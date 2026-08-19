@@ -590,6 +590,14 @@ def evaluate_panel(
     flat_score = np.asarray(score, float).ravel()
     if task == REGRESSION:
         out.update(regression_extras(flat_true, flat_score))
+        # ⚠️ **Block B, `P4-12` — panel-aware and not the flat function.** See
+        # `panel_accuracy_vs_naive`: the `lag_h` baseline must step back along DATES, and
+        # on a flattened panel `i - h` lands on another company.
+        out.update(
+            panel_accuracy_vs_naive(Y, S, valid, horizon=horizon, dates=sorted(set(
+                pd.to_datetime(pd.Series(dates))
+            )))
+        )
     elif task == CLASSIFICATION:
         out.update(classification_extras(flat_true > 0, flat_score))
     return out
@@ -678,6 +686,78 @@ def accuracy_vs_naive(
         "skill_score": float(1.0 - sq.mean() / mse_naive) if mse_naive > 0 else float("nan"),
         "beats_naive": bool(mase == mase and mase < 1.0),
     }
+
+
+def panel_accuracy_vs_naive(
+    Y: np.ndarray,
+    S: np.ndarray,
+    valid: np.ndarray,
+    horizon: int,
+    kind: Optional[str] = None,
+    dates: Optional[Sequence] = None,
+) -> Dict[str, float]:
+    """⚠️ **Block B on a PANEL — `P4-12`, shipped 2026-08-19.**
+
+    `accuracy_vs_naive` was called from `evaluate` only, so every cross-sectional run in
+    this repo carried `test_mase = NaN` while the two VCB runs carried a number. §5 rule 2
+    says an absent measurement is absent, never a pass — and `mase >= 1` is the column
+    `P2-3` calls *the line to quote*, the one that showed the `return_5day` model losing to
+    "predict no change" while its `ic` looked respectable.
+
+    ⚠️ **IT IS NOT A COPY-PASTE, AND THIS FUNCTION EXISTS BECAUSE OF WHERE IT BREAKS.**
+    The flat version's `lag_h` naive is `y_true[i - h]`, which is only the same date's
+    observable value while **rows are consecutive samples in date order**. On a panel each
+    date holds N tickers, so `i - h` steps back a fraction of a session and lands on
+    another COMPANY: at 150 names and h=20 it reads a different ticker's label from 7
+    sessions ago. The baseline would not be wrong by a little, it would be unrelated.
+
+    Here the shift is along the DATE axis of the `(n_dates, n_tickers)` matrix, which is
+    per-ticker by construction — `Y[i - h, j]` is name `j`'s own value `h` sessions back.
+
+    ⚠️ On a two-signed label (`kind` resolves to `zero`) the ordering never mattered and
+    this returns what the flat version would. The panel path matters for a LEVEL target,
+    which is exactly the case §6-0 records as unreadable for every other reason too.
+    """
+    Y = np.asarray(Y, float)
+    S = np.asarray(S, float)
+    flat_true = Y[valid]
+    if kind is None:
+        kind = NAIVE_LAG_H if single_signed(flat_true) else NAIVE_ZERO
+
+    if kind == NAIVE_ZERO:
+        naive = np.zeros_like(Y)
+    elif kind == NAIVE_LAG_H:
+        naive = np.full_like(Y, np.nan)
+        if horizon < Y.shape[0]:
+            # ⚠️ Axis 0 is DATE and axis 1 is TICKER. Shifting axis 0 is the whole fix.
+            naive[horizon:, :] = Y[:-horizon, :]
+    else:
+        raise ValueError(
+            f"naive kind must be {NAIVE_ZERO!r} or {NAIVE_LAG_H!r}, got {kind!r}"
+        )
+
+    usable = valid & np.isfinite(naive) & np.isfinite(S)
+    out: Dict[str, float] = {
+        "naive_kind": kind,
+        "n_vs_naive": int(usable.sum()),
+        "naive_contiguous": _contiguous(dates) if kind == NAIVE_LAG_H else True,
+    }
+    if usable.sum() < 3:
+        return {**out, "mase": float("nan"), "rmsse": float("nan"),
+                "skill_score": float("nan"), "beats_naive": False}
+
+    err = np.abs(S[usable] - Y[usable])
+    naive_err = np.abs(naive[usable] - Y[usable])
+    mae_naive = float(naive_err.mean())
+    mse_naive = float((naive_err ** 2).mean())
+
+    mase = float(err.mean() / mae_naive) if mae_naive > 0 else float("nan")
+    rmsse = (
+        float(np.sqrt((err ** 2).mean() / mse_naive)) if mse_naive > 0 else float("nan")
+    )
+    skill = float(1.0 - (err ** 2).mean() / mse_naive) if mse_naive > 0 else float("nan")
+    return {**out, "mase": mase, "rmsse": rmsse, "skill_score": skill,
+            "beats_naive": bool(mase == mase and mase < 1.0)}
 
 
 def _contiguous(dates: Optional[Sequence]) -> bool:

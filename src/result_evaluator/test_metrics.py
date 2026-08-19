@@ -435,3 +435,95 @@ def test_panel_ic_t_is_scaled_by_sqrt_h_not_by_the_raw_date_count():
     # and `evaluate_panel` must PASS its horizon through — the bug was that it did not
     piped = M.evaluate_panel(dates, tickers, y, score, horizon=20, lookback=20, draws=0)
     assert abs(piped["ic_t"] - h20["ic_t"]) < 1e-9
+
+
+# --- P4-12: Block B on a panel (shipped 2026-08-19) -----------------------------
+
+
+def _level_panel(n_dates=60, n_tickers=8, horizon=5, seed=0):
+    """A panel of price LEVELS — the only case where `lag_h` is the naive baseline."""
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range("2020-01-01", periods=n_dates)
+    steps = rng.normal(0, 1.0, (n_dates, n_tickers))
+    # each name walks from its own base, so the columns are NOT interchangeable
+    Y = 100.0 + np.arange(n_tickers) * 50.0 + np.cumsum(steps, axis=0)
+    S = Y + rng.normal(0, 0.5, Y.shape)
+    valid = np.ones_like(Y, dtype=bool)
+    return dates, Y, S, valid
+
+
+def test_block_B_is_computed_on_a_panel_at_all():
+    """⚠️ P4-12: `evaluate_panel` never called Block B, so every cross-sectional run
+    carried `test_mase = NaN` while the two VCB runs carried a number. §5 rule 2 — an
+    absent measurement is absent, never a pass."""
+    dates, Y, S, _ = _level_panel()
+    tickers = [f"T{j}" for j in range(Y.shape[1])]
+    long_dates = np.repeat(dates.to_numpy(), Y.shape[1])
+    long_tickers = np.tile(tickers, Y.shape[0])
+
+    out = M.evaluate_panel(long_dates, long_tickers, Y.ravel(), S.ravel(),
+                           task=M.REGRESSION, horizon=5, lookback=1, draws=0)
+    for key in ("mase", "rmsse", "skill_score", "beats_naive", "naive_kind"):
+        assert key in out, f"{key} missing from evaluate_panel"
+    assert out["mase"] == out["mase"], "mase is NaN on a panel Block B can score"
+
+
+def test_the_flat_naive_reads_ANOTHER_COMPANYS_price_and_the_panel_one_does_not():
+    """⚠️ THE REASON THIS IS NOT A COPY-PASTE. Flattened, `y_true[i - h]` steps back
+    `h` ROWS; with 8 names per date that is one session and a different ticker. The
+    panel version steps back `h` DATES within the same column."""
+    dates, Y, S, valid = _level_panel()
+    horizon = 5
+
+    panel_out = M.panel_accuracy_vs_naive(Y, S, valid, horizon=horizon, dates=dates)
+    flat_out = M.accuracy_vs_naive(Y.ravel(), S.ravel(), horizon=horizon,
+                                   dates=np.repeat(dates.to_numpy(), Y.shape[1]))
+
+    assert panel_out["naive_kind"] == flat_out["naive_kind"] == M.NAIVE_LAG_H
+    # the panel baseline is each name's own past: a near-perfect predictor beats it
+    assert panel_out["mase"] < 1.0
+    # the flat one compares against a different company's price level, which the
+    # 50-unit spacing between names makes enormous — the ratio collapses toward zero
+    assert flat_out["mase"] < panel_out["mase"] / 10, (
+        f"flat mase {flat_out['mase']:.4f} vs panel {panel_out['mase']:.4f} — if these "
+        f"are close the fixture no longer separates the two baselines"
+    )
+
+
+def test_the_panel_naive_equals_each_tickers_own_lag():
+    """The identity the fix rests on: `Y[i - h, j]` is name `j`'s own value h dates back."""
+    _, Y, S, valid = _level_panel(n_dates=30, n_tickers=4)
+    horizon = 3
+    out = M.panel_accuracy_vs_naive(Y, S, valid, horizon=horizon)
+
+    naive = np.full_like(Y, np.nan)
+    naive[horizon:, :] = Y[:-horizon, :]
+    usable = np.isfinite(naive)
+    expected = float(np.abs(S[usable] - Y[usable]).mean()
+                     / np.abs(naive[usable] - Y[usable]).mean())
+    assert out["mase"] == pytest.approx(expected, rel=1e-12)
+
+
+def test_a_two_signed_panel_label_uses_the_ZERO_naive_and_ordering_stops_mattering():
+    """On a return or a rank the baseline is `predict no change`, which needs no ordering
+    — so the panel and flat versions must agree exactly."""
+    rng = np.random.default_rng(3)
+    dates = pd.bdate_range("2020-01-01", periods=40)
+    Y = rng.normal(0, 0.03, (40, 6))
+    S = Y * 0.4 + rng.normal(0, 0.02, Y.shape)
+    valid = np.ones_like(Y, dtype=bool)
+
+    panel_out = M.panel_accuracy_vs_naive(Y, S, valid, horizon=5, dates=dates)
+    flat_out = M.accuracy_vs_naive(Y.ravel(), S.ravel(), horizon=5)
+    assert panel_out["naive_kind"] == M.NAIVE_ZERO
+    assert panel_out["mase"] == pytest.approx(flat_out["mase"], rel=1e-12)
+
+
+def test_a_missing_name_on_a_date_is_not_scored_against_a_naive_it_never_had():
+    """Ragged panels are the normal case here — 150 names, not all listed throughout."""
+    _, Y, S, valid = _level_panel(n_dates=40, n_tickers=5)
+    Y[:10, 0] = np.nan          # name 0 lists late
+    valid = np.isfinite(Y) & np.isfinite(S)
+    out = M.panel_accuracy_vs_naive(Y, S, valid, horizon=5)
+    assert out["n_vs_naive"] < int(valid.sum())
+    assert out["mase"] == out["mase"]

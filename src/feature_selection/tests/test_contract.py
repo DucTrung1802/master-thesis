@@ -188,3 +188,47 @@ def test_an_archived_run_without_a_fingerprint_reads_as_unrecorded_not_as_this_m
     """§5 rule 2 — inventing a fingerprint would merge runs that may have differed."""
     assert _contract.LEGACY_SETUP_DEFAULTS["env_fingerprint"] == _contract.METHODS_UNRECORDED
     assert _contract.LEGACY_SETUP_DEFAULTS["env_fingerprint"] != env_fingerprint()
+
+
+# --- PNL-2: the grain is the panel's, not the target name's (fixed 2026-08-19) ---
+
+
+def test_a_multi_ticker_panel_is_cross_sectional_whatever_the_target_is_called():
+    """⚠️ THE BUG PNL-2 NAMED. `--ticker ALL --target return_5day` used to run a
+    781-ticker, 2.39 M-row panel through the SINGLE-SERIES path: a pooled Spearman mixing
+    "which stock beats which" with "is today a good day", row-block CV splitting mid-day,
+    and n_eff counting 781 names on one Tuesday as 781 observations."""
+    from feature_selection.run import resolve_grain
+
+    assert resolve_grain("return_5day", 781) is True
+    assert resolve_grain("close_adjust_5day", 20) is True
+    assert resolve_grain("cs_rank_20day", 150) is True
+
+
+def test_a_one_ticker_panel_is_a_series_whatever_the_target_is_called():
+    from feature_selection.run import resolve_grain
+
+    assert resolve_grain("return_5day", 1) is False
+    assert resolve_grain("close_adjust_5day", 1) is False
+
+
+def test_a_cs_target_on_one_ticker_is_a_contradiction_and_raises():
+    """A rank within a date over one name is a CONSTANT, so the run would report an IC
+    against a column that cannot vary. That reads as a flat result, not as an error."""
+    from feature_selection.run import resolve_grain
+
+    with pytest.raises(ValueError, match="needs a cross-section"):
+        resolve_grain("cs_rank_5day", 1)
+
+
+def test_the_archived_runs_do_not_change_meaning_under_the_fix():
+    """⚠️ The check that made PNL-2 safe to ship: every archived run keeps its grain.
+    3 runs are `all` + a `cs_` target (panel before and after); 30 are single-ticker
+    `vcb` (series before and after). Nothing already measured is reinterpreted."""
+    from feature_selection.run import resolve_grain
+
+    # what the OLD rule said, reproduced here so the comparison is explicit
+    old = lambda target, n: target.startswith("cs_")
+    for target, n_tickers in (("cs_rank_20day", 150), ("cs_rank_5day", 20),
+                              ("return_5day", 1), ("close_adjust_5day", 1)):
+        assert resolve_grain(target, n_tickers) == old(target, n_tickers)

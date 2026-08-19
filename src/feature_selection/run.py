@@ -150,6 +150,34 @@ class ProvidedPanel:
     note: str = ""
 
 
+def resolve_grain(target: str, n_tickers: int) -> bool:
+    """Is this a PANEL run? `PNL-2`, and the two inputs are deliberately different kinds.
+
+    ⚠️ **THE TARGET NAMES THE READ; THE DATA NAMES THE GRAIN.** A `cs_` prefix means the
+    label must be DERIVED (`cs_rank_{h}day` exists in no table), so only the target can
+    choose that read path — a panel cannot be consulted before it has been read. But
+    whether the run is cross-sectional is a fact about the panel: **more than one ticker on
+    a date IS a cross-section**, whatever the label happens to be called.
+
+    ⚠️ **What it was before 2026-08-19, and what that cost.** One flag did both, so
+    `--ticker ALL --target return_5day` sent a 781-ticker, 2.39 M-row panel through the
+    single-series path — a pooled Spearman mixing "which stock beats which" with "is today
+    a good day", row-block CV splitting mid-day, and `n_eff = n_rows/h` counting 781 names
+    on one Tuesday as 781 observations. ~~`PNL-1`~~ fixed exactly that in the SCORER; this
+    is the same rule at the selection stage.
+
+    ⚠️ **Verified not to reinterpret history**: of the 33 archived runs, 3 are `all` with a
+    `cs_` target (panel before and after) and 30 are single-ticker `vcb` (series before and
+    after). No archived number changes meaning.
+    """
+    if target.startswith("cs_") and n_tickers < 2:
+        raise ValueError(
+            f"target {target!r} is cross-sectional but the panel holds {n_tickers} "
+            f"ticker(s). A rank within a date needs a cross-section to rank across."
+        )
+    return n_tickers > 1
+
+
 def run_selection(
     ticker: str = "VCB",
     pools: Sequence[str] = ("pool__basic",),
@@ -214,14 +242,22 @@ def run_selection(
     if not os.path.isabs(root):
         root = os.path.normpath(os.path.join(report.REPO_ROOT, root))
 
-    # ⚠️ **THE TARGET DECIDES THE PROCEDURE, not a flag.** A `cs_` prefix marks a
-    # CROSS-SECTIONAL target — a rank within a date across the schema's universe — and
-    # that changes the panel reader, the selector, the CV (sessions, not rows) and the
-    # null (whole dates, not rows). Inferring it from the target name is what stops a
-    # 20-ticker panel being run through the single-series path, which would pool
-    # cross-sectional with time-series variation and count 20 banks on a date as 20
-    # observations (issue **PNL-1**, at the selection stage instead of the scoring one).
-    cross = target.startswith("cs_")
+    # ⚠️ **TWO DECISIONS, NOT ONE — split 2026-08-19, and that split IS `PNL-2`.**
+    # Until then a single `cross = target.startswith("cs_")` chose BOTH the read and the
+    # procedure, so `--ticker ALL --target return_5day` ran a 781-ticker, 2.39 M-row panel
+    # through the SINGLE-SERIES path: one pooled Spearman mixing "which stock beats which"
+    # with "is today a good day", row-block CV that splits mid-day, and `n_eff = n_rows/h`
+    # counting 781 names on a Tuesday as 781 observations. That is `PNL-1` exactly, one
+    # stage earlier than `PNL-1` fixed it.
+    #
+    # 1. **`derives_rank` — WHICH READ, and it must come from the TARGET.** `cs_rank_{h}day`
+    #    exists in no table; it is derived after a hand-written join, so only a `cs_` target
+    #    can ask for that path. A panel cannot be consulted before it has been read.
+    derives_rank = target.startswith("cs_")
+    # 2. **`cross` — WHICH PROCEDURE, and it must come from the panel's SHAPE.** Assigned
+    #    below, once `n_tickers` is known. The selector, the CV unit (sessions vs rows),
+    #    `n_eff` and the null all follow the data, never a naming convention.
+    cross = derives_rank   # provisional: the read below is all it may drive
 
     # ⚠️ The timer starts before the READ, not before the fit — a wide pool spends
     # minutes in PostgreSQL and that time is part of what a run costs. `device` is the
@@ -241,7 +277,7 @@ def run_selection(
             # Nothing is read here and nothing is re-derived: the schema, the database
             # and the channel→pool map are RECORDED values, because the process running
             # this branch cannot see the schema they describe (`ProvidedPanel`).
-            if not cross:
+            if not derives_rank:
                 raise ValueError(
                     f"provided_panel is accepted for a CROSS-SECTIONAL target only; "
                     f"target={target!r} has no `cs_` prefix. The single-series path "
@@ -286,7 +322,7 @@ def run_selection(
                     or "joined before this process ran; cs_rank_* derived there",
                 }
             ]
-        elif cross:
+        elif derives_rank:
             # `read_universe_panel` joins `pool__basic ⋈ pool__targets` in SQL and adds the
             # `cs_rank_{h}day` columns. ⚠️ It reads those two pools ONLY, so a
             # cross-sectional run is `pool__basic`-scoped by construction; `--pools` is
@@ -358,24 +394,24 @@ def run_selection(
                 )
 
         n_tickers = panel["ticker"].nunique() if "ticker" in panel.columns else 1
-        # ⚠️ The universe is RECORDED for a cross-sectional run, because the target is
-        # a rank WITHIN it: the same `cs_rank_20day` over 300 liquid names and over all
-        # 781 are two different labels, and `metadata.json` is the only place a later
-        # reader can tell which one a number describes.
+
+        # ⚠️ **`PNL-2` FIXED HERE, 2026-08-19: THE GRAIN IS THE DATA'S, NOT THE NAME'S.**
+        cross = resolve_grain(target, n_tickers)
+
+        # ⚠️ The universe is RECORDED for any PANEL run, because a rank is a rank WITHIN
+        # it: the same channel ranked over 300 liquid names and over all 781 describes two
+        # different experiments, and `metadata.json` is the only place a later reader can
+        # tell which one a number came from.
         if cross and universe is None and "ticker" in panel.columns:
             universe = sorted(panel["ticker"].unique())
         print(
             f"{schema_name}: {panel.shape[0]:,} rows x {panel.shape[1]} columns "
             f"({panel['date'].min():%Y-%m-%d} -> {panel['date'].max():%Y-%m-%d}), "
             f"{n_tickers} ticker(s), grain={'panel' if cross else 'series'}"
+            f"{' (from the ticker count, not the target name — PNL-2)' if cross and not derives_rank else ''}"
         )
         if target not in panel.columns:
             raise ValueError(f"target {target!r} is not in the joined panel.")
-        if cross and n_tickers < 2:
-            raise ValueError(
-                f"target {target!r} is cross-sectional but the panel holds {n_tickers} "
-                f"ticker(s). A rank within a date needs a cross-section to rank across."
-            )
 
         exclude = IDENTITY + [c for c in ALL_TARGETS if c != target]
 

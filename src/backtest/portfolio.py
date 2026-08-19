@@ -55,6 +55,57 @@ ENTER_PERCENTILE = 0.90
 EXIT_PERCENTILE = 0.75
 
 
+#: Daily price bands, per exchange. A close AT the band has no counterparty on that side:
+#: a name at its ceiling cannot be bought, one at its floor cannot be sold.
+#: ⚠️ Measured to matter: `backtest/CONTEXT.md` §8f found the 5-day hand screen picking
+#: ceiling names **2.14× more often than chance**, and excluding them took that book from
+#: +19.3 % to +7.2 % CAGR. On the h=20 MODEL the bias is 1.33× and removing it slightly
+#: IMPROVES the result (§8h) — but that is a measurement, not a licence to skip it.
+BANDS = {"HOSE": 0.07, "HNX": 0.10, "UPCOM": 0.15}
+
+#: How close to the band counts as "at" it. A close that prints at 0.93× the limit is
+#: already illiquid on that side; the exact tick is not knowable from a daily bar.
+CEILING_TOLERANCE = 0.93
+
+
+def mark_ceiling(daily: pd.DataFrame, exchange: str = "exchange",
+                 day_return: str = "day_ret") -> pd.Series:
+    """Boolean: did this (date, ticker) close at its exchange's daily ceiling?
+
+    ⚠️ **ONE implementation, on purpose.** This rule lived in `walkforward/evaluate.py`
+    and in an ad-hoc probe, which is two copies of a number that decides whether a trade
+    was executable — the same defect the shared `ROUND_TRIP_COST` constant exists to
+    prevent. Both callers use this now.
+
+    ⚠️ An exchange the `BANDS` table does not name yields **NaN → False**, i.e. "not
+    known to be at a ceiling". That is the safe direction for an ENTRY screen (it keeps
+    the row and lets the backtest trade it), and it is the WRONG direction for a floor /
+    exit screen — which is why `PRF-4` lists the sell side as a separate, unbuilt item
+    rather than something this function quietly half-covers.
+    """
+    limit = daily[exchange].map(BANDS) * CEILING_TOLERANCE
+    return (daily[day_return] >= limit).fillna(False)
+
+
+def drop_ceiling(panel: pd.DataFrame, column: str = "at_ceiling") -> tuple:
+    """`(buyable panel, n_dropped)`. Missing column is an ERROR, never a silent pass.
+
+    ⚠️ **A backtest that silently skips the exclusion reports a number the market would
+    not have given you**, and it looks identical to one that applied it. So a panel that
+    cannot answer the question refuses to be traded rather than defaulting to "nothing is
+    at a ceiling" — `build_panel` attaches the column, and any other caller must too.
+    """
+    if column not in panel.columns:
+        raise ValueError(
+            f"the panel carries no {column!r} column, so the price-band exclusion cannot "
+            f"be applied. Build it with `backtest.run.build_panel` (which joins "
+            f"`exchange` from pool__basic), or call `mark_ceiling` yourself. Refusing to "
+            f"trade a panel that cannot say what was buyable — see PRF-0."
+        )
+    flag = panel[column].fillna(False).astype(bool)
+    return panel[~flag].copy(), int(flag.sum())
+
+
 def rebalance_dates(dates: Sequence, horizon: int) -> List:
     """Every `horizon`-th distinct date, so the held windows do not overlap.
 

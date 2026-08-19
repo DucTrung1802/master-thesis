@@ -33,8 +33,11 @@ from backtest import portfolio as P
 
 DEFAULT_OUT = os.path.join(os.path.dirname(__file__), "..", "..", "results", "walkforward")
 
-#: Daily price bands. A close at the band has no counterparty on that side.
-BANDS = {"HOSE": 0.07, "HNX": 0.10, "UPCOM": 0.15}
+#: ⚠️ **The band table moved to `backtest.portfolio` on 2026-08-19** (`PRF-0`). It lived
+#: here AND in an ad-hoc probe AND, implicitly, nowhere in `backtest.run` — three states
+#: for one rule that decides whether a trade was executable. Re-exported under the old
+#: name so nothing that imported it breaks, but `P.mark_ceiling` is the implementation.
+BANDS = P.BANDS
 
 
 def load_track(out_dir: str) -> pd.DataFrame:
@@ -64,7 +67,7 @@ def attach_returns(track: pd.DataFrame, universe: str, horizon: int) -> pd.DataF
 
     basic = basic.sort_values(["ticker", "date"])
     basic["day_ret"] = basic.groupby("ticker")["close_adjust"].pct_change()
-    basic["at_ceiling"] = basic["day_ret"] >= basic["exchange"].map(BANDS) * 0.93
+    basic["at_ceiling"] = P.mark_ceiling(basic)
 
     out = track.merge(targets, on=["date", "ticker"], how="left", validate="one_to_one")
     out = out.merge(basic[["date", "ticker", "exchange", "at_ceiling"]],
@@ -107,12 +110,16 @@ def score(frame: pd.DataFrame, horizon: int, column: str, top_k: int,
     market = P.stats(P.buy_and_hold(frame, horizon, column), horizon)
     out["mkt_sharpe"] = market["sharpe"]
     out["mkt_cagr"] = market["cagr"]
+    st = None
     for cost in bps:
         st = P.stats(P.long_only_top_k(frame, horizon, column, top_k, cost / 10_000), horizon)
         out[f"sharpe@{cost}"] = st["sharpe"]
         out[f"cagr@{cost}"] = st["cagr"]
-    out["n_periods"] = st["n_periods"]
-    out["se_sharpe"] = st["se_sharpe"]
+    # ⚠️ `bps` may be empty — a caller that wants only the IC has no portfolio to count
+    # periods over. This used to read the loop variable and raise `UnboundLocalError`
+    # from inside a scorer, which reads as a bug in the DATA rather than in the call.
+    out["n_periods"] = st["n_periods"] if st else 0
+    out["se_sharpe"] = st["se_sharpe"] if st else float("nan")
     return out
 
 
@@ -139,11 +146,11 @@ def main(argv: Optional[Sequence[str]] = None):
         track = load_track(out_dir)
         panel = attach_returns(track, universe, horizon)
         column = f"return_{horizon}day"
-        buyable = panel[~panel["at_ceiling"]].copy()
+        buyable, dropped = P.drop_ceiling(panel)
 
         print(f"\nOOS track {len(panel):,} rows, {panel['date'].nunique()} dates, "
               f"{panel['date'].min().date()} -> {panel['date'].max().date()}")
-        print(f"dropped {int(panel['at_ceiling'].sum()):,} ceiling rows "
+        print(f"dropped {dropped:,} ceiling rows "
               f"({panel['at_ceiling'].mean():.4f}) — PRF-0\n")
 
         print("=" * 104)

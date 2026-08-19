@@ -1035,56 +1035,94 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-18)
+## 6. State today (2026-08-19)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section
 is the bug.** It was 7 days stale once already.
 
 ### ⚠️ 6-0. THE HEADLINE, and what a new session should read first
 
-**The cross-sectional chain ran end to end for the first time, and the model at the bottom
-of it shows out-of-sample skill that survives an honest error bar.** That has never
-happened in this repo before — §2's verdict is about SINGLE-STOCK SHORT-HORIZON
-prediction and is untouched; this is the other thing, at the grain and horizon §2b and
-§2a-bis pointed to.
+**The cross-sectional chain works out of sample, over TEN expanding folds, after costs.**
+§2's verdict is about SINGLE-STOCK SHORT-HORIZON prediction and is untouched; this is the
+other thing, at the grain and horizon §2b and §2a-bis pointed to.
+
+⚠️ **QUOTE THE WALK-FORWARD, NOT THE SINGLE SPLIT.** Until 2026-08-19 this section
+headlined one train/val/test split whose test window happened to be a +20.2 %/yr VNINDEX
+bull market — Sharpe +1.484 over **32 periods**, `se` 0.256. That number is still on disk
+and still useful (see the leak check below), but it is not the evidence any more.
+
+| | the walk-forward (PRF-1) | the single split |
+|---|---|---|
+| folds | **10**, test = calendar 2017…2026 | 1 |
+| periods | **118** non-overlapping | 32 |
+| `se_sharpe` | **0.155** | 0.256 |
+| Sharpe @20/30/50 bps | **+2.026 / +1.991 / +1.921** | +1.551 @50 |
+| CAGR @30 bps | **+47.5 %** vs market +14.6 % | +32.3 % |
+| daily IC | **+0.1097**, `ic_t` +6.90, 80.6 % of days positive | +0.0863, t +3.47 |
+| null, 200 within-date shuffles | **z = +12.18 / +12.28 / +12.46**, null MAX below observed at all three | z = +4.29 |
+| shape | IC positive **9 of 10 folds**; beats the equal-weight universe **10 of 10** | — |
+
+**The chain that produced it**, and every stage is reproducible from `RUNBOOK.md` §3a:
 
 | stage | artefact | number |
 |---|---|---|
-| 2 · selection | `2026-08-18_072323__all__basic__cs_rank_20day` | `ic_mean` **+0.1075**, 20-draw null bar **+0.0388**, null max +0.0410 (below observed), **z = +9.09** — §2b-bis |
+| 2 · selection | `2026-08-18_072323__all__basic__cs_rank_20day` | `ic_mean` **+0.1075**, 20-draw bar +0.0388, null max +0.0410 (below observed), **z = +9.09** — §2b-bis |
 | 5 · final_features | `unified_schema_all.rank_20day__final__d20_h20` | 624,448 × 17, **150 names**, 621,448 labelled |
 | 6 · train_test_creator | `all__rank_20day__final__d20_h20__tr70_val15_test15__std` | 422,251 / 91,462 / 93,224 windows × 20 × 13 |
-| **7 · model** | `lstm__all__rank_20day__final__d20_h20__20260818-195738` | **4m 23s**; test daily IC **+0.0863**, **t = +3.47**, **80.9 % of days positive**; val +0.1282, t = +4.15 |
-| 8 · result_evaluator | ✅ scored and indexed 2026-08-18 | clears its own block-shuffled bar on `ic` and `dir_auc` — ⚠️ a floor, not a result (`NUL-1`) |
-| **9 · backtest** *(NEW 2026-08-18)* | `results/backtest_test.csv` | long-only **top-15 of 150**, 20-session rebalance, **50 bps**: Sharpe **+1.484** (se 0.256), CAGR **+30.5 %** vs an equal-weight universe of +5.96 %. Within-date shuffle null, 200 draws: mean +0.189, p95 bar +0.686, **MAX +1.134 (below observed)**, **z = +4.29** ✅ — and +6.10 on val |
+| 7 · model | `lstm__all__rank_20day__final__d20_h20__20260818-195738` | 4m 23s; test IC +0.0863, **t = +3.47** (`ICT-1` fixed) |
+| 8 · result_evaluator | scored + indexed | clears its block-shuffled bar on `ic` and `dir_auc` — ⚠️ a floor, not a result (`NUL-1`) |
+| 9 · backtest | `results/backtest_test.csv` | top-15 of 150, 50 bps, **ceiling-screened by default since 2026-08-19**: **+1.5512** test / **+1.7385** val |
+| **W · walkforward** *(NEW 2026-08-19)* | `results/walkforward/` + 10 run folders | the table above. `walkforward/CONTEXT.md` |
 
-✅ **`ICT-1` FIXED 2026-08-18, and the `t` above is now the artefact's own.** It read
-`ic_t = 15.50` — overstated by exactly **√h = √20**, because the standard error divided by
-`n_dates` and not by `n_eff = n_dates/h` while `evaluate_panel` computed the right `n_eff`
-on the next line and nothing consumed it. `panel_core_metrics` takes a `horizon` now.
-After `--rescore` the folder reads **+3.47** test / **+4.15** val, matching the hand
-computation exactly; the two single-series VCB runs did **not** move (5.50 / 0.96), because
-`_ic_uncertainty` had the formula right all along.
+### ⚠️ 6-0-a. FOUR THINGS CLOSED ON 2026-08-19, AND WHAT EACH ONE SETTLED
 
-⚠️ **RE-SCORING A PANEL RUN TAKES TWO COMMANDS AND THE REGISTER SAID ONE.**
-`--rescore` rewrites each run FOLDER's `results/metrics.{csv,json}`; `index.csv` is written
-**only** by `--rebuild-index`. Measured: after `--rescore` the folder read +3.47 while the
-leaderboard still read 15.50. Any panel run scored before 2026-08-18 and not put through
-**both** still carries the overstated figure.
+| | verdict |
+|---|---|
+| **PRF-1** — is it one lucky split? | **No.** 10 folds, 118 periods, z = +12.3. ⚠️ Sharpe@30 DOES decay: slope −0.100/fold, first five +2.775 → last five +1.564. But 2023/24/25 are **+2.64 / +0.90 / +1.39**, all above their market; **2022 is the only bad fold and it is bad for everyone** (the universe itself ran −0.94 that year) |
+| **PRF-7** — were the 13 channels fitted to the test folds? | **Bounded, and MILD.** Re-running the identical selection on dates < 2017 keeps **51 of 61** channels (Jaccard 0.761, **5.8 sd** above chance), shortlists 8 of 13 against a chance of 2.17, picks the same top two. ⚠️ It bounds the bias, it does not remove it |
+| **PRF-8** — would a different architecture do better? | **The architecture is worth NOTHING.** 205,441 params, **2,033 params** and a **1,400-node GBT** all tie on the identical folds — paired \|t\| < 1 at every cost level. §6-0-ter |
+| **PRF-0** — is it buying names nobody could sell? | **Marginally, and removing it HELPS.** The model picks ceiling names 1.33× as often as chance (against 2.14× for a 5-day screen); excluding them takes test +1.484 → **+1.551**. ✅ Now applied BY DEFAULT in `backtest.build_panel`, not by a probe |
 
-⚠️ **AND `mase` IS NOT MEASURED ON A PANEL AT ALL** — block B (`mase`, `rmsse`,
-`skill_score`, `beats_naive`) is computed in `metrics.evaluate`, the series path;
-`evaluate_panel` never calls it, so `test_mase` is **NaN** here while the two VCB runs
-carry 21.36 and 1.068. §5 rule 2: that blank is an **absence**, not a pass — and it is the
-column P2-3 called "the line to quote". TODO **P4-12**.
+### ⚠️ 6-0-b. ✅ AND IT BEATS "PREDICT NO CHANGE" — the first thing here that does
 
-⚠️ **Four things this result does NOT say**, all of them measured or structural:
-**(1)** it ranks, it does not price — R² test **+0.0003**, RMSE 0.29065 against a
-constant-predictor 0.29070, so magnitudes are worthless and only the ORDER carries;
-**(2)** `long_short = +0.0635` is a **rank** spread, not money — the label is a rank;
-**(3)** the evaluator's own `verdict.txt` says its null prices in neither feature
-selection, architecture search nor early stopping; **(4)** `FNM-1` — the selection scored
-those 13 channels under `feature_normalize=cs_rank` and the dataset feeds them globally
-standardised, so *"built on a shortlist that cleared z = +9.09"* is weaker than it sounds.
+`P4-12` fixed 2026-08-19: block B (`mase`, `rmsse`, `skill_score`, `beats_naive`) was
+computed in `metrics.evaluate` only, so **every cross-sectional run carried `test_mase =
+NaN`** — an absence, never a pass (§5 rule 2). `evaluate_panel` now calls a panel-aware
+version and the column is filled:
+
+| run | grain | `naive_kind` | `mase` | beats naive? |
+|---|---|---|---|---|
+| `lstm__vcb__close_adjust_5day` | series | `lag_h` | **21.36** | ❌ 21× worse than a random walk |
+| `lstm__vcb__return_5day` | series | `zero` | **1.068** | ❌ — `P2-3`'s *"line to quote"* |
+| **`lstm__all__rank_20day`** | panel | `zero` | **0.9937** | ✅ **the first in this repo** |
+| the 30 PRF-8 fold runs | panel | `zero` | mean 0.988-0.991 | ✅ `lstm_small` and `gbt` in **10/10** folds, `lstm` in 9/10 |
+
+⚠️ **AND THE MARGIN IS 0.6 %, WHICH IS THE POINT.** `mase = 0.9937` means the model's mean
+absolute error is six parts in a thousand below "always predict the mean rank". That is
+what an R² of **+0.0003** looks like from the other side. **It clears the line and the
+size of the clearance confirms that the magnitudes carry nothing — the result is the
+ORDER.** ⚠️ I wrote in TODO P4-12, before measuring, that it would *not* beat the naive on
+magnitude. That was wrong, and the wrong prediction is left in the register.
+
+⚠️ **RE-SCORING A PANEL RUN TAKES TWO COMMANDS.** `--rescore` rewrites each run FOLDER's
+`results/metrics.{csv,json}`; `index.csv` is written **only** by `--rebuild-index`
+(~8 min each over 33 runs). A run scored before 2026-08-19 and not put through **both**
+carries no `mase` and, if scored before 2026-08-18, an `ic_t` overstated by `√h`
+(`ICT-1`).
+
+### ⚠️ 6-0-c. What the headline still does NOT say
+
+**(1)** ⚠️ **It ranks, it does not price.** R² test **+0.0003**, RMSE 0.29065 against a
+constant-predictor 0.29070. Only the ORDER carries — see §6-0-b.
+**(2)** `long_short = +0.0635` is a **rank** spread, not money — the label is a rank.
+**(3)** `NUL-1` — no null anywhere in this chain prices in the feature selection, the
+architecture search, the early stopping, or the choice of `h=20`, `k=20` and the universe.
+**(4)** `FNM-1` — the selection scored those 13 channels under `feature_normalize=cs_rank`
+and the dataset feeds them globally standardised, so *"built on a shortlist that cleared
+z = +9.09"* is weaker than it sounds. **Unmeasured**; TODO P1-6, ~25 min on a T4.
+**(5)** **Survivorship protects the `z` and not the CAGR** (§2c). Every shuffled draw picks
+from the same survivor basket, so +12.3 stands and **+47.5 %/yr does not**.
+**(6)** **No slippage, no ADV cap, no floor-day exclusion on the SELL side** — `PRF-4`.
 
 ### ⚠️ 6-0-bis. AND STAGE 9 ANSWERED THE TRADABILITY QUESTION — portfolio yes, ONE STOCK no
 
@@ -1092,9 +1130,22 @@ standardised, so *"built on a shortlist that cleared z = +9.09"* is weaker than 
 the second one matters more for anyone who wants a buy/sell signal on a single name.
 
 **The portfolio works, at this horizon, after costs.** Top-15 of 150, rebalanced every 20
-sessions, 50 bps, long-only (no shorting — HOSE does not offer it): test Sharpe **+1.484**
-/ CAGR **+30.5 %**, val **+1.737** / +69.9 %, clearing a 200-draw within-date shuffle null
-at **z = +4.29** and **+6.10**, null MAX below observed in all four cells. `k` is not a
+sessions, 50 bps, long-only (no shorting — HOSE does not offer it), clearing a 200-draw
+within-date shuffle null at **z = +4.29** (test) and **+6.10** (val), null MAX below
+observed in all four cells.
+
+⚠️ **THE NUMBERS MOVED UP ON 2026-08-19 AND THE REASON IS `PRF-0`, NOT A BETTER MODEL.**
+`backtest.build_panel` now drops names sitting at their exchange's daily ceiling on the
+entry date — they have no sellers, so buying them was fiction — and the stage prints how
+many it dropped. It used to be a probe a reader had to remember to run:
+
+| 50 bps, top-15 | as first reported | **screened, the default now** | rows dropped |
+|---|---|---|---|
+| test | +1.4845 / CAGR +30.5 % | **+1.5512** / **+32.3 %** | 1,708 (1.83 %) |
+| val | +1.7367 / CAGR +69.9 % | **+1.7385** / **+70.0 %** | 3,437 (3.76 %) |
+
+⚠️ Both reproduce §8h's probe EXACTLY, which is how the change was verified rather than
+assumed. ⚠️ **And it is the walk-forward, not this split, that should be quoted** — §6-0. `k` is not a
 knife-edge — Sharpe decays monotonically 1.53 (k=10) → 0.81 (k=75).
 
 ⚠️ **This CONTRADICTS §11's regime wall in the direction §2a-bis predicts.** §11 measured
@@ -1127,6 +1178,45 @@ cross-sectional dispersion forecast — the two things §2 has failed at four ti
 answers is *"where will VCB sit among these 150 over the next 20 sessions"*, and reading
 that requires scoring all 150 on the same date.
 
+### ⚠️ 6-0-ter. AND THE ARCHITECTURE IS WORTH NOTHING — PRF-8, 2026-08-19
+
+`src/walkforward/` runs the h=20 chain over **ten expanding folds** (PRF-1, same day), and
+PRF-8 then ran three architectures over the **identical folds and one build of each fold's
+tensors** — 15m 03s. Pooled over 118 non-overlapping periods, top-20 of 150, buyable only:
+
+| arm | capacity | IC | `ic_t` | Sharpe@30 | `z` (200 draws) |
+|---|---|---|---|---|---|
+| `lstm` | **205,441 params** | +0.1097 | 6.90 | **+1.991** | +12.28 ✅ |
+| **`lstm_small`** | **2,033 params — 101×** | +0.1239 | 9.49 | **+1.997** | +12.43 ✅ |
+| `gbt` | **1,400 decision nodes** | +0.1249 | 8.90 | **+1.975** | +11.88 ✅ |
+
+⚠️ **PAIRED, because the arms share the market factor** (ρ = 0.88 between their period
+returns, so `se_sharpe = 0.155` is the error bar on the wrong quantity): `lstm_small`
+`t = +0.87…+0.88`, `gbt` `t = +0.42…+0.47` at 20/30/50 bps. **Every |t| < 1.**
+
+⚠️ **THE RESULT LIVES IN THE 13 CHANNELS, NOT IN THE ARCHITECTURE**, and this is the fourth
+independent measurement pointing that way — after §5c's eleven architectures inside one
+error bar, `P2-3`'s *"best epoch 1 of 21"*, and PRF-1's nine-of-ten folds stopping at epoch
+1. It is the first that moved capacity DELIBERATELY. ⚠️ **The sequence inside the lookback
+is worth nothing either**: `model.gbt` compresses each (20, 13) window to **78 window
+statistics where the LSTM sees 260 numbers**, and it ties.
+
+⚠️ **So "try a bigger model" is closed as an answer to anything in this repo.** What is
+left is FEATURES (TODO `PRF-9`, 90 → 800 candidates), the HORIZON (`PRF-2`), honest
+EXECUTION (`PRF-4`/`PRF-5`) and new DATA (`PRF-6`). ⚠️ It also makes `PRF-7`'s bounded
+selection look-ahead close to the WHOLE story about where this Sharpe comes from rather
+than part of it — the only other candidate has been ruled out. ⚠️ **Not a claim that the
+small model should replace the big one**: nothing was re-tuned for it, and a tie under one
+schedule is not an optimum. `walkforward/CONTEXT.md` §8.
+
+⚠️ **TWO CONCURRENT `walkforward` SWEEPS SILENTLY CORRUPT EACH OTHER** (measured on this
+run, and it cost the first attempt). Every fold writes
+`train_test_set/<ticker>__<table>__…__<tag>` — a name derived from the DATA with no term
+for which process built it — saved with `replace=True` and deleted once its arms are done.
+The loud half is a `FileNotFoundError` in the second sweep; **the silent half is the first
+sweep reading tensors the second is mid-`np.save` on**. `run.namespace_lock` refuses the
+second sweep now, by pid, taking over a lock whose holder is dead.
+
 ### What exists right now
 
 | | VCB | BANK | **ALL (top-150)** |
@@ -1134,7 +1224,7 @@ that requires scoring all 150 on the same date.
 | selection runs | **31** run folders in `reports/feature_selection/` | (shared) | 2 of the 31 |
 | `final_features` | `close_adjust_5day__final__d20_h5` 4,266 × 39 (35 ch) · `return_5day__final__d20_h5` 4,235 × 70 (66 ch) | `rank_5day__final__d20_h5` 53,921 × 18 · `…__basic` 54,528 × 16 | **`rank_20day__final__d20_h20` 624,448 × 17 (13 ch)** |
 | datasets on disk | 3 | 1 | **1** |
-| model runs | 2 | 0 | **1** |
+| model runs | 2 | 0 | **31** — 1 single-split + 10 PRF-1 folds + 20 PRF-8 folds (2 arms × 10) |
 
 ⚠️ **The 16 pre-2026-08-16 model runs were deleted on request** and archived to
 `D:\GIT\_archive\master-thesis\model_runs_2026-08-16.zip` (2.2 MB, outside the repo,
@@ -1182,7 +1272,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (**15 open**, 34 resolved, codes permanent).
+**Open issues live in [ISSUES.md](ISSUES.md)** (**14 open**, 35 resolved, codes permanent — `PNL-2` closed 2026-08-19).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -1207,6 +1297,7 @@ below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | 3k | building or rebuilding a `__final__` table |
 | [src/train_test_creator/CONTEXT.md](src/train_test_creator/CONTEXT.md) | 3k | building a dataset, or asking about the purge/impute/scale/window steps |
 | **[src/model/CONTEXT.md](src/model/CONTEXT.md)** | **9k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |
+| **[src/walkforward/CONTEXT.md](src/walkforward/CONTEXT.md)** | **6k** | asking whether a result survives more than ONE split, or which MODEL to use. §3 the 10-fold h=20 result (pooled Sharpe **+1.991**, IC positive 9/10 folds, beats the market 10/10); §4 the recorded prediction that was half wrong; §5 the no-mechanical-leak check; **§8 is PRF-8 — three architectures from 205 k params to 1,400 tree nodes, all tied**, and §8c the concurrency trap that voided a whole sweep |
 | **[src/backtest/CONTEXT.md](src/backtest/CONTEXT.md)** | **5k** | asking whether a signal is TRADABLE — stage 9, the costed non-overlapping backtest. §3 is the cost identity that decides the horizon (h=5 pays **17.6 %/yr** in fees, above the top-100 benchmark's entire return); §4 the first result here to clear a costed null (top-15, z = **+4.29** test / +6.10 val); **§5 is the single-stock answer and it is "no trade"** |
 | [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | 3k | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
 | [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **3.5k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
@@ -1233,7 +1324,7 @@ brokers' books are unreachable.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](ISSUES.md)** | 15 open / 34 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](ISSUES.md)** | 14 open / 35 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](TODO.md)** | the one backlog, priority-ordered, every item costed | deciding what to do next |
 | `README.md` | the front door; routes here | — |
 | `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |

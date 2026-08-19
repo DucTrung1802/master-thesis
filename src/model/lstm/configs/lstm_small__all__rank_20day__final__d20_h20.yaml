@@ -1,0 +1,61 @@
+# PRF-8 — THE SAME RUN AS `lstm__all__rank_20day__final__d20_h20`, 100x SMALLER.
+#
+# ⚠️ TWO KNOBS MOVE AND NOTHING ELSE DOES: `hidden_size` 128 -> 16 and `num_layers`
+# 2 -> 1. The dataset, the label, the splits, the purge, the optimiser schedule, the
+# batch size, the seed and the head dropout are byte-identical to the big config, so a
+# difference in the result is a difference in CAPACITY and not in anything else.
+#
+#   ~204,900 parameters  ->  ~2,000.   4*(16*13 + 16*16 + 2*16) + 17.
+#
+# ⚠️ WHY IT EXISTS. Three independent observations say capacity is not the binding
+# constraint here:
+#   * PRF-1's walk-forward stopped at EPOCH 1 in nine folds of ten (the tenth at 2),
+#     val loss 0.975-1.021 — within ~2 % of the variance of a standardised label;
+#   * P2-3 recorded the same on VCB: "best epoch 1 of 21, val loss rose from the first
+#     epoch on";
+#   * CLAUDE.md §5c measured ELEVEN architectures spanning 0 to 276 k parameters
+#     inside ONE error bar, with a 25-parameter ridge among the best.
+# A 205 k-parameter model that converges in one pass is being paid for and not used.
+#
+# ⚠️ WHAT A TIE WOULD MEAN, and it is not "we saved some GPU". If a model 100x smaller
+# reproduces the pooled Sharpe +1.991, the finding is about the THIRTEEN CHANNELS and
+# not about the architecture — which also makes PRF-7's selection look-ahead the whole
+# story rather than part of it. That is why this is a measurement and not an
+# optimisation.
+#
+# ⚠️ `dropout` STAYS AT 0.2. `LSTMRegressor` already passes 0.0 to `nn.LSTM` when
+# `num_layers == 1` (the recurrent dropout would be a no-op and torch warns), but the
+# HEAD dropout is real and shared with the big model. Setting it to 0 here would move a
+# third knob.
+#
+# ⚠️ `lookback` and `n_features` are ASSERTIONS. engine._verify raises if the dataset
+# disagrees — the dataset is the authority.
+
+run_name: lstm_small__all__rank_20day__final__d20_h20
+dataset: all__rank_20day__final__d20_h20__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 13
+
+model:
+  type: LSTM
+  hidden_size: 16
+  num_layers: 1
+  dropout: 0.2
+
+train:
+  batch_size: 512
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 100
+  patience: 15
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 5
+
+null_draws: 200
+
+seed: 42
+device: auto

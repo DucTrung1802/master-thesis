@@ -177,3 +177,58 @@ def test_an_empty_track_returns_nan_rather_than_a_flattering_zero():
     assert out["n_periods"] == 0
     assert out["sharpe"] != out["sharpe"]
     assert out["cagr"] != out["cagr"]
+
+
+# --- PRF-0: the price band, shipped as the DEFAULT on 2026-08-19 -----------------
+
+
+def _bars(exchange, returns):
+    return pd.DataFrame({
+        "exchange": [exchange] * len(returns),
+        "day_ret": list(returns),
+    })
+
+
+def test_the_ceiling_is_per_exchange_and_not_one_number():
+    """HOSE 7 %, HNX 10 %, UPCOM 15 % — a +8 % close is at the band on HOSE and is an
+    ordinary day on UPCOM. One global threshold would mis-flag both directions."""
+    eight = [0.08]
+    assert bool(P.mark_ceiling(_bars("HOSE", eight)).iloc[0]) is True
+    assert bool(P.mark_ceiling(_bars("HNX", eight)).iloc[0]) is False
+    assert bool(P.mark_ceiling(_bars("UPCOM", eight)).iloc[0]) is False
+
+
+def test_the_tolerance_catches_a_close_just_under_the_limit():
+    """A print at 0.93x the limit is already illiquid on that side; the exact tick is not
+    knowable from a daily bar, which is why the rule is a band and not an equality."""
+    just_under = 0.07 * P.CEILING_TOLERANCE + 1e-9
+    assert bool(P.mark_ceiling(_bars("HOSE", [just_under])).iloc[0]) is True
+    assert bool(P.mark_ceiling(_bars("HOSE", [0.07 * 0.90])).iloc[0]) is False
+
+
+def test_an_unknown_exchange_and_a_missing_return_are_NOT_flagged():
+    """⚠️ NaN -> False is the safe direction for an ENTRY screen only: it keeps the row.
+    The sell side needs the opposite default, which is why PRF-4 lists floor days as a
+    separate unbuilt item rather than something this quietly half-covers."""
+    frame = pd.DataFrame({"exchange": ["LSE", "HOSE"], "day_ret": [0.50, float("nan")]})
+    assert P.mark_ceiling(frame).tolist() == [False, False]
+
+
+def test_dropping_the_ceiling_removes_exactly_the_flagged_rows():
+    panel = pd.DataFrame({
+        "date": pd.to_datetime(["2020-01-02"] * 4),
+        "ticker": ["A", "B", "C", "D"],
+        "at_ceiling": [True, False, False, True],
+    })
+    buyable, dropped = P.drop_ceiling(panel)
+    assert dropped == 2
+    assert buyable["ticker"].tolist() == ["B", "C"]
+
+
+def test_a_panel_that_cannot_say_what_was_buyable_REFUSES_to_be_traded():
+    """⚠️ The failure this guards is invisible, not loud: a backtest that silently skips
+    the exclusion reports a number the market would not have given you, and its output
+    looks identical to one that applied it."""
+    panel = pd.DataFrame({"date": [], "ticker": [], "y_pred": []})
+    with pytest.raises(ValueError, match="PRF-0"):
+        P.drop_ceiling(panel)

@@ -1,0 +1,53 @@
+# PRF-8 — THE SECOND ARM: gradient-boosted trees on the same 13 channels, same folds.
+#
+# ⚠️ THIS IS NOT A NEW MODEL, IT IS THE SELECTION'S OWN ESTIMATOR SCORED AS A RUN.
+# `feature_selection`'s `xgb_shap` and `permutation` rankers are XGBoost fits on this
+# exact (n, f*6) window-statistics design under the same purged walk-forward — so the
+# 13 channels were CHOSEN by something very close to this model. Asking whether it also
+# TRADES is therefore the sharpest version of PRF-8's question: if the tree ensemble
+# that picked the features also earns the Sharpe, the LSTM is contributing nothing that
+# the channels did not already carry.
+#
+# ⚠️ IT SEES A DIFFERENT WINDOW SHAPE, AND THAT IS THE POINT OF INCLUDING IT.
+# `model.gbt` reduces each (20, 13) window to six statistics per channel — last, mean,
+# slope, sd, min, max — so 260 numbers become 78. The LSTM sees all 260. If the GBT
+# ties, the sequence structure inside the lookback is worth nothing here either.
+#
+# ⚠️ SHALLOW ON PURPOSE, and for the same reason it is shallow on VCB: `n_eff` on this
+# panel is `n_dates / h`, not `n_rows / h` (§5 rule 7) — 4,368 sessions at h=20 is ~218
+# independent observations, NOT 624,448. A deep forest on ~218 observations memorises
+# the training period. The hyper-parameters are copied UNCHANGED from
+# `gbt__vcb__return_5day__final__d20_h5__basic.yaml` so this arm is not also a
+# hyper-parameter search.
+#
+# ⚠️ CPU AND A PINNED SEED, deliberately. `feature_selection/CONTEXT.md` §5 measured
+# XGBoost drawing from a different RNG stream on CUDA with `subsample`/`colsample` on —
+# 4,189 of 8,280 nodes pick a different feature and the fit is not reproducible across
+# devices. `model/gbt/model.py` pins `device="cpu"`; this config agrees with it rather
+# than quietly asking for something the module will not honour.
+#
+# ⚠️ `lookback` and `n_features` are ASSERTIONS. engine._verify raises if the dataset
+# disagrees — the dataset is the authority.
+
+run_name: gbt__all__rank_20day__final__d20_h20
+dataset: all__rank_20day__final__d20_h20__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 13
+
+model:
+  type: GBT
+  max_depth: 3
+  n_estimators: 200
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 5.0
+  reg_lambda: 1.0
+  random_state: 42
+
+null_draws: 200
+
+seed: 42
+device: cpu

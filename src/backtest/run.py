@@ -97,6 +97,32 @@ def realised_returns(universe: str, horizon: int, tickers, dates) -> pd.DataFram
     return frame[keep].reset_index(drop=True)
 
 
+def exchange_and_ceiling(universe: str, tickers, dates) -> pd.DataFrame:
+    """`(date, ticker, exchange, at_ceiling)` from `pool__basic`, for PRF-0's screen.
+
+    ⚠️ **The daily return is computed over the FULL history, then filtered** — not the
+    other way round. `pct_change` on a frame already cut to the scored dates would compare
+    each date with the previous SCORED one, so the first row of every split, and every row
+    after a gap, would carry a multi-day return and be mis-flagged.
+    """
+    from feature_selection.unified_reader import UnifiedSchemaReader
+
+    with UnifiedSchemaReader(universe) as reader:
+        basic = reader.read(
+            "pool__basic", columns=["date", "exchange", "ticker", "close_adjust"]
+        )
+    basic["date"] = pd.to_datetime(basic["date"])
+    basic["ticker"] = basic["ticker"].astype(str).str.upper()
+    basic = basic.sort_values(["ticker", "date"])
+    basic["day_ret"] = basic.groupby("ticker")["close_adjust"].pct_change()
+    basic["at_ceiling"] = P.mark_ceiling(basic)
+
+    keep = basic["ticker"].isin(set(tickers)) & basic["date"].isin(set(dates))
+    return basic.loc[keep, ["date", "ticker", "exchange", "at_ceiling"]].reset_index(
+        drop=True
+    )
+
+
 def build_panel(run_dir: str, split: str) -> Dict:
     """`predictions_<split>.csv ⋈ pool__targets`, one-to-one, with the join asserted."""
     setup = _run_setup(run_dir)
@@ -112,12 +138,31 @@ def build_panel(run_dir: str, split: str) -> Dict:
             f"the join changed the row count {before} -> {len(panel)}; "
             "(date, ticker) is not one-to-one on one side"
         )
+    bands = exchange_and_ceiling(
+        setup["universe"], predictions["ticker"], predictions["date"]
+    )
+    panel = panel.merge(bands, on=["date", "ticker"], how="left", validate="one_to_one")
+    if len(panel) != before:
+        raise AssertionError(
+            f"the price-band join changed the row count {before} -> {len(panel)}"
+        )
+    panel["at_ceiling"] = panel["at_ceiling"].fillna(False).astype(bool)
+
     absolute = f"return_{setup['horizon']}day"
     matched = int(panel[absolute].notna().sum())
+    # ⚠️ **THE EXCLUSION IS THE DEFAULT NOW** (`PRF-0`, shipped 2026-08-19). It used to be
+    # a probe a reader had to remember to run, which meant the stage's own headline was
+    # the UNSCREENED number. A name at its ceiling has no sellers, so buying it on that
+    # date is fiction whatever the model said. The unscreened panel is kept beside it,
+    # because "how big was the bias" is a question §8f/§8h had to answer twice.
+    buyable, dropped = P.drop_ceiling(panel)
     return {
         **setup,
         "split": split,
-        "panel": panel,
+        "panel": buyable,
+        "panel_unscreened": panel,
+        "ceiling_dropped": dropped,
+        "ceiling_rate": float(panel["at_ceiling"].mean()) if before else float("nan"),
         "absolute": absolute,
         "relative": f"return_rel_{setup['horizon']}day",
         "rows": before,
@@ -217,6 +262,12 @@ def main(argv: Optional[List[str]] = None) -> pd.DataFrame:
         )
         print(f"rebalance every {built['horizon']} sessions -> "
               f"{P.SESSIONS_PER_YEAR / built['horizon']:.1f} per year\n")
+        # ⚠️ Printed every run, because an exclusion nobody can see in the output is
+        # one a later reader cannot tell was applied — and §8f/§8h both had to be
+        # re-measured precisely because the headline did not say.
+        print(f"price band (PRF-0): dropped {built['ceiling_dropped']:,} rows at "
+              f"their exchange ceiling ({built['ceiling_rate']:.4f} of the panel) "
+              f"— these had no sellers and could not have been bought\n")
         for kind in table["target"].unique():
             block = table[table["target"] == kind]
             print(f"--- {kind} returns " + "-" * 60)

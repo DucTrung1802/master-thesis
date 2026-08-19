@@ -378,6 +378,33 @@ rank is (1.33× against 2.14×), and at k=15 of 150 a ~2 % ceiling rate touches 
 per rebalance. **The price band is a 5-day problem, not a 20-day one** — one more instance
 of the horizon being the variable that decides.
 
-⚠️ **The exclusion is still applied by a PROBE and not by the stage.** `build_panel` does
-not carry `exchange`, so `long_only_top_k` cannot see a ceiling. TODO **PRF-0**'s
-remainder: fold it in so it is the default rather than something a reader must remember.
+### 8i. ✅ AND IT IS THE DEFAULT NOW — shipped 2026-08-19, `PRF-0`'s remainder
+
+`build_panel` joins `exchange` from `pool__basic`, computes the flag, and returns a panel
+with the ceiling rows already dropped. The stage prints the count on every run, because
+**an exclusion nobody can see in the output is one a later reader cannot tell was applied**
+— which is precisely why §8f and §8h each had to re-measure it from scratch.
+
+| 50 bps, top-15 | as first reported | screened (the default) | dropped |
+|---|---|---|---|
+| test | +1.4845 | **+1.5512** | 1,708 rows, 1.83 % |
+| val | +1.7367 | **+1.7385** | 3,437 rows, 3.76 % |
+
+⚠️ **Both reproduce §8h's probe to four decimals**, which is how the change was verified
+rather than asserted.
+
+⚠️ **ONE RULE, ONE PLACE.** `BANDS` + `mark_ceiling` + `drop_ceiling` live in
+`backtest.portfolio`; `walkforward.evaluate` and `walkforward.compare` import them instead
+of carrying a second copy, the way `ROUND_TRIP_COST` is shared. Two implementations of a
+rule that decides whether a trade was executable is a defect, not a study.
+
+⚠️ **`drop_ceiling` RAISES on a panel with no `at_ceiling` column** rather than passing it
+through. A backtest that silently skips the screen reports a number the market would not
+have given you, **and its output is identical to one that applied it** — so a panel that
+cannot say what was buyable refuses to be traded.
+
+⚠️ **NaN → False, and that is right for an ENTRY screen only.** An unknown exchange or a
+missing daily return keeps the row. The SELL side needs the opposite default — a name at
+its FLOOR on the exit date cannot be sold, and a loser is exactly when that happens — which
+is why `PRF-4` lists floor days as a separate unbuilt item rather than something
+`mark_ceiling` quietly half-covers.

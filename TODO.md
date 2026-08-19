@@ -31,7 +31,66 @@ for runs that are currently blocked anyway.
 ⚠️ **THE `PROFIT` SECTION IS FIRST AND IS ORDERED DIFFERENTLY** — by what would change a
 DECISION about trading, not by what makes an existing number wrong. It was added
 2026-08-19, when `src/backtest/` made "does it pay?" askable for the first time. P0-P4
-below remain the engineering backlog and are unchanged.
+below remain the engineering backlog.
+
+⚠️ **RE-ORDERED 2026-08-19, and TWO THINGS ABOUT THE SHAPE OF THE FILE CHANGED WITH IT.**
+
+1. **Every `✅ DONE` block moved to [§ Archive](#archive--done-kept-because-the-reasoning-is-the-evidence) at the bottom.** The convention
+   says a done item is *deleted*, not ticked, once its measurement lives in `CLAUDE.md` or
+   a `CONTEXT.md` — and all of them now do (`backtest/CONTEXT.md` §8h, `walkforward/CONTEXT.md`,
+   CLAUDE.md §2b-bis, §6-0). They are demoted rather than deleted **only** because the
+   reasoning around the numbers — the two recorded predictions that turned out wrong, the
+   three failed T4 attempts — is itself the evidence, and deleting it is a separate call.
+   **Nothing above the Archive is finished work.** ⚠️ **20 of this file's 32 blocks moved**
+   — all six P0s, four of the eight P1s, six of the eight P2s, and three of the ten PRFs
+   closed on 2026-08-19 alone.
+2. **A BLOCKED item no longer outranks a cheap unblocked one.** The rule below already
+   said so ("a thing that unblocks hours of other work outranks a thing that is only
+   itself"), but `PRF-9` — 90 → 800 channels, the largest upside left — sat first while
+   being blocked by `P1-2` *and* by `MEM-1`. It is now third, behind the two items that
+   can be run today, and `P1-2` was promoted to the head of P1 because it is what unblocks
+   it.
+
+---
+
+## ⚠️ START HERE — what to run next, 2026-08-19
+
+> Every row carries the four things you need before starting: **cost**, **where it runs**,
+> **what lands on disk**, and **what blocks it**. Costs are MEASURED where a comparable run
+> exists and marked *est.* where not. ⚠️ **The Kaggle queue is ~5 min of every job**
+> (measured, `smoke` 2026-08-17), so batch, and iterate with `kgpu rehearse`, which spends
+> no quota.
+
+### ✅ The four CPU items are DONE — 2026-08-19, all four in one pass
+
+| # | item | measured | what it produced |
+|---|---|---|---|
+| 1 | ✅ **`P0-7`** — CLAUDE.md §6-0 rewritten | ~1 h | §6-0 now headlines the **walk-forward** (118 periods, `se` 0.155) with the single split kept beside it as the leak check; new §6-0-a (the four 2026-08-19 closures), §6-0-b (`mase`), §6-0-c (what it still does not say); a `walkforward` row in the chain; run counts 1 → **31** |
+| 2 | ✅ **`PRF-4`, ceiling row** — the screen is the DEFAULT | ~1 h | `backtest.build_panel` drops ceiling rows and PRINTS the count. test **+1.4845 → +1.5512**, val +1.7367 → **+1.7385** — ⚠️ both reproduce §8h's probe to four decimals, which is how it was verified. One rule in `backtest.portfolio`, imported by both `walkforward` callers |
+| 3 | ✅ **`P1-2` / `PNL-2`** — grain from the data | ~½ day | `run.resolve_grain(target, n_tickers)`. **`PRF-9` is unblocked.** ⚠️ Verified not to reinterpret history: 3 archived `all` runs stay panel, 30 `vcb` runs stay series |
+| 4 | ✅ **`P4-12`** — Block B on a panel | ~½ day | `metrics.panel_accuracy_vs_naive`. **`test_mase = 0.9937`, `beats_naive = True`** on the headline run — the first thing in this repo to beat "predict no change" |
+
+⚠️ **235 tests pass** across `feature_selection`, `backtest`, `walkforward`,
+`result_evaluator`, `final_features`, `train_test_creator` and `model` — **13 of them new
+today**, and each pins one of the four failures above rather than the feature that
+replaced it.
+
+### The next thing to run
+
+| # | item | ⏱ | where | output |
+|---|---|---|---|---|
+| 1 | **`P1-6` / `FNM-1`** — re-run the top-150 selection with `feature_normalize=none` and compare the KEPT SET | **~25 min** *est.* + queue | **Kaggle T4** (`cross-sectional` job, `RUN_NULL=false`) | either the 13 channels survive and the sentence *"built on a shortlist that cleared z = +9.09"* is safe, or they do not and it is withdrawn. ⚠️ The `~1 h GPU` written in P1-6 predates panel mode; the estimate here is scaled from `PRF-7`'s **10m 34s** on 44 % of the dates, no null — the kept SET is the measurement, so no bar is needed |
+| 2 | **`PRF-2`** — the real chain at `h=10` | **~3-6 h** selection *est.* + **~10 min** chain | **Kaggle T4**, then **local GPU** | `rank_10day__final__d20_h10`, a dataset, a model run, `results/backtest_*.csv`. Answers *how much a fitted model adds over three ranked channels* — unknown at every horizon — and **separates `PRF-3`'s two hypotheses** by moving only the horizon. ⚠️ Run the hand screen as a baseline in the SAME backtest |
+| 3 | **`PRF-9`** — 90 → 800 candidate channels | ~16 h at 10 draws *est.* | **Kaggle T4** | the first cross-sectional selection ever offered `pool__ta`. ⚠️ **`P1-2` SHIPPED 2026-08-19, so the first blocker is GONE.** Still needs `pool__ta` pruned past `pool__ta` past `MEM-1` (711+90 channels is ~8× a design that already peaked at **16.3 GB** host RAM). ⚠️ Re-run `PRF-7`'s pre-2017 check at the new width — more channels is more room for the selection to have fitted the folds |
+
+⚠️ **WHAT IS NO LONGER ON THIS LIST, AND WHY.** *"Try a different model"* — `PRF-8` closed
+it 2026-08-19: 205,441 params, 2,033 params and 1,400 tree nodes all tie on the identical
+folds, paired |t| < 1. What is left is **FEATURES** (#3), the **HORIZON** (#2), honest
+**EXECUTION** (`PRF-4`'s remaining rows, `PRF-5`) and new **DATA** (`PRF-6`).
+
+⚠️ **Nothing below `PRF-2` changes a DECISION about trading.** `PRF-4` and `PRF-5` move the
+LEVELS and not the `z` — they matter the moment a CAGR is quoted to somebody, and not
+before. `PRF-6` is months and is the only item that needs data this repo does not have.
 
 ---
 
@@ -54,7 +113,465 @@ below remain the engineering backlog and are unchanged.
 > | h=5 hand screen, 30 bps | **ties** the market; loses at 50 bps ❌ |
 > | h=3 | worst of all — turnover dominates ❌ |
 > | **2022-2026** | ⚠️ **the two disagree and the horizon is why.** The h=5/h=10 HAND screens are flat-to-negative there (`backtest` §8g); the h=20 MODEL is clearly positive in 2023/24/25 (+2.64/+0.90/+1.39) with 2022 the only bad fold, bad for everyone |
-> | the biggest open threat | ⚠️ **PRF-7** — the 13 channels were selected on the WHOLE sample, so every LEVEL above is optimistic by an unmeasured amount. Only the SHAPES are safe |
+> | **the selection look-ahead** | ✅ **BOUNDED 2026-08-19 (PRF-7)** — re-running the identical selection on dates < 2017 keeps **51 of 61** channels (5.8 sd above chance) and the same top two. The channel set is **not period-fitted**, so the levels roughly stand. ⚠️ It bounds the bias, it does not remove it |
+> | **the ARCHITECTURE** | ✅ **RULED OUT 2026-08-19 (PRF-8)** — a **2,033-parameter** LSTM (101× smaller) scores Sharpe **+1.997** and a 1,400-node GBT **+1.975** against the 205 k model's +1.991, on the identical folds. Paired `\|t\| < 1` at every cost level. The result lives in the **13 CHANNELS**; nobody needs to try a bigger model |
+| the biggest open threat now | ⚠️ **execution realism (PRF-4) and survivorship (PRF-5)** — both hit the CAGR, neither touches the `z`. `+47.5 %/yr` is the number to distrust; `z = +12.3` is not |
+>
+> **Order below, and why it changed 2026-08-19** — PRF-0/1/7 closed in one day and their
+> successors are not in the order the section was written in:
+>
+> | # | item | ⏱ | why here |
+> |---|---|---|---|
+> | 1 | **PRF-2** | ~1 h GPU + 1 h | the only horizon that is measured-to-work and unmeasured-by-a-model, and it **separates PRF-3's two hypotheses** (horizon vs feature set) by moving one variable. Also the first model-vs-hand-baseline number at any horizon |
+> | 2 | **PRF-9** | days | the largest upside left (90 → 800 candidate channels) and the only one that is **BLOCKED** — needs `P1-2` shipped and `pool__ta` pruned past `MEM-1` first. ⚠️ **PRF-8 promoted it in substance**: with the architecture ruled out, FEATURES are the only lever left that is not new data |
+> | 3 | **PRF-3** | ~1 day | half-answered by PRF-1 already; **run PRF-2 first**, it is cheaper and may make this unnecessary |
+> | 4 | **PRF-4** | ~1 day | execution realism. Moves the LEVELS, not the `z` — and its cheapest row is already measured and just not shipped (`PRF-0`'s ceiling exclusion, ~1 h) |
+> | 5 | **PRF-5** | ~2 days | survivorship. Same shape: `z = +4.72` stands, `+47.5 %/yr` does not. It is a DATA problem, not a code one, which is why it is not higher |
+> | 6 | **PRF-6** | months | new information. The only lever §2d says is left, and the only one that is not a re-analysis of data already on disk |
+>
+> ⚠️ **`PRF-8` CLOSED 2026-08-19 and it changed what the rest of this list is for.** Three
+> models spanning 205,441 parameters to 1,400 decision nodes tie on the identical folds, so
+> "try a different model" is no longer an available answer to anything below. What is left
+> is FEATURES (`PRF-9`), the HORIZON (`PRF-2`), honest EXECUTION (`PRF-4`/`PRF-5`) and new
+> DATA (`PRF-6`).
+
+### 1 · ⚠️ PRF-2 · Run the real chain at `h=10` ⏱ ~3-6 h Kaggle T4 + ~10 min local
+
+> **Why second (2026-08-19):** it is the cheapest way to move ONE variable. `PRF-3` lists
+> two hypotheses for the post-2022 break — the horizon or the feature set — and this run
+> holds the feature pipeline fixed and moves only the horizon, so **run it before PRF-3's
+> training-window experiment**, which costs a day and may turn out unnecessary.
+
+**The one horizon that is both measured-to-work and unmeasured-by-a-model.** A hand-built
+3-channel rank gets Sharpe **+0.652 at 30 bps** there (z = +4.72, 211 periods, beats the
+market's 0.404 at every cost level). Nobody has run the selection + LSTM chain at `h=10`.
+
+The question it answers: **how much does a fitted model add over three ranked channels?**
+That number is not known at any horizon — at h=20 there is a model result and no hand
+baseline; at h=10 there is a hand baseline and no model.
+
+```powershell
+# selection: cs_rank_10day, top-150 by pre-2014 turnover, 20-draw null (Kaggle T4, ~6 h)
+# then the local chain, which is minutes:
+python -m final_features --apply
+python -m train_test_creator --ticker all --table rank_10day__final__d20_h10 --save
+python -m model.lstm --config configs/lstm__all__rank_10day__final__d20_h10.yaml
+python -m result_evaluator --rescore ; python -m result_evaluator --rebuild-index
+python -m backtest --run <run_id> --top-k 20 --draws 200
+```
+
+⚠️ **Cost drag halves against h=5 and doubles against h=20** — 8.8 %/yr at `τ=0.70`,
+50 bps. That is the whole reason h=10 is worth a run and h=5 is not.
+⚠️ **Add the hand screen as the baseline in the same backtest.** §5 rule 4's shape: a
+model that does not beat three ranked columns has not earned its complexity.
+
+### 2 · ⚠️ PRF-9 · THE FEATURE SURVEY — 76 gold tables, and only THREE can help ⏱ see below
+
+> ⚠️ **BLOCKED, and DEMOTED FROM #1 ON 2026-08-19 FOR THAT REASON.** This is the largest
+> upside left in the repo — the 13 channels are the survivors of **90 candidates, not of
+> 800** — and none of it can start today. Two hard blockers, in order: **`P1-2`** (half a
+> day, without it a multi-pool cross-sectional run cannot be expressed at all) and
+> **`MEM-1` / `P3-2`** (711 + 90 channels is ~8× a design that already peaked at 16.3 GB
+> host RAM). The file's own rule — *a thing that unblocks hours of other work outranks a
+> thing that is only itself* — puts `P1-2` ahead of this item, not inside it.
+
+Surveyed 2026-08-19, because "we have much more data in gold, can it add features?" is
+the obvious next question and the answer is structural rather than a matter of trying.
+
+**⚠️ A CROSS-SECTIONAL RANK CANNOT USE A DATE-ONLY COLUMN.** `cs_rank_{h}day` ranks stocks
+WITHIN a date. A column identical for every ticker on that date has a **constant within-date
+rank**, so it carries no information about WHICH stock to buy. Measured, not argued:
+
+| pool | sampled columns with cross-sectional variation |
+|---|---|
+| `pool__basic` | **12 of 12** ✅ |
+| `pool__ta` | **12 of 12** ✅ |
+| `pool__fa` | 8 of 12 (the misses are `year`, `quarter`) |
+| **`pool__economy_vietnam`** | **0 of 12** ❌ |
+
+**Of 76 gold tables, 71 are date-only** — all 19 `economy_*`, all 48 `forex_*`, `bonds`,
+`funds`, `stock_market`, `market_breadth`. ⚠️ **That is ~4,500 channels that are
+structurally incapable of ranking a cross-section**, and it explains the shortlist
+composition without appealing to their being weak. They can only enter through
+INTERACTIONS (macro × beta, macro × sector), and nothing in the pipeline builds one.
+
+⚠️ **This is consistent with, but not the same as, the 2026-08-17 six-pool sweep.** That
+tested `stock_market`/`bonds`/`news_daily`/`market_breadth` on a SINGLE-SERIES VCB target,
+where a date-only column does vary — over time — and they failed anyway (z = +0.19…+0.53).
+Two different arguments, one conclusion.
+
+**Only five gold tables are PER-TICKER**, and this is the whole candidate list:
+
+| source | shape | status |
+|---|---|---|
+| **`stocks_ta` → `pool__ta`** | **711 numeric channels**, 2,381,858 × 777 tickers | ✅ built on `all`, **0 name collisions** with `pool__basic`, coverage median **0.992** (7 of 40 sampled below 0.95). ⚠️ ends **2026-06-26** (`STA-1`) |
+| `news_daily_panel` | 26 channels, 2.06 M rows, per-ticker | ⚠️ `pool__news_daily` exists **for VCB only** — must be built for `all`. Prior is weak: z = +0.53 at layer 1 |
+| `stocks_financials_bank_fa` → `pool__fa` | 1,150 cols | ⚠️ **banks only** — ~20 of the 150 names, so ~87 % NULL on this universe |
+| `stocks` | 41 cols | already the source of `pool__basic` |
+| `news_weekly_panel` | 28 cols | weekly grain; the news thread is closed |
+
+**So the prize is `pool__ta`: 711 channels against `pool__basic`'s 90, an 8× widening of
+the only feature space that can rank.**
+
+⚠️ **AND IT HAS NEVER BEEN OFFERED TO THE CROSS-SECTIONAL SELECTION — `CSP-1`.**
+`cross_sectional.read_universe_panel` is ONE hand-written SQL statement reading
+`pool__basic ⋈ pool__targets`. No `--pools` value, no notebook parameter and no config key
+routes around it. **The 13 channels are the survivors of 90 candidates, not of 800.**
+
+**Order of work, and each step is a real blocker for the next:**
+
+1. **`P1-2` / `PNL-2` first** ⏱ half a day — derive grain from the panel's own ticker
+   count. CLAUDE.md already states this "partly dissolves `CSP-1` for free": the `else`
+   branch then reads via `reader.join(pools)`, making `--pools pool__basic,pool__ta` a real
+   cross-sectional run.
+2. ⚠️ **`MEM-1` becomes the wall, and P3-1 says so in advance.** 711 + 90 channels over
+   624,448 rows is ~8× the design that already peaked at **16.3 GB host RAM** on 90
+   channels (P1-4b). Straight-lining that is ~130 GB. **The blocked ranker (P1-4) fixed the
+   VRAM half only.** So `pool__ta` must be PRUNED before it is selected over — a coverage
+   screen plus a correlation prune, offline, is the cheap version.
+3. **Then the selection.** At ~800 channels the fitted cost model gives ~5.4× the 90-channel
+   run's 6 h 07 m ≈ **33 h at 20 draws**, above Kaggle's 30 GPU-h/week. **Run 10 draws**
+   (§5's rule: 10 to fail, 20 to pass) ≈ 16 h, and pay for 20 only if it looks like passing.
+
+⚠️ **`STA-1` is the tax on all of it**: `pool__ta` stops 2026-06-26, so an INNER join drops
+the chain's last 31 sessions — the same 4,266 → 4,235 it already costs the VCB chain.
+
+⚠️ **`PRF-7` WAS THE PRECONDITION AND IT IS NOW DISCHARGED (2026-08-19)** — but only for
+90 candidates. Widening the pool from 90 to 800 makes selection look-ahead WORSE, not
+better: more channels is more opportunity for the selection to have fitted the test folds,
+and PRF-7's measured overlap (51 of 61 kept, Jaccard 0.761) was measured **at the current
+width**. ⚠️ **So the pre-2017 comparison has to be re-run at the new width**, not assumed
+to carry over — it is one extra Kaggle job on the same job definition, and it is what
+keeps a +1.991 defensible after the widening.
+
+### 3 · ⚠️ PRF-3 · The regime question — **PARTLY ANSWERED by PRF-1, and the answer flipped** ⏱ ~1 day
+
+⚠️ **UPDATE 2026-08-19.** This item was written when three independent measurements all
+found the edge dying after 2022. **PRF-1's walk-forward found the opposite at h=20**:
+2023/2024/2025 score **+2.64 / +0.90 / +1.39** against markets of +1.57 / +0.35 / +0.94,
+and 2022 is the only bad fold — a year the equal-weight universe itself ran Sharpe −0.94.
+
+So the break is **not** universal. It is present in the h=5 and h=10 HAND screens and
+absent in the h=20 MODEL. Two candidate reasons, and they are separable: the **horizon**
+(consistent with §2a-bis and with everything else measured this week) or the **feature
+set** (13 selected channels against 3 hand-picked ones). **PRF-2 separates them** — it runs
+the real chain at h=10, holding the feature pipeline fixed and moving only the horizon.
+Run PRF-2 before the training-window experiment below; it is cheaper and it may make it
+unnecessary.
+
+The original framing, still valid for the hand screens:
+
+
+Three independent measurements now find the same break at the same place:
+
+| study | pre | post |
+|---|---|---|
+| `model/CONTEXT.md` §11 (h=5, foreign flow, 28 folds) | net@20bps **+1.46** (2017-20) | **−0.51** (2022-26) |
+| the h=5 hand screen, 2026-08-19 | Sharpe **+1.104** (2018-21) | **−0.099** (2022-26) |
+| the h=10 hand screen, 2026-08-19 | **+1.671** (2018-21) | **+0.011** (2022-26) |
+
+⚠️ §11 already tested **rolling vs expanding training at h=5 and it did not help** —
+rolling *lowered* AUC (0.513 vs 0.520). So "stale training data" is not the explanation
+there. **Untested at h=10 and h=20**, which is the gap.
+
+Two hypotheses that make different predictions, which is what makes this worth running:
+
+1. **The market changed** (more retail flow, more index products, tighter spreads) — then
+   *no* feature set trained on 2018-21 works post-2022, and rolling retraining does not
+   rescue it (§11's result, one horizon up).
+2. **The FEATURES decayed** — order-flow imbalance from daily order COUNTS is a crowded,
+   widely-visible signal by 2022. Then a *different* feature set still works, and the
+   answer is §2d's ladder, not a longer training window.
+
+**Distinguishing test**: train on 2022-2026 only and score 2022-2026 by walk-forward. If
+even a model that has only ever seen the new regime cannot find an edge in it, that is
+hypothesis 1 and the honest conclusion is that this data cannot be traded now.
+
+### 4 · ⚠️ PRF-4 · Execution realism — the remaining fictions ⏱ ~1 day
+
+Each is a way the backtest is still kinder than the market. Ordered by expected damage:
+
+| gap | why it matters | measured? |
+|---|---|---|
+| **ADV / size cap** | a 20-name book at real size moves a VN mid-cap. `pool__basic.value_matched` is on hand, so cap each position at a fraction of it and re-run | ❌ |
+| **floor days on the SELL side** | the ceiling exclusion covers ENTRY only. A name at its floor on the exit date cannot be sold either, and a loser is exactly when that happens — so this is biased against the strategy in the direction that matters | ❌ |
+| **the ATC auction** | signals built from full-day order counts settle only after close; but a partial-day version could be submitted into ATC. That recovers part of the ~19 pp/yr the t+1 lag costs at h=5 | ❌ |
+| **the ceiling exclusion is a PROBE, not a default** | `PRF-0` measured it and the model survives (+1.484 → **+1.551** test), but `backtest.portfolio` still applies no exclusion, so the next run reproduces the untested number. Needs `exchange` on the panel, which `build_panel` does not carry. ⏱ ~1 h — **the cheapest row here, and the only one already measured** | ✅ measured, ❌ not shipped |
+| ~~**`se_sharpe` on the h=20 cell**~~ | ✅ **CLOSED by PRF-1, 2026-08-19** — the walk-forward produced **118 periods** and `se_sharpe` **0.155**, against the single split's 32 and 0.256. Fixed the way it was predicted to be: more OOS periods, not a wider window | ✅ 2026-08-19 |
+| **max drawdown −55 to −58 %** | at every `k` on the h=10 screen. Statistically tradable ≠ holdable; a vol target or a market-regime filter is the standard answer and neither is tested | ⚠️ known |
+
+### 5 · PRF-5 · Survivorship — the one bias that flatters a momentum screen ⏱ ~2 days
+
+`silver.stocks_basic` holds **no delisted name** (§2c). A screen that buys recent winners
+is the strategy most flattered by that, because the names that crashed out are absent.
+⚠️ **The null is protected** (every shuffled draw picks from the same survivor basket) but
+**the CAGR is not** — so `z = +4.72` stands while `+14.9 %/yr` does not.
+
+Fix is data, not code: a point-in-time listing/delisting table. Related to §2d's
+"point-in-time index membership" lever, and it makes PRF-1's fold series interpretable.
+
+### 6 · PRF-6 · New information — the only lever §2d says is left ⏱ months
+
+Ranked by expected impact **on this specific problem**, which differs from §2d's original
+single-stock ranking:
+
+1. **Intraday / tick data.** ⚠️ The measured 5-day signal decays inside ONE SESSION —
+   +24.4 % CAGR same-close against +5.6 % at t+1. Trading it intraday is not an
+   improvement, it is the difference between a strategy and a curiosity. It also gives
+   §2d's true #1, aggressor buy/sell imbalance, of which daily order COUNTS are a proxy.
+2. **Point-in-time listing status** — PRF-5.
+3. **Fundamentals with filing dates** — `experiment_4` already recovered VCB's publish
+   dates, so the method exists for one name and needs scaling.
+4. ~~News / sentiment~~ — **closed**, see the Closed table. `pool__news_daily` measured
+   z = +0.53 at layer 1.
+
+---
+
+## P0 — a number you already have is wrong or unreadable until this is done
+
+⚠️ **P0-1 … P0-6 ARE ALL DONE and live in [§ Archive](#archive--done-kept-because-the-reasoning-is-the-evidence).** Two items sit
+here instead, both **promoted on 2026-08-19** from lower sections, because by this
+section's own test neither was hygiene.
+
+### ⚠️ P0-7 · CLAUDE.md §6-0 STILL DESCRIBES THE ONE-SPLIT CHAIN AS THE HEADLINE ⏱ ~1 h
+
+⚠️ **The auto-loaded register is the one file every session reads, and its HEADLINE table
+is now the weakest evidence in the repo rather than the strongest.** Four PRF items closed
+on 2026-08-19 and §6-0 predates all of them. Measured, not asserted:
+
+| CLAUDE.md §6-0 says | the state on 2026-08-19 |
+|---|---|
+| header **"State today (2026-08-18)"** | a day stale, and four closures stale |
+| stage 9 · **Sharpe +1.484**, `se` 0.256, **32 periods**, one split | `PRF-1`: **+1.991** over **118 periods**, `se` **0.155**, 10 folds, z = +12.3, beats the market **10/10 folds** |
+| stage 7 · one LSTM run, 205 k params, quoted as *the* model | `PRF-8`: a **2,033-param** model and a **1,400-node GBT** tie it, paired \|t\| < 1 — the architecture is not part of the result |
+| *"the 13 channels were selected on the whole sample"* is unqualified | `PRF-7` **bounded it**: 51 of 61 channels survive a pre-2017 selection, 5.8 sd above chance |
+| **no `walkforward` stage in the 9-stage table at all** | `src/walkforward/` exists and is where the strongest number now lives |
+| **"model runs: ALL = 1"** (§"What exists right now") | `index.csv` holds **33 rows — 21 LSTM + 10 GBT on `all`**, 2 VCB |
+
+⚠️ **This is P0 and not P4 by the section's own rule**: §6-0 is not merely out of date, it
+directs a new session to quote **+1.484 / se 0.256 / 32 periods** when a 118-period figure
+exists. That is *a number you already have being wrong*, in the one file that is loaded
+whether or not anybody opens it. ⚠️ **`§6-0-bis`'s VCB paragraph has the same problem one
+level down** — it reads the single-split book, and PRF-1 never re-ran the single-stock
+question.
+
+**Do**: rewrite §6-0's table around the walk-forward, fold `6-0-ter` (already written) into
+it, add the `walkforward` stage, and refresh the run counts. ⚠️ **Do NOT delete the
+single-split row** — `walkforward/CONTEXT.md` §5 uses it as the no-mechanical-leak check
+(the two agree to the third decimal on the shared window), so it is evidence, not a
+superseded draft.
+
+
+### ⚠️ P4-12 · `mase` IS NEVER COMPUTED ON A PANEL — promoted from P4 2026-08-19 ⏱ ~half a day
+
+⚠️ **BLOCK B (`mase`, `rmsse`, `skill_score`, `beats_naive`) IS NEVER COMPUTED ON A
+PANEL.** `metrics.accuracy_vs_naive` is called from `evaluate` only; `evaluate_panel` runs
+`panel_core_metrics` + `panel_null_metrics` + `regression_extras` and stops. So the
+top-150 cross-sectional run — **the headline result of this whole repo** — carries
+`test_mase = NaN` while both VCB runs carry a number.
+
+**Why this is P0 and not hygiene:** `mase ≥ 1` is the column **P2-3 says is the line to
+quote**, and it is the one that showed the `return_5day` model losing to "predict no
+change" while its `ic` looked respectable. The cross-sectional model has never been asked
+that question. ⚠️ Its `r2` is **+0.0003** and its RMSE is 0.29065 against a constant
+predictor's 0.29070 — which is what a `mase` of ~1.0 looks like from the other side, so
+the honest expectation is that it will not beat the naive on MAGNITUDE either, and the
+result stands or falls on the RANK. **That is worth measuring rather than inferring.**
+
+⚠️ **The fix is not a copy-paste.** The `lag_h` naive reads `y_true[i - h]` and assumes
+rows are **consecutive samples in date order**, which is false on a panel where each date
+holds N tickers — it would have to be per-ticker. Found 2026-08-18 while fixing `ICT-1`;
+nothing was broken by that fix, the gap simply became visible once the panel row was read
+column by column.
+
+## P1 — unblocks hours of other work
+
+⚠️ **Re-ordered 2026-08-19.** `P1-2` moved to the front because it is the only thing here
+that unblocks another item (`PRF-9`, the 90 → 800 channel widening) — this section's own
+rule. `P1-3`/`P1-4`/`P1-5`/`P1-7` are done and live in the Archive; **`P4-11` was promoted
+in** from P4, because a stage reporting `up to date` for an experiment it never ran is a
+false green, which is the class §5 rule 10 exists for.
+
+### P1-2 · Fix `PNL-2` ⏱ half a day
+
+Cheapest fix in the issue register. Derive `cross` from the panel's own `ticker` count, as
+resolved `PNL-1` already made the SCORER do. No chicken-and-egg: the read happens before
+`build()`.
+
+⚠️ **It partly dissolves `CSP-1` for free** — once grain comes from the data, the `else`
+branch reads via `reader.join(pools)`, so `--ticker ALL --pools pool__basic,pool__X
+--target return_5day` becomes a real cross-sectional multi-pool run. `daily_ic` is
+Spearman per date, so ranking `return_5day` within a date is the same metric as
+`cs_rank_5day`; only the ranker *fit* differs.
+
+### ⚠️ P4-11 · `pipeline` CALLS ANOTHER EXPERIMENT'S RUN `up to date` — promoted from P4 2026-08-19 ⏱ ~2 h
+
+⚠️ **`pipeline`'s `selection_2` ROW DESCRIBES A DIFFERENT EXPERIMENT AND CALLS IT
+`up to date`.** Measured 2026-08-18: `python -m pipeline --ticker all --table
+rank_20day__final__d20_h20` reports *"2 layer-2 run(s) over
+`pool__shortlist__rank_20day__d20_h20`"* and then names
+`2026-08-17_011642__vcb__shortlist__return_5day__d20_h5__return_5day` — a different
+schema, a different target and a different pool. The layer-2 detection is not scoped to
+the chain being asked about, **so a stage that has never run for this chain reads green.**
+
+⚠️ **Related trap in the same table, working as designed but worth knowing:** the
+**`model` row keys on `--config`, not on `--table`**, so without one it reports the
+DEFAULT chain's run as up to date — pass `--config`, or `--apply` will skip the model
+stage while saying everything is fine.
+
+**Why it is P1 and not P4:** `RUNBOOK.md` §8 rule 1 makes this command the gate on
+quoting any number (*"`python -m pipeline` must show `up to date` for every stage below
+the one you are quoting"*), and RUNBOOK §3a already has to warn readers off `pipeline`
+for the cross-sectional chain in two separate ⚠️ blocks. A gate that answers about the
+wrong experiment is worse than no gate. ⚠️ It is also the reason the cross-sectional
+chain is run command-by-command instead of through `--apply`.
+
+### ⚠️ P1-6 · `FNM-1` — decide the feature representation by MEASURING it ⏱ ~25 min Kaggle T4
+
+The selection scored the 13 channels under `feature_normalize=cs_rank` (each channel
+ranked within its date before the window); `train_test_creator` feeds the model those
+channels standardised **globally**. Same shape as `RNK-1`, one level over: the label was
+the mismatch there, the FEATURES are the mismatch here.
+
+⚠️ **It does not invalidate the model's own number** — that is measured on its own splits
+under its own representation. It weakens the sentence *"built on a shortlist that cleared
+z = +9.09"*, because §5 rule 1 says a bar computed for one configuration says nothing
+about another.
+
+⚠️ **THE COST ESTIMATE MOVED DOWN, 2026-08-19.** This item was written *"~1 h GPU"* before
+panel mode existed; the run it actually needs is the `cross-sectional` Kaggle job with
+`RUN_NULL=false`, because **the kept SET is the measurement here and not its bar**. `PRF-7`
+measured that shape at **10m 34s** on 44 % of the dates, so the full sample is ~25 min plus
+the ~5 min queue.
+
+⚠️ **Which side moves is not obvious**, which is why nothing was changed: per-date ranking
+in `train_test_creator` changes every panel dataset, and dropping it from the selection
+throws away the argument in `cross_sectional.py` §3. **Re-run the selection with
+`feature_normalize=none` and compare the kept set** — if the 13 survive, the question is
+moot and the sentence is safe.
+
+### P1-1 · Re-fit the cost model into ONE function ⏱ ~2 h
+
+Two models exist, disagree, and were both fitted with `lasso` — dropped 2026-08-16:
+
+| model | predicted the 644-ch / 10-draw run at | actual |
+|---|---|---|
+| Dagster guard `1.1 × (ch/113)² × (1+draws)` | **393 min** | **29.7 min** |
+| `CONTEXT` §15c `0.364 × ch^0.77` | ~53 min/pass | ~3 min/pass |
+
+Needs a **draw coefficient** (draws skip `stability` and the holdout, so `(1 + draws)` is
+wrong) and a **raggedness term** — exponent ~0.83 fits the well-behaved runs while the
+1,406-channel `usa` run sits **6× off**, likely rule 23's all-NaN slices rather than width.
+
+⚠️ **The guard's premise is falsified**: CLAUDE.md says `usa` is "7.2 h with no null"; it
+ran **35 min 12 s**. Rewrite the raise message with the measured number.
+
+**Payoff:** a 20-draw null on each of the 19 country pools becomes **~2-3 hours**, not the
+~1,000 CPU-hours `EVD-1` is scoped at. This is what makes EVD-1 closable.
+
+### P1-4b · Cut the host-side peak so the top-300 panel fits ⏱ see P3-2
+
+⚠️ **THE FIRST EXTRAPOLATION HERE WAS WRONG AND THE SECOND MEASUREMENT KILLED IT.** It
+read *"~1.5 GB of the smoke run's RSS is data over 48,521 rows, so the top-300 panel is
+25.7× the rows → ~39 GB"*. The top-150 run then ended phase 4 at **11.0 GB on 624,448
+rows**, and a straight line through both points predicts **20.6 GB** for top-300 — under
+the box, not 10 GB over it. **One point does not fit a line**, and scaling a peak from a
+tiny panel treats a large fixed cost as if it were per-row.
+
+⚠️ **AND THE SECOND FIT IS NOT TO BE TRUSTED EITHER, FOR A DIFFERENT REASON: `rss` is
+sampled BETWEEN phases.** The top-300 run died *inside* phase 4, so whatever killed it
+was never printed. `selector._tick` now also reports `peak=` — the OS high-water mark
+(`peak_wset` / `ru_maxrss`) — which is the number that decides whether a run survives.
+✅ **AND THE 2026-08-18 NULL RUN REPORTED IT.** On top-150 the phases read `rss=11.2G`
+but **`peak=16.3G`** — the high-water mark is **45 % above where the run settles**, and it
+is reached inside `rank (the ensemble's methods)`, which is exactly where the top-300 run
+died and exactly what an end-of-phase sample could never see. `window design` has the same
+shape: 7.3 G settled, **10.8 G peak**. Doubling the rows puts top-300's peak at
+**~28-30 GB against a ~29-30 GB box**, so that kill is now explained by a measurement.
+
+⚠️ **Both earlier extrapolations were wrong, in opposite directions, and for the same
+reason: each scaled a quantity that was not the binding one** (~39 GB from one tiny panel,
+then ~20.6 GB from settled RSS). **top-300 needs the streaming design (P3-2), not a trim.**
+
+## P2 — new measurements worth having
+
+### P2-2 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h
+
+`read_universe_panel` already takes a `tickers` list and filters in SQL, so this is a CLI
+flag, not a new schema. ~1.3 M rows — ⚠️ **the same width as P2-1 v2, so assume the same
+4 GiB VRAM ceiling and the same P1-3 dependency** until measured otherwise. Puts a number
+against §2b's `ALL` row, which reads **"never ran — ⚠️ unverified"** at IC +0.109.
+⚠️ Today's measurement says liquidity is the variable: the 5-day cross-sectional reversal
+runs `t = −18.60` over all names, `−10.43` at top 300, **`−1.96` at top 100**.
+
+## P3 — structural code, only pays off for runs currently blocked
+
+| item | what | note |
+|---|---|---|
+| **P3-1** | `CSP-1` — give `read_universe_panel` the `UnifiedSchemaReader.join()` the single-ticker path uses | ⚠️ makes `MEM-1` worse by the width joined; `pool__ta` at 922 channels is ~10× the design |
+| **P3-2** | `MEM-1`, **host half only** — stop materialising the whole design; window per fold or per ticker-chunk, never holding the blocks and the `pd.concat` result at once | 4.03 GB per million rows, measured. ⚠️ **The DEVICE half was promoted to P1-4**; and on a T4's ~29 GB of RAM this host half did **not** bite — the 1.25 M-row design built in 189.3 s |
+| **P3-3** | `_ingest_gold_stocks` still carries a legacy column (`close`/`volume` check: 1 of 2 present) | ⚠️ Fixing it redefines `gold.stocks`' OHLC as adjusted and commits to a ~2.4 M × ~900 col rebuild. Its own decision, not a side effect. Related to `STA-1` |
+
+---
+
+## P4 — hygiene, each item distorts one number or hides one failure
+
+⚠️ **Two rows LEFT this table on 2026-08-19, upward.** `P4-12` (`mase` is never computed
+on a panel) is now in **P0** and `P4-11` (`pipeline` calls another experiment's run
+`up to date`) is in **P1** — neither is hygiene by this file's own test. **The codes did
+not change**, so an older message pointing at "P4-11" still finds it.
+
+| item | what | status |
+|---|---|---|
+| **P4-1** | **`STA-1` costs the chain its last 31 sessions** — `pool__ta` stops 2026-06-26, and the INNER join drops the whole chain 4,266 → **4,235 rows**. The `return_5day` table and dataset end 2026-06-25 | measured 2026-08-17 |
+| **P4-2** | Confirm `validation.csv` emits **`n_dead_train` / `n_dead_test`** and read them for `pool__news_daily` — rule 23, its channels are entirely NULL before 2013 | the 2026-08-17 layer-2 `validation.csv` showed no such column |
+| **P4-3** | **262 rows in `bronze.cafef_price` have `high < low`** (e.g. ACB 2018-07-31: high 35,800 low 36,500). CafeF's defect, surfaces in gold as a negative `range_hl`. Needs a bronze data-quality screen, not a gold patch | ⚠️ **re-verified 2026-08-17, still 262.** Probably deserves an ISSUES.md code |
+| **P4-4** | XGBoost warns in **every** run: *"Falling back to prediction using DMatrix due to mismatched devices — running on cuda:0, input data on cpu"* | if the design is copied host→device per prediction, the GPU conversion is leaving speed on the table |
+| **P4-5** | `landed()` cannot answer "did THIS run produce anything" — it rglobs a folder where the previous run's dated files still sit. 140 header-only CSVs went green (2026-07-31) | this is §5 rule 10's mechanism; fix is to compare against the run's own outputs |
+| **P4-6** | `logs/app.log` has many writers now — the executor is multiprocess and every step appends, so records interleave | fix is per-process filenames in `Logger`, **not** going back to sequential |
+| **P4-7** | `raw/trading_view` partitions `crypto` and `options` are permanently red — both `true` in config, folders never existed, `landed(require=True)` fails them | choose `require=False` or accept two red partitions |
+| **P4-8** | Decide the fate of `raw/trading_view_collected_links` — nothing reads it | it is a leaf, not a hub |
+| **P4-9** | ⚠️ If ever backfilling TradingView, use a **single-run backfill**. `tag_concurrency_limits` is per-RUN, so 9 partitions the default way is 9 runs × 8 browsers = **72 Chrome** | `.dagster/dagster.yaml` is empty |
+| **P4-10** | Four heavy assets have never been observed running end to end through Dagster: `trading_view_links`/`data`, the 5 CafeF stock tabs + news, `cafef_pdfs` (100 partitions), `cafef_financials` (~2.4 h each) | *"built is not run"* |
+
+---
+
+## Closed — recorded so they are not reopened
+
+| what | why closed |
+|---|---|
+| **News sentiment scorer** (old items 7-16: annotation, LLM labelling, PhoBERT fine-tune, LIME gate, full panel) | ⛔ **Decided against 2026-08-03 and confirmed 2026-08-17.** 7 paired tests, every \|t\| < 1.3; adding news costs 2-8 pp CAGR for ΔMCC ±0.003. The one reason to continue — coverage — was tested on the top-30 most-covered tickers and did not survive. The event-count half is now `pool__news_daily` and it measured `z = +0.53` at layer 1 |
+| **Silver leaf assets** (old item 17: bonds, forex, funds, indices, gics) | ✅ all five exist |
+| **Gold leaf assets** (old item 18: bonds, forex, funds) | ✅ all three exist |
+| **`switch_config.json` cleanup** (old items 22, 23) | ✅ moot — the file is gone (§5a); a leftover copy now RAISES |
+| **`execution.finished_at = None`** in every `metadata.json` | ✅ **working as designed** ([runtime.py:329](src/utils/runtime.py#L329)) — `summary()` is called mid-run because `write_report` writes the file, and waiting for `stop()` would record a runtime of zero. `None` "rather than a guess" is §5 rule 2 at the clock. I called it a bug on 2026-08-16 and was wrong |
+
+---
+
+## Archive — done, kept because the reasoning is the evidence
+
+> ⚠️ **NOTHING BELOW THIS LINE IS WORK TO DO.** Moved here 2026-08-19, in the order they
+> were closed. The convention at the top of this file says a done item is **deleted**, not
+> ticked, once its measurement lives somewhere permanent — and every one of these does:
+>
+> | block | where the measurement now lives |
+> |---|---|
+> | `PRF-0` | `backtest/CONTEXT.md` §8h — the ceiling table, both splits |
+> | `PRF-1` | **`walkforward/CONTEXT.md`** — the full 10-fold table |
+> | `PRF-7` | `walkforward/CONTEXT.md` §6.1 + the run's own `README.md` |
+> | `P0-1` … `P0-6`, `P1-3/4/5/7` | CLAUDE.md §3d-bis, §6-0, §6-0-bis; `ISSUES.md` (struck through) |
+> | `P2-1 v2` + its three attempts + the 20-draw null | **CLAUDE.md §2b-bis** |
+>
+> They are demoted rather than deleted for one reason: **several of them record a
+> prediction that was written down before the run and turned out wrong** (`P0-1`, `PRF-1`),
+> and the three failed T4 attempts under `P2-1 v2` are the only account of why the design
+> is top-150 and not top-300. That reasoning is not reproducible from a result table.
+> ⚠️ **AND THE TABLE ABOVE IS NOT UNIFORMLY TRUE, WHICH IS THE SECOND REASON NOTHING WAS
+> DELETED.** Checked 2026-08-19: several registers **cite this file rather than restate
+> it** — CLAUDE.md §4 gives `P0-3`'s 52 % dtype figure and then writes *"(TODO P0-3)"*,
+> §3 does the same for `P0-4`'s `mkt_n_names`. For those, deleting the block here would
+> leave a live cross-reference pointing at nothing. **Before deleting any row above,
+> `grep` the codes across `*.md` and move what is cited.**
 
 ### ✅ PRF-0 · DONE 2026-08-19 — the price band does NOT bite the h=20 model
 
@@ -199,155 +716,11 @@ the current 13. ⏱ ~6 GPU-h. If the overlap is high the look-ahead is mild and 
 roughly stand; if it is low, every level in this repo is overstated and only the shapes
 survive. **Do the cheap one first** — it is one run and it bounds the problem.
 
-### ⚠️ PRF-9 · THE FEATURE SURVEY — 76 gold tables, and only THREE can help ⏱ see below
+### ✅ PRF-8 · DONE 2026-08-19 — the architecture is worth nothing; a 2,033-parameter model ties it
 
-Surveyed 2026-08-19, because "we have much more data in gold, can it add features?" is
-the obvious next question and the answer is structural rather than a matter of trying.
-
-**⚠️ A CROSS-SECTIONAL RANK CANNOT USE A DATE-ONLY COLUMN.** `cs_rank_{h}day` ranks stocks
-WITHIN a date. A column identical for every ticker on that date has a **constant within-date
-rank**, so it carries no information about WHICH stock to buy. Measured, not argued:
-
-| pool | sampled columns with cross-sectional variation |
-|---|---|
-| `pool__basic` | **12 of 12** ✅ |
-| `pool__ta` | **12 of 12** ✅ |
-| `pool__fa` | 8 of 12 (the misses are `year`, `quarter`) |
-| **`pool__economy_vietnam`** | **0 of 12** ❌ |
-
-**Of 76 gold tables, 71 are date-only** — all 19 `economy_*`, all 48 `forex_*`, `bonds`,
-`funds`, `stock_market`, `market_breadth`. ⚠️ **That is ~4,500 channels that are
-structurally incapable of ranking a cross-section**, and it explains the shortlist
-composition without appealing to their being weak. They can only enter through
-INTERACTIONS (macro × beta, macro × sector), and nothing in the pipeline builds one.
-
-⚠️ **This is consistent with, but not the same as, the 2026-08-17 six-pool sweep.** That
-tested `stock_market`/`bonds`/`news_daily`/`market_breadth` on a SINGLE-SERIES VCB target,
-where a date-only column does vary — over time — and they failed anyway (z = +0.19…+0.53).
-Two different arguments, one conclusion.
-
-**Only five gold tables are PER-TICKER**, and this is the whole candidate list:
-
-| source | shape | status |
-|---|---|---|
-| **`stocks_ta` → `pool__ta`** | **711 numeric channels**, 2,381,858 × 777 tickers | ✅ built on `all`, **0 name collisions** with `pool__basic`, coverage median **0.992** (7 of 40 sampled below 0.95). ⚠️ ends **2026-06-26** (`STA-1`) |
-| `news_daily_panel` | 26 channels, 2.06 M rows, per-ticker | ⚠️ `pool__news_daily` exists **for VCB only** — must be built for `all`. Prior is weak: z = +0.53 at layer 1 |
-| `stocks_financials_bank_fa` → `pool__fa` | 1,150 cols | ⚠️ **banks only** — ~20 of the 150 names, so ~87 % NULL on this universe |
-| `stocks` | 41 cols | already the source of `pool__basic` |
-| `news_weekly_panel` | 28 cols | weekly grain; the news thread is closed |
-
-**So the prize is `pool__ta`: 711 channels against `pool__basic`'s 90, an 8× widening of
-the only feature space that can rank.**
-
-⚠️ **AND IT HAS NEVER BEEN OFFERED TO THE CROSS-SECTIONAL SELECTION — `CSP-1`.**
-`cross_sectional.read_universe_panel` is ONE hand-written SQL statement reading
-`pool__basic ⋈ pool__targets`. No `--pools` value, no notebook parameter and no config key
-routes around it. **The 13 channels are the survivors of 90 candidates, not of 800.**
-
-**Order of work, and each step is a real blocker for the next:**
-
-1. **`P1-2` / `PNL-2` first** ⏱ half a day — derive grain from the panel's own ticker
-   count. CLAUDE.md already states this "partly dissolves `CSP-1` for free": the `else`
-   branch then reads via `reader.join(pools)`, making `--pools pool__basic,pool__ta` a real
-   cross-sectional run.
-2. ⚠️ **`MEM-1` becomes the wall, and P3-1 says so in advance.** 711 + 90 channels over
-   624,448 rows is ~8× the design that already peaked at **16.3 GB host RAM** on 90
-   channels (P1-4b). Straight-lining that is ~130 GB. **The blocked ranker (P1-4) fixed the
-   VRAM half only.** So `pool__ta` must be PRUNED before it is selected over — a coverage
-   screen plus a correlation prune, offline, is the cheap version.
-3. **Then the selection.** At ~800 channels the fitted cost model gives ~5.4× the 90-channel
-   run's 6 h 07 m ≈ **33 h at 20 draws**, above Kaggle's 30 GPU-h/week. **Run 10 draws**
-   (§5's rule: 10 to fail, 20 to pass) ≈ 16 h, and pay for 20 only if it looks like passing.
-
-⚠️ **`STA-1` is the tax on all of it**: `pool__ta` stops 2026-06-26, so an INNER join drops
-the chain's last 31 sessions — the same 4,266 → 4,235 it already costs the VCB chain.
-
-⚠️ **Do `PRF-7` before or alongside this.** Widening the candidate pool from 90 to 800
-makes selection look-ahead WORSE, not better — more channels means more opportunity for the
-selection to have fitted the test folds. Adding features before bounding that is how a
-+1.991 becomes a number nobody can defend.
-
-### ⚠️ PRF-2 · Run the real chain at `h=10` ⏱ ~1 h GPU + 1 h chain
-
-**The one horizon that is both measured-to-work and unmeasured-by-a-model.** A hand-built
-3-channel rank gets Sharpe **+0.652 at 30 bps** there (z = +4.72, 211 periods, beats the
-market's 0.404 at every cost level). Nobody has run the selection + LSTM chain at `h=10`.
-
-The question it answers: **how much does a fitted model add over three ranked channels?**
-That number is not known at any horizon — at h=20 there is a model result and no hand
-baseline; at h=10 there is a hand baseline and no model.
-
-```powershell
-# selection: cs_rank_10day, top-150 by pre-2014 turnover, 20-draw null (Kaggle T4, ~6 h)
-# then the local chain, which is minutes:
-python -m final_features --apply
-python -m train_test_creator --ticker all --table rank_10day__final__d20_h10 --save
-python -m model.lstm --config configs/lstm__all__rank_10day__final__d20_h10.yaml
-python -m result_evaluator --rescore ; python -m result_evaluator --rebuild-index
-python -m backtest --run <run_id> --top-k 20 --draws 200
-```
-
-⚠️ **Cost drag halves against h=5 and doubles against h=20** — 8.8 %/yr at `τ=0.70`,
-50 bps. That is the whole reason h=10 is worth a run and h=5 is not.
-⚠️ **Add the hand screen as the baseline in the same backtest.** §5 rule 4's shape: a
-model that does not beat three ranked columns has not earned its complexity.
-
-### ⚠️ PRF-3 · The regime question — **PARTLY ANSWERED by PRF-1, and the answer flipped** ⏱ ~1 day
-
-⚠️ **UPDATE 2026-08-19.** This item was written when three independent measurements all
-found the edge dying after 2022. **PRF-1's walk-forward found the opposite at h=20**:
-2023/2024/2025 score **+2.64 / +0.90 / +1.39** against markets of +1.57 / +0.35 / +0.94,
-and 2022 is the only bad fold — a year the equal-weight universe itself ran Sharpe −0.94.
-
-So the break is **not** universal. It is present in the h=5 and h=10 HAND screens and
-absent in the h=20 MODEL. Two candidate reasons, and they are separable: the **horizon**
-(consistent with §2a-bis and with everything else measured this week) or the **feature
-set** (13 selected channels against 3 hand-picked ones). **PRF-2 separates them** — it runs
-the real chain at h=10, holding the feature pipeline fixed and moving only the horizon.
-Run PRF-2 before the training-window experiment below; it is cheaper and it may make it
-unnecessary.
-
-The original framing, still valid for the hand screens:
-
-
-Three independent measurements now find the same break at the same place:
-
-| study | pre | post |
-|---|---|---|
-| `model/CONTEXT.md` §11 (h=5, foreign flow, 28 folds) | net@20bps **+1.46** (2017-20) | **−0.51** (2022-26) |
-| the h=5 hand screen, 2026-08-19 | Sharpe **+1.104** (2018-21) | **−0.099** (2022-26) |
-| the h=10 hand screen, 2026-08-19 | **+1.671** (2018-21) | **+0.011** (2022-26) |
-
-⚠️ §11 already tested **rolling vs expanding training at h=5 and it did not help** —
-rolling *lowered* AUC (0.513 vs 0.520). So "stale training data" is not the explanation
-there. **Untested at h=10 and h=20**, which is the gap.
-
-Two hypotheses that make different predictions, which is what makes this worth running:
-
-1. **The market changed** (more retail flow, more index products, tighter spreads) — then
-   *no* feature set trained on 2018-21 works post-2022, and rolling retraining does not
-   rescue it (§11's result, one horizon up).
-2. **The FEATURES decayed** — order-flow imbalance from daily order COUNTS is a crowded,
-   widely-visible signal by 2022. Then a *different* feature set still works, and the
-   answer is §2d's ladder, not a longer training window.
-
-**Distinguishing test**: train on 2022-2026 only and score 2022-2026 by walk-forward. If
-even a model that has only ever seen the new regime cannot find an edge in it, that is
-hypothesis 1 and the honest conclusion is that this data cannot be traded now.
-
-### ⚠️ PRF-4 · Execution realism — the remaining fictions ⏱ ~1 day
-
-Each is a way the backtest is still kinder than the market. Ordered by expected damage:
-
-| gap | why it matters | measured? |
-|---|---|---|
-| **ADV / size cap** | a 20-name book at real size moves a VN mid-cap. `pool__basic.value_matched` is on hand, so cap each position at a fraction of it and re-run | ❌ |
-| **floor days on the SELL side** | the ceiling exclusion covers ENTRY only. A name at its floor on the exit date cannot be sold either, and a loser is exactly when that happens — so this is biased against the strategy in the direction that matters | ❌ |
-| **the ATC auction** | signals built from full-day order counts settle only after close; but a partial-day version could be submitted into ATC. That recovers part of the ~19 pp/yr the t+1 lag costs at h=5 | ❌ |
-| **`se_sharpe` on the h=20 cell** | 32 periods, 0.256. PRF-1 fixes this by producing more OOS periods, not by a wider window | ⚠️ known |
-| **max drawdown −55 to −58 %** | at every `k` on the h=10 screen. Statistically tradable ≠ holdable; a vol target or a market-regime filter is the standard answer and neither is tested | ⚠️ known |
-
-### PRF-8 · Test a SMALLER model, not a bigger one ⏱ ~2 h
+> **Why it was first (2026-08-19):** the cheapest item in the section, no GPU queue, no
+> export, and the only one that could change what the headline result *means* rather than
+> how big it is. It cost **15m 03s** of compute and it did change the meaning.
 
 ⚠️ **Nine of ten walk-forward folds stopped at EPOCH 1** (the tenth at epoch 2), val loss
 0.975-1.021 — within ~2 % of the variance of a standardised label. The LSTM takes what it
@@ -367,34 +740,72 @@ machinery already exists, so this is a config change and one loop.
 also makes PRF-7's look-ahead the whole story rather than part of it. **A cheap model that
 ties an expensive one is evidence about where the signal lives**, not just a saving.
 
-### PRF-5 · Survivorship — the one bias that flatters a momentum screen ⏱ ~2 days
+**SHIPPED 2026-08-19 — the machinery, ahead of the result.**
 
-`silver.stocks_basic` holds **no delisted name** (§2c). A screen that buys recent winners
-is the strategy most flattered by that, because the names that crashed out are absent.
-⚠️ **The null is protected** (every shuffled draw picks from the same survivor basket) but
-**the CAGR is not** — so `z = +4.72` stands while `+14.9 %/yr` does not.
+| | |
+|---|---|
+| `walkforward --arm <package>:<config>` | repeatable. **All arms train on ONE build of each fold's tensors** — running the sweep twice would refit the scaler, the median and the coverage screen a second time, so "same data, different model" would rest on the builder being deterministic instead of on there being one dataset |
+| `walkforward.compare` | scores N tracks identically and compares them **PAIRED** — see below |
+| `lstm_small__all__rank_20day__final__d20_h20.yaml` | `hidden_size` 128→16, `num_layers` 2→1. **2,033 parameters against 205,441 — 101×.** A test asserts only those two keys differ from the big config |
+| `gbt__all__rank_20day__final__d20_h20.yaml` | the selection's OWN estimator, hyper-parameters copied unchanged from the VCB config so this arm is not also a hyper-parameter search. **1,400 decision nodes**, and it sees 78 window statistics where the LSTM sees all 260 numbers |
+| smoke, 1 fold (the largest train slice), both arms | **2m 14s** — so ten folds is ~25 min, not the ~2 h a per-arm sweep would cost |
 
-Fix is data, not code: a point-in-time listing/delisting table. Related to §2d's
-"point-in-time index membership" lever, and it makes PRF-1's fold series interpretable.
+⚠️ **THE COMPARISON HAD TO BE PAIRED AND THAT IS NOT A DETAIL.** Every arm trades the same
+rebalance dates out of the same panel, so the market factor is common to all of them and
+`se_sharpe ≈ 0.155` is the error bar on the WRONG quantity. An unpaired reading of two
+Sharpes at that SE cannot resolve a 0.3 gap in either direction — it would call a real
+difference noise and a spurious one signal. `compare` reports `t` on the difference series
+`net_A − net_B`, plus the correlation that says how much the pairing bought.
 
-### PRF-6 · New information — the only lever §2d says is left ⏱ months
+⚠️ **PREDICTION, RECORDED BEFORE THE RUN FINISHED** (the P0-1 discipline; the last two
+predictions in this file were wrong and half wrong, which is why they are still here):
+**both cheap arms tie the 205 k LSTM — `|t_paired| < 2` at every cost level — and the
+pooled Sharpe of all three lands inside ±0.3.** The grounds are three independent
+measurements, not taste: §5c's eleven architectures inside one error bar, nine of ten folds
+stopping at EPOCH 1, and the smoke fold's small LSTM converging at epoch 1 with val loss
+0.9983 and then rising for fifteen straight epochs. ⚠️ **The way I expect to be wrong**: the
+GBT is the arm with a real reason to differ — it compresses each 20-session window to six
+statistics per channel, so if the SEQUENCE inside the lookback carries anything, the GBT
+loses and the two LSTMs do not.
 
-Ranked by expected impact **on this specific problem**, which differs from §2d's original
-single-stock ranking:
+**RESULT — 10 folds × 2 arms, 15m 03s, and the prediction was RIGHT on both halves.**
 
-1. **Intraday / tick data.** ⚠️ The measured 5-day signal decays inside ONE SESSION —
-   +24.4 % CAGR same-close against +5.6 % at t+1. Trading it intraday is not an
-   improvement, it is the difference between a strategy and a curiosity. It also gives
-   §2d's true #1, aggressor buy/sell imbalance, of which daily order COUNTS are a proxy.
-2. **Point-in-time listing status** — PRF-5.
-3. **Fundamentals with filing dates** — `experiment_4` already recovered VCB's publish
-   dates, so the method exists for one name and needs scaling.
-4. ~~News / sentiment~~ — **closed**, see the Closed table. `pool__news_daily` measured
-   z = +0.53 at layer 1.
+| arm | capacity | IC | `ic_t` | Sharpe@30 | `z` (200 draws) |
+|---|---|---|---|---|---|
+| `lstm` (PRF-1) | 205,441 params | +0.1097 | 6.90 | **+1.991** | +12.28 ✅ |
+| **`lstm_small`** | **2,033 params — 101×** | +0.1239 | 9.49 | **+1.997** | +12.43 ✅ |
+| `gbt` | 1,400 decision nodes | +0.1249 | 8.90 | **+1.975** | +11.88 ✅ |
 
----
+Paired against `lstm` (ρ **0.88** between the arms' period returns): `lstm_small`
+`t = +0.87…+0.88`, `gbt` `t = +0.42…+0.47` at 20/30/50 bps. **Every |t| < 1**, every
+ΔSharpe ~0.02 against `se_sharpe` 0.155.
 
-## P0 — a number you already have is wrong or unreadable until this is done
+⚠️ **THE RESULT LIVES IN THE 13 CHANNELS, NOT IN THE ARCHITECTURE.** That is the finding,
+and it is not a saving. It also means **`PRF-7`'s selection look-ahead is close to the WHOLE
+story** about where this Sharpe comes from, rather than part of it — the only other
+candidate has just been ruled out.
+
+⚠️ **AND THE SEQUENCE INSIDE THE LOOKBACK IS WORTH NOTHING** — the way I expected to be
+wrong, and I was not. `model.gbt` sees **78 window statistics where the LSTM sees 260
+numbers**, and it ties. Whatever the recurrent layers extract from the 20-session path over
+and above last/mean/slope/sd/min/max does not reach either the IC or the Sharpe.
+
+⚠️ **Do NOT read the table as "smaller is better"** even though `lstm_small` is nominally
+ahead on IC and on days-positive: the portfolio difference is inside the paired error bar,
+and the fold where the big model looks worst (2026, IC −0.0902 against +0.0016 / +0.0254)
+is a 5-period stub with `se_sharpe` 1.04. **The defensible claim is "not worse", which is
+exactly what PRF-8 was built to test.**
+
+⚠️ **A CONCURRENCY TRAP WAS FOUND AND FIXED ON THE WAY**, and it is the reason the first
+sweep was thrown away: two `walkforward` runs over one table rebuild and delete each other's
+fold tensors, because the dataset directory is named from the DATA with no term for which
+process built it. The loud half was a `FileNotFoundError`; the silent half was a model
+reading tensors another process was mid-`np.save` on. `run.namespace_lock` now refuses the
+second sweep. `walkforward/CONTEXT.md` §8c.
+
+**Next**: this closes the architecture question and hands the baton to **`PRF-9`** — the
+next model test is not a different model, it is 90 → 800 candidate CHANNELS.
+`walkforward/CONTEXT.md` §8 has the full tables and §8d what it does not establish.
 
 ### ✅ P0-1 · DONE 2026-08-17 — the two-layer null CLEARS, and **my recorded prediction was wrong**
 
@@ -546,8 +957,6 @@ carries eight names and a sha1. `final_features` had **no tests at all** and now
 
 ⚠️ **P1-5 is unblocked and has NOT been run** — that was the instruction.
 
-## P1 — unblocks hours of other work
-
 ### ⚠️ P1-5 · STAGES 5-8 ALL DONE 2026-08-18 — only **`FNM-1`** is left
 
 **`final_features --apply`** built `unified_schema_all.rank_20day__final__d20_h20` in
@@ -646,24 +1055,6 @@ a name no other group wants.
 panel null is not label-neutral. ⚠️ And read `mase` beside it: P2-3's model cleared nothing
 and lost to "predict no change" at `mase 1.068`, which is the line that mattered.
 
-### ⚠️ P1-6 · `FNM-1` — decide the feature representation by MEASURING it ⏱ ~1 h GPU
-
-The selection scored the 13 channels under `feature_normalize=cs_rank` (each channel
-ranked within its date before the window); `train_test_creator` feeds the model those
-channels standardised **globally**. Same shape as `RNK-1`, one level over: the label was
-the mismatch there, the FEATURES are the mismatch here.
-
-⚠️ **It does not invalidate the model's own number** — that is measured on its own splits
-under its own representation. It weakens the sentence *"built on a shortlist that cleared
-z = +9.09"*, because §5 rule 1 says a bar computed for one configuration says nothing
-about another.
-
-⚠️ **Which side moves is not obvious**, which is why nothing was changed: per-date ranking
-in `train_test_creator` changes every panel dataset, and dropping it from the selection
-throws away the argument in `cross_sectional.py` §3. **Re-run the selection with
-`feature_normalize=none` and compare the kept set** — if the 13 survive, the question is
-moot and the sentence is safe.
-
 ### ✅ P1-4 · DONE 2026-08-18 — the VRAM half is fixed; **the next wall is HOST RAM**
 
 Shipped: `gpu.rank_block_columns` + a blocked `_average_ranks_torch` + a blocked
@@ -687,61 +1078,6 @@ RAM**, which is `MEM-1`'s original half (**P3-2**).
 inference — which §5 rule 2 forbids leaving as one. `selector._tick` now prints
 `rss=… vram=…` per phase (one `psutil` call per phase, nine per run). Measured on the
 30-name smoke panel, 48,521 rows: RSS **0.8 → 2.3 GB**, peaking at `stability`.
-
-### P1-4b · Cut the host-side peak so the top-300 panel fits ⏱ see P3-2
-
-⚠️ **THE FIRST EXTRAPOLATION HERE WAS WRONG AND THE SECOND MEASUREMENT KILLED IT.** It
-read *"~1.5 GB of the smoke run's RSS is data over 48,521 rows, so the top-300 panel is
-25.7× the rows → ~39 GB"*. The top-150 run then ended phase 4 at **11.0 GB on 624,448
-rows**, and a straight line through both points predicts **20.6 GB** for top-300 — under
-the box, not 10 GB over it. **One point does not fit a line**, and scaling a peak from a
-tiny panel treats a large fixed cost as if it were per-row.
-
-⚠️ **AND THE SECOND FIT IS NOT TO BE TRUSTED EITHER, FOR A DIFFERENT REASON: `rss` is
-sampled BETWEEN phases.** The top-300 run died *inside* phase 4, so whatever killed it
-was never printed. `selector._tick` now also reports `peak=` — the OS high-water mark
-(`peak_wset` / `ru_maxrss`) — which is the number that decides whether a run survives.
-✅ **AND THE 2026-08-18 NULL RUN REPORTED IT.** On top-150 the phases read `rss=11.2G`
-but **`peak=16.3G`** — the high-water mark is **45 % above where the run settles**, and it
-is reached inside `rank (the ensemble's methods)`, which is exactly where the top-300 run
-died and exactly what an end-of-phase sample could never see. `window design` has the same
-shape: 7.3 G settled, **10.8 G peak**. Doubling the rows puts top-300's peak at
-**~28-30 GB against a ~29-30 GB box**, so that kill is now explained by a measurement.
-
-⚠️ **Both earlier extrapolations were wrong, in opposite directions, and for the same
-reason: each scaled a quantity that was not the binding one** (~39 GB from one tiny panel,
-then ~20.6 GB from settled RSS). **top-300 needs the streaming design (P3-2), not a trim.**
-
-### P1-1 · Re-fit the cost model into ONE function ⏱ ~2 h
-
-Two models exist, disagree, and were both fitted with `lasso` — dropped 2026-08-16:
-
-| model | predicted the 644-ch / 10-draw run at | actual |
-|---|---|---|
-| Dagster guard `1.1 × (ch/113)² × (1+draws)` | **393 min** | **29.7 min** |
-| `CONTEXT` §15c `0.364 × ch^0.77` | ~53 min/pass | ~3 min/pass |
-
-Needs a **draw coefficient** (draws skip `stability` and the holdout, so `(1 + draws)` is
-wrong) and a **raggedness term** — exponent ~0.83 fits the well-behaved runs while the
-1,406-channel `usa` run sits **6× off**, likely rule 23's all-NaN slices rather than width.
-
-⚠️ **The guard's premise is falsified**: CLAUDE.md says `usa` is "7.2 h with no null"; it
-ran **35 min 12 s**. Rewrite the raise message with the measured number.
-
-**Payoff:** a 20-draw null on each of the 19 country pools becomes **~2-3 hours**, not the
-~1,000 CPU-hours `EVD-1` is scoped at. This is what makes EVD-1 closable.
-
-### P1-2 · Fix `PNL-2` ⏱ half a day
-
-Cheapest fix in the issue register. Derive `cross` from the panel's own `ticker` count, as
-resolved `PNL-1` already made the SCORER do. No chicken-and-egg: the read happens before
-`build()`.
-
-⚠️ **It partly dissolves `CSP-1` for free** — once grain comes from the data, the `else`
-branch reads via `reader.join(pools)`, so `--ticker ALL --pools pool__basic,pool__X
---target return_5day` becomes a real cross-sectional multi-pool run. `daily_ic` is
-Spearman per date, so ranking `return_5day` within a date is the same metric as
-`cs_rank_5day`; only the ranker *fit* differs.
 
 ### ✅ P1-3 · DONE 2026-08-17 — panel mode runs, and the FIRST rehearsal found the existing job broken
 
@@ -802,8 +1138,6 @@ benchmark CAGR of 9.75 %. **h=5 pays more in fees than the market returns.**
    the drag table first: h=10 must beat h=20 by **4.4 pp/yr** just to break even on fees.
 4. **Slippage / ADV cap** — a 15-name book at size moves a top-150 VN name.
    `pool__basic.value_matched` makes this buildable; stage 9 currently assumes fills.
-
-## P2 — new measurements worth having
 
 ### ~~P2-1~~ · RETIRED 2026-08-17 — the first version was a bad experiment (kept for the reasoning)
 
@@ -984,15 +1318,6 @@ column appears to over-state the error bar by ~√N ≈ 12×. If so it is `PNL-1
 the summary instead of the scorer, and it is **conservative** (too wide), which is why it
 has never manufactured a result — but it should not be quoted as this run's error bar.
 
-### P2-2 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h
-
-`read_universe_panel` already takes a `tickers` list and filters in SQL, so this is a CLI
-flag, not a new schema. ~1.3 M rows — ⚠️ **the same width as P2-1 v2, so assume the same
-4 GiB VRAM ceiling and the same P1-3 dependency** until measured otherwise. Puts a number
-against §2b's `ALL` row, which reads **"never ran — ⚠️ unverified"** at IC +0.109.
-⚠️ Today's measurement says liquidity is the variable: the 5-day cross-sectional reversal
-runs `t = −18.60` over all names, `−10.43` at top 300, **`−1.96` at top 100**.
-
 ### ✅ P2-3 · DONE 2026-08-17 — the selection cleared its bar; **the model did not**
 
 `lstm__vcb__return_5day__final__d20_h5__20260817-205952`, 6.0 s, 228,225 parameters,
@@ -1025,42 +1350,3 @@ ROC AUC did not exist at all.
 
 ⚠️ **`mase > 1` on both splits is the line to quote.** A model trained on the best
 shortlist this project has assembled does not beat "predict no change".
-
-## P3 — structural code, only pays off for runs currently blocked
-
-| item | what | note |
-|---|---|---|
-| **P3-1** | `CSP-1` — give `read_universe_panel` the `UnifiedSchemaReader.join()` the single-ticker path uses | ⚠️ makes `MEM-1` worse by the width joined; `pool__ta` at 922 channels is ~10× the design |
-| **P3-2** | `MEM-1`, **host half only** — stop materialising the whole design; window per fold or per ticker-chunk, never holding the blocks and the `pd.concat` result at once | 4.03 GB per million rows, measured. ⚠️ **The DEVICE half was promoted to P1-4**; and on a T4's ~29 GB of RAM this host half did **not** bite — the 1.25 M-row design built in 189.3 s |
-| **P3-3** | `_ingest_gold_stocks` still carries a legacy column (`close`/`volume` check: 1 of 2 present) | ⚠️ Fixing it redefines `gold.stocks`' OHLC as adjusted and commits to a ~2.4 M × ~900 col rebuild. Its own decision, not a side effect. Related to `STA-1` |
-
----
-
-## P4 — hygiene, each item distorts one number or hides one failure
-
-| item | what | status |
-|---|---|---|
-| **P4-1** | **`STA-1` costs the chain its last 31 sessions** — `pool__ta` stops 2026-06-26, and the INNER join drops the whole chain 4,266 → **4,235 rows**. The `return_5day` table and dataset end 2026-06-25 | measured 2026-08-17 |
-| **P4-11** | ⚠️ **`pipeline`'s `selection_2` ROW DESCRIBES A DIFFERENT EXPERIMENT AND CALLS IT `up to date`.** Measured 2026-08-18: `python -m pipeline --ticker all --table rank_20day__final__d20_h20` reports *"2 layer-2 run(s) over `pool__shortlist__rank_20day__d20_h20`"* and then names `2026-08-17_011642__vcb__shortlist__return_5day__d20_h5__return_5day` — a different schema, a different target and a different pool. The layer-2 detection is not scoped to the chain being asked about, so a stage that has never run for this chain reads green. ⚠️ Related trap in the same table, working as designed but worth knowing: the **`model` row keys on `--config`, not on `--table`**, so without one it reports the DEFAULT chain's run as up to date — pass `--config` or `--apply` will skip the model stage while saying everything is fine. | measured 2026-08-18 |
-| **P4-12** | ⚠️ **BLOCK B (`mase`, `rmsse`, `skill_score`, `beats_naive`) IS NEVER COMPUTED ON A PANEL.** `metrics.accuracy_vs_naive` is called from `evaluate` only; `evaluate_panel` runs `panel_core_metrics` + `panel_null_metrics` + `regression_extras` and stops. So the top-150 cross-sectional run carries `test_mase = NaN` while both VCB runs carry a number — and **`mase ≥ 1` is the column P2-3 says is the line to quote**, the one that showed the `return_5day` model losing to "predict no change". ⚠️ The fix is not a copy-paste: the `lag_h` naive reads `y_true[i - h]` and assumes rows are **consecutive samples in date order**, which is false on a panel where each date holds N tickers — it would have to be per-ticker. Found 2026-08-18 while fixing `ICT-1`; nothing was broken by that fix, the gap simply became visible once the panel row was read column by column | measured 2026-08-18 |
-| **P4-2** | Confirm `validation.csv` emits **`n_dead_train` / `n_dead_test`** and read them for `pool__news_daily` — rule 23, its channels are entirely NULL before 2013 | the 2026-08-17 layer-2 `validation.csv` showed no such column |
-| **P4-3** | **262 rows in `bronze.cafef_price` have `high < low`** (e.g. ACB 2018-07-31: high 35,800 low 36,500). CafeF's defect, surfaces in gold as a negative `range_hl`. Needs a bronze data-quality screen, not a gold patch | ⚠️ **re-verified 2026-08-17, still 262.** Probably deserves an ISSUES.md code |
-| **P4-4** | XGBoost warns in **every** run: *"Falling back to prediction using DMatrix due to mismatched devices — running on cuda:0, input data on cpu"* | if the design is copied host→device per prediction, the GPU conversion is leaving speed on the table |
-| **P4-5** | `landed()` cannot answer "did THIS run produce anything" — it rglobs a folder where the previous run's dated files still sit. 140 header-only CSVs went green (2026-07-31) | this is §5 rule 10's mechanism; fix is to compare against the run's own outputs |
-| **P4-6** | `logs/app.log` has many writers now — the executor is multiprocess and every step appends, so records interleave | fix is per-process filenames in `Logger`, **not** going back to sequential |
-| **P4-7** | `raw/trading_view` partitions `crypto` and `options` are permanently red — both `true` in config, folders never existed, `landed(require=True)` fails them | choose `require=False` or accept two red partitions |
-| **P4-8** | Decide the fate of `raw/trading_view_collected_links` — nothing reads it | it is a leaf, not a hub |
-| **P4-9** | ⚠️ If ever backfilling TradingView, use a **single-run backfill**. `tag_concurrency_limits` is per-RUN, so 9 partitions the default way is 9 runs × 8 browsers = **72 Chrome** | `.dagster/dagster.yaml` is empty |
-| **P4-10** | Four heavy assets have never been observed running end to end through Dagster: `trading_view_links`/`data`, the 5 CafeF stock tabs + news, `cafef_pdfs` (100 partitions), `cafef_financials` (~2.4 h each) | *"built is not run"* |
-
----
-
-## Closed — recorded so they are not reopened
-
-| what | why closed |
-|---|---|
-| **News sentiment scorer** (old items 7-16: annotation, LLM labelling, PhoBERT fine-tune, LIME gate, full panel) | ⛔ **Decided against 2026-08-03 and confirmed 2026-08-17.** 7 paired tests, every \|t\| < 1.3; adding news costs 2-8 pp CAGR for ΔMCC ±0.003. The one reason to continue — coverage — was tested on the top-30 most-covered tickers and did not survive. The event-count half is now `pool__news_daily` and it measured `z = +0.53` at layer 1 |
-| **Silver leaf assets** (old item 17: bonds, forex, funds, indices, gics) | ✅ all five exist |
-| **Gold leaf assets** (old item 18: bonds, forex, funds) | ✅ all three exist |
-| **`switch_config.json` cleanup** (old items 22, 23) | ✅ moot — the file is gone (§5a); a leftover copy now RAISES |
-| **`execution.finished_at = None`** in every `metadata.json` | ✅ **working as designed** ([runtime.py:329](src/utils/runtime.py#L329)) — `summary()` is called mid-run because `write_report` writes the file, and waiting for `stop()` would record a runtime of zero. `None` "rather than a guess" is §5 rule 2 at the clock. I called it a bug on 2026-08-16 and was wrong |
