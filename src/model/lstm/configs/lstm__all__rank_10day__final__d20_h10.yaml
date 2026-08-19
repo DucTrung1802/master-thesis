@@ -1,0 +1,63 @@
+# PRF-2 — THE SAME CHAIN AS h=20, MOVED TO h=10 AND NOTHING ELSE.
+#
+# ⚠️ THE HORIZON IS THE ONLY VARIABLE, AND THAT IS THE POINT. The architecture, the
+# optimiser schedule, the batch size, the seed, the universe (top 150 by pre-2014
+# median turnover) and the lookback are copied UNCHANGED from
+# lstm__all__rank_20day__final__d20_h20.yaml. `n_features` differs because the
+# selection kept a different number at this horizon (19 against 13) — that is a
+# RESULT of moving the horizon, not a second knob.
+#
+# ⚠️ WHY h=10 IS WORTH A RUN. It is the one horizon that is measured-to-work and
+# unmeasured-by-a-model: a hand-built 3-channel rank gets Sharpe +0.652 at 30 bps
+# there (backtest/CONTEXT.md §8g, z = +4.72, 211 periods), and nobody has ever run
+# the selection + LSTM chain at it. So "how much does a fitted model add over three
+# ranked columns" is unknown at EVERY horizon — at h=20 there is a model and no hand
+# baseline, at h=10 a hand baseline and no model. `backtest.handscreen` closes that
+# by pricing both on ONE panel.
+#
+# ⚠️ IT ALSO SEPARATES PRF-3's TWO HYPOTHESES. The post-2022 break is present in the
+# h=5 and h=10 HAND screens and absent in the h=20 MODEL. Two candidate causes — the
+# horizon, or 13 selected channels against 3 hand-picked ones — and this run holds
+# the feature pipeline fixed while moving only the horizon.
+#
+# ⚠️ COST DRAG DOUBLES AGAINST h=20. At turnover 0.70 and 50 bps the annual fee is
+# 4.4 % at h=20 and 8.8 % at h=10 (backtest/CONTEXT.md §3), against a top-100
+# benchmark CAGR of 9.75 %. So h=10 has to earn ~4.4 pp/yr MORE than h=20 just to
+# break even on fees, and a tie in gross terms is a loss in net ones.
+#
+# Selection behind it: 2026-08-19_093403__all__basic__cs_rank_10day, 20-draw null,
+# ic_mean +0.1201 against a p95 bar of +0.0355, null max +0.0357 (below observed),
+# z = +13.78. ⚠️ Higher than the h=20 run's +9.09 — and NUL-1 still applies: no null
+# here prices in the universe, the horizon or the architecture.
+#
+# ⚠️ `lookback` and `n_features` are ASSERTIONS. engine._verify raises if the dataset
+# disagrees — the dataset is the authority.
+
+run_name: lstm__all__rank_10day__final__d20_h10
+dataset: all__rank_10day__final__d20_h10__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 19
+
+model:
+  type: LSTM
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.2
+
+train:
+  batch_size: 512
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 100
+  patience: 15
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 5
+
+null_draws: 200
+
+seed: 42
+device: auto

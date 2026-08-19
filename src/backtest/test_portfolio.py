@@ -232,3 +232,75 @@ def test_a_panel_that_cannot_say_what_was_buyable_REFUSES_to_be_traded():
     panel = pd.DataFrame({"date": [], "ticker": [], "y_pred": []})
     with pytest.raises(ValueError, match="PRF-0"):
         P.drop_ceiling(panel)
+
+
+# --- PRF-2: the 3-channel hand baseline ----------------------------------------
+
+
+def _basic(n_dates=30, tickers=("AAA", "BBB", "CCC", "DDD"), seed=0):
+    from backtest import handscreen as H
+
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range("2020-01-01", periods=n_dates)
+    rows = []
+    for j, t in enumerate(tickers):
+        close = 100.0 * (1 + j) * np.cumprod(1 + rng.normal(0, 0.02, n_dates))
+        for i, d in enumerate(dates):
+            rows.append({
+                "date": d, "ticker": t, "close_adjust": close[i],
+                "value_matched": rng.lognormal(10 + j, 0.3),
+                "drv_order_vol_imb_5": rng.normal(),
+                "drv_dist_from_high_63": rng.normal(),
+            })
+    return H, pd.DataFrame(rows), dates, list(tickers)
+
+
+def test_the_hand_score_is_invariant_to_each_channels_UNITS():
+    """It is a mean of within-date PERCENTILE ranks, so rescaling a channel — or changing
+    its sign convention's magnitude — cannot move the ordering. Same argument
+    `cross_sectional.py` §3 makes for ranking features within a date."""
+    H, basic, dates, tickers = _basic()
+    a = H.score_frame(basic, tickers, dates)
+    scaled = basic.copy()
+    scaled["drv_order_vol_imb_5"] = scaled["drv_order_vol_imb_5"] * 1e6 + 42.0
+    b = H.score_frame(scaled, tickers, dates)
+    pd.testing.assert_series_equal(a["y_pred"], b["y_pred"])
+
+
+def test_the_trailing_return_is_computed_BEFORE_the_date_filter():
+    """⚠️ THE TRAP THE DOCSTRING NAMES. Filtering first makes `shift(5)` step back five
+    SCORED rows, which spans the split boundary and every gap — so the first rows of a
+    test split would carry a multi-week return labelled as five sessions."""
+    H, basic, dates, tickers = _basic(n_dates=40)
+    late = dates[20:]
+
+    correct = H.score_frame(basic, tickers, late)
+    # what the wrong order produces: cut the history, then derive
+    filtered_first = H.score_frame(basic[basic["date"].isin(set(late))], tickers, late)
+
+    assert not np.allclose(correct["y_pred"].to_numpy(),
+                           filtered_first["y_pred"].to_numpy(), equal_nan=True), (
+        "the two orders agree, so this fixture no longer exercises the trap"
+    )
+    # the correct one has a trailing return on its FIRST scored date; the wrong one cannot
+    first_day = correct[correct["date"] == late[0]]
+    assert first_day["y_pred"].notna().all()
+
+
+def test_the_quintile_screen_is_off_by_default_and_filters_when_asked():
+    """§8g screens to the top liquidity quintile; the comparison against a model that
+    picks from a fixed 150 must NOT, or it compares two universes."""
+    H, basic, dates, tickers = _basic(tickers=tuple(f"T{i}" for i in range(10)))
+    wide = H.score_frame(basic, [f"T{i}" for i in range(10)], dates)
+    narrow = H.score_frame(basic, [f"T{i}" for i in range(10)], dates, quintile=True)
+    assert len(narrow) < len(wide)
+    assert narrow["in_quintile"].all()
+    assert not wide["in_quintile"].all()
+
+
+def test_a_name_missing_ONE_channel_still_scores_on_the_others():
+    H, basic, dates, tickers = _basic()
+    basic.loc[basic["ticker"] == "AAA", "drv_dist_from_high_63"] = np.nan
+    out = H.score_frame(basic, tickers, dates)
+    aaa = out[out["ticker"] == "AAA"]
+    assert aaa["y_pred"].notna().any(), "a name lost every score for one missing channel"

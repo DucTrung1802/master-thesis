@@ -66,19 +66,54 @@ def _status_name(status) -> str:
     return getattr(status, "name", str(status)).upper()
 
 
-def _fetch_status(api, cfg: JobConfig):
-    """kernels_status(), with Kaggle's 403-for-everything error made actionable."""
-    try:
-        return api.kernels_status(cfg.id)
-    except ValueError as exc:
-        if "denied" in str(exc).lower():
-            raise RuntimeError(
-                f"Kaggle has no kernel '{cfg.id}' you can read.\n"
-                f"  If you have not pushed it yet, run: python -m kgpu push {cfg.name}\n"
-                "  Otherwise check the job's 'id' in kaggle_config.json is "
-                "<your-kaggle-username>/<kernel-slug>."
-            ) from exc
-        raise
+#: How long to keep retrying a status poll that failed for a NETWORK reason, and how
+#: long to sleep between attempts. ⚠️ **Measured 2026-08-19: a six-hour run lost its
+#: watcher at 355 min to one `ConnectionError` from `api.kaggle.com`.** The kernel was
+#: fine — it was still RUNNING when checked by hand — but the local process was gone,
+#: so nothing pulled the results and nothing recorded the duration. A watcher that
+#: cannot outlive a transient DNS blip is the weakest link in a job whose entire point
+#: is that it takes hours.
+POLL_RETRY_MINUTES = 30.0
+POLL_RETRY_SECONDS = 30.0
+
+
+def _fetch_status(api, cfg: JobConfig, retry_minutes: float = 0.0):
+    """kernels_status(), with Kaggle's 403-for-everything error made actionable.
+
+    ⚠️ **A NETWORK failure is retried; an ANSWER is not.** A `ConnectionError` says
+    nothing about the kernel, so giving up on one throws away a running job's result.
+    A `ValueError` from Kaggle IS an answer — the kernel is missing or unreadable — and
+    retrying it would only repeat a wrong request for half an hour.
+    """
+    deadline = time.perf_counter() + retry_minutes * 60
+    attempt = 0
+    while True:
+        try:
+            return api.kernels_status(cfg.id)
+        except ValueError as exc:
+            if "denied" in str(exc).lower():
+                raise RuntimeError(
+                    f"Kaggle has no kernel '{cfg.id}' you can read.\n"
+                    f"  If you have not pushed it yet, run: python -m kgpu push {cfg.name}\n"
+                    "  Otherwise check the job's 'id' in kaggle_config.json is "
+                    "<your-kaggle-username>/<kernel-slug>."
+                ) from exc
+            raise
+        except Exception as exc:  # noqa: BLE001 — network, DNS, TLS, proxy, 5xx
+            attempt += 1
+            if time.perf_counter() >= deadline:
+                raise RuntimeError(
+                    f"lost contact with api.kaggle.com for {retry_minutes:.0f} min "
+                    f"({attempt} attempts; last: {type(exc).__name__}).\n"
+                    f"  ⚠️ THE KERNEL IS PROBABLY STILL RUNNING — this is the WATCHER "
+                    f"giving up, not the job.\n"
+                    f"  Check it with:  python -m kgpu status {cfg.name}\n"
+                    f"  Resume with:    python -m kgpu wait {cfg.name}  then  "
+                    f"python -m kgpu pull {cfg.name}"
+                ) from exc
+            print(f"  network error ({type(exc).__name__}); retrying in "
+                  f"{POLL_RETRY_SECONDS:.0f}s — the kernel is unaffected", flush=True)
+            time.sleep(POLL_RETRY_SECONDS)
 
 
 def build(cfg: JobConfig, quiet: bool = False) -> Path:
@@ -183,7 +218,7 @@ def wait(cfg: JobConfig) -> str:
         print("baseline: none yet — no percentage until this job completes once")
 
     while True:
-        response = _fetch_status(api, cfg)
+        response = _fetch_status(api, cfg, retry_minutes=POLL_RETRY_MINUTES)
         name = _status_name(response.status)
         elapsed = time.perf_counter() - start
         pct = f"{elapsed / baseline:>4.0%} of last" if baseline else "  no baseline"

@@ -140,7 +140,7 @@ before. `PRF-6` is months and is the only item that needs data this repo does no
 > is FEATURES (`PRF-9`), the HORIZON (`PRF-2`), honest EXECUTION (`PRF-4`/`PRF-5`) and new
 > DATA (`PRF-6`).
 
-### 1 · ⚠️ PRF-2 · Run the real chain at `h=10` ⏱ ~3-6 h Kaggle T4 + ~10 min local
+### ✅ PRF-2 · DONE 2026-08-19 — the model beats three ranked columns by **2.7 Sharpe**, and it answers PRF-3
 
 > **Why second (2026-08-19):** it is the cheapest way to move ONE variable. `PRF-3` lists
 > two hypotheses for the post-2022 break — the horizon or the feature set — and this run
@@ -169,6 +169,34 @@ python -m backtest --run <run_id> --top-k 20 --draws 200
 50 bps. That is the whole reason h=10 is worth a run and h=5 is not.
 ⚠️ **Add the hand screen as the baseline in the same backtest.** §5 rule 4's shape: a
 model that does not beat three ranked columns has not earned its complexity.
+
+**RESULT — 6 h 04 m selection on a T4 (20 draws) + ~25 min of local chain.**
+
+| stage | number |
+|---|---|
+| selection | `ic_mean` **+0.1201**, p95 bar +0.0355, null max +0.0357 (below observed), **z = +13.78** — higher than h=20's +9.09, and `n_eff`/fold **76.6** against 38.1. 61 of 90 kept, 19 shortlisted, same channel at #1 (`drv_order_vol_imb`) |
+| model | `lstm__all__rank_10day__final__d20_h10__20260819-163848`, 4m 31s. Test IC **+0.1393**, `ic_t` +8.19, **85.8 %** of days positive, `mase` **0.9874** ✅, R² +0.011 |
+| backtest, top-20, 63 periods | **Sharpe +2.442 @30 bps**, CAGR +43.8 %, `se` 0.251, max_dd −7.2 %, **z = +8.99** ✅ |
+| **vs the 3-channel hand rule, ONE panel** | hand **−0.263** @30 (z = −1.72 ❌). **ΔSharpe +2.71, paired `t` = +5.94** (ρ 0.74) |
+
+⚠️ **THE HAND RULE SCORING −0.26 IS NOT A CONTRADICTION OF §8g.** Its +0.652 is over
+2018-2026; this window is 2023-11 onward, inside the regime §8g itself measured at **+0.011**
+(2022-2026). It is doing exactly what §8g said it does after 2022.
+
+⚠️ **AND THAT ANSWERS `PRF-3` — the break is in the FEATURES, not the market.** Same window,
+same universe, same `h=10`: 19 selected channels return +2.44, three hand-picked ones return
+−0.26. Hypothesis (2) of PRF-3, not (1). The market did not stop being predictable after
+2022; **those three columns stopped predicting it.**
+
+⚠️ **h=10 BEATS h=20 WHILE PAYING DOUBLE THE FEES** (8.8 %/yr against 4.4 %) — Sharpe@30
++2.442 against +1.441 on the same universe, architecture and test window. ⚠️ **Do not
+promote h=10 on this yet**: one split each, `se_sharpe` ~0.25, and h=20 has a 10-fold
+walk-forward behind it while this has none. **The h=10 walk-forward is the run that settles
+it**, and `src/walkforward/` already does it in one command.
+
+⚠️ **A DEFECT WAS FOUND AND FIXED ON THE WAY — see `PRB-1` in ISSUES.md.** Two Kaggle probe
+runs had been merged into the CHAIN's report root, where `final_features` groups them with
+the real runs. `backtest/CONTEXT.md` §9.
 
 ### 2 · ⚠️ PRF-9 · THE FEATURE SURVEY — 76 gold tables, and only THREE can help ⏱ see below
 

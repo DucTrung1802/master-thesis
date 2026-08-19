@@ -1110,6 +1110,44 @@ magnitude. That was wrong, and the wrong prediction is left in the register.
 carries no `mase` and, if scored before 2026-08-18, an `ic_t` overstated by `√h`
 (`ICT-1`).
 
+### ⚠️ 6-0-bis-2. PRF-2 — THE CHAIN AT h=10, AND IT ANSWERS THE REGIME QUESTION
+
+Run 2026-08-19: the same chain, same universe, same architecture, **only the horizon
+moved**. Selection cleared at **z = +13.78** (`ic_mean` +0.1201, bar +0.0355, null max
+below observed, `n_eff`/fold **76.6** against h=20's 38.1). Test window 2023-11 → 2026-07,
+63 periods, top-20 of 150, buyable only:
+
+| h=10, one panel | CAGR@30 | Sharpe@30 | null z |
+|---|---|---|---|
+| **the model** | **+43.8 %** | **+2.442** (se 0.251) | **+8.99** ✅ |
+| the 3-channel HAND rule | −5.1 % | **−0.263** | −1.72 ❌ |
+| equal-weight universe | +4.0 % | +0.329 | — |
+
+Paired (ρ 0.74): **ΔSharpe +2.71, `t` = +5.94**. Model run: IC +0.1393, `ic_t` +8.19,
+85.8 % of days positive, `mase` **0.9874** ✅.
+
+⚠️ **THE BREAK AFTER 2022 IS IN THE FEATURES, NOT IN THE MARKET.** `model/CONTEXT.md` §11
+and `backtest` §8g both found the edge dying post-2022 and read it as a regime wall. Hold
+the window, the universe and the horizon fixed and move only the FEATURE SET: 19 selected
+channels return +2.44 where three hand-picked ones return −0.26. **The market did not stop
+being predictable; those three columns stopped predicting it.** That is `PRF-3`'s
+hypothesis (2), and it re-opens §2d's ladder as the answer rather than a longer training
+window. ⚠️ The hand rule's −0.26 is not a contradiction of its own +0.652 — that figure is
+over 2018-2026, and §8g itself measured +0.011 for 2022-2026.
+
+⚠️ **h=10 BEATS h=20 WHILE PAYING DOUBLE THE FEES** (8.8 %/yr against 4.4 % at τ=0.70,
+50 bps) — +2.442 against +1.441 on the same universe, architecture and window. ⚠️ **One
+split each**, `se_sharpe` ~0.25, and h=20 has a 10-fold walk-forward behind it while this
+has none. **Do not promote the horizon on this**; the h=10 walk-forward settles it and
+`src/walkforward/` runs it in one command.
+
+⚠️ **`PRB-1`, found and fixed in the same session**: two Kaggle PROBE runs had been merged
+into the CHAIN's report root, where `final_features` groups them with the real runs — the
+`PRF-7` window probe **silently** (the data window is not a `SETUP_KEY`) and the `FNM-1`
+representation probe as a hard collision that blocked planning entirely. Probes now write
+to `reports/feature_selection_probes/`. **A run that measures the SELECTION is not a run
+that feeds the CHAIN, and only the ROOT separates them.**
+
 ### ⚠️ 6-0-c. What the headline still does NOT say
 
 **(1)** ⚠️ **It ranks, it does not price.** R² test **+0.0003**, RMSE 0.29065 against a
@@ -1281,7 +1319,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (**14 open**, 35 resolved, codes permanent — `PNL-2` closed 2026-08-19).
+**Open issues live in [ISSUES.md](ISSUES.md)** (**14 open**, 36 resolved, codes permanent — `PNL-2` and `PRB-1` closed 2026-08-19).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -1333,7 +1371,7 @@ brokers' books are unreachable.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](ISSUES.md)** | 14 open / 35 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](ISSUES.md)** | 14 open / 36 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](TODO.md)** | the one backlog, priority-ordered, every item costed | deciding what to do next |
 | `README.md` | the front door; routes here | — |
 | `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |

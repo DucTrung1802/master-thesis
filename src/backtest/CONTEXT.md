@@ -408,3 +408,70 @@ missing daily return keeps the row. The SELL side needs the opposite default —
 its FLOOR on the exit date cannot be sold, and a loser is exactly when that happens — which
 is why `PRF-4` lists floor days as a separate unbuilt item rather than something
 `mark_ceiling` quietly half-covers.
+
+---
+
+## 9. ⚠️ PRF-2 — THE CHAIN AT h=10, AND THE MODEL BEATS THREE RANKED COLUMNS BY 2.7 SHARPE
+
+Run 2026-08-19. §8g measured a hand-built 3-channel rank at h=10 and §4 a fitted LSTM at
+h=20; **nobody had put the two on one panel**, so *how much a fitted model adds over three
+ranked columns* was unknown at every horizon. `backtest.handscreen` closes that by scoring
+the hand rule as a `y_pred` the normal machinery prices — same dates, same universe, same
+costs, same `k`, same ceiling screen.
+
+**Test window 2023-11-28 → 2026-07-24, 63 non-overlapping periods, top-20 of 150, buyable
+only:**
+
+| h=10, same panel | CAGR@30 | **Sharpe@30** | `se_sharpe` | max_dd | null z @30 |
+|---|---|---|---|---|---|
+| **the model** | **+43.8 %** | **+2.442** | 0.251 | −7.2 % | **+8.99** ✅ |
+| the 3-channel hand rule | −5.1 % | **−0.263** | 0.128 | −21.8 % | **−1.72** ❌ |
+| equal-weight universe | +4.0 % | +0.329 | 0.126 | −18.2 % | — |
+
+**Paired** (they trade the same dates, ρ = 0.74): ΔSharpe **+2.71**, `t` = **+5.94** at
+30 bps, +5.87/+6.08 at 20/50. The model's own run: test IC **+0.1393**, `ic_t` +8.19,
+**85.8 % of days positive**, `mase` **0.9874** (beats "predict no change"), R² +0.011.
+
+### 9a. ⚠️ The hand rule scoring −0.26 is NOT a contradiction of §8g
+
+§8g's **+0.652** is over **2018-2026** on the top liquidity quintile of the whole market.
+This window is 2023-11 onward — squarely inside the regime §8g itself measured at
+**+0.011 (2022-2026)** and −0.131 at 50 bps. **So the hand rule is doing here exactly what
+§8g said it does after 2022: nothing.** Two further differences, both stated so the number
+is not over-read: the universe is the model's fixed 150 rather than a dynamic quintile
+(deliberate — otherwise this compares two UNIVERSES), and both sides trade same-close
+rather than t+1 (deliberate — otherwise the model gets a free session).
+
+### 9b. ⚠️ AND THAT ANSWERS `PRF-3`: THE BREAK IS IN THE FEATURES, NOT THE HORIZON
+
+`PRF-3` had two hypotheses for the post-2022 collapse. **(1) the market changed**, so no
+feature set works after 2022; **(2) the FEATURES decayed** — order-flow imbalance from daily
+order counts is a crowded signal by 2022 — so a different feature set still works.
+
+PRF-2 holds the feature pipeline fixed and moves only the horizon, and this table holds the
+horizon fixed and moves only the feature set. **On the same window, the same universe and
+the same `h=10`, a selected 19-channel model returns +2.44 while the 3 hand-picked channels
+return −0.26.** That is hypothesis **(2)**: the market did not stop being predictable after
+2022, those three columns stopped predicting it.
+
+⚠️ **What it does not license.** The 19 channels were selected on the whole sample
+(`PRF-7` bounds that bias as mild but does not remove it), the hand rule was never re-fitted
+for this window, and `NUL-1` applies to both. The claim is about THESE two feature sets on
+THIS window, not about hand rules in general.
+
+### 9c. ⚠️ h=10 beats h=20 *despite* paying double the fees, which was not the expectation
+
+§3's cost identity: at turnover 0.70 and 50 bps the annual drag is **4.4 % at h=20 and
+8.8 % at h=10**. So h=10 has to earn ~4.4 pp/yr more just to break even — and it does, by
+far more than that. Same universe, same architecture, same test window, top-20:
+
+| | Sharpe@30, test | selection z | `n_eff`/fold |
+|---|---|---|---|
+| h=20 | +1.441 | +9.09 | 38.1 |
+| **h=10** | **+2.442** | **+13.78** | **76.6** |
+
+⚠️ **Do not read this as "h=10 is the better horizon" yet.** It is ONE split at each
+horizon, `se_sharpe` 0.24-0.25, and the h=20 figure has a 10-fold walk-forward behind it
+(`walkforward/CONTEXT.md`, pooled +1.991 over 118 periods) while this one does not. **The
+walk-forward at h=10 is the run that would settle it.** What is already solid is the
+comparison inside this table — model vs hand, paired, on one panel.
