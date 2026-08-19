@@ -77,15 +77,20 @@ replaced it.
 
 ### The next thing to run
 
+✅ **`P1-6` / `FNM-1` DONE 2026-08-19** — 22m 04s round trip on a T4 against the ~25 min
+estimate. **12 of the 13 channels survive `feature_normalize=none`**, kept-set overlap 53 of
+61 (**+5.90 sd** above chance), same channel at #1. The shortlist is
+**representation-invariant**; ⚠️ the `z = +9.09` remains a `cs_rank` number, because this run
+carries no null. §P1-6 below.
+
 | # | item | ⏱ | where | output |
 |---|---|---|---|---|
-| 1 | **`P1-6` / `FNM-1`** — re-run the top-150 selection with `feature_normalize=none` and compare the KEPT SET | **~25 min** *est.* + queue | **Kaggle T4** (`cross-sectional` job, `RUN_NULL=false`) | either the 13 channels survive and the sentence *"built on a shortlist that cleared z = +9.09"* is safe, or they do not and it is withdrawn. ⚠️ The `~1 h GPU` written in P1-6 predates panel mode; the estimate here is scaled from `PRF-7`'s **10m 34s** on 44 % of the dates, no null — the kept SET is the measurement, so no bar is needed |
-| 2 | **`PRF-2`** — the real chain at `h=10` | **~3-6 h** selection *est.* + **~10 min** chain | **Kaggle T4**, then **local GPU** | `rank_10day__final__d20_h10`, a dataset, a model run, `results/backtest_*.csv`. Answers *how much a fitted model adds over three ranked channels* — unknown at every horizon — and **separates `PRF-3`'s two hypotheses** by moving only the horizon. ⚠️ Run the hand screen as a baseline in the SAME backtest |
-| 3 | **`PRF-9`** — 90 → 800 candidate channels | ~16 h at 10 draws *est.* | **Kaggle T4** | the first cross-sectional selection ever offered `pool__ta`. ⚠️ **`P1-2` SHIPPED 2026-08-19, so the first blocker is GONE.** Still needs `pool__ta` pruned past `pool__ta` past `MEM-1` (711+90 channels is ~8× a design that already peaked at **16.3 GB** host RAM). ⚠️ Re-run `PRF-7`'s pre-2017 check at the new width — more channels is more room for the selection to have fitted the folds |
+| 1 | **`PRF-2`** — the real chain at `h=10` | **~3-6 h** selection *est.* + **~10 min** chain | **Kaggle T4**, then **local GPU** | `rank_10day__final__d20_h10`, a dataset, a model run, `results/backtest_*.csv`. Answers *how much a fitted model adds over three ranked channels* — unknown at every horizon — and **separates `PRF-3`'s two hypotheses** by moving only the horizon. ⚠️ Run the hand screen as a baseline in the SAME backtest |
+| 2 | **`PRF-9`** — 90 → 800 candidate channels | ~16 h at 10 draws *est.* | **Kaggle T4** | the first cross-sectional selection ever offered `pool__ta`. ⚠️ **`P1-2` SHIPPED 2026-08-19, so the first blocker is GONE.** Still needs `pool__ta` pruned past `pool__ta` past `MEM-1` (711+90 channels is ~8× a design that already peaked at **16.3 GB** host RAM). ⚠️ Re-run `PRF-7`'s pre-2017 check at the new width — more channels is more room for the selection to have fitted the folds |
 
 ⚠️ **WHAT IS NO LONGER ON THIS LIST, AND WHY.** *"Try a different model"* — `PRF-8` closed
 it 2026-08-19: 205,441 params, 2,033 params and 1,400 tree nodes all tie on the identical
-folds, paired |t| < 1. What is left is **FEATURES** (#3), the **HORIZON** (#2), honest
+folds, paired |t| < 1. What is left is **FEATURES** (#2), the **HORIZON** (#1), honest
 **EXECUTION** (`PRF-4`'s remaining rows, `PRF-5`) and new **DATA** (`PRF-6`).
 
 ⚠️ **Nothing below `PRF-2` changes a DECISION about trading.** `PRF-4` and `PRF-5` move the
@@ -426,7 +431,7 @@ for the cross-sectional chain in two separate ⚠️ blocks. A gate that answers
 wrong experiment is worse than no gate. ⚠️ It is also the reason the cross-sectional
 chain is run command-by-command instead of through `--apply`.
 
-### ⚠️ P1-6 · `FNM-1` — decide the feature representation by MEASURING it ⏱ ~25 min Kaggle T4
+### ✅ P1-6 · `FNM-1` DONE 2026-08-19 — the shortlist is representation-INVARIANT, 12 of 13
 
 The selection scored the 13 channels under `feature_normalize=cs_rank` (each channel
 ranked within its date before the window); `train_test_creator` feeds the model those
@@ -449,6 +454,48 @@ in `train_test_creator` changes every panel dataset, and dropping it from the se
 throws away the argument in `cross_sectional.py` §3. **Re-run the selection with
 `feature_normalize=none` and compare the kept set** — if the 13 survive, the question is
 moot and the sentence is safe.
+
+**RESULT — `cross-sectional-fnm` on a Kaggle T4, 22m 04s round trip. The 13 survive.**
+
+Identical to the `cross-sectional` job in **every** recorded setup key except one —
+`lookback_d`, `horizon_h`, `normalize`, `corr_threshold`, `n_splits`, `min_train`,
+`random_state`, `selector_class`, `methods`, `design_dtype` and even `env_fingerprint`
+(`b899d1bd4ec0`, the same Kaggle image) all match. Same payload, same 150 names, same
+4,368 labelled dates, `n_eff_per_fold` 38.1 both sides.
+
+| | `cs_rank` (the selection's) | `none` (the dataset's) |
+|---|---|---|
+| kept | 61 of 90 | **60 of 90** — overlap **53**, Jaccard **0.779**, **+5.90 sd** above chance (40.7 expected) |
+| **REF's 13 shortlisted channels** | — | ⚠️ **12 of 13 are KEPT**; only `n_sell_orders` is not |
+| shortlist | 13 | 24 (the cut is measured per run) — overlap 8, **+3.07 sd** |
+| top of the shortlist | `drv_order_vol_imb` | **`drv_order_vol_imb`** — the same channel #1, and REF's top 5 are all re-shortlisted (#1 #3 #4 #2 #5) |
+| `ic_mean` (selected) | +0.1075, sd 0.0342, trend **+0.0054** | **+0.1215**, sd 0.0307, trend −0.0018 |
+
+⚠️ **THE SENTENCE IS SAFE, AND FOR A NARROWER REASON THAN "IT PASSED".** What this
+establishes is that the CHANNEL SET does not depend on the representation — the shortlist
+is not an artefact of ranking each feature within its date. It does **not** transfer the
+BAR: `z = +9.09` was computed under `cs_rank`, this run carries **no null** (deliberately —
+the kept set was the measurement, which is what took it from ~6 h to 22 min), and §5 rule 1
+still says a bar computed for one configuration says nothing about another. **So: the
+shortlist is representation-invariant; the +9.09 remains a `cs_rank` number.**
+
+⚠️ **`none` SCORES HIGHER, NOT LOWER — +0.1215 against +0.1075**, on the same folds and
+nearly the same channels. Two things follow and neither was expected: the `cs_rank` feature
+normalisation is **not** what is doing the work, and the model's global standardisation is
+not a handicap it has been carrying. ⚠️ Do not read the +0.1215 as a result — it has no
+bar.
+
+⚠️ **THE FOUR NEAR-MISSES ARE THE SAME TIE-BREAKING AS `PRF-7`, NOT A DISAGREEMENT.** Of
+the five of REF's 13 that `none` did not shortlist, four are still KEPT and two have a
+family twin ranked higher (`drv_parkinson_5` → `drv_parkinson_21`, `drv_dist_from_high_63`
+→ `drv_dist_from_high_252` at #3). The correlation prune treats them as interchangeable and
+the representation moves which representative wins, not which family does.
+
+⚠️ **`close_adjust` slips from ensemble rank 38 to 45** and drops off the shortlist while
+staying kept. That is the one channel with a mechanism for it: it is a price LEVEL, so
+under `cs_rank` it becomes a clean within-date SIZE factor and under `none` it is a raw
+level carrying era structure. `PRF-7` found it stable across the pre-2017 WINDOW; this
+finds it the most representation-SENSITIVE of the 13.
 
 ### P1-1 · Re-fit the cost model into ONE function ⏱ ~2 h
 
@@ -1024,7 +1071,7 @@ still read 15.50. **Both flags, in that order, or the leaderboard keeps the old 
 That is not a regression from this fix; it is a gap this fix made visible. New item
 **P4-12**.
 
-**Left:** **`FNM-1` (P1-6)** — measure which side should move.
+**Left:** ~~`FNM-1` (P1-6)~~ ✅ **measured 2026-08-19** — the shortlist does not depend on the representation, so neither side has to move.
 
 **Why it is the question this repo has never answered.** Twice now a selection has cleared an honest
 bar and the model below it has shown nothing (§5d, P2-3) — and `RNK-1` says that on a

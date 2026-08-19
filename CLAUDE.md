@@ -1117,9 +1117,18 @@ constant-predictor 0.29070. Only the ORDER carries — see §6-0-b.
 **(2)** `long_short = +0.0635` is a **rank** spread, not money — the label is a rank.
 **(3)** `NUL-1` — no null anywhere in this chain prices in the feature selection, the
 architecture search, the early stopping, or the choice of `h=20`, `k=20` and the universe.
-**(4)** `FNM-1` — the selection scored those 13 channels under `feature_normalize=cs_rank`
-and the dataset feeds them globally standardised, so *"built on a shortlist that cleared
-z = +9.09"* is weaker than it sounds. **Unmeasured**; TODO P1-6, ~25 min on a T4.
+**(4)** ✅ `FNM-1` **MEASURED 2026-08-19 and it holds.** The selection scored those 13
+channels under `feature_normalize=cs_rank` while the dataset feeds them globally
+standardised — two representations, and §5 rule 1 says a bar computed for one says nothing
+about another. Re-running the identical selection under `feature_normalize=none` (22m 04s
+on a T4; every other setup key including `env_fingerprint` unchanged) keeps **12 of the 13**,
+kept-set overlap **53 of 61**, Jaccard 0.779, **+5.90 sd** above chance, and the **same
+channel at #1** (`drv_order_vol_imb`). ⚠️ **What that establishes is narrower than "it
+passed": the CHANNEL SET is representation-invariant, but the BAR does not transfer** — the
+`none` run carries no null, so **`z = +9.09` remains a `cs_rank` number**. ⚠️ And `none`
+scores *higher* on the same folds (`ic_mean` **+0.1215** vs +0.1075), which says the
+within-date feature ranking is not what is doing the work — read it as a channel-set fact,
+not as a result, because it has no bar. TODO P1-6.
 **(5)** **Survivorship protects the `z` and not the CAGR** (§2c). Every shuffled draw picks
 from the same survivor basket, so +12.3 stands and **+47.5 %/yr does not**.
 **(6)** **No slippage, no ADV cap, no floor-day exclusion on the SELL side** — `PRF-4`.

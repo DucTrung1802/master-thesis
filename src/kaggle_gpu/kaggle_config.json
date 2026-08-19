@@ -123,6 +123,45 @@
         "REPORT_ROOT": "reports/feature_selection",
         "NOTES": "TODO PRF-7, the CHEAP half. Identical to the `cross-sectional` job in every respect except the DATA WINDOW: dates < 2017-01-01, i.e. only what the earliest walk-forward fold could have seen. Same universe (liquidity_before stays 2014-01-01), same target, horizon, lookback, min_width, dtype and ensemble, so the ONLY thing that moves is which dates the selection saw. The question is whether the same channels survive: the full-sample run shortlisted 13 of 90 candidates, and two random 13-subsets of 90 would share 1.9 by chance. NO NULL on purpose - the kept SET is the measurement here, not its bar, and dropping the null takes the run from ~6 h to well under one."
       }
+    },
+    "cross-sectional-fnm": {
+      "id": "lyductrung/mt-cross-sectional-selection-no-feature-norm",
+      "title": "MT cross-sectional selection no feature norm",
+      "notebook": "src/feature_selection/RUN__cross_sectional_panel.ipynb",
+      "results_into": "reports/feature_selection",
+      "data": {
+        "id": "lyductrung/mt-panel-top150",
+        "title": "MT cross-sectional panel (top 150, h=20)",
+        "ticker": "ALL",
+        "source_dirs": [
+          "src/feature_selection",
+          "src/utils"
+        ],
+        "panel": {
+          "top_n": 150,
+          "liquidity_before": "2014-01-01",
+          "horizons": [
+            20
+          ],
+          "min_width": 5
+        }
+      },
+      "parameters": {
+        "TICKER": "ALL",
+        "TARGET": "cs_rank_20day",
+        "HORIZON": 20,
+        "LOOKBACK": 20,
+        "DEVICE": "cuda",
+        "DESIGN_DTYPE": "float64",
+        "MIN_IC_WIDTH": 5,
+        "RUN_STABILITY": true,
+        "RUN_NULL": false,
+        "N_NULL": 0,
+        "HOLDOUT_START": null,
+        "REPORT_ROOT": "reports/feature_selection",
+        "NOTES": "TODO P1-6 / FNM-1. Identical to the `cross-sectional` job in every respect except FEATURE_NORMALIZE: 'cs_rank' -> 'none'. Same payload dataset (the panel is byte-identical), same universe, target, horizon, lookback, min_width, dtype and ensemble, so the only thing that moves is the FEATURE REPRESENTATION the selection scores under. The question: the selection kept its 13 channels while ranking each feature within its date before windowing, but train_test_creator feeds the model those channels GLOBALLY STANDARDISED - two different representations, and CLAUDE.md section 5 rule 1 says a bar computed for one configuration says nothing about another. If the same channels survive under 'none', the mismatch is moot and the sentence 'built on a shortlist that cleared z = +9.09' is safe; if they do not, that sentence is withdrawn. NO NULL on purpose - the kept SET is the measurement here, not its bar, which is what took PRF-7 from ~6 h to 10m 34s. feature_normalize is already in contract.SETUP_KEYS, so this run groups APART from the cs_rank runs and cannot be unioned into one table by accident.",
+        "FEATURE_NORMALIZE": "none"
+      }
     }
   }
 }
