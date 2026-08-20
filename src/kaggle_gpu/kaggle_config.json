@@ -272,6 +272,45 @@
         "REPORT_ROOT": "reports/feature_selection_probes",
         "NOTES": "TODO PRF-9, memory pilot ATTEMPT 2 - 90 pool__basic + 30 pool__ta = 120 channels. ATTEMPT 1 at 140 channels FAILED, and it failed on the wall nobody predicted: host RAM peaked at 24.5 GB and SURVIVED, while XGBoost died on VRAM inside XGBoosterPredictFromDMatrix - free 3.00 GB, requested 3.15 GB on a 14.6 GiB T4. The allocation is xgb_shap's SHAP contributions, (n_rows, design_cols+1), and design_cols is channels x 6 window stats - so it scales with the widening exactly. 120 channels puts that request at ~2.7 GB against a smaller torch footprint. LABEL-FREE prune as before (711 -> 405 -> 30). NO NULL: the measurement is whether it fits and whether any pool__ta channel survives selection at all."
       }
+    },
+    "cross-sectional-h10-early": {
+      "id": "lyductrung/mt-cross-sectional-selection-h10-pre-2017",
+      "title": "MT cross-sectional selection h10 pre-2017",
+      "notebook": "src/feature_selection/RUN__cross_sectional_panel.ipynb",
+      "results_into": "reports/feature_selection_probes",
+      "data": {
+        "id": "lyductrung/mt-panel-top150-h10-pre2017",
+        "title": "MT panel top150 h10 pre-2017",
+        "ticker": "ALL",
+        "source_dirs": [
+          "src/feature_selection",
+          "src/utils"
+        ],
+        "panel": {
+          "top_n": 150,
+          "liquidity_before": "2014-01-01",
+          "horizons": [
+            10
+          ],
+          "min_width": 5,
+          "date_end": "2017-01-01"
+        }
+      },
+      "parameters": {
+        "TICKER": "ALL",
+        "TARGET": "cs_rank_10day",
+        "HORIZON": 10,
+        "LOOKBACK": 20,
+        "DEVICE": "cuda",
+        "DESIGN_DTYPE": "float64",
+        "MIN_IC_WIDTH": 5,
+        "RUN_STABILITY": true,
+        "RUN_NULL": false,
+        "N_NULL": 0,
+        "HOLDOUT_START": null,
+        "REPORT_ROOT": "reports/feature_selection_probes",
+        "NOTES": "TODO PRF-7 at h=10 - the CHEAP half, second horizon. The h=20 walk-forward has its selection look-ahead BOUNDED (pre-2017 probe kept 51 of 61 channels, Jaccard 0.761, 5.8 sd above chance, same top two); the h=10 walk-forward measured 2026-08-20 (pooled Sharpe at 30 bps +2.531 over 236 periods, z=+18.58, positive in 10 of 10 folds) has NO such bound - its 19 channels were selected over 2009-2026, i.e. including every test fold. Identical to the `cross-sectional-h10` job in every respect except the DATA WINDOW: dates < 2017-01-01, exactly what walk-forward fold 0 could have seen (its train ends 2016-01-01, its val is 2016). Same universe (liquidity_before stays 2014-01-01), same target, horizon, lookback, min_width, dtype, feature_normalize and ensemble, so the ONLY thing that moves is which dates the selection saw. Two random 19-subsets of 90 candidates share 4.0 by chance, so that is the bar the overlap is read against. NO NULL on purpose - the kept SET is the measurement here, not its bar, which is what took the h=20 version from ~6 h to 10m 34s. REPORT_ROOT is the probes root: PRB-1 - a run that measures the SELECTION is not a run that feeds the CHAIN, and only the root separates them."
+      }
     }
   }
 }

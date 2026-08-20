@@ -267,3 +267,182 @@ one process share the namespace exactly as two processes do. Three tests in
    It is a claim about where the signal lives. Nothing here was re-tuned for the small
    model, and a tie under one schedule is not an optimum.
 
+
+---
+
+## 9. ⚠️ THE SAME SWEEP AT h=10 — 2026-08-20, and it BEATS h=20 on every cost level
+
+```powershell
+cd src
+python -m walkforward --ticker all --table rank_10day__final__d20_h10 `
+    --config lstm__all__rank_10day__final__d20_h10.yaml --first-test 2017-01-01 `
+    --out ../results/walkforward_h10                              # 33m 26s
+python -m walkforward.evaluate --top-k 20 --draws 200 --horizon 10 --universe all `
+    --out ../results/walkforward_h10                              # 8m 59s
+```
+
+⚠️ **`--out` IS NOT OPTIONAL HERE AND IT IS DESTRUCTIVE TO OMIT.** `DEFAULT_OUT` is
+`results/walkforward/`, which holds §3's h=20 track — `predictions_oos.csv`, `folds.csv`
+and `per_fold.csv` are all written by basename, so the documented §1 command run at h=10
+**silently overwrites PRF-1**. The two horizons are two experiments and they need two
+directories.
+
+**Why it was run**: `PRF-2` measured h=10 at Sharpe@30 **+2.442** against h=20's +1.441 —
+**on one split each**, `se_sharpe` ~0.25. h=20 had ten folds behind it and h=10 had none,
+so the horizon was explicitly NOT promoted. This is the run that settles it. Identical
+geometry to §3: same universe (top 150 by pre-2014 turnover), same `--first-test`, same
+expanding 12-month folds `oos2017…oos2026`, same top-20, same ceiling screen.
+
+Buyable names only (`PRF-0`): **9,259 of 349,581 = 2.65 %** — the same share as h=20's
+2.65 %, which is what it should be, since the screen is a property of the panel and not of
+the label.
+
+| fold | IC | `ic_t` | days IC>0 | **Sharpe@30** | market | CAGR@30 | market |
+|---|---|---|---|---|---|---|---|
+| 2017 | +0.175 | 9.66 | 98.0 % | **+3.84** | +2.38 | +87.9 % | +32.7 % |
+| 2018 | +0.157 | 7.56 | 94.0 % | **+3.25** | −0.61 | +59.5 % | −9.3 % |
+| 2019 | +0.189 | 10.45 | 97.2 % | **+3.93** | +0.92 | +77.0 % | +7.1 % |
+| 2020 | +0.152 | 5.61 | 84.9 % | **+3.52** | +2.02 | +150.9 % | +57.2 % |
+| 2021 | +0.091 | 2.76 | 69.6 % | **+5.00** | +2.95 | +240.6 % | +117.4 % |
+| **2022** | +0.151 | 4.43 | 83.1 % | **+0.37** | −1.26 | +7.3 % | −40.1 % |
+| 2023 | +0.102 | 4.04 | 80.3 % | **+2.77** | +1.33 | +58.3 % | +24.9 % |
+| 2024 | +0.171 | 9.41 | 96.0 % | **+3.68** | +0.48 | +49.7 % | +5.7 % |
+| 2025 | +0.107 | 4.19 | 79.4 % | **+2.39** | +1.04 | +41.2 % | +17.6 % |
+| 2026 * | +0.094 | 1.67 | 77.8 % | +1.38 | −1.42 | +22.9 % | −18.4 % |
+
+\* 135 dates / **11 periods** — partial year, `se_sharpe` 0.400.
+
+**Pooled, as one walk-forward track — 2,383 dates, 236 non-overlapping periods:**
+
+| | IC | `ic_t` | days>0 | Sharpe@20 | @30 | @50 | `se_sharpe` | market |
+|---|---|---|---|---|---|---|---|---|
+| | **+0.1412** | **+16.05** | 86.5 % | **+2.601** | **+2.531** | **+2.391** | 0.128 | +0.715 |
+| CAGR | | | | +76.8 % | +74.0 % | +68.5 % | | +13.9 % |
+
+**The null** (`y_pred` shuffled within each date, 200 draws, top-20):
+
+| bps | observed | null mean | p95 bar | null MAX | **z** | |
+|---|---|---|---|---|---|---|
+| 20 | +2.601 | +0.505 | +0.676 | +0.812 | **+18.42** | ✅ |
+| 30 | +2.531 | +0.409 | +0.578 | +0.719 | **+18.58** | ✅ |
+| 50 | +2.390 | +0.218 | +0.389 | +0.534 | **+18.86** | ✅ |
+
+Null MAX below observed at all three, so §5 rule 3 does not fire.
+
+⚠️ **IC is positive in 10 of 10 folds and the strategy beats the equal-weight universe in
+10 of 10, on both Sharpe and CAGR.** h=20 managed 9 of 10 on IC. Every h=10 fold also
+clears its own market on CAGR, including 2022 (+7.3 % against −40.1 %).
+
+### 9a. ⚠️ THE DECAY IS THE SAME, AND I MISREAD IT ONCE BEFORE WRITING IT DOWN
+
+```
+Sharpe@30bps across folds: slope -0.2192/fold   first half +3.907   second half +2.119
+```
+
+The slope is **2.2× h=20's −0.100/fold**, and reading only the slope says h=10 decays twice
+as fast. **It does not.** In proportional terms the two are the same decay:
+
+| | first half | second half | fall | slope |
+|---|---|---|---|---|
+| h=20 (§3) | +2.775 | +1.564 | **−43.6 %** | −0.100/fold |
+| **h=10** | +3.907 | +2.119 | **−45.8 %** | −0.219/fold |
+
+⚠️ **The absolute slope is steeper only because the level is higher.** A ratio and a
+difference disagree here, and the ratio is the one that compares two tracks with different
+means. What the pair actually says is that **both horizons lose ~45 % of their Sharpe
+between the first five folds and the last five** — a shared decay, not a property of h=10.
+
+### 9b. The no-mechanical-leak check, run the same way §5 was
+
+Restricting the h=10 walk-forward track to the single split's OWN test window — read from
+the dataset's `metadata.json`, `2023-11-28 → 2026-07-24` — and scoring it identically:
+
+| k=20, 30 bps | IC | `ic_t` | Sharpe@30 | CAGR@30 | n |
+|---|---|---|---|---|---|
+| walk-forward, restricted | **+0.1307** | +7.61 | **+2.257** | +43.2 % | **63** |
+| single split (`PRF-2`) | **+0.1393** | +8.19 | **+2.442** | +43.8 % | **63** |
+
+**63 periods on both sides** — the windows are the same window, which is the check working.
+The ICs agree to ~0.009 and the Sharpe gap is **0.185 against `se_sharpe` 0.224, i.e. 0.8
+SE**.
+
+⚠️ **The sign of that gap is OPPOSITE to §5's and it must not be read as a finding.** At
+h=20 the walk-forward scored *above* the single split and §5 called that the expected
+direction (its models are retrained up to each test year); here it scores *below*. At
+0.8 SE neither direction is resolvable, and the honest statement is that the two agree
+within noise at both horizons.
+
+### 9c. ⚠️ h=10 vs h=20 IS STILL AN UNPAIRED COMPARISON
+
+| | h=10 | h=20 |
+|---|---|---|
+| Sharpe@30 | **+2.531** | +1.991 |
+| periods | **236** | 118 |
+| `se_sharpe` | 0.128 | 0.155 |
+
+⚠️ **`walkforward.compare` CANNOT PAIR THESE, and the reason is structural rather than a
+missing flag.** It pairs ARMS within one sweep — arms that trade the same dates out of the
+same panel, which is what makes `ρ = 0.88` and a paired `t` meaningful (§8a). Two horizons
+produce **236 and 118 periods over different holding intervals**, so there is no period-wise
+correspondence to difference. The +0.54 gap is therefore a comparison of two independent
+estimates, each with `se` ~0.13-0.16 — **suggestive, and not the paired test §8a insisted on
+for a difference this size**. §5c is the standing warning: eleven architectures once spread
+IC across 0.227 and the whole spread was one error bar.
+
+⚠️ **AND THE COST IDENTITY CUTS THE OTHER WAY.** `backtest/CONTEXT.md` §3: at turnover 0.70
+and 50 bps the annual fee drag is **8.8 % at h=10 against 4.4 % at h=20**. Every figure above
+is already net of that, so h=10 wins *after* paying double — but it also means h=10's edge is
+the more fragile of the two to any cost the backtest still does not charge (`PRF-4`: ADV cap,
+floor days on the sell side, slippage).
+
+### 9d. What §9 does NOT establish
+
+1. ✅ **The selection look-ahead is now BOUNDED at h=10 too — see §9e.** It is still a bound
+   and not a removal: the 19 channels were chosen over 2009-2026 including every test fold,
+   so every LEVEL here carries an optimism this probe constrains rather than subtracts.
+2. **`NUL-1` in full force** — the within-date shuffle prices the universe, `k`, the cost and
+   the schedule. It prices neither the feature selection, nor the architecture, nor the
+   choice of `h=10` itself, which was made *using* `PRF-2`'s result.
+3. **Survivorship protects the `z` and not the CAGR** (§6, CLAUDE.md §2c). `z = +18.6` stands;
+   **+74.0 %/yr does not**, and it is the more extreme claim of the two by a wide margin.
+4. **One `k`, one universe, one architecture.** `PRF-8` ruled the architecture out at h=20;
+   nothing has re-run those arms here.
+
+
+### 9e. ✅ PRF-7 AT h=10 — the channel set is NOT period-fitted here either
+
+`cross-sectional-h10-early`, a Kaggle T4, **9m 46s**, merged into
+`reports/feature_selection_probes/`. Identical to the run behind §9 in every respect except
+the DATA WINDOW: dates < 2017-01-01, exactly what walk-forward fold 0 could have seen. Panel
+**273,367 × 104 over 1,995 dates** — the same panel `PRF-7` used at h=20, so the two probes
+differ only in the label. `RUN_NULL=false`: the kept SET is the measurement, not its bar.
+
+| | full sample | pre-2017 | |
+|---|---|---|---|
+| candidates | 90 | 90 | identical pools, so the null needs no restriction |
+| kept | 61 | 58 | **overlap 51**, Jaccard **0.750**, chance 39.3 ± 2.1 → **+5.48 sd** |
+| shortlisted | **19** | **9** | **overlap 7**, chance 1.90 ± 1.17 → **+4.37 sd** |
+| #1 channel | `drv_order_vol_imb` | `drv_order_vol_imb` | ✅ the same, and it is h=20's #1 too |
+| `ic_mean` | +0.1201 | **+0.1260** | ⚠️ HIGHER on 44 % of the data — see below |
+| `n_eff_per_fold` | 76.6 | **28.9** | `se_ic_per_fold` 0.115 → **0.189** |
+
+⚠️ **AND 10 OF THE 12 SHORTLIST "MISSES" ARE IN THE EARLY KEPT SET**, so 7-of-19 understates
+the agreement exactly as it did at h=20. Only **two** are absent from the early run outright:
+`drv_close_z_21` and **`n_sell_orders`** — and `n_sell_orders` was one of h=20's misses too,
+which makes it the one channel that is period-dependent at BOTH horizons.
+
+⚠️ **THE ASYMMETRY IS THE OTHER WAY ROUND FROM h=20, AND IT IS SAMPLE SIZE.** At h=20 the
+early run shortlisted MORE than the full one (15 vs 13); here it shortlists **half as many**
+(9 vs 19). `n_eff_per_fold` is **28.9 against 76.6** and `se_ic_per_fold` **0.189 against
+0.115**, so fewer channels clear the FDR cut on a quarter of the effective sample. **Read the
+shortlist counts as a statement about power, not about the market.**
+
+⚠️ **`ic_mean` going UP (+0.126 vs +0.120) is NOT evidence the early window is better.** At
+`se_ic_per_fold` 0.189 the difference is ~0.03 SE. It also runs opposite to h=20's probe,
+which scored −9.5 %. Both are inside noise; neither direction means anything.
+
+**Reading — the same as `PRF-7`'s, at a second horizon:** a walk-forward that re-ran the
+selection per fold would have picked substantially the same channels, so §9's levels stand as
+levels-with-a-bounded-bias rather than artefacts. ⚠️ **A stable channel SET still does not
+make the measured IC unbiased** — it bounds the problem and does not remove it, and the
+~60 GPU-h per-fold version remains unrun at both horizons.

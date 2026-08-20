@@ -53,7 +53,48 @@ below remain the engineering backlog.
 
 ---
 
-## ⚠️ START HERE — what to run next, 2026-08-19 (evening)
+## ⚠️ START HERE — what to run next, 2026-08-20
+
+### ✅ CLOSED 2026-08-20 — the h=10 WALK-FORWARD, and the horizon is still NOT promoted
+
+The one run that settles *"is h=10 one lucky split?"*. **33m 26s** sweep + **8m 59s**
+scoring on the local RTX 3050, no Kaggle quota. Numbers in **CLAUDE.md §6-0-bis-3** and
+**`walkforward/CONTEXT.md` §9**; do not re-derive them here.
+
+| | h=10 (NEW) | h=20 (`PRF-1`) |
+|---|---|---|
+| Sharpe@30, pooled | **+2.531** | +1.991 |
+| periods | **236** | 118 |
+| IC / `ic_t` | **+0.1412** / **+16.05** | +0.1097 / +6.90 |
+| null z @20/30/50 | **+18.42 / +18.58 / +18.86** | +12.18 / +12.28 / +12.46 |
+| folds with IC > 0 | **10 of 10** | 9 of 10 |
+
+⚠️ **AND IT IS STILL NOT A REASON TO MOVE THE CHAIN TO h=10.** Three measured reasons:
+
+1. ⚠️ **THE TWO HORIZONS CANNOT BE PAIRED, so +0.54 is not a tested difference.**
+   `walkforward.compare` pairs ARMS inside one sweep (same dates, same panel, ρ = 0.88).
+   Two horizons give **236 and 118 periods over different holding intervals** — no
+   period-wise correspondence exists. Two independent estimates at `se` ~0.13-0.16 each.
+   §5c is the standing warning: eleven architectures once spread IC over 0.227 and the
+   whole spread was **one error bar**.
+2. ✅ **`PRF-7` now bounds h=10 too — and it came back clean.** 9m 46s on a T4:
+   **51 of 61** kept channels survive a pre-2017 selection (**+5.48 sd** above chance,
+   Jaccard 0.750), **`drv_order_vol_imb` is #1 in both**, and 10 of the 12 shortlist misses
+   sit in the early kept set. ⚠️ **It bounds the optimism rather than removing it**, so the
+   LEVELS above are still levels-with-a-bias. CLAUDE.md §6-0-bis-3, `walkforward` §9e.
+3. ⚠️ **The decay is the SAME at both horizons and the slope alone says otherwise** —
+   −0.219/fold against −0.100, but **−45.8 %** against **−43.6 %** proportionally. The
+   absolute slope is steeper only because the level is higher. I read this wrong once
+   before writing it down.
+
+**Opened by the same run**: **`WFO-1`** (`walkforward` overwrites the previous sweep — one
+omitted `--out` from destroying `PRF-1`), now **`P1-8`**. **Also fixed**: both registers
+pointed stage 9's artefact at repo-root `results/`, where it has never been — `backtest`
+writes into `<run_dir>/results/`, which is gitignored (`RPR-1`).
+
+---
+
+## ⚠️ What was next on 2026-08-19 (evening)
 
 > ⚠️ **TWO OF THE THREE OBVIOUS LEVERS ARE NOW CLOSED BY MEASUREMENT, AND THAT IS THE MOST
 > IMPORTANT THING ON THIS PAGE.** `PRF-8`: a model **101× smaller** ties the 205 k LSTM
@@ -120,7 +161,7 @@ One-line each:
 
 | # | item | ⏱ | where | output |
 |---|---|---|---|---|
-| 1 | **the h=10 WALK-FORWARD** — the one run that settles horizon | **~20 min** *est.* | **local GPU** | `PRF-2` measured h=10 at Sharpe **+2.442** against h=20's +1.441 **on one split each**. h=20 has 10 folds behind it; h=10 has none, so the horizon is NOT promoted. `src/walkforward/` runs it in one command and `walkforward.compare` pairs the two tracks |
+| ~~1~~ | ~~**the h=10 WALK-FORWARD**~~ | ~~**~20 min** *est.*~~ | ✅ **DONE 2026-08-20** | **42 min actual**, not 20. See the block at the top of this file. ⚠️ **Its last clause was wrong and is worth keeping visible**: *"`walkforward.compare` pairs the two tracks"* — it **cannot**, and the reason is structural (different holding intervals ⇒ no period-wise correspondence). Pairing two horizons is an OPEN problem, now **P2-4** |
 | 2 | **`PRF-4`** — execution realism | ~1 day | **CPU** | ADV/size cap, floor days on the SELL side, the ATC auction. ⚠️ These move the LEVELS, and after PRF-8/PRF-9 the levels are the only thing still moving |
 | 3 | **`PRF-5`** — survivorship | ~2 days | **data** | `z` is protected, `+47.5 %/yr` is not. A point-in-time listing table |
 | 4 | **`PRF-3`** — ⚠️ **mostly ANSWERED by `PRF-2`**; what is left is the training-window test | ~1 day | local | PRF-2 showed the post-2022 break is in the FEATURES, not the market (19 selected channels +2.44 vs 3 hand-picked −0.26, same window and horizon). The rolling-vs-expanding half is still untested at h=10/h=20 |
@@ -488,80 +529,65 @@ single-stock ranking:
 
 ## P0 — a number you already have is wrong or unreadable until this is done
 
-⚠️ **P0-1 … P0-6 ARE ALL DONE and live in [§ Archive](#archive--done-kept-because-the-reasoning-is-the-evidence).** Two items sit
-here instead, both **promoted on 2026-08-19** from lower sections, because by this
-section's own test neither was hygiene.
+⚠️ **P0 IS EMPTY as of 2026-08-20, and that is a claim, not an oversight.** `P0-1 … P0-6`
+closed 2026-08-17/18; **`P0-7`** (CLAUDE.md §6-0 headlining the one-split chain) was fixed
+and, being a documentation-staleness item whose reasoning is not evidence, was **deleted
+per this file's own rule** rather than archived; **`P4-12`** (`mase` never computed on a
+panel) closed 2026-08-19 and **moved to the Archive**, because CLAUDE.md §6-0-b cites that
+block by name as the place a wrong recorded prediction is kept.
 
-### ⚠️ P0-7 · CLAUDE.md §6-0 STILL DESCRIBES THE ONE-SPLIT CHAIN AS THE HEADLINE ⏱ ~1 h
-
-⚠️ **The auto-loaded register is the one file every session reads, and its HEADLINE table
-is now the weakest evidence in the repo rather than the strongest.** Four PRF items closed
-on 2026-08-19 and §6-0 predates all of them. Measured, not asserted:
-
-| CLAUDE.md §6-0 says | the state on 2026-08-19 |
-|---|---|
-| header **"State today (2026-08-18)"** | a day stale, and four closures stale |
-| stage 9 · **Sharpe +1.484**, `se` 0.256, **32 periods**, one split | `PRF-1`: **+1.991** over **118 periods**, `se` **0.155**, 10 folds, z = +12.3, beats the market **10/10 folds** |
-| stage 7 · one LSTM run, 205 k params, quoted as *the* model | `PRF-8`: a **2,033-param** model and a **1,400-node GBT** tie it, paired \|t\| < 1 — the architecture is not part of the result |
-| *"the 13 channels were selected on the whole sample"* is unqualified | `PRF-7` **bounded it**: 51 of 61 channels survive a pre-2017 selection, 5.8 sd above chance |
-| **no `walkforward` stage in the 9-stage table at all** | `src/walkforward/` exists and is where the strongest number now lives |
-| **"model runs: ALL = 1"** (§"What exists right now") | `index.csv` holds **33 rows — 21 LSTM + 10 GBT on `all`**, 2 VCB |
-
-⚠️ **This is P0 and not P4 by the section's own rule**: §6-0 is not merely out of date, it
-directs a new session to quote **+1.484 / se 0.256 / 32 periods** when a 118-period figure
-exists. That is *a number you already have being wrong*, in the one file that is loaded
-whether or not anybody opens it. ⚠️ **`§6-0-bis`'s VCB paragraph has the same problem one
-level down** — it reads the single-split book, and PRF-1 never re-ran the single-stock
-question.
-
-**Do**: rewrite §6-0's table around the walk-forward, fold `6-0-ter` (already written) into
-it, add the `walkforward` stage, and refresh the run counts. ⚠️ **Do NOT delete the
-single-split row** — `walkforward/CONTEXT.md` §5 uses it as the no-mechanical-leak check
-(the two agree to the third decimal on the shared window), so it is evidence, not a
-superseded draft.
+⚠️ **Nothing currently known makes a quoted number wrong.** The nearest candidates are
+deliberately NOT here: `WFO-1` is a way to DESTROY a number rather than misstate one, and
+`PRF-7`-at-h=10 measures how optimistic a level is rather than showing it to be wrong. If
+you find something that does belong here, it outranks everything below it.
 
 
-### ⚠️ P4-12 · `mase` IS NEVER COMPUTED ON A PANEL — promoted from P4 2026-08-19 ⏱ ~half a day
-
-⚠️ **BLOCK B (`mase`, `rmsse`, `skill_score`, `beats_naive`) IS NEVER COMPUTED ON A
-PANEL.** `metrics.accuracy_vs_naive` is called from `evaluate` only; `evaluate_panel` runs
-`panel_core_metrics` + `panel_null_metrics` + `regression_extras` and stops. So the
-top-150 cross-sectional run — **the headline result of this whole repo** — carries
-`test_mase = NaN` while both VCB runs carry a number.
-
-**Why this is P0 and not hygiene:** `mase ≥ 1` is the column **P2-3 says is the line to
-quote**, and it is the one that showed the `return_5day` model losing to "predict no
-change" while its `ic` looked respectable. The cross-sectional model has never been asked
-that question. ⚠️ Its `r2` is **+0.0003** and its RMSE is 0.29065 against a constant
-predictor's 0.29070 — which is what a `mase` of ~1.0 looks like from the other side, so
-the honest expectation is that it will not beat the naive on MAGNITUDE either, and the
-result stands or falls on the RANK. **That is worth measuring rather than inferring.**
-
-⚠️ **The fix is not a copy-paste.** The `lag_h` naive reads `y_true[i - h]` and assumes
-rows are **consecutive samples in date order**, which is false on a panel where each date
-holds N tickers — it would have to be per-ticker. Found 2026-08-18 while fixing `ICT-1`;
-nothing was broken by that fix, the gap simply became visible once the panel row was read
-column by column.
 
 ## P1 — unblocks hours of other work
 
-⚠️ **Re-ordered 2026-08-19.** `P1-2` moved to the front because it is the only thing here
-that unblocks another item (`PRF-9`, the 90 → 800 channel widening) — this section's own
-rule. `P1-3`/`P1-4`/`P1-5`/`P1-7` are done and live in the Archive; **`P4-11` was promoted
-in** from P4, because a stage reporting `up to date` for an experiment it never ran is a
-false green, which is the class §5 rule 10 exists for.
+⚠️ **Re-ordered 2026-08-20.** `P1-2` (`PNL-2`) shipped 2026-08-19 and its resolution is
+recorded in ISSUES.md, so the stub was deleted; `P1-3`/`P1-4`/`P1-5`/`P1-6`/`P1-7` are done
+and live in the Archive. **`P4-11` was promoted in** from P4, because a stage reporting
+`up to date` for an experiment it never ran is a false green, which is the class §5 rule 10
+exists for. **`P1-8` is new** and heads the section: it is the only item here that protects
+an artefact somebody already paid GPU-hours for.
 
-### P1-2 · Fix `PNL-2` ⏱ half a day
 
-Cheapest fix in the issue register. Derive `cross` from the panel's own `ticker` count, as
-resolved `PNL-1` already made the SCORER do. No chicken-and-egg: the read happens before
-`build()`.
+### ⚠️ P1-8 · Fix `WFO-1` — `walkforward` overwrites the previous sweep ⏱ ~2 h
 
-⚠️ **It partly dissolves `CSP-1` for free** — once grain comes from the data, the `else`
-branch reads via `reader.join(pools)`, so `--ticker ALL --pools pool__basic,pool__X
---target return_5day` becomes a real cross-sectional multi-pool run. `daily_ic` is
-Spearman per date, so ranking `return_5day` within a date is the same metric as
-`cs_rank_5day`; only the ranker *fit* differs.
+⚠️ **Opened 2026-08-20 after nearly destroying `PRF-1`'s track.** `run.DEFAULT_OUT` is
+`results/walkforward/` and all three artefacts are written by BASENAME, so `RUNBOOK.md`
+§3's documented command run at a second horizon overwrites the first horizon's entire OOS
+track — silently, no fingerprint check, no message. It was caught by reading `DEFAULT_OUT`
+before pressing enter, which is not a control.
+
+**Two fixes, and the second is the cheap half:**
+
+| | |
+|---|---|
+| **derive the leaf from the experiment** | `results/walkforward/<ticker>__<table>/`, exactly as `train_test_creator` and `final_features` already name their outputs. Then two horizons cannot collide and `--out` goes back to being an override |
+| **refuse a mismatched directory** | `folds.csv` already records the run names, which carry the table. Reading it and raising when it names a different table is ~10 lines and would have caught this without any renaming |
+
+⚠️ **The `evaluate` half must move with it**: `--horizon` defaults to 20 and sets BOTH the
+period cut and the `return_{h}day` column scored, so an h=10 track scored without
+`--horizon 10` silently scores the wrong label against the right predictions. Derive it
+from the track, or refuse when `folds.csv` disagrees.
+
+⚠️ **Third instance of one shape** — `PRF-8`'s concurrency trap (dataset names derived
+from the DATA, `walkforward/CONTEXT.md` §8c) and `PRB-1` (only the report ROOT separates a
+probe from a chain input). Two were fixed with a lock and a second root; **neither helps a
+sequential re-run of the same command**, which is the ordinary way this one fires.
+
+⚠️ **AND `RPR-1` IS WHAT TURNS THIS FROM ANNOYING INTO DANGEROUS — measured 2026-08-20.**
+`git ls-files results/` returns **NOTHING**: `.gitignore:50` is a blanket `*.csv` and
+`results/` carries no negation rule, so **both walk-forward tracks exist only on this
+machine**. `reports/` is fine (1,377 tracked files, 63 `outstanding.csv`) because it HAS
+negations; `results/` was never given any. So the repo's strongest evidence —
+`predictions_oos.csv` at h=20 and h=10, 33 GPU-minutes each — is simultaneously
+**untracked** and **one omitted flag from being overwritten**. Either half alone is
+survivable. **Decide both together**: a negation rule for `results/**/predictions_oos.csv`
++ `per_fold.csv` + `folds.csv` is ~3 lines (16.5 MB each, so `per_fold`/`folds` alone may
+be the right call), and it is the cheaper half of this item.
 
 ### ⚠️ P4-11 · `pipeline` CALLS ANOTHER EXPERIMENT'S RUN `up to date` — promoted from P4 2026-08-19 ⏱ ~2 h
 
@@ -696,6 +722,33 @@ then ~20.6 GB from settled RSS). **top-300 needs the streaming design (P3-2), no
 
 ## P2 — new measurements worth having
 
+### ⚠️ P2-4 · Nothing can PAIR two horizons, and the old TODO assumed something could ⏱ ~1 day
+
+⚠️ **Opened 2026-08-20.** The retired item above promised *"`walkforward.compare` pairs the
+two tracks"*. It does not, and cannot: it pairs ARMS inside one sweep — arms that trade the
+same dates out of the same panel, which is what makes ρ = 0.88 and a paired `t` meaningful
+(`walkforward/CONTEXT.md` §8a). **h=10 and h=20 produce 236 and 118 periods over different
+holding intervals**, so there is no period-wise correspondence to difference. The measured
+gap — Sharpe@30 **+2.531 vs +1.991** — is two independent estimates at `se` ~0.13-0.16, not
+a tested difference, and the repo has been burned by exactly that distinction (§5c: eleven
+architectures, spread 0.227, one error bar).
+
+**Three candidate designs, cheapest first:**
+
+| | what | what it costs |
+|---|---|---|
+| **daily-return series** | Stop comparing PERIOD returns. Both strategies produce a daily P&L series over the same 2,383 dates; difference those and use Newey-West with a lag of `max(h)` to price the overlap. Pairs on the calendar, which the two DO share | ~half a day, no new runs |
+| **block bootstrap on dates** | Resample date-blocks of ≥ 2h, rebuild both tracks inside each draw, difference the Sharpes. Makes no distributional assumption and handles the unequal period counts directly | ~1 day, CPU |
+| **run h=20 at h=10's cadence** | Rebalance the h=20 signal every 10 sessions with a 20-day holding overlap. Then the periods DO correspond, but it is a third strategy, not h=20 | ~half a day + a design decision |
+
+⚠️ **Until one of these exists, no register may state that h=10 beats h=20** — only that
+each independently clears its own null, which both do decisively. Both `CLAUDE.md`
+§6-0-bis-3 and `walkforward/CONTEXT.md` §9c are worded to that standard; keep them there.
+
+⚠️ **It also blocks a cheaper question that looks unrelated**: `PRF-4`'s execution costs
+(ADV cap, floor days on the sell side) are expected to hit **h=10 harder**, since it pays
+double the fee drag — but "harder" is a difference between two tracks, which is this item.
+
 ### P2-2 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h
 
 `read_universe_panel` already takes a `tickers` list and filters in SQL, so this is a CLI
@@ -773,6 +826,32 @@ not change**, so an older message pointing at "P4-11" still finds it.
 > §3 does the same for `P0-4`'s `mkt_n_names`. For those, deleting the block here would
 > leave a live cross-reference pointing at nothing. **Before deleting any row above,
 > `grep` the codes across `*.md` and move what is cited.**
+
+### ✅ P4-12 · DONE 2026-08-19 — `mase` on a panel, and **my recorded prediction was wrong**
+
+⚠️ **THE PREDICTION BELOW IS KEPT BECAUSE IT WAS WRONG.** It reads *"the honest expectation is that it will not beat the naive on MAGNITUDE either"*. Measured: the top-150 h=20 run scores `mase` **0.9937** — it DOES beat "predict no change", by 0.6 %. CLAUDE.md §6-0-b has the full table and cites this block by name.
+
+
+⚠️ **BLOCK B (`mase`, `rmsse`, `skill_score`, `beats_naive`) IS NEVER COMPUTED ON A
+PANEL.** `metrics.accuracy_vs_naive` is called from `evaluate` only; `evaluate_panel` runs
+`panel_core_metrics` + `panel_null_metrics` + `regression_extras` and stops. So the
+top-150 cross-sectional run — **the headline result of this whole repo** — carries
+`test_mase = NaN` while both VCB runs carry a number.
+
+**Why this is P0 and not hygiene:** `mase ≥ 1` is the column **P2-3 says is the line to
+quote**, and it is the one that showed the `return_5day` model losing to "predict no
+change" while its `ic` looked respectable. The cross-sectional model has never been asked
+that question. ⚠️ Its `r2` is **+0.0003** and its RMSE is 0.29065 against a constant
+predictor's 0.29070 — which is what a `mase` of ~1.0 looks like from the other side, so
+the honest expectation is that it will not beat the naive on MAGNITUDE either, and the
+result stands or falls on the RANK. **That is worth measuring rather than inferring.**
+
+⚠️ **The fix is not a copy-paste.** The `lag_h` naive reads `y_true[i - h]` and assumes
+rows are **consecutive samples in date order**, which is false on a panel where each date
+holds N tickers — it would have to be per-ticker. Found 2026-08-18 while fixing `ICT-1`;
+nothing was broken by that fix, the gap simply became visible once the panel row was read
+column by column.
+
 
 ### ✅ PRF-0 · DONE 2026-08-19 — the price band does NOT bite the h=20 model
 

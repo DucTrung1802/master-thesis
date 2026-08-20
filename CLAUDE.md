@@ -1036,7 +1036,7 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-19)
+## 6. State today (2026-08-20)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section
 is the bug.** It was 7 days stale once already.
@@ -1063,6 +1063,13 @@ and still useful (see the leak check below), but it is not the evidence any more
 | null, 200 within-date shuffles | **z = +12.18 / +12.28 / +12.46**, null MAX below observed at all three | z = +4.29 |
 | shape | IC positive **9 of 10 folds**; beats the equal-weight universe **10 of 10** | — |
 
+⚠️ **AND THE SAME SWEEP AT h=10 SCORES HIGHER ON EVERY ROW — 2026-08-20, §6-0-bis-3.**
+Sharpe@30 **+2.531** over **236** periods, IC **+0.1412**, `ic_t` **+16.05**, z = **+18.58**,
+IC positive **10 of 10** folds. ⚠️ **The two horizons are NOT paired and cannot be** (236 vs
+118 periods over different holding intervals), so read that as two independent estimates with
+`se` ~0.13-0.16 each, **not** as a settled +0.54. The horizon is still not promoted: the
+chain's tables, configs and `RUNBOOK.md` §3a stay at h=20 until something pairs them.
+
 **The chain that produced it**, and every stage is reproducible from `RUNBOOK.md` §3a:
 
 | stage | artefact | number |
@@ -1072,8 +1079,9 @@ and still useful (see the leak check below), but it is not the evidence any more
 | 6 · train_test_creator | `all__rank_20day__final__d20_h20__tr70_val15_test15__std` | 422,251 / 91,462 / 93,224 windows × 20 × 13 |
 | 7 · model | `lstm__all__rank_20day__final__d20_h20__20260818-195738` | 4m 23s; test IC +0.0863, **t = +3.47** (`ICT-1` fixed) |
 | 8 · result_evaluator | scored + indexed | clears its block-shuffled bar on `ic` and `dir_auc` — ⚠️ a floor, not a result (`NUL-1`) |
-| 9 · backtest | `results/backtest_test.csv` | top-15 of 150, 50 bps, **ceiling-screened by default since 2026-08-19**: **+1.5512** test / **+1.7385** val |
+| 9 · backtest | `src/model/runs/<run_id>/results/backtest_test.csv` ⚠️ **inside the RUN FOLDER, which is gitignored (`RPR-1`)** — not repo-root `results/` | top-15 of 150, 50 bps, **ceiling-screened by default since 2026-08-19**: **+1.5512** test / **+1.7385** val |
 | **W · walkforward** *(NEW 2026-08-19)* | `results/walkforward/` + 10 run folders | the table above. `walkforward/CONTEXT.md` |
+| **W · walkforward @ h=10** *(NEW 2026-08-20)* | `results/walkforward_h10/` + 10 run folders | Sharpe@30 **+2.531**, 236 periods, z = +18.58 — §6-0-bis-3. ⚠️ `--out` is REQUIRED or it overwrites the row above |
 
 ### ⚠️ 6-0-a. FOUR THINGS CLOSED ON 2026-08-19, AND WHAT EACH ONE SETTLED
 
@@ -1138,9 +1146,60 @@ over 2018-2026, and §8g itself measured +0.011 for 2022-2026.
 
 ⚠️ **h=10 BEATS h=20 WHILE PAYING DOUBLE THE FEES** (8.8 %/yr against 4.4 % at τ=0.70,
 50 bps) — +2.442 against +1.441 on the same universe, architecture and window. ⚠️ **One
-split each**, `se_sharpe` ~0.25, and h=20 has a 10-fold walk-forward behind it while this
-has none. **Do not promote the horizon on this**; the h=10 walk-forward settles it and
-`src/walkforward/` runs it in one command.
+split each**, `se_sharpe` ~0.25 — ✅ **and the walk-forward below settled it 2026-08-20.**
+
+### ⚠️ 6-0-bis-3. THE h=10 WALK-FORWARD — 2026-08-20, 10 folds, and it holds
+
+The run §6-0-bis-2 called for. Same geometry as `PRF-1`: top 150 by pre-2014 turnover,
+`--first-test 2017-01-01`, expanding 12-month folds `oos2017…oos2026`, top-20, ceiling
+screen. **33m 26s** sweep + **8m 59s** scoring, local RTX 3050, no Kaggle quota.
+
+| pooled, top-20, buyable only | **h=10 (NEW)** | h=20 (`PRF-1`) |
+|---|---|---|
+| periods | **236** | 118 |
+| `se_sharpe` | **0.128** | 0.155 |
+| Sharpe @20/30/50 bps | **+2.601 / +2.531 / +2.391** | +2.026 / +1.991 / +1.921 |
+| CAGR@30 | **+74.0 %** vs market +13.9 % | +47.5 % vs +14.6 % |
+| daily IC | **+0.1412**, `ic_t` **+16.05**, 86.5 % of days positive | +0.1097, +6.90, 80.6 % |
+| null, 200 within-date shuffles | **z = +18.42 / +18.58 / +18.86**, null MAX below observed at all three | +12.18 / +12.28 / +12.46 |
+| shape | IC positive **10 of 10** folds; beats the universe **10 of 10** on Sharpe AND CAGR | IC positive 9/10 |
+
+⚠️ **THE DECAY IS THE SAME AT BOTH HORIZONS, AND THE SLOPE ALONE SAYS OTHERWISE.** h=10's
+Sharpe@30 slope is **−0.219/fold** against h=20's −0.100 — 2.2× steeper — but the
+proportional fall is **−45.8 %** against **−43.6 %** (first five folds vs last five). The
+absolute slope is steeper only because the level is higher. **Both horizons lose ~45 % of
+their Sharpe across the sweep**; that is a shared property, not an h=10 defect.
+
+⚠️ **THE TWO HORIZONS ARE NOT PAIRED AND CANNOT BE.** `walkforward.compare` pairs ARMS
+inside one sweep — same dates, same panel, ρ = 0.88, which is what makes a paired `t`
+meaningful. Two horizons give **236 and 118 periods over different holding intervals**, so
+no period-wise correspondence exists. The +0.54 gap is two independent estimates with `se`
+~0.13-0.16 each: **suggestive, and not the paired test §6-0-ter insisted on**. §5c is why
+that matters — eleven architectures once spread IC over 0.227 and the whole spread was one
+error bar.
+
+✅ **No mechanical leak.** Restricting the h=10 track to the single split's own test window
+(`2023-11-28 → 2026-07-24`, read from the dataset's `metadata.json`) gives **63 periods on
+both sides**, IC +0.1307 against `PRF-2`'s +0.1393, Sharpe@30 **+2.257 against +2.442** —
+a gap of **0.8 SE**. ⚠️ Its SIGN is opposite to the h=20 check's and at 0.8 SE that is not
+resolvable; both horizons agree with their single split within noise.
+
+✅ **THE SELECTION LOOK-AHEAD IS BOUNDED AT h=10 TOO — measured 2026-08-20, 9m 46s on a
+T4.** Re-running the identical selection on dates < 2017 keeps **51 of 61** channels
+(Jaccard **0.750**, chance 39.3 ± 2.1 → **+5.48 sd**), shortlists **7** against a chance of
+1.90 (**+4.37 sd**), and puts **`drv_order_vol_imb` at #1 in both** — the same channel h=20's
+probe put first. **10 of the 12 shortlist misses are in the early KEPT set**; only
+`drv_close_z_21` and `n_sell_orders` are absent outright, and `n_sell_orders` was one of
+h=20's misses too. ⚠️ The early run shortlists **9 against 19** because `n_eff_per_fold` is
+**28.9 against 76.6** — that is POWER, not the market. ⚠️ **It bounds the optimism, it does
+not remove it**: these 19 channels were still chosen over 2009-2026 including every test
+fold. `walkforward/CONTEXT.md` §9e.
+⚠️ Survivorship protects `z = +18.6` and **not** +74.0 %/yr (§2c). `walkforward/CONTEXT.md` §9.
+
+⚠️ **`--out` IS LOAD-BEARING AND OMITTING IT DESTROYS `PRF-1`.** `walkforward`'s
+`DEFAULT_OUT` is `results/walkforward/`, which holds the h=20 track; every artefact is
+written by basename, so the RUNBOOK §3 command run at h=10 **silently overwrites it**. The
+h=10 track lives in `results/walkforward_h10/`.
 
 ⚠️ **`PRB-1`, found and fixed in the same session**: two Kaggle PROBE runs had been merged
 into the CHAIN's report root, where `final_features` groups them with the real runs — the
@@ -1631,7 +1690,7 @@ below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | 7k | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | 36k | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
-⚠️ **[ISSUES.md](ISSUES.md) (~4k) is the second file to open, not an afterthought.** Ten
+⚠️ **[ISSUES.md](ISSUES.md) (~4k) is the second file to open, not an afterthought.** Sixteen
 open issues. **SHP-1** is the one to read first — a `value`-only filter silently
 discarded 71% of the forex folder for as long as that ingest existed, and the same
 filter sits unchecked on four sibling ingests. **Four** change how a number may be read:
@@ -1649,7 +1708,7 @@ brokers' books are unreachable.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](ISSUES.md)** | 15 open / 36 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](ISSUES.md)** | 16 open / 36 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](TODO.md)** | the one backlog, priority-ordered, every item costed | deciding what to do next |
 | `README.md` | the front door; routes here | — |
 | `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |

@@ -160,6 +160,35 @@ experiment/experiment_10/_cache/
 !reports/ranker_evaluation/
 !reports/ranker_evaluation/**
 #
+# ⚠️ **AND THE THREE ROOTS ADDED 2026-08-19/20 NEEDED THEIR OWN PAIRS — MEASURED 2026-08-20,
+# AFTER TWO COMMITS HAD ALREADY SHIPPED WITHOUT THEM.** `PRB-1` split the report tree into
+# three roots (a run that measures the SELECTION is not a run that feeds the CHAIN) and
+# `SSK-1` added a fourth, and NOT ONE of them got a negation pair. The blanket `*.csv` on
+# line 50 took every one of their CSVs, so `git add -A` reported success while committing
+# the README, the figures and `metadata.json` and silently dropping `outstanding.csv`,
+# `feature_importance.csv`, `validation.csv` and the rest:
+#
+#   reports/feature_selection_wide/   8 CSVs on disk,  0 tracked
+#   reports/feature_selection_vn30/  18 CSVs on disk,  0 tracked
+#   reports/feature_selection_probes/ 32 CSVs on disk, 16 tracked (two runs force-added)
+#
+# ⚠️ `_wide` is the one that bites hardest: RUNBOOK §3b promotes it to a CHAIN INPUT, and
+# `final_features --root ../reports/feature_selection_wide` reads exactly the
+# `outstanding.csv` that was not being committed — so a fresh clone plans nothing and says
+# nothing, which is `plan_from_reports` skipping a folder with no `outstanding.csv`, the
+# silent failure CLAUDE.md §3b already records.
+#
+# ⚠️ **This is the FOURTH time this exact shape has been paid** (GIT-1, the forex root, the
+# ranker root, now three at once). The lesson the earlier comments drew — "the whole argument
+# against extra roots, paid once on purpose" — is now paid four times: **a new report root is
+# not free, and its cost is a negation pair remembered at creation time.**
+!reports/feature_selection_probes/
+!reports/feature_selection_probes/**
+!reports/feature_selection_wide/
+!reports/feature_selection_wide/**
+!reports/feature_selection_vn30/
+!reports/feature_selection_vn30/**
+#
 # ⚠️ ONE ROOT, and only one, since 2026-08-10. `reports/feature_selection_basic/`,
 # `_economy/` and `_superseded/` were three MORE paths these two rules did not match,
 # each needing its own negation pair or its CSVs fell straight back into the blanket

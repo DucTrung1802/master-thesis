@@ -79,7 +79,7 @@ for yet.
 | 6 | train_test_creator | `python -m train_test_creator --save` | `src/train_test_set/<dataset>/` | **0.5 s** |
 | 7 | model | `python -m model.lstm` *or* `model/lstm/RUN__lstm.ipynb` | `src/model/runs/<run_id>/` | minutes |
 | 8 | result_evaluator | `python -m result_evaluator` | `results/metrics.json` — ⚠️ **`runs/index.csv` only via `--rebuild-index`** | **41.6 s** `--rescore`, **42.7 s** `--rebuild-index`, 3 runs |
-| 9 | **backtest** | `python -m backtest --run <run_id> --ticker VCB --top-k 15` | `results/backtest_<split>.csv` + `backtest_null_<split>.csv` | **1m 14s** with a 200-draw null |
+| 9 | **backtest** | `python -m backtest --run <run_id> --ticker VCB --top-k 15` | `src/model/runs/<run_id>/results/backtest_<split>.csv` + `backtest_null_<split>.csv` ⚠️ **inside the RUN FOLDER** (gitignored, `RPR-1`) — repo-root `results/` holds only the walk-forward tracks | **1m 14s** with a 200-draw null |
 
 **Four tools added 2026-08-19, none of them a stage — each answers a question the chain
 cannot ask about itself:**
@@ -91,6 +91,29 @@ cannot ask about itself:**
 | **hand baseline** (`PRF-2`) | `python -m backtest.handscreen --run <run_id> --top-k 20 --draws 200` | *does the model beat three ranked columns?* | **1m 53s** |
 | **head to head** (`PRF-9`) | `python -m backtest.head2head --a <run_id> --b <run_id> --top-k 15 --draws 200` | *does chain A beat chain B?* Priced on the INTERSECTION, paired | **2m 18s** |
 | **pool prune** (`PRF-9`) | `python -m feature_selection.prune --ticker ALL --pool pool__ta --universe-from <table> --budget 30 --out <json>` | *which channels can a wide pool even OFFER?* ⚠️ LABEL-FREE by construction | ~1 min |
+
+⚠️ **`walkforward` WRITES TO ONE DEFAULT DIRECTORY AND WILL OVERWRITE THE LAST SWEEP.**
+`DEFAULT_OUT` is `results/walkforward/`, and `folds.csv` / `per_fold.csv` /
+`predictions_oos.csv` are all written by basename — so the row above, run at a second
+horizon, **silently destroys the first**. One experiment, one `--out`:
+
+```powershell
+# h=20 — PRF-1, the default
+python -m walkforward --ticker all --table rank_20day__final__d20_h20 `
+    --config lstm__all__rank_20day__final__d20_h20.yaml --first-test 2017-01-01
+python -m walkforward.evaluate --top-k 20 --draws 200 --horizon 20 --universe all
+
+# h=10 — measured 2026-08-20: 33m 26s sweep + 8m 59s scoring
+python -m walkforward --ticker all --table rank_10day__final__d20_h10 `
+    --config lstm__all__rank_10day__final__d20_h10.yaml --first-test 2017-01-01 `
+    --out ../results/walkforward_h10
+python -m walkforward.evaluate --top-k 20 --draws 200 --horizon 10 --universe all `
+    --out ../results/walkforward_h10
+```
+
+⚠️ **`--horizon` on `evaluate` is NOT cosmetic** — it sets the holding interval the periods
+are cut at and the `return_{h}day` column that is scored. Passing the default 20 against an
+h=10 track silently scores the wrong label.
 
 ⚠️ **`walkforward.compare` and `backtest.head2head` PAIR the difference, and that is not a
 nicety.** Every arm trades the same dates out of the same panel, so their period returns
