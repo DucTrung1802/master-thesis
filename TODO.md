@@ -83,6 +83,29 @@ measured are CLAUDE.md §6-1** — do not re-derive them here.
 | re-scrape | 4 CafeF tabs x 5 tickers, `skip_existing=False`, **19m29s**, 0 ERROR, all five to **2026-08-19** |
 | pools | `pool__basic` + `pool__targets`, ~19s per partition, 96 cols x ~4,393 rows |
 
+### ⚠️ SSK-1 UPDATE 2026-08-20 — 30 VN30 names, and the POOLED answer flipped
+
+Numbers in **CLAUDE.md §6-1-bis / §6-1-ter / §6-1-quater**; do not re-derive them here.
+One-line each:
+
+| | |
+|---|---|
+| single-stock `return_10day`, **30 VN30 names** | pooled excess **+0.0611**, dependence-adjusted **t = +3.77, p = 0.002** — ⚠️ but 8 of 30 clear individually, 5 are negative, rule 3 fires on 22 of 30 |
+| widening a SINGLE STOCK (90 → 470 ch) | HPG **z +0.11 → −0.40** ❌ — the date-only macro blocks, offered to a return target for the first time, take it below its null's mean |
+| widening the CROSS-SECTION (100 → 245 ch) | VN30 **z +0.10 → +1.62** — opposite sign, same week, same data |
+| the width ladder at h=10 | VN30 **z = +0.10** against `PRF-2`'s top-150 **+13.78**; the `1/√N` noise floor reproduces at 2.15 vs 2.24 predicted |
+| `pool__ta` reduced | **711 → 145** label-free; `SKW-1` now has numbers (`val_matched_bn` is an EXACT copy of `value_matched`) |
+
+**What this changes about what to do next:**
+
+| # | item | ⏱ | why |
+|---|---|---|---|
+| 1 | ⚠️ **Take the 30-name result DOWNSTREAM before believing it** | ~2 h | `t = +3.77` is a SELECTION bar. §5d and `P2-3`: a cleared selection bar has never once survived to a model in this repo. `final_features → train_test_creator → model → result_evaluator` on 2-3 of the 8 names that cleared individually (VJC z +3.67, SSB +2.60, PLX +2.55) is the honest next step, and a negative there closes the thread cleanly |
+| 2 | **A wider cross-section at h=10 that is NOT VN30** | ~1 h | §6-1-quater cannot separate N from the date window from the universe rule. Top-150 by `liquidity_before` restricted to **2017→** isolates the window; top-30 by the same rule isolates the RULE. Both reuse `xs_vn30.py`'s `ProvidedPanel` path, which needs no Kaggle quota |
+| 3 | **`P4-2` — emit `n_dead_train`/`n_dead_test`** | ~2 h | still open, still costing a hand computation to read any ragged-pool run |
+| 4 | ⚠️ **`STA-1` is now BLOCKING, not just untidy** | see `STA-1` | `pool__ta` cannot build on ANY one-company schema — `gold.stocks_ta` disagrees with `silver.stocks_basic` for all 30 VN30 names in BOTH directions (ACB 4,882 vs 4,383; BID 3,096 vs 3,121). Until it is rebuilt, the single-stock track can never see a technical indicator |
+| 5 | `FRZ-1` in `pipeline.status_data` | ~1 h | unchanged |
+
 ### What is next on this track, in order
 
 | # | item | ⏱ | why |

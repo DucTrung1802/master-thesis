@@ -90,11 +90,19 @@ from orchestration.resources import PreprocessorResource
 UNIFIED_PARTITIONS = StaticPartitionsDefinition(
     enabled.register(
         "unified",
-        # ⚠️ The five single-name partitions after the sentinels were added
-        # 2026-08-19 for the h=10 SINGLE-STOCK track. They need no entry in
-        # `UNIFIED_MEMBER_FILTERS` — an unlisted key falls through to
-        # `ticker = %s`, which is exactly right for one company.
-        ["VCB", "ALL", "BANK", "HPG", "SSI", "FPT", "VIC", "STB"],
+        # ⚠️ The sentinels first, then one schema per company for the SINGLE-STOCK
+        # track. They need no `UNIFIED_MEMBER_FILTERS` entry — an unlisted key falls
+        # through to `ticker = %s`, which is exactly right for one company.
+        # ⚠️ VCB is a sentinel-adjacent single name AND a VN30 constituent; the list
+        # must stay deduplicated or StaticPartitionsDefinition raises on it.
+        [
+            "VCB", "ALL", "BANK", "VN30",
+            "ACB", "BCM", "BID", "BVH", "CTG", "FPT",
+            "GAS", "GVR", "HDB", "HPG", "MBB", "MSN",
+            "MWG", "PLX", "POW", "SAB", "SHB", "SSB",
+            "SSI", "STB", "TCB", "TPB", "VHM", "VIB",
+            "VIC", "VJC", "VNM", "VPB", "VRE",
+        ],
     )
 )
 

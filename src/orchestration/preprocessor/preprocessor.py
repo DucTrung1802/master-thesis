@@ -6089,9 +6089,34 @@ class DataPreprocessor:
     # Both therefore inherit the filter from the spine, so a new sentinel needs one
     # entry here and no change anywhere else — which is what stops the three builders
     # from drifting apart the way a forked universe method would.
+    # ⚠️ **`VN30` IS TODAY'S MEMBERSHIP AND IS NOT POINT-IN-TIME.** `vn30.csv` is a
+    # single snapshot with no history, so this predicate selects the 30 companies that
+    # turned out to be index members in 2026 — SSB listed in 2021-03 and is in the list;
+    # every name that was in the VN30 during the sample and later dropped out is NOT.
+    # That is survivorship AND look-ahead in the form CLAUDE.md §2c calls the worst,
+    # and it is why `pool__basic_vn30` was previously deferred rather than built.
+    # It is materialised anyway because a VN30 experiment was asked for explicitly; the
+    # honest comparator is a liquidity-ranked top-30 chosen with `liquidity_before`,
+    # which is what `kgpu.export` already does for the top-150 panel.
+    # ⚠️ Anything quoting a CAGR off this universe is quoting a biased number. A `z`
+    # against a within-date shuffle is protected (every draw sees the same basket).
+    UNIFIED_VN30 = "VN30"
+
+    #: The VN30 constituents as of `vn30.csv`. Frozen here rather than read from the CSV
+    #: at call time so a partition's membership cannot change under an already-built
+    #: table without a code change that shows up in `git diff`.
+    UNIFIED_VN30_TICKERS = (
+        "ACB", "BCM", "BID", "BVH", "CTG", "FPT",
+        "GAS", "GVR", "HDB", "HPG", "MBB", "MSN",
+        "MWG", "PLX", "POW", "SAB", "SHB", "SSB",
+        "SSI", "STB", "TCB", "TPB", "VCB", "VHM",
+        "VIB", "VIC", "VJC", "VNM", "VPB", "VRE",
+    )
+
     UNIFIED_MEMBER_FILTERS = {
         UNIFIED_UNIVERSE: (None, ()),
         UNIFIED_BANK: ("industry_code = %s", ("401010",)),
+        UNIFIED_VN30: ("ticker = ANY(%s)", (list(UNIFIED_VN30_TICKERS),)),
     }
 
     def _helper_unified_is_universe(self, ticker: str) -> bool:

@@ -1372,6 +1372,176 @@ constant within a date has a constant within-date rank, `PRF-9`) and perfectly v
 single stock. **71 of 76 gold tables are date-only.** So the honest statement is *"the stock's
 own 90 channels carry nothing at h=10 on these five names"*, not *"nothing does"*.
 
+### ⚠️ 6-1-bis. THE SAME QUESTION ON 30 VN30 NAMES — and the POOLED answer flips
+
+Run 2026-08-20. `pool__basic` (90 numeric channels), `return_10day`, `d=20 h=10`, 5
+expanding folds, a `date_block` null **per name** with the whole selection re-run inside
+each draw. 30 names, ~5.5 min each.
+
+| | |
+|---|---|
+| observed `ic_mean` | mean **+0.0635**, sd 0.0571 |
+| each run's own null | mean **+0.0023**, sd 0.0140 — well centred (se of a 10-draw null mean is 0.0175) |
+| pooled excess | **+0.0611**, sd 0.0637 |
+| naive `t` (29 df) | **+5.25** |
+| cross-name dependence | ρ̄ = **+0.032** over the 5-fold IC vectors → `n_eff` **15.5** |
+| **dependence-adjusted `t`** | **+3.77, p = 0.002** |
+
+**This is the first time in this repo that a single-stock short-horizon selection has
+beaten its own null in aggregate.** It does not overturn §2, and four measured reasons say
+why:
+
+1. ⚠️ **NO INDIVIDUAL NAME IS CONVINCING.** `z > +1.645` on **8 of 30** (chance says 1.5 —
+   above chance, but it is 8), **5 names are NEGATIVE**, and **rule 3 fires on 22 of 30**:
+   a shuffled draw beat the real data for 73 % of the names. The per-name picture is the
+   same as §6-1's five; what changed is that 30 draws of a small effect resolve it and 5
+   do not.
+2. ⚠️ **THE EFFECT IS SMALL.** Mean selected IC **+0.064** at `n_eff_test = 76.7` per fold
+   — about 1.3 SE for one name. It is detectable in aggregate and useless one name at a
+   time, which is the same shape §2b found from the other direction.
+3. ⚠️ **`NUL-1` IN FULL FORCE.** These nulls price the FEATURE search inside each run.
+   Nothing prices the choice of `h=10` over `h=5`, of `return_10day` over three other
+   labels, of VN30, or the fact that this is the fifth thread tried. §6-1 measured that
+   cost directly at one level up: `P(at least one of five names above z=1.83) = 0.157`.
+4. ⚠️ **A CLEARED SELECTION BAR HAS NEVER SURVIVED DOWNSTREAM HERE** — §5d (`z = +2.15`
+   bought nothing) and TODO `P2-3`. Selection IC is not model skill and certainly not money.
+
+⚠️ **The five-name result in §6-1 is superseded for the POOLED question and stands for
+every per-name one.** `t = +1.45` on five names and `t = +3.77` on thirty are the same
+effect at two sample sizes — the five happened to include VIC (`z −0.69`) and HPG
+(`z +0.11`), two of the weakest. **That is what an underpowered sample of a small effect
+looks like, and recording it is the point: the 5-name run was not wrong, it was small.**
+
+⚠️ **The fold pattern rises monotonically** — mean IC per fold across the 30 names is
+**+0.020 / +0.045 / +0.088 / +0.071 / +0.093**. Fold 1 trains on 500 rows and carries the
+most dead channels (§6-1's rule-23 table). The null re-runs the selection inside every
+draw, so it *does* price a ragged pool — but the trend is still the reason not to read
++0.064 as a stationary edge.
+
+### ⚠️ 6-1-ter. WIDENING A SINGLE STOCK HURTS; WIDENING THE CROSS-SECTION HELPS
+
+Two measurements on 2026-08-20, opposite in sign, and the contrast is the finding.
+
+**Single stock** — HPG, `return_10day`, identical folds, `pool__basic` versus
+`pool__basic + pool__stock_market + pool__bonds + pool__market_breadth +
+pool__economy_vietnam`:
+
+| | channels | kept | `ic_mean` | null mean | null MAX | **z** |
+|---|---|---|---|---|---|---|
+| narrow | 90 | 55 | **+0.0169** | +0.0109 | +0.0958 | **+0.11** |
+| **wide** | **470** | 218 | **−0.0064** | +0.0119 | +0.0893 | **−0.40** |
+
+⚠️ **This is the first time the date-only macro blocks have been offered to a RETURN target
+on a single stock** — §6-1 named it as the one structurally-new lever left, because
+`PRF-9` proved those blocks cannot rank a cross-section while they are perfectly valid for
+one name. Offered, they take HPG **below its null's mean**. 19m58s for one name.
+
+**Cross-section** — VN30, `cs_rank_10day`, 65,763 rows × 30 names × 2,288 dates
+(2017-04-21 → 2026-06-26):
+
+| | channels | kept | `ic_mean` | null mean | p95 | null MAX | **z** |
+|---|---|---|---|---|---|---|---|
+| `pool__basic` | 100 | 62 | +0.0204 | +0.0190 | +0.0370 | +0.0435 | **+0.10** ❌ |
+| **+ the 145 reduced `pool__ta` channels** | 245 | 204 | **+0.0333** | +0.0136 | +0.0332 | +0.0342 | **+1.62** ⚠️ |
+
+⚠️ **Neither is a pass** — 5b's null MAX (+0.0342) still exceeds its observed (+0.0333), so
+rule 3 fires and `cleared_p95_not_a_pass` is the right label. What is measured is the
+DIRECTION: width helps a panel and hurts a series, on the same data, in the same week.
+
+### ⚠️ 6-1-quater. THE WIDTH LADDER RE-RUN AT h=10 — VN30 is z = +0.10 against top-150's +13.78
+
+| | `PRF-2`, top-150 | **VN30** |
+|---|---|---|
+| N | 150 | **30** |
+| dates | 4,368 (2009→) | **2,288 (2017→)** |
+| `ic_mean` | **+0.1201** | **+0.0204** |
+| null `sd` | ≈0.0065 | ≈0.014 |
+| **z** | **+13.78** ✅ | **+0.10** ❌ |
+
+Two things it establishes and one it does not:
+
+1. ✅ **The `1/√N` mechanism reproduces exactly.** The null sd ratio is **2.15** against
+   `√(150/30) = 2.24`. §2b's account of *why* width works is confirmed at a second horizon.
+2. ⚠️ **But the OBSERVED IC collapsed too, 6×, and §2b says it should not have.** §2b's
+   claim is *"the observed IC barely moves; the noise floor collapses"*. Here both moved.
+   The extra suspect is §5d's: **a co-moving basket has less to rank**, and VN30 is the 30
+   most co-moving names in the market — possibly the WORST 30-name cross-section available,
+   not the best.
+3. ⚠️ **It is NOT a single-variable comparison and must not be quoted as one.** N, the date
+   window (4,368 → 2,288 sessions, because VN30 only reaches 20 listed members in 2017) and
+   the universe RULE (pre-2014 liquidity vs today's index membership) all moved together,
+   and all three push the same way. It bounds the cost of narrowing; it does not price N.
+
+⚠️ **VN30 membership is `vn30.csv`, i.e. TODAY'S list with no history** (`UNIFIED_VN30` in
+`preprocessor.py` carries the warning). Before 2017 the "VN30" here is 9-16 names that
+happen to still be in the index in 2026. A within-date shuffle null is protected — every
+draw sees the same basket — and any CAGR read off this universe is not.
+
+### ⚠️ 6-2. `pool__ta` REDUCED 711 → 145, LABEL-FREE — and the prune exposed `SKW-1` as a NUMBER
+
+Measured 2026-08-20 on a 295,193-row / 538-date sample of `unified_schema_all.pool__ta`.
+The question was "which technical indicators are worth keeping?", and the answer had to be
+reached **without the label**, because ranking channels by their correlation with the
+target would build `PRF-7`'s look-ahead into the candidate set before any null could see
+it (`prune.py`'s own argument).
+
+**What `pool__ta`'s 922 columns actually are**: 3 keys + **208 BOOLEAN flags**
+(`close_gt_ema_50`, `rsi_14_gt_70`, `macd_…_cross_above` — each a thresholded copy of a
+numeric channel that is already present) + **711 numeric**. Of the 711, **278 (39 %) are
+moving-average machinery** across 15 MA types and **143 are pairwise MA-vs-MA
+combinatorics** (`close_wma_7_14_dist`, `_direction`, `_crossover_up`, `_bars_since`).
+Only **164 distinct indicator roots** exist, and **122 of them carry ≤2 columns**.
+
+| step, in order | left | why it is label-free |
+|---|---|---|
+| all columns | 922 | |
+| − 208 booleans − 3 keys | **711** | `prune.numeric_channels` already excludes them |
+| − coverage < 0.95 | 596 | `COV-1` |
+| − 133 pairwise MA-vs-MA − 26 `_dist_abs` | 437 | **construction, not movement** — a distance between two MAs is a deterministic function of two channels the pool already carries, and `|x|` of a present channel is not a new one. Correlation cannot make this drop: at \|ρ\| ≥ 0.50 **24 pairwise columns still survive** |
+| − \|Spearman\| ≥ 0.70 redundancy | 152 | same operation `FeatureSelector` runs internally, moved earlier |
+| − 7 measured duplicates of `pool__basic` | **145** | see below |
+
+**The measured curve** (statistical prune alone vs semantic-then-statistical):
+
+| \|ρ\| | stat only | semantic + stat | roots |
+|---|---|---|---|
+| 0.95 | 448 | 303 | 117 |
+| **0.90** | **369** | 258 | 107 |
+| 0.85 | 308 | 220 | 98 |
+| 0.80 | 263 | 197 | 89 |
+| **0.70** | 196 | **152** | 76 |
+| 0.60 | 155 | 120 | 66 |
+| 0.50 | 115 | 94 | 61 |
+
+⚠️ **The 0.90 row reproduces `python -m feature_selection.prune`'s 369 EXACTLY**, and that
+equality is the check that the fast reimplementation is the same procedure. It earned its
+keep: a first numpy version returned **587** because `R.T @ R` propagates NaN where pandas
+`.corr()` uses pairwise-complete observations, so every `|corr| >= threshold` comparison
+silently evaluated False and nothing was pruned.
+
+### ⚠️ `SKW-1` IS NOW A NUMBER: the same stock-day, two answers, measured on VN30
+
+The last step above is new evidence, not hygiene. Joining `pool__basic` to `pool__ta`
+carries **STA-1's 13 legacy column names**, and they are not new measurements — they are
+the same measurements, taken before the `OUT-1` flow screen:
+
+| `pool__ta` | `pool__basic` | Pearson | Spearman | median ratio |
+|---|---|---|---|---|
+| `val_matched_bn` | `value_matched` | **+1.000000** | **+1.000000** | **1** |
+| `val_negotiated_bn` | `value_negotiated` | **+0.113** | **+0.988** | 1 |
+| `f_buy_val` | `foreign_buy_value` | +0.867 | +0.897 | 1 |
+| `f_net_val` | `foreign_net_value` | +0.862 | +0.973 | 1 |
+| `foreign_room` | `foreign_room_left` | +0.993 | +0.967 | ~1 |
+| **`close`** | `close_adjust` | +0.989 | **+0.997** | ~1 |
+
+⚠️ **`val_matched_bn` is an EXACT duplicate.** ⚠️ **The high-Spearman / low-Pearson pairs
+are `SKW-1` itself**: identical ordering, different extremes, because `pool__basic` was
+rebuilt with the `OUT-1` screen on 2026-08-16 and `pool__ta` could not be (`STA-1`). A run
+offering both hands the ranker one measurement twice and disagrees with itself about the
+outliers. ⚠️ And `pool__ta` carries a **price LEVEL** (`close`, ρ +0.997 with
+`close_adjust`) — in a cross-sectional rank problem that is the size proxy
+`cross_sectional.py` §3 exists to remove.
+
 ### What exists right now
 
 | | VCB | BANK | **ALL (top-150)** |
