@@ -89,9 +89,35 @@ cannot ask about itself:**
 | **walk-forward** | `python -m walkforward --ticker all --table <T> --config <C> --first-test 2017-01-01` then `python -m walkforward.evaluate --top-k 20 --draws 200 --horizon <h> --universe all` | *is this one lucky split?* 10 expanding folds, one OOS track | **~35 min**, 10 folds |
 | **arms** (`PRF-8`) | `python -m walkforward --out <dir> --arm lstm:<cfgA>.yaml --arm gbt:<cfgB>.yaml` then `python -m walkforward.compare --top-k 20 --draws 200 a=<dirA> b=<dirB>` | *does the ARCHITECTURE matter?* All arms train on ONE build of each fold | **15m 03s**, 10 folds × 2 arms |
 | **pair** (`P2-4`) | `python -m walkforward.pair --top-k 20 --draws 2000 h10=<dirA>:10 h20=<dirB>:20` | *does one HORIZON beat another?* Pairs on the CALENDAR, not on periods — the only tool that can compare two horizons | **48 s** |
+| **arm sweep, N arms** | `python -m walkforward --out <dir> --arm <pkg>:<cfg>.yaml ...` then `python -m walkforward.compare --top-k 20 --horizon <h> --draws 200 a=<dir>/a b=<dir>/b ...` | *does the ARCHITECTURE matter?* Every arm trains on ONE build of each fold | **2h 49m** for 7 arms × 10 folds; scoring **22m 25s** |
 | **hand baseline** (`PRF-2`) | `python -m backtest.handscreen --run <run_id> --top-k 20 --draws 200` | *does the model beat three ranked columns?* | **1m 53s** |
 | **head to head** (`PRF-9`) | `python -m backtest.head2head --a <run_id> --b <run_id> --top-k 15 --draws 200` | *does chain A beat chain B?* Priced on the INTERSECTION, paired | **2m 18s** |
 | **pool prune** (`PRF-9`) | `python -m feature_selection.prune --ticker ALL --pool pool__ta --universe-from <table> --budget 30 --out <json>` | *which channels can a wide pool even OFFER?* ⚠️ LABEL-FREE by construction | ~1 min |
+
+### The model packages, and what each one costs to add
+
+Ten architectures are wired to the shared engine. **A new one is `model.py` + a ~30-line
+binding, never a copy of `train.py`** (`model/CONTEXT.md` §7) — the four added 2026-08-21
+took about half an hour each.
+
+| package | `model_type` | at h=10, 19 channels |
+|---|---|---|
+| `gbt` | GBT | **1,398 nodes** — the best arm measured |
+| `cnn` | CNN | 5,185 params |
+| `tcn` | TCN | 18,113 — dilated CAUSAL convolutions |
+| `cnnlstm` | CNNLSTM | 30,369 — Conv1d then LSTM |
+| `transformer` | TRANSFORMER | 68,417 — needs positional encoding or it is a set function |
+| `lstm` | LSTM | 208,769 — the chain's reference |
+| `bilstm` | BILSTM | 313,153 — reads `h_n`, NOT `out[:, -1, :]` |
+| `gru` / `mlp` / `baseline_*` | — | the older arms |
+
+⚠️ **Every arm in one sweep must inherit the reference's optimiser schedule, batch size,
+patience and seed.** That is what makes them comparable; a difference in schedule shows up
+as a difference in architecture. It also means a LOSS may be a schedule mismatch — `cnn`
+wanting 20 epochs under a patience of 15 is the visible case (`walkforward/CONTEXT.md` §11d).
+
+⚠️ **`--arm <pkg>:<cfg>` requires each arm's `run_name` to start with a DIFFERENT segment**,
+because `Arm.label` is `run_name.split("__")[0]` and the arms share one output directory.
 
 ⚠️ **`walkforward` WRITES TO ONE DEFAULT DIRECTORY AND WILL OVERWRITE THE LAST SWEEP.**
 `DEFAULT_OUT` is `results/walkforward/`, and `folds.csv` / `per_fold.csv` /
@@ -453,7 +479,13 @@ a smoke test, never a number.
    `skill_score` or `beats_naive`, and `test_mase` is **NaN** for every cross-sectional
    run. Rule 4 above and P2-3 both say `mase ≥ 1` is the line to quote; on a panel that
    line is simply **not measured yet** (TODO **P4-12**).
-8. **A rank target's `long_short` is NOT money.** The metric is documented "in return
+8. ⚠️ **`walkforward.compare`'s `t_paired` TESTS THE MEAN RETURN, NOT the `d_sharpe`
+   printed beside it** (`compare.py:110`). They can disagree in sign — the h=10 sweep's
+   `gbt` arm shows `d_sharpe` **+0.36** against `t` **−1.02**, i.e. a lower mean return at
+   lower volatility. **Quote `t_paired` as a return test and leave `d_sharpe`
+   unqualified** until **P1-9** ships. `walkforward.pair` already bootstraps both
+   estimands and is the model for the fix.
+9. **A rank target's `long_short` is NOT money.** The metric is documented "in return
    units", which holds when the label is a return; on `cs_rank_*` it is a spread of
    RANKS. The 2026-08-18 run's `+0.0635` is not 6.35 %.
 

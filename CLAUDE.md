@@ -1104,7 +1104,7 @@ because h=10 lost, but because it has not won the test that matters.
 |---|---|
 | **PRF-1** — is it one lucky split? | **No.** 10 folds, 118 periods, z = +12.3. ⚠️ Sharpe@30 DOES decay: slope −0.100/fold, first five +2.775 → last five +1.564. But 2023/24/25 are **+2.64 / +0.90 / +1.39**, all above their market; **2022 is the only bad fold and it is bad for everyone** (the universe itself ran −0.94 that year) |
 | **PRF-7** — were the 13 channels fitted to the test folds? | **Bounded, and MILD.** Re-running the identical selection on dates < 2017 keeps **51 of 61** channels (Jaccard 0.761, **5.8 sd** above chance), shortlists 8 of 13 against a chance of 2.17, picks the same top two. ⚠️ It bounds the bias, it does not remove it |
-| **PRF-8** — would a different architecture do better? | **The architecture is worth NOTHING.** 205,441 params, **2,033 params** and a **1,400-node GBT** all tie on the identical folds — paired \|t\| < 1 at every cost level. §6-0-ter |
+| **PRF-8** — would a different architecture do better? | **Not at h=20.** 205,441 params, **2,033 params** and a **1,400-node GBT** all tie on the identical folds — paired \|t\| < 1 at every cost level. §6-0-ter. ⚠️ **QUALIFIED 2026-08-21**: at h=10 three of six alternatives lose SIGNIFICANTLY (§6-0-ter-2), and that `\|t\|` tests MEAN RETURN, not Sharpe |
 | **PRF-0** — is it buying names nobody could sell? | **Marginally, and removing it HELPS.** The model picks ceiling names 1.33× as often as chance (against 2.14× for a 5-day screen); excluding them takes test +1.484 → **+1.551**. ✅ Now applied BY DEFAULT in `backtest.build_panel`, not by a probe |
 
 ### ⚠️ 6-0-b. ✅ AND IT BEATS "PREDICT NO CHANGE" — the first thing here that does
@@ -1222,6 +1222,48 @@ into the CHAIN's report root, where `final_features` groups them with the real r
 representation probe as a hard collision that blocked planning entirely. Probes now write
 to `reports/feature_selection_probes/`. **A run that measures the SELECTION is not a run
 that feeds the CHAIN, and only the ROOT separates them.**
+
+### ⚠️ 6-0-ter-2. SEVEN ARCHITECTURES AT h=10 — 2026-08-21, and §6-0-ter does NOT reproduce
+
+The same test as `PRF-8`, one horizon down, **224× of capacity** (1,398 decision nodes to
+313,153 parameters) against §6-0-ter's 101×. Four arms were written for it (`bilstm`,
+`cnnlstm`, `tcn`, `transformer`); all seven trained on ONE build of each of 10 folds.
+**2h 48m sweep + 22m scoring, 0 errors.**
+
+| arm | capacity | Sharpe@30 | IC | **paired `t` vs `lstm`** | null z |
+|---|---|---|---|---|---|
+| **`gbt`** | **1,398 nodes** | **+2.891** | **+0.1460** | −1.02 | +22.57 |
+| `transformer` | 68,417 | +2.622 | +0.1433 | −0.33 | +20.08 |
+| `tcn` | 18,113 | +2.622 | +0.1426 | −0.20 | +20.25 |
+| `lstm` *(ref)* | 208,769 | +2.531 | +0.1412 | — | +18.58 |
+| `bilstm` | 313,153 | +2.474 | +0.1419 | **−2.09** ❌ | +17.55 |
+| `cnnlstm` | 30,369 | +2.367 | +0.1308 | **−2.15** ❌ | +16.80 |
+| `cnn` | 5,185 | +2.133 | +0.1171 | **−3.37** ❌ | +15.37 |
+
+⚠️ **ARCHITECTURE MATTERS AT h=10, BUT ONLY DOWNWARD.** No arm beats the LSTM
+significantly; **three lose to it significantly**. §6-0-ter's *"the architecture is worth
+nothing"* was measured at h=20 and does **not** reproduce here. The statement that survives
+both is narrower than either: **choosing the wrong architecture costs money; choosing a
+better one buys nothing.**
+
+⚠️ **AND IT IS NOT A CAPACITY STORY.** The best arm is the SMALLEST (1,398 nodes); the
+largest (313 k) sits *below* the 209 k reference; the second-worst is 5,185 parameters.
+What separates them is inductive bias — `cnn` pools the sequence away and loses 0.40
+Sharpe, while the two arms keeping a per-timestep view of the whole window tie. §6-0-ter's
+reading that **the sequence inside the lookback is worth nothing** reproduces and is the
+better explanation of the whole table.
+
+⚠️ **`t_paired` DOES NOT TEST THE SHARPE GAP, AND §6-0-ter WAS READ OFF THAT COLUMN.**
+`compare.paired()` computes `t` on the mean period-RETURN difference while the table prints
+`d_sharpe` beside it — `gbt` shows them disagreeing in sign (`d_sharpe` **+0.36**, `t`
+**−1.02**: a lower mean return at lower volatility). So §6-0-ter's *"paired |t| < 1 at every
+cost level"* is a claim about **mean return**, not Sharpe, and on the Sharpe difference the
+architecture question has **never been tested at either horizon**. TODO **P1-9**.
+
+⚠️ **AND "BEST EPOCH IS 1" IS AN LSTM PROPERTY, NOT A PROPERTY OF THE PROBLEM.** That
+sentence has been quoted four times here as evidence capacity is worthless. Across these 70
+runs only **43** stop by epoch 2: `cnn` averages **7.7** (max 20) and `tcn` **5.7** (max 13).
+Attach it to an architecture from now on. `walkforward/CONTEXT.md` §11.
 
 ### ⚠️ 6-0-quater. PRF-9 — MORE FEATURES DO NOT PAY EITHER, AND THAT CLOSES THE SECOND LEVER
 
@@ -1356,7 +1398,10 @@ error bar, `P2-3`'s *"best epoch 1 of 21"*, and PRF-1's nine-of-ten folds stoppi
 is worth nothing either**: `model.gbt` compresses each (20, 13) window to **78 window
 statistics where the LSTM sees 260 numbers**, and it ties.
 
-⚠️ **So "try a bigger model" is closed as an answer to anything in this repo.** What is
+⚠️ **So "try a bigger model" is closed as an answer to anything in this repo** — ⚠️ **but
+"any model will do" is NOT, and 2026-08-21 measured the difference** (§6-0-ter-2): at h=10 a
+CNN loses **0.40 Sharpe** to the LSTM at `t` = −3.37, and a bidirectional LSTM 60 % larger
+loses at −2.09. Bigger buys nothing; WRONGER costs. What is
 left is FEATURES (TODO `PRF-9`, 90 → 800 candidates), the HORIZON (`PRF-2`), honest
 EXECUTION (`PRF-4`/`PRF-5`) and new DATA (`PRF-6`). ⚠️ It also makes `PRF-7`'s bounded
 selection look-ahead close to the WHOLE story about where this Sharpe comes from rather

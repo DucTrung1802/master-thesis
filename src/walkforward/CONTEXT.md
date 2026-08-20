@@ -532,3 +532,97 @@ the published +1.991 and +2.531. That equality is what licenses reading anything
    identity showing up — h=10 pays double the fee drag. Any cost `PRF-4` adds hurts h=10
    more.
 4. **One `k`, one universe, one architecture, two horizons.** h=5 was never run.
+
+---
+
+## 11. ⚠️ SEVEN ARCHITECTURES AT h=10 — and PRF-8's "they all tie" does NOT reproduce
+
+```powershell
+cd src
+python -m walkforward --ticker all --table rank_10day__final__d20_h10 `
+    --first-test 2017-01-01 --out ../results/walkforward_h10_arch `
+    --arm lstm:lstm__all__rank_10day__final__d20_h10.yaml `
+    --arm bilstm:bilstm__... --arm cnn:cnn__... --arm cnnlstm:cnnlstm__... `
+    --arm tcn:tcn__... --arm transformer:transformer__... --arm gbt:gbt__...
+#   measured 2026-08-21: 70 arm-folds, 2h 48m 47s, 0 errors
+python -m walkforward.compare --top-k 20 --horizon 10 --universe all --draws 200 `
+    lstm=../results/walkforward_h10_arch/lstm  ...          # 22m 25s
+```
+
+**Capacity spans 224×** — 1,398 decision nodes to 313,153 parameters — against `PRF-8`'s
+101×, and this is the first architecture test at h=10. Four of the seven arms
+(`bilstm`, `cnnlstm`, `tcn`, `transformer`) were written for this run.
+
+| arm | capacity | Sharpe@30 | IC | **paired `t` vs `lstm`** | null z |
+|---|---|---|---|---|---|
+| **`gbt`** | **1,398 nodes** | **+2.891** | **+0.1460** | −1.02 | **+22.57** |
+| `transformer` | 68,417 | +2.622 | +0.1433 | −0.33 | +20.08 |
+| `tcn` | 18,113 | +2.622 | +0.1426 | −0.20 | +20.25 |
+| `lstm` *(reference)* | 208,769 | +2.531 | +0.1412 | — | +18.58 |
+| `bilstm` | 313,153 | +2.474 | +0.1419 | **−2.09** ❌ | +17.55 |
+| `cnnlstm` | 30,369 | +2.367 | +0.1308 | **−2.15** ❌ | +16.80 |
+| `cnn` | 5,185 | +2.133 | +0.1171 | **−3.37** ❌ | +15.37 |
+
+All seven clear the within-date shuffle null with the null MAX below the observed, so
+§5 rule 3 fires for none of them.
+
+### 11a. ⚠️ THE FINDING: architecture matters, but only DOWNWARD
+
+**No arm beats the LSTM significantly. Three lose to it significantly.** That is not
+`PRF-8`'s result — §8 found a 101× capacity span tying at h=20 with every |t| < 1 — and
+it is not a contradiction of it either. The honest statement is narrower than both:
+
+> **Choosing the wrong architecture costs money; choosing a better one buys nothing.**
+
+⚠️ **AND IT IS NOT A CAPACITY STORY.** The best arm is the SMALLEST (1,398 decision nodes)
+and the worst-but-one is also small (`cnn`, 5,185 parameters), while the largest
+(`bilstm`, 313 k) sits below the 209 k `lstm`. Ranking the seven by parameter count gives
+a Spearman of essentially nothing against their Sharpe. What separates them is the
+**inductive bias**: `cnn` pools the sequence away and loses 0.40 Sharpe; the two arms that
+keep a per-timestep view of the whole window (`tcn`, `transformer`) tie the LSTM; the tree
+that sees only 78 window statistics beats it. §8b's reading — *"the sequence inside the
+lookback is worth nothing"* — reproduces at h=10 and is now the better explanation of the
+whole table.
+
+### 11b. ⚠️ TWO RECORDED PREDICTIONS, AND BOTH WERE WRONG
+
+Written into TODO.md at 00:20 with 24 of 70 arm-folds done and no result visible:
+
+| prediction | outcome |
+|---|---|
+| *"They all tie, paired \|t\| < 1.5, at every cost level"* | ❌ **WRONG.** `bilstm` −2.09, `cnnlstm` −2.15, `cnn` −3.37 |
+| *"`best_epoch` will be 0-2 for every arm in nearly every fold"* | ❌ **PARTLY WRONG.** 43 of 70. `cnn` averages **7.7** (max 20) and `tcn` **5.7** (max 13) |
+| *"If anything wins, I expect `gbt` or `tcn`"* | ✅ right in direction — `gbt` leads on Sharpe AND IC |
+| *"`transformer` winning would surprise me"* | it placed 2nd-equal and did not win |
+
+⚠️ **The second one matters beyond bookkeeping.** *"Best epoch is 1"* has been quoted four
+times in this repo as evidence that capacity is worthless. It is an **LSTM and GBT**
+property: the convolutional arms genuinely train for 6-20 epochs. The sentence must be
+attached to an architecture from now on, not to the problem.
+
+### 11c. ⚠️ `t_paired` DOES NOT TEST THE SHARPE GAP — and PRF-8 was read off this column
+
+`compare.paired()` computes its `t` on the mean period-RETURN difference
+(`compare.py:110`), while the table prints `d_sharpe` beside it. `gbt` shows the two
+disagreeing in sign — `d_sharpe` **+0.36** against `t` **−1.02** — which is not a
+contradiction: it earns a *lower mean return at lower volatility*.
+
+⚠️ **So `PRF-8`'s headline — "paired |t| < 1 at every cost level" — is a statement about
+MEAN RETURN, not about Sharpe**, and *"the architecture is worth nothing"* should be
+quoted with that attached. On the Sharpe difference the question was never tested at
+either horizon. This is §10b's error one module over: **two numbers side by side are only
+a cross-check when they measure the same thing.** `walkforward.pair` bootstraps both
+estimands for exactly this reason; `compare` does not, and should (TODO **P1-9**).
+
+### 11d. What §11 does NOT establish
+
+1. **Nothing was tuned per arm.** Every arm inherited the LSTM's optimiser schedule, batch
+   size, patience and seed — which is what makes them comparable and also means a LOSS may
+   be a schedule mismatch rather than an architecture verdict. `cnn` wanting 20 epochs
+   under a patience of 15 is the visible case.
+2. **`NUL-1` in full force** — no null here prices the feature selection that chose the 19
+   channels all seven arms read.
+3. **One `k`, one universe, one horizon.** `PRF-8`'s h=20 arms were not re-run here, so
+   "h=20 ties and h=10 does not" is a comparison across two sweeps, not a paired test.
+4. ⚠️ **`gbt` leading is not a recommendation.** It is one arm, untuned, ahead by a gap the
+   tested statistic calls a tie.

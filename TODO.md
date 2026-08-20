@@ -53,6 +53,86 @@ below remain the engineering backlog.
 
 ---
 
+## ✅ DONE 2026-08-21 — the 7-arm architecture sweep at h=10, and BOTH predictions were wrong
+
+**Result: architecture matters at h=10, but only DOWNWARD.** No arm beats the LSTM
+significantly; **three lose to it significantly**. Numbers in CLAUDE.md §6-0-ter-2 and
+`walkforward/CONTEXT.md` §11 — do not re-derive them here. 2h 48m sweep + 22m scoring,
+70/70 arm-folds, 0 errors.
+
+| | verdict |
+|---|---|
+| `gbt` (1,398 nodes) | Sharpe@30 **+2.891**, IC **+0.1460** — leads both, and is the SMALLEST arm |
+| `transformer` / `tcn` | +2.622 each — tie the LSTM (`t` −0.33 / −0.20) |
+| `bilstm` (313 k) | +2.474, **`t` = −2.09** ❌ loses, while being the LARGEST arm |
+| `cnnlstm` / `cnn` | +2.367 / +2.133, **`t` = −2.15 / −3.37** ❌ |
+
+⚠️ **Three things this changed elsewhere in this file**, all applied: `PRF-8`'s "ruled out"
+row is now "ruled out AT h=20"; the START HERE claim that "try a bigger model is closed" is
+qualified; and **`P1-9` is opened** because the `|t|` both results were read off tests MEAN
+RETURN, not Sharpe.
+
+**The prediction as written at 00:20, kept verbatim below, and how it scored:**
+
+| # | prediction | outcome |
+|---|---|---|
+| 1 | *"They all tie, paired \|t\| < 1.5"* | ❌ **WRONG** — three arms at 2.09-3.37 |
+| 2 | *"`best_epoch` 0-2 for every arm in nearly every fold"* | ❌ **PARTLY WRONG** — 43 of 70; `cnn` averages 7.7 (max 20), `tcn` 5.7 |
+| 3 | *"if anything wins, `gbt` or `tcn`"* | ✅ right in direction |
+| 4 | *"`transformer` winning would surprise me"* | placed 2nd-equal, did not win |
+
+⚠️ **Prediction 2 matters beyond bookkeeping**: *"best epoch is 1"* has been quoted four
+times in this repo as evidence capacity is worthless. It is an **LSTM and GBT** property —
+the convolutional arms genuinely train 6-20 epochs. Attach it to an architecture from now on.
+
+---
+
+### The prediction as recorded, before the run
+
+> Written 2026-08-21 00:20, with 24 of 70 arm-folds done and no result visible. Recorded
+> here because this file already holds three predictions made the same way and **two of
+> them were wrong** (`PRF-1`, `P0-1`, `P4-12`) — which is the only reason the eventual
+> numbers are worth anything.
+
+`walkforward --out ../results/walkforward_h10_arch`, 10 expanding folds, seven arms, all
+trained on ONE build of each fold so `walkforward.compare` can pair them:
+
+| arm | parameters |
+|---|---|
+| `bilstm` | 313,153 |
+| `lstm` | 208,769 |
+| `transformer` | 68,417 |
+| `cnnlstm` | 30,369 |
+| `tcn` | 18,113 |
+| `cnn` | 5,185 |
+| `gbt` | 1,398 decision nodes |
+
+**Capacity spans 224×**, against `PRF-8`'s 101× — the widest architecture test this repo
+has run, and the first at h=10.
+
+### The prediction, stated so it can be scored
+
+1. ⚠️ **They all tie, paired |t| < 1.5, at every cost level.** `PRF-8` found this at h=20
+   over a 101× span; §5c found it over eleven architectures inside ONE error bar. The
+   horizon is the only thing that moved, and `PRF-2` showed the horizon moves the RESULT
+   without touching the architecture question.
+2. **`best_epoch` will be 0-2 for every arm in nearly every fold.** Already visible in the
+   log: train loss 0.976 → 0.613 while val goes 0.972 → 1.315, best still epoch 1. If a
+   sequence model needed depth over this window, some arm would want more epochs.
+3. ⚠️ **If anything wins, I expect `gbt` or `tcn`, not the big recurrent nets** — the
+   small models won or tied at h=20, and 19 channels over a 20-day window is not a regime
+   where 313k parameters have anything to spend themselves on.
+4. **The one thing that would surprise me is `transformer` winning.** Self-attention's
+   argument is a long path length; at d=20 an LSTM's path is already short, so a win there
+   would mean the window's INTERNAL structure carries something recurrence misses — and
+   that would be the first evidence in this repo that architecture is worth anything.
+
+**What the result cannot establish either way**: nothing here was tuned per arm, and a tie
+under one schedule is not an optimum (`PRF-8` §8d). `NUL-1` applies to all seven — no null
+prices the feature selection that chose the 19 channels every arm reads.
+
+---
+
 ## ⚠️ START HERE — what to run next, 2026-08-20
 
 ### ✅ CLOSED 2026-08-20 — the h=10 WALK-FORWARD, and the horizon is still NOT promoted
@@ -101,7 +181,10 @@ writes into `<run_dir>/results/`, which is gitignored (`RPR-1`).
 > IMPORTANT THING ON THIS PAGE.** `PRF-8`: a model **101× smaller** ties the 205 k LSTM
 > (paired |t| < 1). `PRF-9`: **30 more candidate channels** tie (paired t = −0.29, and the
 > wide model is if anything *worse* on money while *better* on IC). **The 13 original
-> channels are the result.** So "try a bigger model" and "add more of this data" are both
+> channels are the result.** ⚠️ **QUALIFIED 2026-08-21** — the h=10 arm sweep found three of
+> six alternatives LOSING significantly to the LSTM (`cnn` −3.37, `cnnlstm` −2.15, `bilstm`
+> −2.09), so the closed door is "a BIGGER model", not "the architecture does not matter".
+> So "try a bigger model" and "add more of this data" are both
 > spent — what is left is honest EXECUTION and NEW INFORMATION.
 
 **Closed today** — `PRF-0`, `PRF-1`, `PRF-2`, `PRF-7`, `PRF-8`, `PRF-9`, `P0-7`, `P1-2`
@@ -193,7 +276,7 @@ One-line each:
 > | h=3 | worst of all — turnover dominates ❌ |
 > | **2022-2026** | ⚠️ **the two disagree and the horizon is why.** The h=5/h=10 HAND screens are flat-to-negative there (`backtest` §8g); the h=20 MODEL is clearly positive in 2023/24/25 (+2.64/+0.90/+1.39) with 2022 the only bad fold, bad for everyone |
 > | **the selection look-ahead** | ✅ **BOUNDED 2026-08-19 (PRF-7)** — re-running the identical selection on dates < 2017 keeps **51 of 61** channels (5.8 sd above chance) and the same top two. The channel set is **not period-fitted**, so the levels roughly stand. ⚠️ It bounds the bias, it does not remove it |
-> | **the ARCHITECTURE** | ✅ **RULED OUT 2026-08-19 (PRF-8)** — a **2,033-parameter** LSTM (101× smaller) scores Sharpe **+1.997** and a 1,400-node GBT **+1.975** against the 205 k model's +1.991, on the identical folds. Paired `\|t\| < 1` at every cost level. The result lives in the **13 CHANNELS**; nobody needs to try a bigger model |
+> | **the ARCHITECTURE** | ✅ **RULED OUT AT h=20 2026-08-19 (PRF-8)** — a **2,033-parameter** LSTM (101× smaller) scores Sharpe **+1.997** and a 1,400-node GBT **+1.975** against the 205 k model's +1.991. Paired `\|t\| < 1` at every cost level. ⚠️ **NOT ruled out at h=10 (2026-08-21)**: over 224× of capacity, `gbt` leads at **+2.891** and three arms LOSE significantly — `cnn` −3.37, `cnnlstm` −2.15, `bilstm` −2.09. Architecture matters DOWNWARD. ⚠️ And that `\|t\|` tests MEAN RETURN, not Sharpe (**P1-9**) |
 | the biggest open threat now | ⚠️ **execution realism (PRF-4) and survivorship (PRF-5)** — both hit the CAGR, neither touches the `z`. `+47.5 %/yr` is the number to distrust; `z = +12.3` is not |
 >
 > **Order below, and why it changed 2026-08-19** — PRF-0/1/7 closed in one day and their
@@ -553,6 +636,26 @@ and live in the Archive. **`P4-11` was promoted in** from P4, because a stage re
 exists for. **`P1-8` is new** and heads the section: it is the only item here that protects
 an artefact somebody already paid GPU-hours for.
 
+
+### ⚠️ P1-9 · `compare`'s `t_paired` tests the MEAN, not the SHARPE printed beside it ⏱ ~2 h
+
+⚠️ **Opened 2026-08-21, and it changes how an existing headline may be quoted.**
+`walkforward.compare` prints `d_sharpe` and `t_paired` in one row, but `compare.paired()`
+computes that `t` on the mean period-RETURN difference (`compare.py:110`). The two are
+different estimands and they can disagree in SIGN: the h=10 sweep's `gbt` arm shows
+`d_sharpe` **+0.36** beside `t` **−1.02** — a lower mean return at lower volatility, which
+is not a contradiction and reads like one.
+
+⚠️ **`PRF-8`'s headline was read off this column.** *"Paired |t| < 1 at every cost level"*
+is therefore a statement about **mean return**; on the Sharpe difference the architecture
+question has never been tested at either horizon. Same for §6-0-ter-2's ties.
+
+**The fix already exists one module over.** `walkforward.pair` (P2-4) bootstraps BOTH
+estimands after making exactly this mistake in its first version — `walkforward/CONTEXT.md`
+§10b. Port `block_bootstrap_diff`'s two-estimand summary into `compare`, and print the
+Sharpe difference with its own interval rather than bare.
+
+⚠️ **Until it ships, quote `t_paired` as a return test and leave `d_sharpe` unqualified.**
 
 ### ⚠️ P1-8 · Fix `WFO-1` — `walkforward` overwrites the previous sweep ⏱ ~2 h
 
