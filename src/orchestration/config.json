@@ -218,10 +218,16 @@
             "HOSE_ACB": true
         },
         "// unified": "The three universes of the unified schema, shared by all ten pool__* assets. Same rule: the group's `enabled` is the off switch, not setting all three false.",
+        "// unified": "VCB / BANK / ALL are the sentinels; the five single names below were added 2026-08-19 for the h=10 single-stock track. This block IS listed, so absent means OFF - a new ticker must appear here as well as in UNIFIED_PARTITIONS or it is silently unmaterialisable.",
         "unified": {
             "VCB": true,
             "ALL": true,
-            "BANK": true
+            "BANK": true,
+            "HPG": true,
+            "SSI": true,
+            "FPT": true,
+            "VIC": true,
+            "STB": true
         },
         "// raw/cafef_pdfs": "100 ticker partitions from vn100.csv, NOT listed here - absent means enabled, and 100 lines of `true` would bury the settings that matter. Disable one with \"raw/cafef_pdfs\": {\"HOSE_VCB\": false}.",
         "// analysis/feature_selection_economy": "19 COUNTRY partitions, NOT listed here for the same reason as raw/cafef_pdfs - and because the list is DERIVED from parameters/trading_view/economy, so listing it again is the drift enabled.py exists to stop. A country enabled for the scrape is a country you can select over. Disable one with \"analysis/feature_selection_economy\": {\"usa\": false} - but note that usa already refuses to run at the default budget_minutes, which is the guard you want rather than making it invisible."

@@ -65,6 +65,34 @@ below remain the engineering backlog.
 **Closed today** — `PRF-0`, `PRF-1`, `PRF-2`, `PRF-7`, `PRF-8`, `PRF-9`, `P0-7`, `P1-2`
 (`PNL-2`), `P1-6` (`FNM-1`), `P4-12`, `PRB-1`. **Opened**: `VRM-1`.
 
+### ⚠️ SSK-1 · THE SINGLE-STOCK h=10 TRACK — measured 2026-08-19, and it FAILED
+
+The thesis' stated top goal is an absolute `return`/price forecast for ONE HOSE/HNX/UPCOM
+name at 5-10 sessions. `h=5` was ruled out before spending anything, on two numbers already
+in CLAUDE.md (§2a-bis: at h=5 even pure momentum loses its benchmark; §6-0-bis: at h=5 fees
+alone are 17.6 %/yr against a 9.75 %/yr benchmark return). `h=10` had **never been run once**
+— 0 of 32 archived selection runs used `return_10day`. It has now, on five names, and it does
+not clear: pooled `t = +1.45`, rule 3 fires on 4 of 5. **Full numbers and the four things it
+measured are CLAUDE.md §6-1** — do not re-derive them here.
+
+**What was built to get there, and is now reusable:**
+
+| | |
+|---|---|
+| 5 new unified partitions | `HPG SSI FPT VIC STB` in `assets/unified.py::UNIFIED_PARTITIONS` **and** `config.json` `partitions.unified` (that block is LISTED, so absent = OFF). No `UNIFIED_MEMBER_FILTERS` entry needed — an unlisted key falls through to `ticker = %s` |
+| re-scrape | 4 CafeF tabs x 5 tickers, `skip_existing=False`, **19m29s**, 0 ERROR, all five to **2026-08-19** |
+| pools | `pool__basic` + `pool__targets`, ~19s per partition, 96 cols x ~4,393 rows |
+
+### What is next on this track, in order
+
+| # | item | ⏱ | why |
+|---|---|---|---|
+| 1 | **offer the date-only blocks** — `pool__economy_*` (19) and `pool__forex_*` (47) for these five names | ~1-2 h build + selection | ⚠️ **The one structurally NEW thing available.** `PRF-9` proved date-only channels cannot rank a cross-section (constant within-date rank); for a SINGLE stock they are perfectly valid. **71 of 76 gold tables are date-only** and none has ever been run on a return target — the 19 archived economy runs were all `close_adjust` with **0 null draws**, and `pool__forex_*` has never been selected on at all. This is the honest remaining lever for the stated goal |
+| 2 | **exclude `prop_*` and re-run** | ~30 min | 5 channels with coverage 0.20 (first value **2023-01-03**) were shortlisted by 4 of 5 tickers while being constants in folds 1-4's training slices. Cheap, and it removes a rule-23 confound from every number above |
+| 3 | **`P4-2` — emit `n_dead_train` / `n_dead_test`** | ~2 h | ⚠️ **CONFIRMED STILL OPEN 2026-08-19.** `validation.csv` carries `n_train`/`n_test`/`ic`/`r2`/`hit_rate` and nothing about dead channels, so rule 23's confound had to be computed externally to read this run at all. Until it ships, every ragged-pool run needs a hand check |
+| 4 | **`FRZ-1`** — put the per-ticker freshness split in `pipeline.status_data` | ~1 h | 755 of 781 tickers were 37 sessions stale and `MAX(date)` said 2026-08-07. One query, beside `pools_behind` |
+| 5 | ⚠️ **decide whether `gold.stocks_ta` gets rebuilt** | see `STA-1` | The re-scrape made `STA-1` bite these five names for the first time: `pool__basic` is now 37 sessions past `pool__ta`, so `basic + ta` INNER-joins the fresh rows away. Before, non-bank tickers ended on the SAME day in both and it cost nothing |
+
 ### What is left, in order
 
 | # | item | ⏱ | where | output |

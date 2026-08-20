@@ -57,6 +57,7 @@ four independent times.** The one thing that survives its own null is the
 | feature selection, VCB, 5 configs | `return_5day` / `return_rel_5day` × 3 representations | **every one inside its own shuffled-label null** | `feature_selection` §6b–6d |
 | news sentiment, 3 tickers | price level / direction / ≥5% jump / price-defined sentiment | no signal — and adding sentiment **makes price/TA models worse** (QWK 0.175 → 0.045) | `sentiment` §6, §6a |
 | news EVENTS (not tone), 777 tickers | `rel5` / `rel10` / 1-13 weeks, paired by fold | **7 paired tests, every \|t\| < 1.3**, folds won 2-4 of 6, signs mixed. §6a reproduced at 259× the width | `orchestration/todo.md` (retired 2026-08-17) |
+| **single stock, h=10, 5 tickers (2026-08-19)** | **`return_10day`** on `pool__basic`, HPG/SSI/FPT/VIC/STB | **pooled excess over each run's own null +0.0332 ± 0.0229, t = +1.45, p = 0.220**; rule 3 fires on 4 of 5 | §6-1 below |
 | literature, 23 papers | others' claims | **not one reports a naive baseline**; reported skill tracks test-set size (0.90@10d → 0.56@100d in one paper's own table); best honestly-run paper gets MCC 0.069 | `experiment_10` |
 
 ### ⚠️ 2a-bis. THE HORIZON IS THE VARIABLE NOBODY CONTROLLED FOR — and `h=5` is the worst of it
@@ -1297,6 +1298,80 @@ The loud half is a `FileNotFoundError` in the second sweep; **the silent half is
 sweep reading tensors the second is mid-`np.save` on**. `run.namespace_lock` refuses the
 second sweep now, by pid, taking over a lock whose holder is dead.
 
+### ⚠️ 6-1. THE SINGLE-STOCK TRACK AT h=10 — FIVE TICKERS, AND IT DOES NOT CLEAR
+
+Run 2026-08-19, and it is the **fifth independent failure** of single-stock short-horizon
+prediction in this repo — the first at a horizon other than 5 days, and the first on more
+than one name. Motivation was §2a-bis: four defeats had all been at `h=5`, so the HORIZON
+had never been controlled for on a single stock. It has now.
+
+**Setup.** `pool__basic` alone (90 numeric channels), `return_10day`, `d=20 h=10`, purge
+`d+h-1 = 29`, 5 expanding folds (`n_train` 500/1267/2034/2801/3568, `n_test` 767,
+`n_eff_test` **76.7**), `date_block` null with the whole selection re-run inside each draw,
+GPU, 5m25s-5m32s per ticker. ⚠️ `pool__ta` was deliberately EXCLUDED — `FRZ-1`'s re-scrape
+moved `pool__basic` 37 sessions past `gold.stocks_ta` (`STA-1`), so a `basic + ta` join
+would have truncated the very rows the re-scrape was run to obtain.
+
+| ticker | kept | `ic_mean` | trend | null mean | p95 bar | **null MAX** | **z** | p | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| HPG | 55 | +0.0169 | +0.0072 | +0.0109 | +0.0877 | +0.0958 | **+0.11** | 0.545 | ❌ |
+| SSI | 54 | +0.0420 | +0.0184 | +0.0068 | +0.0632 | +0.0814 | **+0.96** | 0.182 | ❌ |
+| FPT | 54 | +0.0720 | +0.0509 | +0.0051 | +0.0690 | +0.0794 | +1.74 | 0.182 | ⚠️ rule 3 |
+| VIC | 60 | −0.0214 | −0.0458 | +0.0150 | +0.0785 | +0.0792 | **−0.69** | 0.727 | ❌ below the null's mean |
+| **STB, 20 draws** | 61 | **+0.1014** | −0.0179 | +0.0047 | +0.0830 | +0.0866 | **+1.83** | 0.0476 | ⚠️ |
+
+**Pooled over the 5 independent names** (excess over each run's own null mean):
+**+0.0332, sd 0.0512, se 0.0229 → t = +1.45, p = 0.220.**
+
+Four things this measured, and each one is reusable:
+
+1. ⚠️ **RULE 3 FIRES ON FOUR OF FIVE.** HPG, SSI, FPT and VIC each had a shuffled draw beat
+   the real data. FPT's `cleared_p95_not_a_pass` is the label working as designed.
+2. ⚠️ **MORE DRAWS MOVED `z` DOWN, NOT UP.** STB at 10 draws was `z = +2.13`; the identical
+   run at 20 draws is **`z = +1.83`** — the observed is deterministic and unchanged at
+   +0.1014, and only the null moved, its **sd growing 0.0444 → 0.0528 (+19 %)**. That is
+   within one `SE(sd)` and so CONFIRMS the "10 to fail, 20 to pass" rule rather than
+   contradicting it: a 10-draw `z` on a result that lands far above is optimistic, which is
+   exactly why the rule asks for 20 before anything is promoted.
+3. ⚠️ **THE NULL PRICES THE FEATURE SEARCH, NEVER THE TICKER SEARCH.** Five names were
+   tried. P(z > 1.83) once is 0.0336; **P(at least one of five) = 0.157**. STB's survival is
+   about as surprising as nothing at all. This is `NUL-1` one level up, the same shape §2b-bis
+   point 3 records for the universe/horizon/target choice.
+4. ⚠️ **RULE 23 EXPLAINS BOTH APPARENT CLEARANCES, AND `validation.csv` STILL CANNOT SHOW IT**
+   (`P4-2` confirmed open — the file carries `n_train`/`n_test`/`ic`/`r2`/`hit_rate` and **no**
+   `n_dead_train`). Counting all-NaN-in-train channels externally, per fold, of each shortlist:
+
+   | ticker | dead in train, folds 1-5 | folds' selected IC |
+   |---|---|---|
+   | HPG | 6, 3, 3, 3, **0** | −0.062 +0.198 −0.086 −0.074 +0.110 |
+   | SSI | 2, 2, 2, 2, **0** | −0.059 +0.094 +0.143 −0.097 +0.129 |
+   | **FPT** | **9**, 3, 3, 3, **0** | **−0.137** +0.122 +0.148 +0.097 +0.130 |
+   | VIC | 6, 3, 3, 3, **0** | +0.026 +0.066 +0.024 −0.108 −0.115 |
+   | **STB** | **8**, 5, 5, 5, **0** | +0.028 **+0.240 +0.191** −0.021 +0.069 |
+
+   **FPT is the textbook case**: 9 of 20 shortlisted channels are constants in fold 1's
+   training slice, fold 1 scores −0.137, every later fold +0.10…+0.15, and
+   `ic_trend_per_fold` is **+0.0509** — the steepest of the five. Rule 23 says a rising trend
+   on a ragged pool measures **data arrival**, not a strengthening signal.
+   **STB is weak differently**: +0.1014 is carried by folds 2-3 alone, and fold 5 — the only
+   fold where all 21 channels are alive in train — scores **+0.069**. At `n_eff_test = 76.7`,
+   `SE(IC) ≈ 0.114`, so only fold 2 exceeds 2 sd and the other four sit inside 1 sd of zero
+   (across its own folds, `t = +2.05`, p = 0.109).
+
+⚠️ **`prop_*` MUST BE EXCLUDED FROM ANY RUN AT THIS TIME SCALE, AND IT WAS NOT.** Proprietary
+flow starts **2023-01-03** — coverage **0.197-0.203** — yet `prop_sell_vol` and `prop_buy_val`
+were shortlisted by **4 of 5** tickers and `drv_prop_participation` by 3. They are all-NaN in
+the training slice of folds 1-4, imputed to the constant `0.0`, and then RANKED. Flow that
+IS usable: **order stats from 2010-01-04** (≥0.95) and **foreign from 2012-01-03** (~0.70) —
+§2d's top lever survives, the prop block does not.
+
+⚠️ **What this does NOT establish.** It is one pool. `pool__ta`'s ~900 channels, the 19
+`pool__economy_*` blocks and the 47 `pool__forex_*` blocks were **not** offered — and the
+date-only blocks are the one thing that is structurally DEAD for a cross-section (a column
+constant within a date has a constant within-date rank, `PRF-9`) and perfectly valid for a
+single stock. **71 of 76 gold tables are date-only.** So the honest statement is *"the stock's
+own 90 channels carry nothing at h=10 on these five names"*, not *"nothing does"*.
+
 ### What exists right now
 
 | | VCB | BANK | **ALL (top-150)** |
@@ -1352,7 +1427,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (**15 open**, 36 resolved, codes permanent — `PNL-2`/`PRB-1` closed and `VRM-1` opened 2026-08-19).
+**Open issues live in [ISSUES.md](ISSUES.md)** (**16 open**, 36 resolved, codes permanent — `PNL-2`/`PRB-1` closed, `VRM-1` and `FRZ-1` opened 2026-08-19).
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;

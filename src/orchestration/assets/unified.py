@@ -88,7 +88,14 @@ from orchestration.resources import PreprocessorResource
 # assets share this object and a pool offered for a universe its spine does not have
 # would be a broken edge.
 UNIFIED_PARTITIONS = StaticPartitionsDefinition(
-    enabled.register("unified", ["VCB", "ALL", "BANK"])
+    enabled.register(
+        "unified",
+        # ⚠️ The five single-name partitions after the sentinels were added
+        # 2026-08-19 for the h=10 SINGLE-STOCK track. They need no entry in
+        # `UNIFIED_MEMBER_FILTERS` — an unlisted key falls through to
+        # `ticker = %s`, which is exactly right for one company.
+        ["VCB", "ALL", "BANK", "HPG", "SSI", "FPT", "VIC", "STB"],
+    )
 )
 
 
