@@ -709,3 +709,70 @@ docstring says all of this; the guard proved it rather than trusting it.
 4. **`lookback` was never swept**, and it is the one dataset knob that would matter: `d`
    comes from the source TABLE NAME and `engine._verify` asserts it, so changing it needs
    a fresh selection run per value — not a flag.
+
+---
+
+## 13. ⚠️ THE WIDENED CHAIN AT h=10 — `pool__ta` changes the SHORTLIST and not the MONEY, again
+
+`PRF-9` measured this at h=20 with 120 candidates and an LSTM. This is h=10, **162
+candidates**, a GBT, and a selection that ran only after four Kaggle failures and three
+memory fixes (§13a). It reproduces.
+
+**Selection** (`cross-sectional-wide-h10`, T4, 44m 12s, no null): 162 candidates → 133 kept
+→ **21 shortlisted, 18 from `pool__basic` and 3 from `pool__ta`**. The top NINE are all
+`pool__basic`; `drv_order_vol_imb` is #1 and `drv_clv` #2, as in every previous run. The
+best technical channel is `close_wma_7_slope` at rank 10.
+
+**Downstream**, priced on the 340,183 rows the two chains SHARE (the wide chain joins
+`pool__ta` and loses 140 `(date, ticker)` rows to its coverage, so `walkforward.compare`
+refuses them as two experiments — correctly; this is the intersection `backtest.head2head`
+exists to take):
+
+| | narrow, 19 ch | **wide, 21 ch** |
+|---|---|---|
+| daily IC | +0.1484 | **+0.1520** |
+| `ic_t` | 17.36 | **17.64** |
+| **Sharpe@30** | **+2.8910** | +2.8136 |
+| CAGR@30 | +69.8 % | **+71.0 %** |
+
+**Paired over 236 periods, ρ 0.943: `d_cagr_ann` +0.0100, `t` = +0.46 at 20, 30 and 50 bps.**
+
+⚠️ **IC UP, SHARPE DOWN — the same split PRF-9 found** (+0.1053 vs +0.0927 IC against
+ΔSharpe −0.126 there). Adding technical channels makes the ranking marginally better and
+the portfolio marginally more volatile, and the paired test cannot separate either from zero.
+
+⚠️ **The three cost levels give an IDENTICAL `t`, and that is correct rather than a bug.**
+Both chains hold top-20 of 150 rebalanced every 10 sessions, so their turnover is the same
+and the cost term cancels exactly in `a − b`. A paired difference removes anything the two
+arms share, and here that includes the entire fee.
+
+⚠️ **`ic_mean +0.1495` from the selection is NOT comparable to the narrow chain's +0.1201.**
+This run carries no null, and a selection over more candidates always reports a higher
+selected IC because it picks the best of more. That is exactly why the question was taken
+downstream.
+
+### 13a. ⚠️ FOUR ATTEMPTS, FOUR WALLS, AND THE PHASE PROFILE IS WHAT DISTINGUISHED THEM
+
+The 233-channel version of this run never completed. Each attempt moved the wall:
+
+| attempt | fixed before it | `window design` peak | died |
+|---|---|---|---|
+| 1 | — | *never exported* | host RAM on the laptop, at export |
+| 2 | export ticker filter (SQL, in `reader.read`) | 26.2 G | phase 4 |
+| 3 | `window_design` cube row-blocking | **26.1 G — no change** | phase 4 |
+| 4 | `panel_window_design` preallocation | **21.7 G** | phase 4 |
+
+✅ **VRAM sat at 6.1 of 14.9 GB throughout** — `gpu.tree_shap`'s row-blocking held from the
+first attempt, and `VRM-1`'s VRAM half is genuinely resolved.
+
+⚠️ **ATTEMPT 3 IS THE INSTRUCTIVE ONE.** Row-blocking `window_design` was a real fix for a
+real 23.3 GB allocation and it moved the peak by 0.1 GB, because the CROSS-SECTIONAL path
+does not call that function down the frame — `panel_window_design` windows each ticker and
+then did `pd.concat(blocks).sort_index()`, holding **three** full copies of the design.
+`rss` even went UP (13.7 → 19.3 G) because the design became preallocated. **Only `peak`
+beside `rss` told the difference**, and `selector._tick` reports both for this reason.
+
+⚠️ **Running at 162 rather than 233 is a SCOPE DECISION, not a discovery.** What remains is
+the ranker ensemble's own copies of a 1,398-column design, and `PRF-9` had already settled
+that the money question is downstream — so the marginal value of 233 over 162 did not
+justify a fifth wall. 162 is still 35 % wider than the previous best.

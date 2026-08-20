@@ -1311,6 +1311,15 @@ on the **intersection** of their rows (646 dates, 32 periods, top-15):
 Paired, ρ **0.90**: ΔSharpe **−0.126**, `t` = **−0.29**. **The extra channels moved the
 shortlist and not the money.**
 
+⚠️ **REPRODUCED AT h=10, 2026-08-21, AND IT HOLDS.** 162 candidates (90 `pool__basic`
++ 72 pruned `pool__ta`) against `PRF-9`'s 120, a GBT instead of an LSTM, selection on a T4
+in 44m 12s: **21 shortlisted, 18 `pool__basic` and 3 `pool__ta`**, top NINE all
+`pool__basic`, `drv_order_vol_imb` #1 again. Priced downstream on the 340,183 rows the two
+chains SHARE — daily IC **+0.1520 vs +0.1484**, Sharpe@30 **+2.8136 vs +2.8910**, paired
+over 236 periods at ρ 0.943: **`t` = +0.46**. ⚠️ **IC up, Sharpe down — the same split
+`PRF-9` found**, and the paired test separates neither from zero.
+`walkforward/CONTEXT.md` §13.
+
 ⚠️ **WITH `PRF-8`, TWO OF THE THREE OBVIOUS LEVERS ARE NOW CLOSED BY MEASUREMENT.** A model
 101× smaller ties; 30 more candidate channels tie. **The 13 original channels are the
 result.** What remains is honest execution (`PRF-4`/`PRF-5`) and NEW INFORMATION (`PRF-6`,

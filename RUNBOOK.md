@@ -93,6 +93,7 @@ cannot ask about itself:**
 | **settings sweep** | `python -m walkforward … --out <dir>/<tag> [--val-months N] [--step-months N] [--no-scale-target] [--rank-min-width N]` then `walkforward.compare` | *does the SPLIT or the DATASET setting matter?* Use the cheapest arm — the model must be the constant | ~**20 min** per track with `gbt` |
 | **hand baseline** (`PRF-2`) | `python -m backtest.handscreen --run <run_id> --top-k 20 --draws 200` | *does the model beat three ranked columns?* | **1m 53s** |
 | **head to head** (`PRF-9`) | `python -m backtest.head2head --a <run_id> --b <run_id> --top-k 15 --draws 200` | *does chain A beat chain B?* Priced on the INTERSECTION, paired | **2m 18s** |
+| **wide vs narrow, walk-forward** | intersect the two tracks on `(date, ticker)`, then `compare.net_series` + `compare.paired` | *does a wider chain PAY?* ⚠️ `walkforward.compare` REFUSES two tracks with different row coverage — correctly; a wider pool changes coverage, so the comparison must be on the INTERSECTION | ~3 min |
 | **pool prune** (`PRF-9`) | `python -m feature_selection.prune --ticker ALL --pool pool__ta --universe-from <table> --budget 30 --out <json>` | *which channels can a wide pool even OFFER?* ⚠️ LABEL-FREE by construction | ~1 min |
 
 ### The model packages, and what each one costs to add
