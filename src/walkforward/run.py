@@ -312,6 +312,24 @@ def main(argv: Optional[Sequence[str]] = None):
     step = int(option("--step-months", 12))
     val_months = int(option("--val-months", 12))
     keep = "--keep" in argv
+    # ⚠️ THE DATASET KNOBS, exposed 2026-08-21 so a SETTINGS sweep can be run the same
+    # way an ARM sweep is. They were reachable only as `TrainTestCreator` kwargs before,
+    # which meant the only way to vary them was the single split — and the single split
+    # stopped being the evidence when PRF-1 landed.
+    #
+    # ⚠️ `--no-scale-target` is NOT a free knob on a classification target: engine._verify
+    # raises if a classifier points at a dataset carrying a target scaler, and CLAUDE.md
+    # §5 rule 9 forbids standardising a 0/1 label at all. On a regression target it is a
+    # real question and that is what this exists for.
+    #
+    # ⚠️ `--rank-min-width` is PART OF A CROSS-SECTIONAL LABEL'S DEFINITION, not a
+    # cleaning knob: it sets how many names must trade on a date for that date to
+    # contribute a rank. Moving it moves the LABEL, so a track built at one value cannot
+    # be compared with a track built at another as if only the split had changed — and it
+    # must match the `min_ic_width` the SELECTION ran with, or the channels were chosen
+    # against a different label than the model is trained on.
+    scale_target = "--no-scale-target" not in argv
+    rank_min_width = int(option("--rank-min-width", 5))
     out_dir = os.path.abspath(str(option("--out", DEFAULT_OUT)))
     os.makedirs(out_dir, exist_ok=True)
 
@@ -324,10 +342,16 @@ def main(argv: Optional[Sequence[str]] = None):
         arms = [Arm(model_name, _load_config(config_name, module), module)]
 
     with namespace_lock(out_dir), runtime.RunTimer(
-        f"walkforward  {ticker}.{table}  step={step}m  "
+        f"walkforward  {ticker}.{table}  step={step}m val={val_months}m "
+        f"scale={scale_target} minw={rank_min_width}  "
         f"arms={','.join(a.label for a in arms)}", show_gpu=True
     ):
-        builder = FoldBuilder(ticker=ticker, table=table)
+        builder = FoldBuilder(
+            ticker=ticker, table=table,
+            scale_target=scale_target, rank_min_width=rank_min_width,
+        )
+        print(f"dataset knobs: scale_target={scale_target}  "
+              f"rank_min_width={rank_min_width}  val_months={val_months}  step={step}m")
         print(f"reading {builder.schema_table} ...")
         frame, comment = builder.read()
         print(f"  {len(frame):,} rows x {frame['ticker'].nunique()} tickers  "

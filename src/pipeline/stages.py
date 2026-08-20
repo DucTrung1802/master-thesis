@@ -424,12 +424,21 @@ def _shortlist_table(table: str = DEFAULT_TABLE, scope: Optional[str] = None) ->
     return table_name(target, lookback, horizon, scope, SHAPE_SHORTLIST)
 
 
-def _layer2_runs(root: Optional[str] = DEFAULT_ROOT) -> List[str]:
+def _layer2_runs(root: Optional[str] = DEFAULT_ROOT,
+                 pool: Optional[str] = None) -> List[str]:
     """The run folders whose channels came OUT of a shortlist pool — layer 2.
 
     ⚠️ Read off `outstanding.csv`'s `source_table`, exactly as `final_features` does.
     A second implementation of "which layer is this" is a second answer waiting to
     disagree with the one that builds the table.
+
+    ⚠️ **`pool` SCOPES THE ANSWER TO ONE CHAIN, AND OMITTING IT WAS `P4-11`.** Without
+    it this returned every layer-2 run under the root regardless of schema, target or
+    horizon — so `python -m pipeline --ticker all --table rank_20day__final__d20_h20`
+    reported *"2 layer-2 run(s) over `pool__shortlist__rank_20day__d20_h20`"* and then
+    named a `vcb` / `return_5day` / `d20_h5` run. **A stage that has never run for this
+    chain read green**, and `RUNBOOK.md` §8 rule 1 makes this command the gate on quoting
+    any number. Measured 2026-08-18, fixed 2026-08-21.
     """
     from feature_selection.outstanding import OUTSTANDING_FILENAME
     from final_features.builder import SHORTLIST_POOL_PREFIX
@@ -442,8 +451,13 @@ def _layer2_runs(root: Optional[str] = DEFAULT_ROOT) -> List[str]:
         path = os.path.join(root, name, OUTSTANDING_FILENAME)
         if not os.path.exists(path):
             continue
-        sources = pd.read_csv(path, usecols=["source_table"])["source_table"]
-        if sources.astype(str).str.startswith(SHORTLIST_POOL_PREFIX).any():
+        sources = pd.read_csv(path, usecols=["source_table"])["source_table"].astype(str)
+        # ⚠️ An exact match when a pool is named, a prefix match only when it is not —
+        # a prefix would let `pool__shortlist__rank_20day__d20_h20` match
+        # `…__d20_h200` and, more usefully here, lets the unscoped call keep its old
+        # meaning for callers that genuinely want "any layer 2".
+        hit = (sources == pool).any() if pool else             sources.str.startswith(SHORTLIST_POOL_PREFIX).any()
+        if hit:
             found.append(name)
     return found
 
@@ -482,8 +496,9 @@ def status_selection_2(root: Optional[str] = DEFAULT_ROOT, table: str = DEFAULT_
     so in the COMMENT. This stage exists so that "which of the two tables am I looking
     at" is answered by the pipeline rather than by reading a `COMMENT` in psql.
     """
-    runs = _layer2_runs(root)
     pool = _shortlist_table(table, scope)
+    # ⚠️ SCOPED — `P4-11`. `pool` was computed here and not passed, which is the whole bug.
+    runs = _layer2_runs(root, pool=pool)
     return StageState(
         "selection_2",
         ready=bool(runs),
