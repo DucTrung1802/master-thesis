@@ -71,12 +71,13 @@ scoring on the local RTX 3050, no Kaggle quota. Numbers in **CLAUDE.md §6-0-bis
 
 ⚠️ **AND IT IS STILL NOT A REASON TO MOVE THE CHAIN TO h=10.** Three measured reasons:
 
-1. ⚠️ **THE TWO HORIZONS CANNOT BE PAIRED, so +0.54 is not a tested difference.**
-   `walkforward.compare` pairs ARMS inside one sweep (same dates, same panel, ρ = 0.88).
-   Two horizons give **236 and 118 periods over different holding intervals** — no
-   period-wise correspondence exists. Two independent estimates at `se` ~0.13-0.16 each.
-   §5c is the standing warning: eleven architectures once spread IC over 0.227 and the
-   whole spread was **one error bar**.
+1. ✅ **THEY WERE PAIRED THE SAME DAY (`P2-4`), AND THE ANSWER SPLIT IN HALF.**
+   `walkforward.pair` pairs on the CALENDAR (both hold a book on all 2,360 shared sessions,
+   ρ = 0.723) because `compare` cannot pair 236 periods against 118. At 30 bps the **mean
+   return gap is +17.0 pp/yr, p = 0.0004, CI [+8.6, +25.7]** ✅ — and the **Sharpe gap is
+   +0.44 with a CI of [−0.079, +1.041]** ❌. **h=10 is higher-return and higher-VOLATILITY**;
+   the risk-adjusted advantage is not established. ⚠️ Nor is equality — the CI reaches
+   +1.04, so this is underpowered, not settled.
 2. ✅ **`PRF-7` now bounds h=10 too — and it came back clean.** 9m 46s on a T4:
    **51 of 61** kept channels survive a pre-2017 selection (**+5.48 sd** above chance,
    Jaccard 0.750), **`drv_order_vol_imb` is #1 in both**, and 10 of the 12 shortlist misses
@@ -722,7 +723,35 @@ then ~20.6 GB from settled RSS). **top-300 needs the streaming design (P3-2), no
 
 ## P2 — new measurements worth having
 
-### ⚠️ P2-4 · Nothing can PAIR two horizons, and the old TODO assumed something could ⏱ ~1 day
+### ✅ P2-4 · DONE 2026-08-20 — paired on the CALENDAR, and the answer SPLIT
+
+`src/walkforward/pair.py`, 48 s. Both strategies hold a book on all 2,360 shared sessions,
+so their DAILY net-return series pair date by date (ρ = **0.723**) even though 236 and 118
+periods cannot. At 30 bps, h=10 − h=20:
+
+| estimand | Δ | Newey-West | bootstrap 95 % CI | |
+|---|---|---|---|---|
+| **mean return/yr** | **+17.0 pp** | t = +3.53, p = 0.0004 | [+8.6, +25.7] | ✅ significant |
+| **Sharpe** | +0.44 | — | **[−0.079, +1.041]** | ❌ not established |
+
+**h=10 is a higher-return, higher-VOLATILITY track.** The chain stays at h=20 — not because
+h=10 lost, but because it has not won the test that matters. ⚠️ **A non-significant ΔSharpe
+is not evidence of equality**: the CI reaches +1.04, so this is UNDERPOWERED, and the honest
+next move is more OOS sessions, not a third test. Full numbers: `walkforward/CONTEXT.md` §10.
+
+**Two defects the reconciliation caught**, both now recorded: the return matrix was pivoted
+from the TRACK (2.21 % of cells missing → a 0 % return booked on days a held name was not
+scored), and **`BKT-1`** — the backtest rebalances on a CALENDAR grid while `return_{h}day`
+steps `h` ROWS of the ticker. `BKT-1` is measured at −0.015 Sharpe (h=20) and −0.038 (h=10),
+i.e. every published figure is slightly CONSERVATIVE, and no conclusion moves.
+
+⚠️ **And the first version of the module reported two tests that looked like they
+disagreed** — Newey-West p = 0.0002 beside a bootstrap p = 0.067. They were testing the MEAN
+and the SHARPE. **Two tests are only a cross-check when they test the same thing.**
+
+**The original framing, kept because it is the reason the tool exists:**
+
+### ~~P2-4~~ · Nothing can PAIR two horizons, and the old TODO assumed something could ⏱ ~1 day
 
 ⚠️ **Opened 2026-08-20.** The retired item above promised *"`walkforward.compare` pairs the
 two tracks"*. It does not, and cannot: it pairs ARMS inside one sweep — arms that trade the
@@ -744,6 +773,11 @@ architectures, spread 0.227, one error bar).
 ⚠️ **Until one of these exists, no register may state that h=10 beats h=20** — only that
 each independently clears its own null, which both do decisively. Both `CLAUDE.md`
 §6-0-bis-3 and `walkforward/CONTEXT.md` §9c are worded to that standard; keep them there.
+
+✅ **The first design was the one built** (daily series + Newey-West), **and the block
+bootstrap was added beside it rather than instead of it** — the two were meant to
+cross-check, and making that work forced the estimand fix above. The third design (running
+h=20 at h=10's cadence) is still unbuilt and is the one that would settle a tie.
 
 ⚠️ **It also blocks a cheaper question that looks unrelated**: `PRF-4`'s execution costs
 (ADV cap, floor days on the sell side) are expected to hit **h=10 harder**, since it pays

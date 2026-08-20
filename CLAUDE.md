@@ -1065,10 +1065,25 @@ and still useful (see the leak check below), but it is not the evidence any more
 
 ⚠️ **AND THE SAME SWEEP AT h=10 SCORES HIGHER ON EVERY ROW — 2026-08-20, §6-0-bis-3.**
 Sharpe@30 **+2.531** over **236** periods, IC **+0.1412**, `ic_t` **+16.05**, z = **+18.58**,
-IC positive **10 of 10** folds. ⚠️ **The two horizons are NOT paired and cannot be** (236 vs
-118 periods over different holding intervals), so read that as two independent estimates with
-`se` ~0.13-0.16 each, **not** as a settled +0.54. The horizon is still not promoted: the
-chain's tables, configs and `RUNBOOK.md` §3a stay at h=20 until something pairs them.
+IC positive **10 of 10** folds.
+
+✅ **AND THE TWO WERE PAIRED THE SAME DAY (`P2-4`), WHICH SPLIT THE ANSWER IN HALF.**
+`walkforward.pair` pairs them on the CALENDAR — both hold a book on all 2,360 shared
+sessions, ρ = **0.723** — because they cannot be paired period by period (236 vs 118 periods
+over different holding intervals). At 30 bps:
+
+| estimand | h=10 − h=20 | Newey-West | block bootstrap 95 % CI | verdict |
+|---|---|---|---|---|
+| **mean return/yr** | **+17.0 pp** | t = **+3.53**, p = 0.0004 | **[+8.6, +25.7]** | ✅ significant |
+| **Sharpe** | +0.44 | — | **[−0.079, +1.041]** | ❌ **not established** |
+
+⚠️ **h=10 IS A HIGHER-RETURN, HIGHER-VOLATILITY TRACK, and the +0.54 that looked clean is
+not resolvable at 2,360 sessions.** Zero sits inside the Sharpe CI at 20, 30 and 50 bps, and
+p rises 0.067 → 0.141 as costs do — `backtest` §3's identity showing through, since h=10 pays
+double the fee drag. ⚠️ **A non-significant ΔSharpe is not evidence of equality**: the CI
+reaches +1.04, so this is underpowered, not settled. **The chain stays at h=20** — not
+because h=10 lost, but because it has not won the test that matters.
+`walkforward/CONTEXT.md` §10.
 
 **The chain that produced it**, and every stage is reproducible from `RUNBOOK.md` §3a:
 

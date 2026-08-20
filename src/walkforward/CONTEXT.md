@@ -270,7 +270,13 @@ one process share the namespace exactly as two processes do. Three tests in
 
 ---
 
-## 9. ⚠️ THE SAME SWEEP AT h=10 — 2026-08-20, and it BEATS h=20 on every cost level
+## 9. ⚠️ THE SAME SWEEP AT h=10 — 2026-08-20, higher on every LEVEL
+
+⚠️ **Read §10 before quoting any comparison in this section.** The levels below are all
+above h=20's, and `P2-4` then paired the two tracks on the calendar: the MEAN gap is
+significant (+17.0 pp/yr, p < 0.001) and the **SHARPE gap is NOT** (95 % CI
+[−0.079, +1.041]). This heading originally read *"and it BEATS h=20 on every cost
+level"*, which is true of the levels and false of the test that matters.
 
 ```powershell
 cd src
@@ -380,6 +386,11 @@ within noise at both horizons.
 | periods | **236** | 118 |
 | `se_sharpe` | 0.128 | 0.155 |
 
+✅ **PAIRED 2026-08-20 — see §10, and the answer is split.** `walkforward.pair` pairs the
+two on the CALENDAR (both hold a book every session), and finds the MEAN gap significant
+and the SHARPE gap not. The paragraph below stands as the reason `compare` could not do
+it, which is why a second tool exists.
+
 ⚠️ **`walkforward.compare` CANNOT PAIR THESE, and the reason is structural rather than a
 missing flag.** It pairs ARMS within one sweep — arms that trade the same dates out of the
 same panel, which is what makes `ρ = 0.88` and a paired `t` meaningful (§8a). Two horizons
@@ -446,3 +457,78 @@ selection per fold would have picked substantially the same channels, so §9's l
 levels-with-a-bounded-bias rather than artefacts. ⚠️ **A stable channel SET still does not
 make the measured IC unbiased** — it bounds the problem and does not remove it, and the
 ~60 GPU-h per-fold version remains unrun at both horizons.
+
+---
+
+## 10. ⚠️ P2-4 — h=10 vs h=20, PAIRED AT LAST, and the two estimands disagree
+
+```powershell
+cd src
+python -m walkforward.pair --top-k 20 --universe all --draws 2000 `
+    h10=../results/walkforward_h10:10 h20=../results/walkforward:20   # 48 s
+```
+
+§9c said no tool in this repo could test the +0.54 Sharpe gap, because `compare` pairs
+period by period and two horizons have no period-wise correspondence. **`walkforward.pair`
+pairs on the CALENDAR instead**: both strategies hold a book on every one of the same 2,360
+sessions, so both have a DAILY net-return series and those pair date by date. Correlation
+**0.723** — high enough that pairing is worth the trouble, exactly as it was for the arms.
+
+| bps | corr | **Δ mean/yr** | NW t | NW p | boot 95 % CI | boot p | **Δ Sharpe** | boot 95 % CI | boot p |
+|---|---|---|---|---|---|---|---|---|---|
+| 20 | 0.723 | **+0.1786** | +3.71 | 0.0002 | [+0.095, +0.266] | 0.0000 | +0.4782 | [−0.048, +1.080] | 0.0670 |
+| 30 | 0.723 | **+0.1697** | +3.53 | 0.0004 | [+0.086, +0.257] | 0.0000 | +0.4437 | [−0.079, +1.041] | 0.0870 |
+| 50 | 0.723 | **+0.1518** | +3.16 | 0.0016 | [+0.068, +0.240] | 0.0030 | +0.3730 | [−0.140, +0.959] | 0.1410 |
+
+### 10a. The answer, in two sentences that must be quoted together
+
+✅ **h=10 earns significantly more per unit of TIME.** +17.0 pp/yr at 30 bps, CI
+[+8.6, +25.7], and **Newey-West and the block bootstrap agree** to three decimal places on
+p — two methods with different assumptions, one estimand, one answer.
+
+❌ **Its RISK-ADJUSTED advantage is NOT established.** ΔSharpe +0.44 at 30 bps with a 95 %
+CI of **[−0.079, +1.041]** — zero is inside it at every cost level, and the p rises from
+0.067 to 0.141 as costs do. **h=10 is a higher-return, higher-VOLATILITY track**, and the
+gap that looked like a clean +0.54 is not resolvable at 2,360 sessions.
+
+⚠️ **SO §9's HEADING WAS TOO STRONG AND IS CORRECTED HERE**: *"it BEATS h=20 on every cost
+level"* is true of the levels and of the mean, and **not** of the risk-adjusted difference,
+which is the quantity a horizon decision should turn on. The horizon stays at h=20 by
+default — not because h=10 lost, but because it has not won the test that matters.
+
+### 10b. ⚠️ The two tests looked like they disagreed, and the first version of this module was the reason
+
+The first run reported Newey-West p = 0.0002 beside a bootstrap p = 0.067 and it read as a
+method disagreement. **It was not.** The NW test was on the MEAN difference and the
+bootstrap on the SHARPE difference — a linear functional against a ratio whose denominator
+also moves. Bootstrapping BOTH estimands made them agree wherever they are comparable.
+**Two tests are only a cross-check when they test the same thing**, which is the same error
+`walkforward.compare` §8a exists to prevent one level up.
+
+### 10c. What the reconciliation caught on the way — two real defects
+
+The module refuses to report until its daily construction reproduces `long_only_top_k`'s
+own period returns. It did not, twice, and both causes were real:
+
+| | |
+|---|---|
+| **the return matrix was pivoted from the TRACK** | a track holds one row per SCORED `(date, ticker)`, and every one of the 150 names is missing some (median 2,339 of 2,373 sessions, min 258) — **2.21 % of cells**. That booked a 0 % return on any day the model did not score a name **we were still holding**. Fixed: returns come from `pool__basic` over the full calendar, scores from the track |
+| **`BKT-1`** | `return_{h}day` steps `h` ROWS of the ticker; the book is held `h` SESSIONS. Verified: the stored column IS the `h`-row shift, to **8.9e-16 over 2.37 M rows**. Immaterial at portfolio level (−0.015 Sharpe at h=20, −0.038 at h=10) and it makes every published figure slightly CONSERVATIVE |
+
+✅ **After both, the check passes at machine precision**: on names trading every session the
+daily reconstruction reproduces `return_{h}day` to **1.22e-15**, and the period-based Sharpe
+rebuilt from this module's own picks is **+1.9913** at h=20 and **+2.5310** at h=10 —
+the published +1.991 and +2.531. That equality is what licenses reading anything above.
+
+### 10d. What §10 does NOT establish
+
+1. **It prices the difference between two REALISED tracks.** `NUL-1` unchanged: nothing here
+   prices either track's feature selection, nor the choice to compare these two horizons.
+2. ⚠️ **A non-significant ΔSharpe is not evidence of equality.** The CI reaches +1.04 — a
+   real and large h=10 advantage is entirely consistent with this data. **Underpowered, not
+   settled**, and the honest next move is more OOS sessions rather than a third test.
+3. **Costs are the one thing that moves the answer directionally**: ΔSharpe falls 0.478 →
+   0.373 from 20 to 50 bps and its p nearly doubles, which is `backtest/CONTEXT.md` §3's
+   identity showing up — h=10 pays double the fee drag. Any cost `PRF-4` adds hurts h=10
+   more.
+4. **One `k`, one universe, one architecture, two horizons.** h=5 was never run.
