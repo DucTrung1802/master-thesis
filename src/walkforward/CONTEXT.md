@@ -626,3 +626,86 @@ estimands for exactly this reason; `compare` does not, and should (TODO **P1-9**
    "h=20 ties and h=10 does not" is a comparison across two sweeps, not a paired test.
 4. ⚠️ **`gbt` leading is not a recommendation.** It is one arm, untuned, ahead by a gap the
    tested statistic calls a tie.
+
+---
+
+## 12. ⚠️ THE DATASET AND SPLIT SETTINGS ARE WORTH NOTHING — 2026-08-21
+
+```powershell
+cd src
+python -m walkforward --ticker all --table rank_10day__final__d20_h10 `
+    --first-test 2017-01-01 --model gbt --config gbt__all__rank_10day__final__d20_h10.yaml `
+    --out ../results/settings_h10/<tag> [--val-months N] [--step-months N] `
+    [--no-scale-target] [--rank-min-width N]
+python -m walkforward.compare --top-k 20 --horizon 10 --universe all --draws 0 `
+    baseline=../results/settings_h10/baseline val6=… val24=… step6=… noscale=…
+```
+
+Six full walk-forward tracks, one per setting, scored paired against `baseline`. The arm
+is `gbt` throughout — the fastest and best-scoring architecture measured in §11 — because
+the question is the SETTING and the model has to be a constant.
+
+✅ **`baseline` reproduces §11's `gbt` row to every digit** (Sharpe@30 **2.8910**, IC
+**0.1460**, 236 periods). The walk-forward is deterministic given its settings, which is
+what licenses reading any difference below as the setting rather than run-to-run noise.
+
+| setting | what moved | Sharpe@30 | **Δ vs baseline** | **paired `t`** | ρ |
+|---|---|---|---|---|---|
+| `baseline` | — | +2.8910 | — | — | — |
+| `val6` | validation 12 → **6** months | **+2.9655** | +0.0746 | **+0.33** | 0.972 |
+| `val24` | validation 12 → **24** months | +2.7562 | −0.1348 | **−1.32** | 0.946 |
+| `step6` | refold every **6** months — **20 folds** | +2.8977 | +0.0067 | **−0.09** | 0.989 |
+| `noscale` | `scale_target` off | +2.8910 | **0.0000** | **NaN** | **1.0000** |
+
+**Every setting ties. No `|t|` reaches 1.4.** The only directional hint is `val24` at
+−1.32 — a longer validation window is weakly worse, which is what stealing training data
+should look like — and it does not clear.
+
+⚠️ **`step6` IS THE STRONGEST OF THE FIVE RESULTS AND THE EASIEST TO MISS.** It retrains
+**twice as often** — 20 folds against 10 — for `t = −0.09` and ρ = 0.989. Doubling the
+retraining frequency changes essentially nothing, which says the model is not chasing a
+moving target between folds. Read it beside §9a's decay: the Sharpe falls ~45 % across the
+sweep at BOTH horizons, and refitting twice as often does not arrest it. **Whatever decays
+is not staleness.**
+
+### 12a. ⚠️ `noscale` is BIT-IDENTICAL, and that is a fact about TREES, not about the problem
+
+ρ = **1.0000**, `d_sharpe` exactly **0.0000**, `t` = **NaN** because the difference series
+has zero variance. The flag reached the builder — the run's own banner reads
+`scale_target=False` — so this is not a plumbing failure.
+
+**Why**: `engine._write_predictions` inverse-transforms a regression prediction back to the
+target's scale, and a decision tree's splits depend only on the ORDERING of `y` within a
+node. Standardising the label is an affine map, orderings are affine-invariant, and the
+inverse-transform undoes the rest. End to end it is the identity.
+
+⚠️ **IT WOULD NOT BE THE IDENTITY FOR A NEURAL NET**, where the loss scale interacts with
+the learning rate and the initialisation. **I chose `gbt` for speed, and that choice made
+one of the six settings unanswerable for the family that actually uses it.** Re-run
+`noscale` with an `lstm` arm before quoting this for anything but trees.
+
+### 12b. ⚠️ `minw10` was REFUSED by `compare`, and the refusal is the measurement
+
+`walkforward.compare` raised in 1.6 s:
+
+> *arm 'minw10' covers **349,371** (date, ticker) rows against the reference arm's
+> **349,581** … These are two different experiments and their Sharpes are not comparable.*
+
+`rank_min_width` sets how many names must trade on a date for that date to contribute a
+rank, so raising it 5 → 10 **drops dates from the panel** — it moves the LABEL, not the
+split. It is also supposed to match the `min_ic_width` the SELECTION ran with (5), so a
+`minw10` track trains on channels chosen against a different label. The flag's own
+docstring says all of this; the guard proved it rather than trusting it.
+
+### 12c. What §12 does NOT establish
+
+1. **One arm.** `gbt` is scale-invariant and shallow; a setting worth nothing to it may be
+   worth something to a 200 k-parameter recurrent net. §12a is the concrete case.
+2. **One horizon, one universe, one `k`.** And `NUL-1`: no null here prices the feature
+   selection every track inherits.
+3. ⚠️ **A tie is not "the default is optimal"** — it is "these five knobs do not move the
+   result at this width". The knobs that DO move it, on the evidence in this file, are the
+   feature set (§11a) and the horizon (§9c), neither of which is a dataset setting.
+4. **`lookback` was never swept**, and it is the one dataset knob that would matter: `d`
+   comes from the source TABLE NAME and `engine._verify` asserts it, so changing it needs
+   a fresh selection run per value — not a flag.

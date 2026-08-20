@@ -1265,6 +1265,31 @@ sentence has been quoted four times here as evidence capacity is worthless. Acro
 runs only **43** stop by epoch 2: `cnn` averages **7.7** (max 20) and `tcn` **5.7** (max 13).
 Attach it to an architecture from now on. `walkforward/CONTEXT.md` §11.
 
+### ⚠️ 6-0-ter-3. AND NEITHER DO THE DATASET SETTINGS — 2026-08-21
+
+Six full walk-forward tracks at h=10, one per setting, `gbt` throughout, scored **paired**
+against a baseline that reproduces §6-0-ter-2's `gbt` row to every digit.
+
+| setting | Sharpe@30 | Δ | paired `t` | ρ |
+|---|---|---|---|---|
+| validation 12 → **6** months | +2.9655 | +0.075 | +0.33 | 0.972 |
+| validation 12 → **24** months | +2.7562 | −0.135 | −1.32 | 0.946 |
+| refold every **6** months (**20 folds**) | +2.8977 | +0.007 | −0.09 | 0.989 |
+| `scale_target` off | +2.8910 | **0.0000** | **NaN** | **1.0000** |
+
+**Every setting ties; no `|t|` reaches 1.4.** ⚠️ **`step6` is the one to read**: retraining
+**twice as often** moves nothing (ρ 0.989), so the ~45 % Sharpe decay across the sweep
+(§6-0-bis-3) is **not staleness** — refitting does not arrest it.
+
+⚠️ **`scale_target` is bit-identical because trees are scale-invariant, not because the
+knob is inert.** Splits depend on the ORDERING of `y`, standardising is affine, and
+`engine._write_predictions` inverse-transforms — end to end, the identity. **For a neural
+net it would not be**, and choosing `gbt` for speed made that one setting unanswerable for
+the family that uses it. ⚠️ `rank_min_width` was REFUSED by `compare` as a different
+experiment (349,371 rows against 349,581) — it moves the LABEL, not the split.
+⚠️ **`lookback` was never swept and is the one that would matter**: `d` comes from the
+source TABLE NAME, so each value needs its own selection run. `walkforward/CONTEXT.md` §12.
+
 ### ⚠️ 6-0-quater. PRF-9 — MORE FEATURES DO NOT PAY EITHER, AND THAT CLOSES THE SECOND LEVER
 
 Run 2026-08-19. `pool__ta` is the only widening available at all — `PRF-9`'s survey found
