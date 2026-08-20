@@ -693,7 +693,35 @@ survivable. **Decide both together**: a negation rule for `results/**/prediction
 + `per_fold.csv` + `folds.csv` is ~3 lines (16.5 MB each, so `per_fold`/`folds` alone may
 be the right call), and it is the cheaper half of this item.
 
-### ⚠️ P4-11 · `pipeline` CALLS ANOTHER EXPERIMENT'S RUN `up to date` — promoted from P4 2026-08-19 ⏱ ~2 h
+### ✅ P4-11 · DONE 2026-08-21 — the layer-2 detection is scoped to the chain being asked about
+
+`_layer2_runs` scanned every run folder under the root and returned any whose
+`outstanding.csv` named ANY `pool__shortlist__*`, with no term for schema, target or
+horizon — while `status_selection_2` had already computed the right pool name and simply
+did not pass it. **One argument.** Measured before and after:
+
+| asked about | before | after |
+|---|---|---|
+| `return_5day__final__d20_h5` (VCB) | 2 runs | **1** — its own |
+| `rank_20day__final__d20_h20` | 2 runs ❌ *(a vcb/return_5day/d20_h5 run)* | **0** |
+| `rank_10day__final__d20_h10` | 2 runs ❌ | **0** |
+
+⚠️ **The match is EXACT when a pool is named**, a prefix only when it is not — so the
+unscoped call keeps its old meaning for a caller that genuinely wants "any layer 2", and
+`…__d20_h20` cannot match `…__d20_h200`.
+
+⚠️ **Why it mattered**: `RUNBOOK.md` §8 rule 1 makes `python -m pipeline` the gate on
+quoting any number, and a gate that answers about the wrong experiment is worse than no
+gate. It is also why RUNBOOK §3a had to warn readers off `pipeline` for the
+cross-sectional chain in two separate blocks.
+
+⚠️ **The sibling trap in the same table is NOT fixed and is working as designed**: the
+`model` row keys on `--config`, not on `--table`, so without one it reports the DEFAULT
+chain's run as up to date. Pass `--config`.
+
+**The original entry, kept:**
+
+### ~~P4-11~~ · `pipeline` CALLS ANOTHER EXPERIMENT'S RUN `up to date` — promoted from P4 2026-08-19 ⏱ ~2 h
 
 ⚠️ **`pipeline`'s `selection_2` ROW DESCRIBES A DIFFERENT EXPERIMENT AND CALLS IT
 `up to date`.** Measured 2026-08-18: `python -m pipeline --ticker all --table
