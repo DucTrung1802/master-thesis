@@ -188,6 +188,13 @@ experiment/experiment_10/_cache/
 !reports/feature_selection_wide/**
 !reports/feature_selection_vn30/
 !reports/feature_selection_vn30/**
+# ⚠️ A FIFTH ROOT, 2026-08-21, and its pair was added IN THE SAME COMMIT as the root —
+# which is the only reason it is not a sixth instance of the shape above. `_wide` already
+# holds PRF-9's h=20 run and `final_features` scopes EVERY table in a plan, so putting an
+# h=10 run beside it would have built a junk `rank_20day__final__d20_h20__wide10` duplicate
+# of a table that already exists. A separate root is the fix; the negation is its cost.
+!reports/feature_selection_wide_h10/
+!reports/feature_selection_wide_h10/**
 #
 # ⚠️ ONE ROOT, and only one, since 2026-08-10. `reports/feature_selection_basic/`,
 # `_economy/` and `_superseded/` were three MORE paths these two rules did not match,
