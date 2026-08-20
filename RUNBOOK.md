@@ -387,6 +387,25 @@ to end, of which **5.2 min was QUEUED**. ⚠️ **The queue is the floor, not th
 | RAM free | ~7 GB | ~29 GB |
 | quota | — | 30 GPU-h/week |
 
+⚠️ **THE WIDTH CEILING WAS RE-MEASURED 2026-08-21 AND IT MOVED TWICE.** Three memory fixes
+shipped (all verified exact at `0.000e+00`): `gpu.tree_shap` blocks its `pred_contribs`
+call over ROWS, `UnifiedSchemaReader.read` filters tickers in SQL, and `window_design` /
+`panel_window_design` stopped materialising the design three times over. **VRAM is no
+longer the wall** — it held at 6.1 of 14.9 GB across four attempts. What binds now is HOST
+RAM inside the ranker ensemble, and the measured state is:
+
+| width | outcome |
+|---|---|
+| 120 channels | ✅ completed (`PRF-9`, before any of the fixes) |
+| **162 channels** | ✅ **completed 2026-08-21, 44m 12s** — the current known-good |
+| 233 channels | ❌ four attempts, `DeadKernelError` in the ranker phase every time |
+
+⚠️ **Read the phase profile, not the outcome.** `selector._tick` prints `rss=` and `peak=`
+per phase; `peak` is the number that decides whether a run survives, and on attempt 3 `rss`
+ROSE while `peak` held — a fix that looked like a regression on the wrong column.
+
+⚠️ **The historical note, kept because the reasoning is the evidence:**
+
 ⚠️ **THE WIDTH CEILING ON A T4 IS ~120 CHANNELS, AND IT IS VRAM — `VRM-1`.** Measured
 2026-08-19: at **140 channels** over 624 k rows the host peaked at **24.5 GB and survived**,
 while XGBoost died in `XGBoosterPredictFromDMatrix` (*free 3.00 GB, requested 3.15 GB*).
@@ -526,6 +545,10 @@ a smoke test, never a number.
 | a rebuild quietly gains channels nobody selected | same cause, silent half: the probe shares setup keys, so it is UNIONED rather than colliding | §3b, and check the table's `obj_description` for its `Source runs:` |
 | a Kaggle job "finishes" but no run folder appears | the local WATCHER died on a network error; the kernel is probably still running | `kgpu status <job>`, then `kgpu wait` + `kgpu pull` — §7a |
 | `XGBoostError: … cudaErrorMemoryAllocation` mid-selection | more than ~120 channels on a T4 — the ceiling is VRAM, not host RAM (`VRM-1`) | prune the pool first: `python -m feature_selection.prune` — §7a |
+| a Kaggle kernel ends `ERROR` with `DeadKernelError: Kernel died` and no traceback | **OOM-kill.** A Python exception leaves a traceback; a dead kernel was terminated by the OS | `kgpu logs <job>` and read the PHASE lines — `rss=` says where it settled, `peak=` says what killed it, and the two disagree |
+| a memory fix lands and `peak` does not move | you fixed a real allocation that was not the BINDING one | measured 2026-08-21: row-blocking `window_design` moved a 23.3 GB cube and the peak by **0.1 GB**, because the panel path allocates in `panel_window_design` instead. ⚠️ `rss` went UP while `peak` held — **read `peak`, never `rss` alone** |
+| `walkforward.compare` raises *"arm X covers N rows against the reference arm's M"* | the two tracks do not span the same panel — a wider pool changes coverage, a different `rank_min_width` changes the label | **the refusal is correct.** Price them on the INTERSECTION (`backtest/CONTEXT.md`, and §3's wide-vs-narrow recipe), never by comparing two unpaired Sharpes |
+| `final_features --scope X` plans a table you did not ask for | ⚠️ **a scope names EVERY table in the plan**, and a report root holding two experiments plans both | give the second experiment its own `--root` — **and add its `.gitignore` negation pair in the same commit**, or its CSVs are silently dropped |
 | `Unknown top-level keys in kaggle_config.json` | a comment or note added at the top level; the schema is closed | put prose in `kaggle_gpu/README.md`, not in the config |
 
 ---

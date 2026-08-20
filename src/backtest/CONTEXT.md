@@ -475,3 +475,126 @@ horizon, `se_sharpe` 0.24-0.25, and the h=20 figure has a 10-fold walk-forward b
 (`walkforward/CONTEXT.md`, pooled +1.991 over 118 periods) while this one does not. **The
 walk-forward at h=10 is the run that would settle it.** What is already solid is the
 comparison inside this table — model vs hand, paired, on one panel.
+
+---
+
+## 10. ⚠️ THE INDICATOR SURVEY — 29 channels, 3 horizons, 2 grains, and only 3 survive
+
+Measured 2026-08-20. Data and both scripts are in `reports/indicator_survey_*` so the
+numbers below can be recomputed rather than trusted. Universe: **top liquidity quintile by
+that date's own `value_matched`** (point-in-time, ~114 names/date), 480,457 rows,
+2009-2026, `|return_h| > 100 %` screened to NaN rather than winsorised.
+
+**Each channel measured TWICE, and the pair is the finding**: Spearman *within each date*
+across the liquid names (can I rank a GROUP today?) and Spearman *within each ticker* down
+its own history (does this predict ONE stock's future?). Averaging the t-statistic over
+h=5/10/20 splits them into three families that do not transfer.
+
+| family | channels | group `t` | one-stock `t` |
+|---|---|---|---|
+| **A · works at BOTH** | `drv_order_vol_imb` | +9.2 | +14.4 |
+| | `drv_log_order_size_ratio` | +7.8 | +13.0 |
+| | `drv_order_vol_imb_5` | +5.8 | +6.8 |
+| **B · GROUP only, sign FLIPS** | `drv_dist_from_high_252` | **+5.0** | **−3.0** |
+| | `drv_close_pos_252` | +4.8 | −1.0 |
+| | `drv_foreign_participation` | +2.7 | −2.1 |
+| **C · one-stock only, SUSPECT** | `drv_amihud_63` | −2.5 | +12.2 |
+| | `avg_vol_per_sell_order` | −0.9 | +8.5 |
+
+⚠️ **FAMILY B IS THE PRACTICAL RESULT AND IT IS THE ONE A TRADER GETS BACKWARDS.**
+*"Buy this stock because it is near its own 252-day high"* measures **t = −3.0**. *"Buy the
+stocks nearest their highs relative to every other name today"* measures **t = +5.0**.
+Distance-from-high is a **relative** signal, not an absolute timing rule, and the same
+number points opposite ways depending on what it is compared against.
+
+⚠️ **FAMILY C IS NOT REPORTED AS A RESULT.** The per-ticker `t` measures CONSISTENCY ACROSS
+NAMES, not significance within a series — it prices no autocorrelation. Both leaders are
+**trending series**, and correlating a trend with a trending price is the classic spurious
+regression; the cross-sectional column is immune because ranking within a date removes any
+common trend. CLAUDE.md §6-1 agrees from the other direction: single-stock selection at
+h=10 on these same channels did **not** clear its null.
+
+### 10a. ⚠️ FILTER ONE — the session you cannot trade costs the best channel two thirds of itself
+
+Every channel is built from day `t`'s closing order counts, so the earliest entry is the
+close of `t+1`. Re-measuring against the return earned FROM `t+1` reorders the table
+(h=10, cross-sectional `t`):
+
+| channel | same close | t+1 | kept | reading |
+|---|---|---|---|---|
+| `drv_order_vol_imb` | +8.82 | +3.07 | **35 %** | fast — mostly a same-session effect |
+| `drv_order_vol_imb_5` | +5.80 | +3.60 | 62 % | fast |
+| **`drv_log_order_size_ratio`** | +8.05 | **+5.97** | 75 % | the slow half of the order-flow family |
+| `drv_dist_from_high_252` | +5.08 | **+4.96** | 97 % | slow — the lag costs nothing |
+| `drv_rogers_satchell_21` | −4.12 | −4.16 | 101 % | slow · low-volatility premium |
+| `drv_order_count_imb_5` | −3.43 | −4.14 | 120 % | strengthens with the lag |
+| `drv_foreign_flow_ratio_21` | −0.19 | +0.03 | — | nothing, at either lag |
+
+⚠️ **This reproduces §8b's portfolio-level finding channel by channel and NAMES THE CULPRIT**:
+`drv_order_vol_imb`, the single most important input to every working model in this repo,
+is largely a **latency trade**. The channels a daily trader can actually hold are the SLOW
+ones, precisely because a one-day lag costs them nothing.
+
+⚠️ **`drv_foreign_flow_ratio_21` measures ~ZERO at either lag**, which CONTRADICTS
+`model/CONTEXT.md` §11's *"foreign flow is the one signal that survives"*. The two measure
+different things — §11 used `gold_schema.stocks.foreign_net_value` through a classifier,
+this is `pool__basic`'s ratio univariately — and **which is right is unresolved**. Do not
+quote either without the other.
+
+### 10b. ⚠️ FILTER TWO — 2022 removes the other half, and it names WHICH half
+
+h=10, t+1 entry, cross-sectional `t`, split at 2022-01-01:
+
+| channel | 2018-2021 | 2022-2026 | |
+|---|---|---|---|
+| `drv_log_order_size_ratio` | +4.38 | **+3.19** | ✅ survives |
+| `drv_order_count_imb_5` | −2.91 | **−2.97** | ✅ survives |
+| `drv_rogers_satchell_21` | −1.24 | **−2.39** | ✅ strengthens |
+| `drv_order_vol_imb` | +2.71 | +1.37 | ⚠️ halved |
+| `drv_dist_from_high_252` | +2.45 | **+0.62** | ❌ gone |
+| `drv_close_pos_252` | +2.73 | **+0.46** | ❌ gone |
+| `drv_dist_from_high_63` | +2.09 | +0.72 | ❌ gone |
+
+⚠️ **§9b established that the post-2022 break lives in the FEATURES rather than the market;
+this says WHICH features.** The entire position-within-range family went from `t ≈ +2.5` to
+`t ≈ +0.5`. Order SIZE and order COUNT imbalance did not.
+
+### 10c. The three that pass all three filters
+
+| channel | measures | h=5 | h=10 | h=20 | sign |
+|---|---|---|---|---|---|
+| `drv_log_order_size_ratio` | log(mean buy-order size ÷ sell-order size) | +3.16 | **+3.19** | +2.41 | buy LARGER tickets |
+| `drv_order_count_imb_5` | 5-day imbalance of buy vs sell order COUNTS | — | **−2.97** | −2.78 | fade the crowd |
+| `drv_rogers_satchell_21` | 21-day Rogers-Satchell range volatility | −2.34 | **−2.39** | −2.13 | buy the CALM |
+
+⚠️ **THE TOP PAIR IS ONE ECONOMIC IDEA WITH ITS HALVES DELIBERATELY OPPOSED.** Order SIZE
+up predicts positively; order COUNT up predicts negatively — the institutional-versus-retail
+read of a tape, and the first time this repo has separated the two. They were always bundled
+inside one "order flow" family, and the pair survives 2022 while raw volume imbalance does not.
+
+⚠️ **NONE OF THIS IS A STRATEGY.** An IC of 0.04 at `t ≈ 3` is a RANKING edge over ~114
+names, not a trade, and it must clear §3's turnover: **8.8 %/yr at h=10, 17.6 % at h=5**
+against a benchmark returning 9.75 %. Every number here is univariate, unpenalised for the
+29 channels searched, and has no walk-forward behind it — unlike the fitted chain, which does.
+
+### 10d. ⚠️ The gap map — every h=10 and h=20 test in this repo has run on ONE pool
+
+| pool | channels | tested at | |
+|---|---|---|---|
+| `pool__basic` | 90-101 | h=5, 10, 20 · every target | ✅ the only one |
+| `pool__ta` | 711 numeric | one run each at h=5, 10, 20 | ⚠️ barely |
+| 19 × `pool__economy_*` | ~1,400 | price-LEVEL target only, **0 null draws** | ❌ |
+| 47 × `pool__forex_*` | 3,129 series | — | ❌ **never once** |
+| `pool__fa` | — | h=5 only, 1 run | ❌ — and see below |
+| `pool__bonds` / `stock_market` / `news_daily` / `market_breadth` | — | h=5 only, 1 run each | ❌ |
+
+⚠️ **So *"nothing else predicts"* has never been shown. What has been shown is that nothing
+else has been ASKED the right question** — everything outside `pool__basic` was tested at
+h=5, the one horizon §3's fee arithmetic already rules out, or against a price-level target
+with no null.
+
+⚠️ **Two structural exceptions bound how much of that gap is fillable.** A date-only series
+(macro, forex, bond yields) has a **constant within-date rank** and therefore cannot rank a
+cross-section at all — valid for one stock, dead for a group. And **`pool__fa` holds 2
+tickers on `unified_schema_all`** (VCB and ACB, 8,265 rows), so fundamentals are not
+available at panel grain in this database.

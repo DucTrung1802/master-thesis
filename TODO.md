@@ -53,6 +53,60 @@ below remain the engineering backlog.
 
 ---
 
+## ⚠️ START HERE — 2026-08-21, after a six-item program
+
+**Five of six done. The sixth is the only one that touches the chain every number rests on.**
+
+| # | asked for | verdict |
+|---|---|---|
+| 1 | bring the new features in | ✅ **162 channels ran** (90 `pool__basic` + 72 pruned `pool__ta`), 35 % wider than the previous best, after **four memory walls** |
+| 2 | feature selection + final features, carefully | ✅ **the widened chain TIES the narrow one**, paired `t` = **+0.46** over 236 periods |
+| 3 | many train/test settings | ✅ **six tracks, every `\|t\|` < 1.4** — the settings are worth nothing |
+| 4 | LSTM / CNN / LSTM-CNN / bidirectional | ✅ **7 arms × 10 folds**; architecture matters **only downward** |
+| 5 | other models | ✅ TCN + Transformer written and run; more is available on request |
+| 6 | **one complete flow** | ⚠️ **25 %** — see below, and it is the only item with real risk |
+
+### What the five measured items actually settled
+
+- **Architecture matters at h=10, but only DOWNWARD** (§6-0-ter-2). Over **224×** of
+  capacity no arm beats the LSTM significantly and **three lose** — `cnn` −3.37, `cnnlstm`
+  −2.15, `bilstm` −2.09. `PRF-8`'s "worth nothing" was h=20 and does not reproduce.
+- **The dataset and split settings are worth nothing** (`walkforward` §12). ⚠️ **`step6` is
+  the one to read**: retraining **twice as often** gives `t` = −0.09, so the ~45 % Sharpe
+  decay across the sweep is **not staleness**.
+- **`pool__ta` changes the SHORTLIST and not the MONEY**, now measured at two horizons, two
+  candidate widths and two architectures (`walkforward` §13).
+- **The h=10 walk-forward holds** — z = +18.58, IC positive 10/10 folds — and **`PRF-7` at
+  h=10 came back clean** (51 of 61 channels survive a pre-2017 selection).
+- **The indicator survey** (`backtest` §10): 29 channels × 3 horizons × 2 grains, and only
+  **three** survive the execution lag AND the 2022 break. ⚠️ Its most reusable finding is
+  that `drv_dist_from_high_252` **flips sign between grains** — a relative signal, not an
+  absolute timing rule.
+
+### ⚠️ Three predictions I recorded before measuring, and three were wrong
+
+Kept verbatim where they were written, because the register's value is that it does not
+quietly edit them: *"they all tie"* (three arms lost), *"`best_epoch` 0-2 for every arm"*
+(43 of 70 — the convolutional arms train 6-20 epochs, so **"best epoch is 1" is an LSTM and
+GBT property, not a property of the problem**), and *"row-blocking `window_design` will cut
+the peak"* (it moved 0.1 GB; the panel REASSEMBLY was the allocation).
+
+### What is left, in order
+
+| # | item | ⏱ | why |
+|---|---|---|---|
+| 1 | **`P1-8` — `WFO-1` + the `results/` gitignore negation** | ~2 h | The cheap half is 3 lines and protects tracks that cost GPU-hours and are **untracked**. |
+| 2 | **`P1-9` — `compare`'s `t_paired` tests the MEAN, not the Sharpe beside it** | ~2 h | It changes how `PRF-8` and §6-0-ter-2 may be QUOTED. `walkforward.pair` already has the fix to port. |
+| 3 | ⚠️ **item 6 proper — make `pipeline` cover the cross-sectional chain** | ~1 day | `pipeline` is the gate `RUNBOOK` §8 rule 1 makes mandatory before quoting anything, and RUNBOOK §3a still has to warn readers OFF it for the chain that produces every headline. It knows nothing of stage 9 (`backtest`) or stage W (`walkforward`). ⚠️ **This is the only remaining item that edits the chain every measurement rests on** — do it in verifiable steps, not one refactor. |
+| 4 | `P4-2` — emit `n_dead_train` / `n_dead_test` | ~2 h | unchanged |
+| 5 | `STA-1` decision · `FRZ-1` · `PRF-4` · `PRF-5` · `PRF-6` | hours → months | unchanged |
+
+⚠️ **What is NOT worth doing, on this session's evidence**: a bigger model (224× of capacity
+tied or lost), more of this data (`pool__ta` tied twice), and more dataset settings (six
+tied). What is left is honest EXECUTION and NEW INFORMATION — `PRF-4`, `PRF-5`, `PRF-6`.
+
+---
+
 ## ✅ DONE 2026-08-21 — the 7-arm architecture sweep at h=10, and BOTH predictions were wrong
 
 **Result: architecture matters at h=10, but only DOWNWARD.** No arm beats the LSTM
@@ -133,7 +187,7 @@ prices the feature selection that chose the 19 channels every arm reads.
 
 ---
 
-## ⚠️ START HERE — what to run next, 2026-08-20
+## ⚠️ What was next on 2026-08-20 — superseded by the block above
 
 ### ✅ CLOSED 2026-08-20 — the h=10 WALK-FORWARD, and the horizon is still NOT promoted
 
