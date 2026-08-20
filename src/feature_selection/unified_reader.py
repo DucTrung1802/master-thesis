@@ -38,17 +38,12 @@ from typing import Dict, List, Optional, Sequence
 import pandas as pd
 from dotenv import load_dotenv
 
-from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
-    Condition,
-    DataType,
-)
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
     PostgreSQLConnectionDto,
 )
 from logger.logger import Logger
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from utils.constants import DATABASE_MAIN_V2
-from utils.enums import SqlOperator
 
 # The unified layer's schema template. `src/orchestration/assets/unified.py` builds
 # `unified_schema_vcb`; anything else that follows the template is readable here
@@ -295,12 +290,27 @@ class UnifiedSchemaReader:
 
         conditions = None
         if tickers is not None and "ticker" in types:
+            # ⚠️ **IMPORTED HERE, NOT AT MODULE LEVEL, AND THAT IS `KGP-1`'s SHAPE.**
+            # The Kaggle payload ships `src/feature_selection` and `src/utils` only, and
+            # `kgpu_bootstrap` STUBS `dtos` for the one connection DTO it needs. A
+            # top-level `from dtos…tabular_database_driver_dtos import Condition`
+            # therefore imports fine here and kills the worker at cell 0 with
+            # *"'dtos.tabular_database_driver_dtos' is not a package"* — measured
+            # 2026-08-21, 1m 29s into a 233-channel run that had nothing else wrong.
+            # A worker has no database, so it can never reach this branch; the import
+            # belongs where the database does.
             names = sorted({str(t).upper() for t in tickers})
             if not names:
                 raise ValueError(
                     f"{self.schema}.{table}: `tickers` is empty, which would select no "
                     f"rows — pass None to read every ticker."
                 )
+            from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
+                Condition,
+                DataType,
+            )
+            from utils.enums import SqlOperator
+
             conditions = [
                 Condition(
                     column="ticker",

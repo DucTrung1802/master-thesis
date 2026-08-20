@@ -405,6 +405,23 @@ python -m kgpu wait <job>                # resume the watch
 python -m kgpu pull <job>                # then fetch and merge
 ```
 
+⚠️ **ADDING A TOP-LEVEL IMPORT TO A SHIPPED MODULE CAN KILL THE WORKER, AND `rehearse`
+IS THE ONLY THING THAT CATCHES IT — measured again 2026-08-21.** The payload ships
+`src/feature_selection` and `src/utils`; `kgpu_bootstrap` **stubs** `dtos` for the single
+connection DTO it needs. A new `from dtos…tabular_database_driver_dtos import Condition`
+at the top of `unified_reader.py` imports perfectly here and dies on the worker at cell 0
+with *"'dtos.tabular_database_driver_dtos' is not a package"* — **1m 29s into a
+233-channel run that had nothing else wrong**, and the quota was already spent.
+
+**The rule this leaves:** an import a worker cannot satisfy belongs INSIDE the branch that
+needs it. A ticker filter needs a database; a worker has none; so the import goes where the
+database does. And **`kgpu export` + `kgpu rehearse` before `kgpu run`, every time a
+shipped module changed** — `export` restages the payload without uploading, `rehearse`
+drives the worker path locally, and together they cost about four minutes against a wasted
+kernel launch. This is `KGP-1` a second time, from the other direction: that one was a
+stub SHADOWING a shipped package, this one is a shipped package reaching for something
+never shipped.
+
 ⚠️ **A Kaggle run is a different PROCEDURE, not the same run on a faster card.** Its image
 ships **xgboost 3.2.0 / sklearn 1.6.1 / numpy 2.0.2** against `mt_env`'s **2.1.1 / 1.7.2 /
 2.2.6**, and XGBoost subsamples from a different RNG stream per device. Since 2026-08-17
