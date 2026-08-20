@@ -184,16 +184,12 @@ def window_design(
         return frame.rename(columns={c: design_column(c, "last") for c in frame})
 
     # ⚠️ `dtype` is applied HERE, at the source, not to the result. Casting the
-    # finished design would peak at float64 first and save nothing — the whole cost
-    # is the six `(n_windows, n_channels)` reductions plus the `column_stack` copy,
-    # and every one of them inherits its type from this array.
+    # finished design would peak at float64 first and save nothing — every
+    # intermediate below inherits its type from this array.
     values = frame.to_numpy(dtype)
-    # (n_windows, lookback, n_channels) — a VIEW, so nothing is copied here. Each
-    # reduction below streams over it and materialises only its own (n_windows,
-    # n_channels) result.
-    windows = np.lib.stride_tricks.sliding_window_view(
-        values, window_shape=lookback, axis=0
-    ).transpose(0, 2, 1)
+    n_windows = len(frame) - lookback + 1
+    n_channels = values.shape[1]
+    n_stats = len(stats)
 
     # ⚠️ Matched to `dtype` so the `slope` einsum below does not silently upcast its
     # output back to float64 — which would restore the peak this option exists to cut.
@@ -201,85 +197,137 @@ def window_design(
     centred = ramp - ramp.mean()
     denominator = float((centred**2).sum()) or np.nan
 
-    # How many observations each window actually has. `prop_buy_vol` and friends are
-    # NULL for years, so an ALL-NaN window is a legitimate state, not an error — the
-    # right answer for every statistic over it is NaN, and the imputer downstream
-    # fills it from the training median. numpy says so with a RuntimeWarning per
-    # reduction, which would bury the notebook in noise; the expected case is
-    # declared here instead of shouted about eight times.
-    finite = np.count_nonzero(np.isfinite(windows), axis=1)
-    empty = finite == 0
+    # Grouped by CHANNEL, so a channel's stats sit together in the design matrix and
+    # a per-channel slice is contiguous: column `position * n_stats + stat_index`.
+    columns = [
+        design_column(channel, stat)
+        for channel in frame.columns
+        for stat in stats
+    ]
+    design = np.empty((n_windows, n_channels * n_stats), dtype=dtype)
 
-    # ── normalisation, applied to the WINDOW before any statistic is taken ──
-    # ⚠️ Every scaling constant comes from the window itself — its own mean, sd or
-    # last value — so it uses no information after day N and needs no train/test
-    # fitting. That is the reason it is done here and not as a preprocessing step:
-    # a scaler fitted on a training slice would have to be carried into every fold,
-    # and the first version of that is always the one that leaks.
-    if normalize != "none":
-        with np.errstate(invalid="ignore", divide="ignore"), warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore", r"(Mean|All-NaN|Degrees of freedom)", RuntimeWarning
-            )
-            if normalize == "zscore":
-                centre = np.nanmean(windows, axis=1, keepdims=True)
-                scale = np.nanstd(windows, axis=1, keepdims=True)
-                # A window that never moved has sd 0. Its z-scores are 0/0; the
-                # honest value is 0 (today is exactly average), not NaN or inf.
-                windows = np.where(scale > 0, (windows - centre) / scale, 0.0)
-            else:  # window_relative
-                reference = windows[:, -1:, :]
-                windows = np.where(
-                    reference != 0, windows / reference - 1.0, np.nan
-                )
-        windows = np.where(empty[:, None, :], np.nan, windows)
+    # ⚠️ **ROW-BLOCKED, AND THAT IS `P3-2`'s CHEAP HALF — measured 2026-08-21.** The
+    # sliding view itself is free, but three steps used to materialise the FULL
+    # `(n_windows, lookback, n_channels)` cube: the normalisation `np.where`, the
+    # `slope` term `windows - nanmean(...)`, and its `nan_to_num`. On a 233-channel
+    # panel over 624,238 windows that cube is **23.3 GB in one statement**, and it is
+    # what killed a Kaggle T4 kernel with `DeadKernelError` after `window design`
+    # peaked at **26.2 GB** of host RAM on a ~29 GB box — while VRAM sat at 6.1 of
+    # 14.9 GB, so the wall was never the GPU.
+    #
+    # ⚠️ **The blocking is EXACT.** Every statistic of a window reads only that
+    # window's own `lookback` rows, so a block of windows computes exactly what it
+    # would have computed inside the whole. Blocks overlap by `lookback - 1` SOURCE
+    # rows, which is what makes each block's first window complete.
+    block_rows = window_row_chunk(lookback, n_channels, dtype)
+    for lo in range(0, n_windows, block_rows):
+        hi = min(lo + block_rows, n_windows)
+        windows = np.lib.stride_tricks.sliding_window_view(
+            values[lo : hi + lookback - 1], window_shape=lookback, axis=0
+        ).transpose(0, 2, 1)
+
+        # How many observations each window actually has. `prop_buy_vol` and friends
+        # are NULL for years, so an ALL-NaN window is a legitimate state, not an
+        # error — the right answer for every statistic over it is NaN, and the
+        # imputer downstream fills it from the training median. numpy says so with a
+        # RuntimeWarning per reduction, which would bury the notebook in noise; the
+        # expected case is declared here instead of shouted about eight times.
         finite = np.count_nonzero(np.isfinite(windows), axis=1)
         empty = finite == 0
 
-    computed: Dict[str, np.ndarray] = {}
-    with np.errstate(invalid="ignore"), warnings.catch_warnings():
-        warnings.filterwarnings("ignore", r"(Mean|All-NaN|Degrees of freedom)", RuntimeWarning)
-        for stat in stats:
-            if stat == "last":
-                computed[stat] = windows[:, -1, :]
-            elif stat == "mean":
-                computed[stat] = np.nanmean(windows, axis=1)
-            elif stat == "sd":
-                computed[stat] = np.nanstd(windows, axis=1)
-            elif stat == "min":
-                computed[stat] = np.nanmin(windows, axis=1)
-            elif stat == "max":
-                computed[stat] = np.nanmax(windows, axis=1)
-            elif stat == "slope":
-                # ⚠️ NaN wherever the window holds fewer than two observations. The
-                # `nan_to_num` below is what makes the dot product ignore missing
-                # days, but on its own it would report a FLAT TREND (0.0) for a
-                # window with no data at all — a claim the data cannot support, and
-                # one that would rank an empty channel above a genuinely flat one.
-                centred_values = windows - np.nanmean(windows, axis=1, keepdims=True)
-                slope = (
-                    np.einsum("k,ikj->ij", centred, np.nan_to_num(centred_values))
-                    / denominator
+        # ── normalisation, applied to the WINDOW before any statistic is taken ──
+        # ⚠️ Every scaling constant comes from the window itself — its own mean, sd
+        # or last value — so it uses no information after day N and needs no
+        # train/test fitting. That is the reason it is done here and not as a
+        # preprocessing step: a scaler fitted on a training slice would have to be
+        # carried into every fold, and the first version of that is always the one
+        # that leaks.
+        if normalize != "none":
+            with np.errstate(invalid="ignore", divide="ignore"), \
+                    warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore", r"(Mean|All-NaN|Degrees of freedom)", RuntimeWarning
                 )
-                computed[stat] = np.where(finite >= 2, slope, np.nan)
-            # Every other statistic already yields NaN on an empty window; this
-            # keeps them consistent with `slope` rather than relying on it.
-            if stat != "slope":
-                computed[stat] = np.where(empty, np.nan, computed[stat])
+                if normalize == "zscore":
+                    centre = np.nanmean(windows, axis=1, keepdims=True)
+                    scale = np.nanstd(windows, axis=1, keepdims=True)
+                    # A window that never moved has sd 0. Its z-scores are 0/0; the
+                    # honest value is 0 (today is exactly average), not NaN or inf.
+                    windows = np.where(scale > 0, (windows - centre) / scale, 0.0)
+                else:  # window_relative
+                    reference = windows[:, -1:, :]
+                    windows = np.where(
+                        reference != 0, windows / reference - 1.0, np.nan
+                    )
+            windows = np.where(empty[:, None, :], np.nan, windows)
+            finite = np.count_nonzero(np.isfinite(windows), axis=1)
+            empty = finite == 0
 
-    # Grouped by CHANNEL, so a channel's stats sit together in the design matrix and
-    # a per-channel slice is contiguous.
-    columns, blocks = [], []
-    for position, channel in enumerate(frame.columns):
-        for stat in stats:
-            columns.append(design_column(channel, stat))
-            blocks.append(computed[stat][:, position])
+        with np.errstate(invalid="ignore"), warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", r"(Mean|All-NaN|Degrees of freedom)", RuntimeWarning
+            )
+            for index, stat in enumerate(stats):
+                if stat == "last":
+                    block = windows[:, -1, :]
+                elif stat == "mean":
+                    block = np.nanmean(windows, axis=1)
+                elif stat == "sd":
+                    block = np.nanstd(windows, axis=1)
+                elif stat == "min":
+                    block = np.nanmin(windows, axis=1)
+                elif stat == "max":
+                    block = np.nanmax(windows, axis=1)
+                elif stat == "slope":
+                    # ⚠️ NaN wherever the window holds fewer than two observations.
+                    # The `nan_to_num` is what makes the dot product ignore missing
+                    # days, but on its own it would report a FLAT TREND (0.0) for a
+                    # window with no data at all — a claim the data cannot support,
+                    # and one that would rank an empty channel above a genuinely
+                    # flat one.
+                    centred_values = windows - np.nanmean(
+                        windows, axis=1, keepdims=True
+                    )
+                    slope = (
+                        np.einsum(
+                            "k,ikj->ij", centred, np.nan_to_num(centred_values)
+                        )
+                        / denominator
+                    )
+                    del centred_values
+                    block = np.where(finite >= 2, slope, np.nan)
+                # Every other statistic already yields NaN on an empty window; this
+                # keeps them consistent with `slope` rather than relying on it.
+                if stat != "slope":
+                    block = np.where(empty, np.nan, block)
+                # Column `position * n_stats + index` for every channel position —
+                # a strided write, so no intermediate stack of the whole design.
+                design[lo:hi, index::n_stats] = block
+                del block
+        del windows
 
     return pd.DataFrame(
-        np.column_stack(blocks),
-        columns=columns,
-        index=frame.index[lookback - 1 :],
+        design, columns=columns, index=frame.index[lookback - 1 :]
     )
+
+
+#: Target bytes for the `(block, lookback, channels)` cube one block materialises.
+#: The cube is the peak, not the design — `slope` and the normalisation each build
+#: one, and at 233 channels over 624,238 windows the unblocked cube is 23.3 GB.
+DESIGN_BLOCK_BYTES = 1024 * 1024 * 1024
+
+
+def window_row_chunk(lookback: int, n_channels: int, dtype: np.dtype,
+                     block_bytes: int = DESIGN_BLOCK_BYTES) -> int:
+    """Windows per block so one `(rows, lookback, channels)` cube fits `block_bytes`.
+
+    ⚠️ Up to three cubes are live at once in the worst case (`windows`, the
+    normalisation's `np.where` result, and `slope`'s `centred_values`), so the
+    effective peak is a few times `block_bytes`. That is deliberate: the point is to
+    make the peak a CONSTANT chosen here rather than a function of the panel's width.
+    """
+    per_row = max(1, lookback * n_channels * np.dtype(dtype).itemsize)
+    return int(max(2_000, min(200_000, block_bytes // per_row)))
 
 
 def aggregate_to_channels(
