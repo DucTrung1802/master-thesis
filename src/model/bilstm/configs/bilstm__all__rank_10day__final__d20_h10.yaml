@@ -1,0 +1,44 @@
+# Bidirectional LSTM at h=10 — one arm of the architecture sweep.
+#
+# ⚠️ EVERYTHING EXCEPT THE `model:` BLOCK IS COPIED UNCHANGED from
+# lstm__all__rank_10day__final__d20_h10.yaml: same dataset, same optimiser schedule,
+# same batch size, same patience, same seed, same null draws. That is what makes the
+# arms comparable at all — `walkforward.compare` pairs them period by period and a
+# difference in schedule would show up as a difference in architecture.
+#
+# ⚠️ NOTHING HERE WAS TUNED. PRF-8 measured three architectures spanning 205,441
+# parameters to 1,400 decision nodes tying at h=20 (paired |t| < 1), so the prior is a
+# tie; a tie under one schedule is not an optimum for any of them, and a WIN would
+# need re-tuning before it could be believed.
+#
+# ⚠️ `lookback` and `n_features` are ASSERTIONS. engine._verify raises if the dataset
+# disagrees — the dataset is the authority.
+
+run_name: bilstm__all__rank_10day__final__d20_h10
+dataset: all__rank_10day__final__d20_h10__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 19
+
+model:
+  type: BiLSTM
+  hidden_size: 96
+  num_layers: 2
+  dropout: 0.2
+
+train:
+  batch_size: 512
+  lr: 0.001
+  weight_decay: 0.00001
+  max_epochs: 100
+  patience: 15
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 5
+
+null_draws: 200
+
+seed: 42
+device: auto

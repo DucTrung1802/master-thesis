@@ -812,8 +812,19 @@ def permutation_importance_batched(
     return drops.mean(axis=1)
 
 
-def tree_shap(model, X: pd.DataFrame) -> np.ndarray:
-    """Mean |SHAP| per feature, computed by the booster itself.
+#: Target bytes for one `pred_contribs` block. The allocation is
+#: `rows x (cols + 1) x 4`, so this caps the block rather than the whole design.
+SHAP_BLOCK_BYTES = 512 * 1024 * 1024
+
+
+def shap_row_chunk(n_columns: int, block_bytes: int = SHAP_BLOCK_BYTES) -> int:
+    """Rows per `pred_contribs` call so one block stays near `block_bytes`."""
+    per_row = max(1, (n_columns + 1) * 4)
+    return int(max(10_000, min(1_000_000, block_bytes // per_row)))
+
+
+def tree_shap(model, X: pd.DataFrame, row_chunk: Optional[int] = None) -> np.ndarray:
+    """Mean |SHAP| per feature, computed by the booster itself, in ROW BLOCKS.
 
     ⚠️ **Not `shap.TreeExplainer`.** XGBoost's own `pred_contribs=True` runs the
     same exact tree-SHAP algorithm INSIDE the booster, so on `device="cuda"` it
@@ -823,9 +834,32 @@ def tree_shap(model, X: pd.DataFrame) -> np.ndarray:
 
     The last column of `pred_contribs` is the bias/expected-value term, which is
     not a feature; it is dropped.
+
+    ⚠️ **THE BLOCKING IS `VRM-1`'s FIX AND IT IS EXACT, NOT AN APPROXIMATION.**
+    `pred_contribs=True` materialises `(n_rows, n_columns + 1)` floats in ONE
+    allocation, linear in the width — which is what killed a 140-channel panel
+    selection on a 14.6 GiB T4 (*free 3.00 GB, requested 3.15 GB*) while host RAM
+    peaked at 24.5 GB and survived. A SHAP contribution is per-row independent and
+    the statistic wanted here is a column MEAN, so summing `|contributions|` over
+    row blocks and dividing by `n` at the end returns the same number the single
+    allocation would have. Accumulation is float64 so the block count cannot move
+    the result.
+
+    ⚠️ `selector._tick` cannot see this allocation — it reports torch's VRAM while
+    XGBoost allocates through its own CUDA allocator, so the ceiling was invisible
+    until a run died at it.
     """
     import xgboost as xgb
 
     booster = model.get_booster()
-    contributions = booster.predict(xgb.DMatrix(X), pred_contribs=True)
-    return np.abs(contributions[:, :-1]).mean(axis=0)
+    n_rows, n_columns = X.shape
+    if n_rows == 0:
+        return np.zeros(n_columns, dtype=float)
+    chunk = row_chunk or shap_row_chunk(n_columns)
+
+    total = np.zeros(n_columns, dtype=np.float64)
+    for lo in range(0, n_rows, chunk):
+        block = X.iloc[lo : lo + chunk]
+        contributions = booster.predict(xgb.DMatrix(block), pred_contribs=True)
+        total += np.abs(contributions[:, :-1]).sum(axis=0, dtype=np.float64)
+    return total / n_rows
