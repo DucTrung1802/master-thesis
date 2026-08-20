@@ -38,12 +38,17 @@ from typing import Dict, List, Optional, Sequence
 import pandas as pd
 from dotenv import load_dotenv
 
+from dtos.tabular_database_driver_dtos.tabular_database_driver_dtos import (
+    Condition,
+    DataType,
+)
 from dtos.tabular_database_driver_dtos.postgre_sql_connection_dto import (
     PostgreSQLConnectionDto,
 )
 from logger.logger import Logger
 from tabular_database_driver.postgre_sql_driver import PostgreSQLDriver
 from utils.constants import DATABASE_MAIN_V2
+from utils.enums import SqlOperator
 
 # The unified layer's schema template. `src/orchestration/assets/unified.py` builds
 # `unified_schema_vcb`; anything else that follows the template is readable here
@@ -261,11 +266,25 @@ class UnifiedSchemaReader:
         table: str,
         columns: Optional[Sequence[str]] = None,
         order_by: Sequence[str] = ("date",),
+        tickers: Optional[Sequence[str]] = None,
     ) -> pd.DataFrame:
         """Read one table, typed from `information_schema` rather than inferred.
 
         `numeric` → float64 and `date` → datetime64, because psycopg2 hands both
         back as Python objects that pandas stores as dtype `object`.
+
+        ⚠️ **`tickers` FILTERS IN SQL, AND FILTERING IN PANDAS INSTEAD IS WHAT BROKE THE
+        WIDE EXPORT.** `kgpu.export._export_panel` read a whole pool and then narrowed to
+        the panel's names with `.isin()` — for `pool__ta` on `unified_schema_all` that is
+        **2,381,858 rows of 781 tickers materialised to keep 150**, and at 143 channels it
+        died with *"Unable to allocate 1.54 GiB for an array with shape (87, 2381858)"*
+        (2026-08-21). The rows were always going to be discarded; they just had to exist
+        first. A `WHERE ticker IN (...)` costs nothing and never allocates them.
+
+        ⚠️ Ignored, deliberately, on a table with no `ticker` column — the date-only pools
+        (`pool__economy_*`, `pool__forex_*`, `pool__bonds`, …) are broadcast across
+        tickers and have nothing to filter, so a caller passing one list for a mixed set
+        of pools does not have to special-case them.
         """
         types = self.column_types(table)
         if columns is not None:
@@ -274,11 +293,30 @@ class UnifiedSchemaReader:
                 raise ValueError(f"{self.schema}.{table} has no column(s) {unknown}")
         order = [c for c in order_by if c in types] or None
 
+        conditions = None
+        if tickers is not None and "ticker" in types:
+            names = sorted({str(t).upper() for t in tickers})
+            if not names:
+                raise ValueError(
+                    f"{self.schema}.{table}: `tickers` is empty, which would select no "
+                    f"rows — pass None to read every ticker."
+                )
+            conditions = [
+                Condition(
+                    column="ticker",
+                    operator=SqlOperator.IN,
+                    value=names,
+                    data_type=DataType.VARCHAR(),
+                    column_func="upper",
+                )
+            ]
+
         frame = self._driver.select(
             schema_name=self.schema,
             table_name=table,
             columns=list(columns) if columns else None,
             order_by=order,
+            conditions=conditions,
         )
         if frame.empty:
             raise ValueError(f"{self.schema}.{table} is empty.")

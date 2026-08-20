@@ -240,9 +240,20 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
                         f"column the source does not have is a silent no-op, so it raises."
                     )
                 wanted = list(KEY_COLS) + [c for c in channels if c not in KEY_COLS]
-                piece = reader.read(table, columns=wanted)
+                # ⚠️ **FILTER IN SQL, NOT IN PANDAS — this line was the wide export's
+                # ceiling.** Reading the pool whole and narrowing afterwards materialises
+                # every ticker in the schema to keep the panel's: for `pool__ta` on
+                # `unified_schema_all` that is **2,381,858 rows of 781 names to keep
+                # 150**, and at 143 channels it died with *"Unable to allocate 1.54 GiB
+                # for an array with shape (87, 2381858)"* (2026-08-21). `PRF-9` never hit
+                # it because 30 channels fit; the fix is the same either way, since the
+                # discarded rows never needed to exist.
+                piece = reader.read(table, columns=wanted, tickers=universe)
                 piece["date"] = pd.to_datetime(piece["date"])
                 piece["ticker"] = piece["ticker"].astype(str).str.upper()
+                # ⚠️ Kept as a belt-and-braces narrowing: `read(tickers=...)` is a no-op
+                # on a table with no `ticker` column, and this is the line that would
+                # catch a pool that turns out to be date-only.
                 piece = piece[piece["ticker"].isin(set(universe))]
                 before = len(frame)
                 # ⚠️ INNER, matching `read_universe_panel`'s own join and `join_log`. A
