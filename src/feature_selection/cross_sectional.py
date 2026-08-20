@@ -398,23 +398,64 @@ def panel_window_design(
     ⚠️ **A series shorter than `lookback` contributes nothing and is skipped, not
     padded.** Padding would invent a history the company does not have, and every
     statistic over it would be a claim about data that never existed.
+
+    ⚠️ **WRITTEN INTO ONE PREALLOCATED ARRAY, NOT `pd.concat`-ed — measured
+    2026-08-21.** The first version collected 150 per-ticker designs in a list and
+    finished with `pd.concat(blocks).sort_index()`. That holds **three** full copies
+    of the design at once — the blocks, the concatenation, and the sort's output —
+    and on a 233-channel panel each copy is ~7 GB, which is the **26.1 GB** host peak
+    that killed a Kaggle T4 kernel with `DeadKernelError` twice. Row-blocking
+    `window_design` itself did NOT move that peak (13.7 → 19.3 GB resident, peak
+    unchanged), because the cube was never the binding allocation on this path — the
+    reassembly was.
+
+    ⚠️ Writing each series into its own rows also removes the sort: the destination
+    positions ARE the panel's order, so nothing has to be put back afterwards.
     """
-    blocks = []
-    for _, positions in frame.groupby(ids.to_numpy(), sort=False).groups.items():
-        block = frame.loc[positions]
-        if len(block) < lookback:
+    groups = frame.groupby(ids.to_numpy(), sort=False).groups
+    # ⚠️ Two passes. The first only measures, so nothing large is alive during it —
+    # the design's column NAMES need one series to be windowed, and its ROW COUNT
+    # needs every series' length, and both must be known before allocating.
+    kept: List[Tuple[np.ndarray, int]] = []
+    total = 0
+    for _, positions in groups.items():
+        index = frame.index.get_indexer(pd.Index(positions))
+        if len(index) < lookback:
             continue
-        blocks.append(
-            windows.window_design(block, lookback, stats_, normalize, dtype=dtype)
-        )
-    if not blocks:
+        kept.append((index, total))
+        total += len(index) - lookback + 1
+    if not kept:
         raise ValueError(
             f"no series has {lookback} rows — every window would be empty."
         )
+
+    design: Optional[np.ndarray] = None
+    columns: Optional[pd.Index] = None
+    order = np.empty(total, dtype=np.int64)
+    for index, offset in kept:
+        piece = windows.window_design(
+            frame.iloc[index], lookback, stats_, normalize, dtype=dtype
+        )
+        if design is None:
+            columns = piece.columns
+            design = np.empty((total, piece.shape[1]), dtype=dtype)
+        design[offset : offset + len(piece)] = piece.to_numpy()
+        # The panel positions this series' windows belong to: its own rows from the
+        # `lookback - 1`-th onward, since the first complete window ends there.
+        order[offset : offset + len(piece)] = index[lookback - 1 :]
+        del piece
+
     # ⚠️ Sorted back into the panel's own order, which is `(date, ticker)`. The
     # walk-forward split and every `.iloc` downstream address rows by position, and
     # a design matrix in ticker-major order would put fold 1 entirely inside AAA.
-    return pd.concat(blocks).sort_index()
+    # `argsort` on the destination positions is the whole reassembly — one int64
+    # permutation instead of a second copy of the design.
+    permutation = np.argsort(order, kind="stable")
+    return pd.DataFrame(
+        design[permutation],
+        columns=columns,
+        index=frame.index[order[permutation]],
+    )
 
 
 def cross_sectional_normalize(
