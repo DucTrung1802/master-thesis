@@ -30,6 +30,7 @@ import numpy as np
 import pandas as pd
 
 from backtest import portfolio as P
+from walkforward import manifest
 
 DEFAULT_OUT = os.path.join(os.path.dirname(__file__), "..", "..", "results", "walkforward")
 
@@ -136,13 +137,23 @@ def main(argv: Optional[Sequence[str]] = None):
     out_dir = os.path.abspath(str(option("--out", DEFAULT_OUT)))
     top_k = int(option("--top-k", 20))
     draws = int(option("--draws", 200))
-    horizon = int(option("--horizon", 20))
+    # ⚠️ `WFO-1`, the half that MISSTATES a number rather than destroying one. This used
+    # to be `int(option("--horizon", 20))`, and the horizon sets BOTH the interval the
+    # periods are cut at AND the `return_{h}day` column scored — so an h=10 track scored
+    # without the flag silently scored the wrong label against the right predictions.
+    # It is now DERIVED from the track, and an explicit flag that disagrees is an error.
+    horizon = manifest.horizon_for(
+        out_dir, int(option("--horizon")) if "--horizon" in argv else None
+    )
     universe = str(option("--universe", "all"))
     costs = [20, 30, 50]
 
     from utils import runtime
 
-    with runtime.RunTimer(f"walkforward.evaluate  k={top_k}", show_gpu=False):
+    with runtime.RunTimer(
+        f"walkforward.evaluate  k={top_k}  h={horizon} (derived)  "
+        f"{os.path.basename(out_dir)}", show_gpu=False
+    ):
         track = load_track(out_dir)
         panel = attach_returns(track, universe, horizon)
         column = f"return_{horizon}day"

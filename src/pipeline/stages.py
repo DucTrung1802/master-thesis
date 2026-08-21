@@ -1,11 +1,24 @@
 # src\pipeline\stages.py
-"""The eight stages, in order, and what each one hands the next.
+"""The ten stages, in order, and what each one hands the next.
 
-⚠️ **It was six until 2026-08-16.** `shortlist_pool` and `selection_2` split what used
-to be one hop from the archive to the final table, because those were two different
-claims wearing one name: a UNION of per-pool runs and a run in which the channels
-COMPETED. Both selection stages are `manual` — this module materialises the tables
-between them and checks that each still matches the shortlists it came from.
+⚠️ **It was six until 2026-08-16 and eight until 2026-08-21.** `shortlist_pool` and
+`selection_2` split what used to be one hop from the archive to the final table, because
+those were two different claims wearing one name: a UNION of per-pool runs and a run in
+which the channels COMPETED. Both selection stages are `manual` — this module materialises
+the tables between them and checks that each still matches the shortlists it came from.
+
+⚠️ **`backtest` and `walkforward` joined 2026-08-21, and until then the gate was blind to
+the two tools that produce every headline in CLAUDE.md §6-0.** `result_evaluator` answers
+*does it rank?*; only `backtest` answers *does it pay?*. One split cannot tell a decayed
+edge from a lucky window; only `walkforward` can. `RUNBOOK.md` §8 rule 1 makes this command
+the gate on quoting any number, so a green plan that had never asked either question was a
+gate answering a smaller question than the one it was trusted for.
+
+⚠️ **ON A CROSS-SECTIONAL CHAIN, STAGES 3-4 DO NOT EXIST** (`CSP-1`) and are reported
+`n/a` rather than `would run` — `--apply` would otherwise build a shortlist pool that
+nothing can ever select over. The chain is detected from the SHORTLISTS, never from the
+table name: `final_features` drops the `cs_` prefix when it names a table. See
+`is_cross_sectional`.
 
     python -m pipeline                    # print the plan and every stage's state
     python -m pipeline --apply            # run every stage that is not up to date
@@ -462,6 +475,78 @@ def _layer2_runs(root: Optional[str] = DEFAULT_ROOT,
     return found
 
 
+def selected_for(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE,
+                 root: Optional[str] = DEFAULT_ROOT) -> str:
+    """What the channels feeding `table` were SELECTED for — `cs_rank_20day`, say.
+
+    ⚠️ **READ OFF THE SHORTLISTS, NEVER OFF THE TABLE NAME.** `final_features` drops the
+    `cs_` prefix when it names a table (`cs_rank_20day` → `rank_20day__final__…`,
+    `final_features/CONTEXT.md` §3), so the name genuinely cannot say whether the
+    selection was cross-sectional. `TrainTestCreator.resolve_target` makes exactly this
+    point and reads `outstanding.csv`'s `target` column; this is the same filter —
+    `(schema, lookback_d, horizon_h)` — so the two cannot answer differently.
+
+    Returns `""` when no shortlist covers this chain, which is a state (nothing selected
+    yet) and not an error.
+    """
+    from feature_selection.outstanding import OUTSTANDING_FILENAME
+    from train_test_creator.dataset import parse_final_table
+
+    _, lookback, horizon = parse_final_table(table)
+    schema = f"unified_schema_{ticker.lower()}"
+    root = root or _report_root()
+    if not os.path.isdir(root):
+        return ""
+
+    targets = set()
+    for name in sorted(os.listdir(root)):
+        path = os.path.join(root, name, OUTSTANDING_FILENAME)
+        if not os.path.exists(path):
+            continue
+        rows = pd.read_csv(path)
+        if not {"schema", "lookback_d", "horizon_h", "target"} <= set(rows.columns):
+            continue
+        hit = rows[(rows["schema"] == schema)
+                   & (rows["lookback_d"] == lookback)
+                   & (rows["horizon_h"] == horizon)]
+        targets.update(hit["target"].astype(str))
+    # ⚠️ A comma-joined list is deliberately NOT resolved to a rank target — the same
+    # rule `TrainTestCreator._is_ranked` applies: a mixed list is not a rank target and
+    # is left alone rather than guessed at.
+    return sorted(targets)[0] if len(targets) == 1 else ", ".join(sorted(targets))
+
+
+def is_cross_sectional(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE,
+                       root: Optional[str] = DEFAULT_ROOT) -> bool:
+    """Does this chain rank a cross-section? The `cs_rank_` rule, in ONE place.
+
+    ⚠️ It decides whether stages 3-4 exist at all (`CSP-1`), so it is not cosmetic: a
+    cross-sectional selection reads `pool__basic ⋈ pool__targets` in hand-written SQL
+    and `run_selection` RAISES on any other `--pools` value, so there is no layer 2 to
+    build and no run that could ever read a shortlist pool.
+    """
+    target = selected_for(ticker, table, root)
+    return target.startswith("cs_rank_") and "," not in target
+
+
+def _not_applicable(name: str, table: str) -> StageState:
+    """A stage that does not EXIST for this chain — distinct from one that has not run.
+
+    ⚠️ `ready=True` on purpose, and the distinction cost something. `--apply` skips a
+    ready stage; a `ready=False` row here would make `pipeline --apply` build a
+    `pool__shortlist__rank_20day__d20_h20` that **nothing can ever select over**, which
+    is precisely what `RUNBOOK.md` §3a had to warn readers off `pipeline` to prevent.
+    The `detail` says "n/a" so nobody reads the green as "this ran".
+    """
+    return StageState(
+        name,
+        ready=True,
+        detail=(f"n/a — {table} is a CROSS-SECTIONAL chain: the selection reads "
+                f"pool__basic JOIN pool__targets only, so there is no layer 2 (CSP-1)"),
+        output="",
+    )
+
+
 def status_shortlist_pool(
     ticker: str = DEFAULT_TICKER,
     table: str = DEFAULT_TABLE,
@@ -470,6 +555,8 @@ def status_shortlist_pool(
 ):
     from final_features.builder import SHAPE_SHORTLIST
 
+    if is_cross_sectional(ticker, table, root):
+        return _not_applicable("shortlist_pool", table)
     return _status_built_table(
         "shortlist_pool", ticker, _shortlist_table(table, scope), root, scope,
         SHAPE_SHORTLIST,
@@ -477,10 +564,21 @@ def status_shortlist_pool(
 
 
 def apply_shortlist_pool(
-    root: Optional[str] = DEFAULT_ROOT, scope: Optional[str] = DEFAULT_SCOPE
+    root: Optional[str] = DEFAULT_ROOT, scope: Optional[str] = DEFAULT_SCOPE,
+    ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE,
 ) -> None:
     from final_features.builder import SHAPE_SHORTLIST, build_all
 
+    # ⚠️ A SECOND GUARD, and it is not redundant with `status_shortlist_pool`'s. `--only
+    # shortlist_pool` forces a stage regardless of its `ready`, so the status check alone
+    # would still let `pipeline --only shortlist_pool` build the junk pool that
+    # `RUNBOOK.md` §3a warns about.
+    if is_cross_sectional(ticker, table, root):
+        raise ValueError(
+            f"{table} is a CROSS-SECTIONAL chain — a selection over a shortlist pool "
+            f"cannot be run for a `cs_` target (CSP-1), so building one would produce a "
+            f"table nothing can ever read. Stages 3-4 do not exist here."
+        )
     build_all(
         root=root or _report_root(), apply=True, replace=False, scope=scope,
         shape=SHAPE_SHORTLIST,
@@ -488,14 +586,22 @@ def apply_shortlist_pool(
 
 
 def status_selection_2(root: Optional[str] = DEFAULT_ROOT, table: str = DEFAULT_TABLE,
-                       scope: Optional[str] = DEFAULT_SCOPE):
+                       scope: Optional[str] = DEFAULT_SCOPE,
+                       ticker: str = DEFAULT_TICKER):
     """Has the ONE run where the channels compete happened yet?
 
     ⚠️ **Its absence is not an error and not a warning — it is the state "layer 1
     only".** `final_features` still builds a table without it, from the union, and says
     so in the COMMENT. This stage exists so that "which of the two tables am I looking
     at" is answered by the pipeline rather than by reading a `COMMENT` in psql.
+
+    ⚠️ **On a CROSS-SECTIONAL chain the answer is "there is no such run" (`CSP-1`), and
+    reporting `0 layer-2 run(s) — MANUAL` would be worse than useless**: it names a
+    command (`feature_selection.run --pools pool__shortlist__…`) that RAISES for a `cs_`
+    target, so it reads as work outstanding when the work is impossible.
     """
+    if is_cross_sectional(ticker, table, root):
+        return _not_applicable("selection_2", table)
     pool = _shortlist_table(table, scope)
     # ⚠️ SCOPED — `P4-11`. `pool` was computed here and not passed, which is the whole bug.
     runs = _layer2_runs(root, pool=pool)
@@ -796,6 +902,125 @@ def apply_evaluation() -> None:
     leaderboard(rescore=True)
 
 
+# ------------------------------------------------------------------- 9. backtest
+
+
+def _latest_run(config: str = DEFAULT_CONFIG) -> Optional[str]:
+    """The newest run folder for `config`, or None. Shares `status_model`'s matcher."""
+    state = status_model(config)
+    return state.output if state.ready else None
+
+
+def status_backtest(config: str = DEFAULT_CONFIG, split: str = "test"):
+    """Does the ranking pay for its own trading? — the first stage that charges costs.
+
+    ⚠️ **`result_evaluator` answers *does it rank?* and only this answers *does it
+    pay?*.** They are different questions and a run can pass the first and fail the
+    second, which is why this is a stage rather than a probe someone remembers to run.
+
+    ⚠️ **THE ARTEFACT LIVES INSIDE THE RUN FOLDER, WHICH IS GITIGNORED (`RPR-1`)** —
+    `<run_dir>/results/backtest_<split>.csv`, never repo-root `results/`. Both registers
+    pointed at the wrong path until 2026-08-20.
+
+    ⚠️ **PANEL RUNS ONLY.** `backtest.build_panel` needs a cross-section to rank on a
+    date; a single-series run has one name per date and `k` is meaningless. Reported as
+    n/a rather than as a failure.
+    """
+    run_dir = _latest_run(config)
+    if run_dir is None:
+        return StageState("backtest", False, "no model run yet — train one first")
+
+    path = os.path.join(run_dir, "results", f"backtest_{split}.csv")
+    if not os.path.exists(path):
+        return StageState(
+            "backtest", False,
+            f"not backtested — python -m backtest --run {os.path.basename(run_dir)} "
+            f"--top-k 20 --draws 200",
+            path,
+        )
+    frame = pd.read_csv(path)
+    # ⚠️ The null bar is a SEPARATE file and its absence is recorded as absent, never
+    # implied to be a pass (§5 rule 2). A costed Sharpe with no bar is descriptive.
+    null_path = os.path.join(run_dir, "results", f"backtest_null_{split}.csv")
+    nulled = os.path.exists(null_path)
+    return StageState(
+        "backtest",
+        ready=True,
+        detail=(f"{len(frame)} cost level(s) on {split}"
+                + ("; nulled" if nulled else " — ⚠️ NO NULL (evidence=absent)")),
+        output=path,
+        counts={"cost_levels": len(frame), "nulled": int(nulled)},
+    )
+
+
+def apply_backtest(config: str = DEFAULT_CONFIG, split: str = "test",
+                   top_k: int = 20, draws: int = 200) -> None:
+    from backtest.run import main as backtest_main
+
+    run_dir = _latest_run(config)
+    if run_dir is None:
+        raise ValueError("no model run to backtest — train one first")
+    backtest_main(["--run", os.path.basename(run_dir), "--split", split,
+                   "--top-k", str(top_k), "--draws", str(draws)])
+
+
+# ---------------------------------------------------------------- W. walkforward
+
+
+def status_walkforward(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE,
+                       out: Optional[str] = None):
+    """Is this one lucky split, or does it survive ten expanding folds?
+
+    ⚠️ **NOT A STAGE THE CHAIN PRODUCES, AND NEVER `--apply`-able.** A sweep is ~35 GPU
+    minutes and writes ten run folders; `RUNBOOK.md` §3's own rule that the expensive
+    artefact must be a deliberate act applies here exactly as it does to a selection.
+    So this row REPORTS and never runs — `manual=True`, `apply=None`.
+
+    ⚠️ **The track is located by its MANIFEST, not by a fixed path** (`WFO-1`): a track
+    directory now records the experiment it holds, so "is there a walk-forward for THIS
+    table" is answerable rather than assumed from `results/walkforward/`.
+    """
+    from walkforward import manifest as W
+
+    root = os.path.abspath(out or os.path.join(_SRC, "..", "results"))
+    if not os.path.isdir(root):
+        return StageState("walkforward", False, f"no {root}")
+
+    matches = []
+    for name in sorted(os.listdir(root)):
+        directory = os.path.join(root, name)
+        if not os.path.isdir(directory):
+            continue
+        ident = W.read(directory)
+        tables = ([ident["table"]] if ident else W.table_from_folds(directory))
+        if table in tables and (ident is None or ident.get("ticker") == ticker):
+            scored = os.path.exists(os.path.join(directory, "per_fold.csv"))
+            matches.append((name, scored, ident is not None))
+
+    if not matches:
+        return StageState(
+            "walkforward", False,
+            f"no OOS track for {table} — python -m walkforward --ticker {ticker} "
+            f"--table {table} --config <cfg> --first-test 2017-01-01 "
+            f"--out ../results/<name>  (MANUAL, ~35 min)",
+            root,
+        )
+    scored = [name for name, ok, _ in matches if ok]
+    bare = [name for name, _, ok in matches if not ok]
+    return StageState(
+        "walkforward",
+        # ⚠️ A track that was swept but never SCORED is not ready: `per_fold.csv` is
+        # where the fold series lives, and the fold SHAPE is the whole point of PRF-1.
+        ready=bool(scored),
+        detail=(f"{len(matches)} track(s): {', '.join(n for n, _, _ in matches)}"
+                + (f"; scored {', '.join(scored)}" if scored else
+                   " — swept but NOT scored (python -m walkforward.evaluate --out …)")
+                + (f"; ⚠️ no manifest on {', '.join(bare)} (pre-WFO-1)" if bare else "")),
+        output=root,
+        counts={"tracks": len(matches), "scored": len(scored)},
+    )
+
+
 # ------------------------------------------------------------------------- driver
 
 
@@ -830,12 +1055,12 @@ def stages(
             "shortlist_pool",
             "materialise pool__shortlist__<target>__d<d>_h<h> — layer 2's input",
             lambda: status_shortlist_pool(ticker, table, root, scope),
-            lambda: apply_shortlist_pool(root, scope),
+            lambda: apply_shortlist_pool(root, scope, ticker, table),
         ),
         Stage(
             "selection_2",
             "the ONE run where the surviving channels compete — MANUAL",
-            lambda: status_selection_2(root, table, scope),
+            lambda: status_selection_2(root, table, scope, ticker),
             # ⚠️ No `apply`, and not for want of a wrapper: this is the run that
             # decides which of layer 1's survivors are real, and running it is GPU
             # time plus a decision about the null. `--apply` reports MANUAL rather
@@ -866,6 +1091,29 @@ def stages(
             "score every run against its own block-shuffled null",
             status_evaluation,
             apply_evaluation,
+        ),
+        # ⚠️ **STAGES 9 AND W, ADDED 2026-08-21.** `RUNBOOK.md` §8 rule 1 makes this
+        # command the gate on quoting any number, and the two tools that produce every
+        # headline in CLAUDE.md §6-0 were invisible to it — so the gate could read green
+        # on a chain whose tradability and whose out-of-sample survival were both
+        # unmeasured. Neither is a formality: `result_evaluator` answers *does it rank?*
+        # and only `backtest` answers *does it pay?*; one split cannot tell a decayed
+        # edge from a lucky window, and only `walkforward` can.
+        Stage(
+            "backtest",
+            "does the ranking pay for its own trading — costed, against a null",
+            lambda: status_backtest(config),
+            lambda: apply_backtest(config),
+        ),
+        Stage(
+            "walkforward",
+            "is it one lucky split — ten expanding folds — MANUAL",
+            lambda: status_walkforward(ticker, table),
+            # ⚠️ No `apply`, for the same reason `selection_2` has none: a sweep is ~35
+            # GPU minutes and ten run folders. `--apply` reports MANUAL rather than
+            # spending that on someone's behalf (PIP-1's rule).
+            None,
+            manual=True,
         ),
     ]
 

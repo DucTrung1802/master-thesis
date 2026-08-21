@@ -51,6 +51,7 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from walkforward import manifest
 from walkforward.folds import Fold, FoldBuilder, make_folds
 
 DEFAULT_OUT = os.path.join(os.path.dirname(__file__), "..", "..", "results", "walkforward")
@@ -333,6 +334,19 @@ def main(argv: Optional[Sequence[str]] = None):
     out_dir = os.path.abspath(str(option("--out", DEFAULT_OUT)))
     os.makedirs(out_dir, exist_ok=True)
 
+    # ⚠️ `WFO-1` — CLAIM THE DIRECTORY BEFORE ANY GPU IS SPENT. Every artefact below is
+    # written by BASENAME, so this same command at a second horizon overwrote the first
+    # horizon's whole OOS track, silently. `manifest.claim` refuses a directory that
+    # already holds a different experiment — including the five that predate the
+    # manifest, whose table it recovers from `folds.csv`. The check is here rather than
+    # beside the write so a refusal costs seconds instead of half an hour of training.
+    ident = manifest.identity(
+        ticker=ticker, table=table, first_test=first_test, step_months=step,
+        val_months=val_months, scale_target=scale_target,
+        rank_min_width=rank_min_width,
+    )
+    manifest.claim(out_dir, ident, force="--force-out" in argv)
+
     arms = parse_arms(argv)
     # ⚠️ No `--arm` means the pre-PRF-8 single-model form, and it writes FLAT into
     # `--out` so PRF-1's own command still reproduces PRF-1's own file paths.
@@ -340,6 +354,12 @@ def main(argv: Optional[Sequence[str]] = None):
     if flat:
         module = resolve_model(model_name)
         arms = [Arm(model_name, _load_config(config_name, module), module)]
+
+    # ⚠️ The PARENT is claimed here, before a single fold is built, so a crashed sweep
+    # still owns its directory and the next command has to be deliberate about reusing
+    # it. For an arm sweep this is the only manifest carrying the KNOBS — the leaves get
+    # theirs beside their artefacts below, and `folds.csv` records no knobs at all.
+    manifest.write(out_dir, ident, arms=[a.label for a in arms], flat=flat)
 
     with namespace_lock(out_dir), runtime.RunTimer(
         f"walkforward  {ticker}.{table}  step={step}m val={val_months}m "
@@ -397,6 +417,12 @@ def main(argv: Optional[Sequence[str]] = None):
         for arm in arms:
             target_dir = out_dir if flat else os.path.join(out_dir, arm.label)
             os.makedirs(target_dir, exist_ok=True)
+            # ⚠️ The manifest travels with the ARTEFACTS, not only with `--out`, because
+            # `evaluate` and `compare` are pointed at an arm's own leaf. `arm`/`config`
+            # are provenance and deliberately NOT part of the identity — two arms are one
+            # experiment over one set of folds, which is what makes them comparable.
+            manifest.write(target_dir, ident, arm=arm.label, run_name=arm.run_name,
+                           arms=[a.label for a in arms])
             plan = pd.DataFrame(rows[arm.label])
             plan.to_csv(os.path.join(target_dir, "folds.csv"), index=False)
             predictions = collect(run_dirs[arm.label], [f.tag for f in folds])

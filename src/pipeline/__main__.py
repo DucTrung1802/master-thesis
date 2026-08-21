@@ -33,6 +33,18 @@ def main(argv=None):
     def option(flag: str, default):
         return argv[argv.index(flag) + 1] if flag in argv else default
 
+    # ⚠️ **THE ONE ENTRY POINT THAT LACKED THIS, AND IT IS THE GATE** (`RUNBOOK.md` §8
+    # rule 1). A Windows console is cp1252, and this module prints a table built from
+    # every stage's `detail` — text those stages own, not text this one wrote. A single
+    # non-cp1252 glyph in one detail therefore killed the WHOLE plan after the stages had
+    # already done their work: measured 2026-08-21, `UnicodeEncodeError` on U+22C8 from
+    # the new cross-sectional row, six seconds of database queries thrown away at the
+    # `print`. Every other stage module already reconfigures (CLAUDE.md §5 rule 18); the
+    # driver that aggregates them did not.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
     pd.set_option("display.width", 200)
     pd.set_option("display.max_colwidth", 60)
 

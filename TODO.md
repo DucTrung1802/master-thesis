@@ -53,9 +53,12 @@ below remain the engineering backlog.
 
 ---
 
-## ⚠️ START HERE — 2026-08-21, after a six-item program
+## ⚠️ START HERE — 2026-08-21, after a six-item program AND the three items that followed it
 
-**Five of six done. The sixth is the only one that touches the chain every number rests on.**
+**Six of six done.** Item 6 — the one that touches the chain every number rests on — closed
+the same day, together with `P1-8` and `P1-9`. Their measurements live in CLAUDE.md
+§6-0-ter-2, `walkforward/CONTEXT.md` §11c and §14, and `pipeline/CONTEXT.md` §1c-1d; per
+this file's own rule they are **deleted here, not ticked**.
 
 | # | asked for | verdict |
 |---|---|---|
@@ -64,13 +67,16 @@ below remain the engineering backlog.
 | 3 | many train/test settings | ✅ **six tracks, every `\|t\|` < 1.4** — the settings are worth nothing |
 | 4 | LSTM / CNN / LSTM-CNN / bidirectional | ✅ **7 arms × 10 folds**; architecture matters **only downward** |
 | 5 | other models | ✅ TCN + Transformer written and run; more is available on request |
-| 6 | **one complete flow** | ⚠️ **25 %** — see below, and it is the only item with real risk |
+| 6 | **one complete flow** | ✅ **DONE** — `python -m pipeline` now covers the cross-sectional chain end to end: **10 stages, 5.8 s, every row `up to date`**, and `RUNBOOK` §3a's two "do not use pipeline here" blocks are gone rather than reworded |
 
 ### What the five measured items actually settled
 
-- **Architecture matters at h=10, but only DOWNWARD** (§6-0-ter-2). Over **224×** of
-  capacity no arm beats the LSTM significantly and **three lose** — `cnn` −3.37, `cnnlstm`
-  −2.15, `bilstm` −2.09. `PRF-8`'s "worth nothing" was h=20 and does not reproduce.
+- **Architecture matters at h=10, but only DOWNWARD** (§6-0-ter-2) — ⚠️ **and `P1-9`
+  narrowed this the same day.** Those `t`s test MEAN RETURN. On the SHARPE difference only
+  `cnn` loses (p = 0.001); `bilstm` and `cnnlstm` earn less at lower volatility and **tie**
+  (p = 0.61 / 0.30). `gbt` GAINS +0.36 Sharpe at a nominal p = 0.044 that does **not**
+  survive the six arms tried (Bonferroni 0.0083). ⚠️ `PRF-8`'s h=20 sweep has **not** been
+  re-scored, so its ties remain mean-return results only.
 - **The dataset and split settings are worth nothing** (`walkforward` §12). ⚠️ **`step6` is
   the one to read**: retraining **twice as often** gives `t` = −0.09, so the ~45 % Sharpe
   decay across the sweep is **not staleness**.
@@ -91,15 +97,53 @@ quietly edit them: *"they all tie"* (three arms lost), *"`best_epoch` 0-2 for ev
 GBT property, not a property of the problem**), and *"row-blocking `window_design` will cut
 the peak"* (it moved 0.1 GB; the panel REASSEMBLY was the allocation).
 
+### ⚠️ THE LEADERBOARD AS IT STANDS — re-read FROM DISK 2026-08-21, not quoted from a register
+
+Both tracks reproduce CLAUDE.md §6-0 to every digit via
+`walkforward.evaluate --draws 0` (RUNBOOK §7b, ~2 min each, no GPU). Top-20, 30 bps,
+buyable only:
+
+| track | IC | `ic_t` | `sharpe@30` | `cagr@30` | market | periods | `se_sharpe` |
+|---|---|---|---|---|---|---|---|
+| **h=10 · `gbt`** | 0.1460 | 16.36 | **+2.891** 🥇 | +69.8 % | +13.9 % | 236 | 0.142 |
+| h=10 · `transformer` | 0.1433 | 16.60 | +2.622 | +72.9 % | +13.9 % | 236 | 0.131 |
+| h=10 · `tcn` | 0.1426 | 16.43 | +2.622 | +73.4 % | +13.9 % | 236 | 0.131 |
+| **h=10 · `lstm`** | 0.1412 | 16.05 | +2.531 | **+74.0 %** 🥇 | +13.9 % | 236 | 0.128 |
+| h=10 · `bilstm` | 0.1419 | 16.12 | +2.474 | +65.9 % | +13.9 % | 236 | 0.125 |
+| h=10 · `cnnlstm` | 0.1308 | 13.73 | +2.367 | +64.3 % | +13.9 % | 236 | 0.121 |
+| h=10 · `cnn` | 0.1171 | 12.42 | +2.133 | +56.8 % | +13.9 % | 236 | 0.113 |
+| **h=20 · `lstm`** *(the chain)* | 0.1097 | 6.90 | +1.991 | +47.5 % | +14.6 % | 118 | 0.155 |
+
+⚠️ **THE HIGHEST-SHARPE ARM IS NOT THE HIGHEST-CAGR ARM**, and it is `P1-9` visible in the
+LEVELS rather than only in the paired test: `gbt` earns **4.2 pp/yr less** than `lstm` while
+scoring **0.36 more** Sharpe. **"The best model" is not well-formed without an estimand** —
+RUNBOOK §7c.
+
 ### What is left, in order
 
-| # | item | ⏱ | why |
-|---|---|---|---|
-| 1 | **`P1-8` — `WFO-1` + the `results/` gitignore negation** | ~2 h | The cheap half is 3 lines and protects tracks that cost GPU-hours and are **untracked**. |
-| 2 | **`P1-9` — `compare`'s `t_paired` tests the MEAN, not the Sharpe beside it** | ~2 h | It changes how `PRF-8` and §6-0-ter-2 may be QUOTED. `walkforward.pair` already has the fix to port. |
-| 3 | ⚠️ **item 6 proper — make `pipeline` cover the cross-sectional chain** | ~1 day | `pipeline` is the gate `RUNBOOK` §8 rule 1 makes mandatory before quoting anything, and RUNBOOK §3a still has to warn readers OFF it for the chain that produces every headline. It knows nothing of stage 9 (`backtest`) or stage W (`walkforward`). ⚠️ **This is the only remaining item that edits the chain every measurement rests on** — do it in verifiable steps, not one refactor. |
-| 4 | `P4-2` — emit `n_dead_train` / `n_dead_test` | ~2 h | unchanged |
-| 5 | `STA-1` decision · `FRZ-1` · `PRF-4` · `PRF-5` · `PRF-6` | hours → months | unchanged |
+| # | item | ⏱ | local? | why |
+|---|---|---|---|---|
+| **1** | ⚠️ **re-score the h=20 `PRF-8` sweep through the fixed `compare`** | **~5 min** | ✅ | **Unfinished business from 2026-08-21.** `P1-9` flipped the h=10 verdict on **three of six** arms; §6-0-ter's h=20 ties are **still read off the MEAN column**. Cheapest item on the page and it decides whether the repo's architecture claim is stated correctly at both horizons: `python -m walkforward.compare --top-k 20 --draws 0 lstm=../results/walkforward lstm_small=../results/walkforward/prf8/lstm_small gbt=../results/walkforward/prf8/gbt` |
+| **2** | ⚠️ **take the 30-name VN30 result DOWNSTREAM** | ~2 h | ✅ | `t = +3.77` is a **SELECTION bar**, and §5d + `P2-3`: a cleared selection bar has **never once** survived to a model here. Run `final_features → train_test_creator → model → result_evaluator` on 2-3 names that cleared individually (VJC z +3.67, SSB +2.60, PLX +2.55). ⚠️ **A negative closes the thread cleanly** — that is the value |
+| **3** | **a wider cross-section at h=10 that is NOT VN30** | ~1 h | ✅ | §6-1-quater cannot separate **N** from the **date window** from the **universe rule** — all three moved together. Top-150 by `liquidity_before` restricted to 2017→ isolates the window; top-30 by the same rule isolates the RULE. Reuses `ProvidedPanel`, no Kaggle quota |
+| **4** | `P4-2` — emit `n_dead_train` / `n_dead_test` | ~2 h | ✅ | Rule 23 explains **both** apparent clearances in §6-1, and `validation.csv` still carries no such column — so every ragged-pool run needs a hand computation to read at all |
+| **5** | `FRZ-1` in `pipeline.status_data` | ~1 h | ✅ | 755 of 781 tickers were 37 sessions stale while `MAX(date)` said 2026-08-07. One query, beside `pools_behind` |
+| **6** | **re-run each LEGACY walk-forward track once** | ~0 | ✅ | ⚠️ **A limit CREATED on 2026-08-21, not discovered.** The `WFO-1` guard covers the five pre-existing tracks on their **TABLE only** — `folds.csv` records no dataset knobs and §5 rule 2 forbids inferring them. One re-run writes the manifest and closes it. `walkforward/CONTEXT.md` §14b |
+| **7** | ⚠️ **`STA-1` — decide whether `gold.stocks_ta` is rebuilt** | see `STA-1` | ✅ | **BLOCKING, not untidy**: it disagrees with `silver.stocks_basic` for all 30 VN30 names in BOTH directions, so the single-stock track can **never see a technical indicator** until it is done. Rebuild = 13 renamed columns + 289 k moved rows — its own decision |
+| **8** | **`PRF-4`** — execution realism | ~1 day | ✅ CPU | ADV/size cap, **floor days on the SELL side** (the ceiling screen covers ENTRY only), the ATC auction. Moves the LEVELS — and after `PRF-8`/`PRF-9` the levels are the only thing still moving |
+| **9** | **`PRF-5`** — survivorship | ~2 days | data | A point-in-time listing table. `z = +18.6` is protected; **+74 %/yr is not** |
+| **10** | **`PRF-3`** — the rolling-vs-expanding half | ~1 day | ✅ | Mostly answered by `PRF-2` (the post-2022 break is in the FEATURES, not the market). Only the training-window test is left, untested at h=10 and h=20 |
+| **11** | **`PRF-6`** — new information | months | — | ⚠️ **The main lever, not the last resort.** Intraday/tick (the 5-day signal decays inside ONE session), point-in-time listing, fundamentals with filing dates |
+
+**Lower still**: `P1-1` (cost model) · `P1-4b`/`P3-2` (host-side streaming) · `VRM-1`'s host
+half · `P2-2` · `P3-1`/`P3-3` · `P4-1`, `P4-3`…`P4-10`.
+
+⚠️ **Items 1-8 and 10 are LOCAL or CPU** — none touches the 30 GPU-h/week Kaggle quota.
+
+⚠️ **A NEW LIMIT WAS CREATED, NOT DISCOVERED, AND IT IS WRITTEN DOWN RATHER THAN HOPED
+OVER**: the `WFO-1` guard protects the five pre-2026-08-21 tracks on their **TABLE only**,
+because `folds.csv` records no dataset knobs and §5 rule 2 forbids inferring them. Running
+any legacy track once writes its manifest and closes the gap. `walkforward/CONTEXT.md` §14b.
 
 ⚠️ **What is NOT worth doing, on this session's evidence**: a bigger model (224× of capacity
 tied or lost), more of this data (`pool__ta` tied twice), and more dataset settings (six
@@ -683,69 +727,46 @@ you find something that does belong here, it outranks everything below it.
 
 ## P1 — unblocks hours of other work
 
-⚠️ **Re-ordered 2026-08-20.** `P1-2` (`PNL-2`) shipped 2026-08-19 and its resolution is
-recorded in ISSUES.md, so the stub was deleted; `P1-3`/`P1-4`/`P1-5`/`P1-6`/`P1-7` are done
-and live in the Archive. **`P4-11` was promoted in** from P4, because a stage reporting
-`up to date` for an experiment it never ran is a false green, which is the class §5 rule 10
-exists for. **`P1-8` is new** and heads the section: it is the only item here that protects
-an artefact somebody already paid GPU-hours for.
+⚠️ **P1 IS DOWN TO TWO STALE-COST ITEMS AS OF 2026-08-21.** `P1-8` (`WFO-1`) and `P1-9`
+(the Sharpe estimand) both shipped that day and are recorded above as DONE blocks rather
+than deleted, because each carries a REJECTED alternative and a newly created limit that a
+future session must not rediscover. `P1-2` (`PNL-2`) shipped 2026-08-19;
+`P1-3`/`P1-4`/`P1-5`/`P1-6`/`P1-7` are done and live in the Archive; `P4-11` was promoted
+in from P4 and closed. What remains here is `P1-1` (the cost model) and `P1-4b` (the
+host-side peak).
 
 
-### ⚠️ P1-9 · `compare`'s `t_paired` tests the MEAN, not the SHARPE printed beside it ⏱ ~2 h
+### ✅ P1-9 · DONE 2026-08-21 — and the Sharpe test disagrees about three of six arms
 
-⚠️ **Opened 2026-08-21, and it changes how an existing headline may be quoted.**
-`walkforward.compare` prints `d_sharpe` and `t_paired` in one row, but `compare.paired()`
-computes that `t` on the mean period-RETURN difference (`compare.py:110`). The two are
-different estimands and they can disagree in SIGN: the h=10 sweep's `gbt` arm shows
-`d_sharpe` **+0.36** beside `t` **−1.02** — a lower mean return at lower volatility, which
-is not a contradiction and reads like one.
+`compare.paired()` now returns BOTH estimands, each with its own interval, by reusing
+`pair.block_bootstrap_diff` rather than writing a second one. Numbers in **CLAUDE.md
+§6-0-ter-2** and **`walkforward/CONTEXT.md` §11c** — do not re-derive them here.
 
-⚠️ **`PRF-8`'s headline was read off this column.** *"Paired |t| < 1 at every cost level"*
-is therefore a statement about **mean return**; on the Sharpe difference the architecture
-question has never been tested at either horizon. Same for §6-0-ter-2's ties.
+| what changed | |
+|---|---|
+| the column formerly `t_paired` | is **`t_ret`**, and it always was a MEAN-RETURN test |
+| `d_sharpe` | carries `sh_ci_lo` / `sh_ci_hi` / `p_sharpe` from a PAIRED circular block bootstrap |
+| `ac1` | printed per row — the lag-1 autocorrelation of the difference, which is what `--block` has to cover (it ran −0.09…+0.06, so `block=2` did no hidden work) |
+| the verdict | **"three lose" was a mean-return claim; on Sharpe only `cnn` does.** `gbt` GAINS at a nominal p = 0.044 that does not survive six arms |
 
-**The fix already exists one module over.** `walkforward.pair` (P2-4) bootstraps BOTH
-estimands after making exactly this mistake in its first version — `walkforward/CONTEXT.md`
-§10b. Port `block_bootstrap_diff`'s two-estimand summary into `compare`, and print the
-Sharpe difference with its own interval rather than bare.
+⚠️ **A defect in the ported code was found by the test that compares an arm with itself**:
+`pair.summarise`'s two-sided p could return **2.0** on exact ties at zero. Clipped; it never
+fired on `P2-4`'s published numbers because two strategies never tie exactly. **`BOO-1`**.
 
-⚠️ **Until it ships, quote `t_paired` as a return test and leave `d_sharpe` unqualified.**
+⚠️ **Left undone deliberately**: the h=20 `PRF-8` sweep is **not** re-scored, so §6-0-ter's
+ties are still mean-return only. That is item 1 in START HERE and costs ~5 minutes.
 
-### ⚠️ P1-8 · Fix `WFO-1` — `walkforward` overwrites the previous sweep ⏱ ~2 h
+### ✅ P1-8 · DONE 2026-08-21 — `WFO-1` closed by a REFUSAL, and `RPR-1`'s half with it
 
-⚠️ **Opened 2026-08-20 after nearly destroying `PRF-1`'s track.** `run.DEFAULT_OUT` is
-`results/walkforward/` and all three artefacts are written by BASENAME, so `RUNBOOK.md`
-§3's documented command run at a second horizon overwrites the first horizon's entire OOS
-track — silently, no fingerprint check, no message. It was caught by reading `DEFAULT_OUT`
-before pressing enter, which is not a control.
-
-**Two fixes, and the second is the cheap half:**
+Numbers and the rejected alternative in **`walkforward/CONTEXT.md` §14**. One line each:
 
 | | |
 |---|---|
-| **derive the leaf from the experiment** | `results/walkforward/<ticker>__<table>/`, exactly as `train_test_creator` and `final_features` already name their outputs. Then two horizons cannot collide and `--out` goes back to being an override |
-| **refuse a mismatched directory** | `folds.csv` already records the run names, which carry the table. Reading it and raising when it names a different table is ~10 lines and would have caught this without any renaming |
-
-⚠️ **The `evaluate` half must move with it**: `--horizon` defaults to 20 and sets BOTH the
-period cut and the `return_{h}day` column scored, so an h=10 track scored without
-`--horizon 10` silently scores the wrong label against the right predictions. Derive it
-from the track, or refuse when `folds.csv` disagrees.
-
-⚠️ **Third instance of one shape** — `PRF-8`'s concurrency trap (dataset names derived
-from the DATA, `walkforward/CONTEXT.md` §8c) and `PRB-1` (only the report ROOT separates a
-probe from a chain input). Two were fixed with a lock and a second root; **neither helps a
-sequential re-run of the same command**, which is the ordinary way this one fires.
-
-⚠️ **AND `RPR-1` IS WHAT TURNS THIS FROM ANNOYING INTO DANGEROUS — measured 2026-08-20.**
-`git ls-files results/` returns **NOTHING**: `.gitignore:50` is a blanket `*.csv` and
-`results/` carries no negation rule, so **both walk-forward tracks exist only on this
-machine**. `reports/` is fine (1,377 tracked files, 63 `outstanding.csv`) because it HAS
-negations; `results/` was never given any. So the repo's strongest evidence —
-`predictions_oos.csv` at h=20 and h=10, 33 GPU-minutes each — is simultaneously
-**untracked** and **one omitted flag from being overwritten**. Either half alone is
-survivable. **Decide both together**: a negation rule for `results/**/predictions_oos.csv`
-+ `per_fold.csv` + `folds.csv` is ~3 lines (16.5 MB each, so `per_fold`/`folds` alone may
-be the right call), and it is the cheaper half of this item.
+| the fix | `walkforward/manifest.py` — `run.main` CLAIMS the directory before a fold is built; the rename to `results/walkforward/<ticker>__<table>/` was **rejected** because five tracks are cited BY PATH in three registers |
+| verified | the exact command that nearly destroyed `PRF-1` now exits in **< 1 s**, before any GPU |
+| legacy tracks | protected via `folds.csv`'s run names — ⚠️ **on the TABLE only**; knobs are not recorded there and are not inferred |
+| the scoring half | `evaluate` and `compare` DERIVE `--horizon` from the track and raise on disagreement; `compare` also refuses two horizons and points at `pair` |
+| `RPR-1`'s half | `folds.csv` + `per_fold.csv` negated — **26 files, 41 KB**; `predictions_oos.csv` stays ignored at **323 MB** for 18. `git ls-files --others --exclude-standard results/` went 0 → 26 |
 
 ### ✅ P4-11 · DONE 2026-08-21 — the layer-2 detection is scoped to the chain being asked about
 
@@ -793,7 +814,7 @@ stage while saying everything is fine.
 **Why it is P1 and not P4:** `RUNBOOK.md` §8 rule 1 makes this command the gate on
 quoting any number (*"`python -m pipeline` must show `up to date` for every stage below
 the one you are quoting"*), and RUNBOOK §3a already has to warn readers off `pipeline`
-for the cross-sectional chain in two separate ⚠️ blocks. A gate that answers about the
+for the cross-sectional chain in two separate ⚠️ blocks (✅ **both removed 2026-08-21**). A gate that answers about the
 wrong experiment is worse than no gate. ⚠️ It is also the reason the cross-sectional
 chain is run command-by-command instead of through `--apply`.
 

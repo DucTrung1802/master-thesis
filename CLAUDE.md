@@ -1104,7 +1104,7 @@ because h=10 lost, but because it has not won the test that matters.
 |---|---|
 | **PRF-1** — is it one lucky split? | **No.** 10 folds, 118 periods, z = +12.3. ⚠️ Sharpe@30 DOES decay: slope −0.100/fold, first five +2.775 → last five +1.564. But 2023/24/25 are **+2.64 / +0.90 / +1.39**, all above their market; **2022 is the only bad fold and it is bad for everyone** (the universe itself ran −0.94 that year) |
 | **PRF-7** — were the 13 channels fitted to the test folds? | **Bounded, and MILD.** Re-running the identical selection on dates < 2017 keeps **51 of 61** channels (Jaccard 0.761, **5.8 sd** above chance), shortlists 8 of 13 against a chance of 2.17, picks the same top two. ⚠️ It bounds the bias, it does not remove it |
-| **PRF-8** — would a different architecture do better? | **Not at h=20.** 205,441 params, **2,033 params** and a **1,400-node GBT** all tie on the identical folds — paired \|t\| < 1 at every cost level. §6-0-ter. ⚠️ **QUALIFIED 2026-08-21**: at h=10 three of six alternatives lose SIGNIFICANTLY (§6-0-ter-2), and that `\|t\|` tests MEAN RETURN, not Sharpe |
+| **PRF-8** — would a different architecture do better? | **Not at h=20.** 205,441 params, **2,033 params** and a **1,400-node GBT** all tie on the identical folds — paired \|t\| < 1 at every cost level. §6-0-ter. ⚠️ **RE-QUALIFIED 2026-08-21 when `P1-9` shipped**: that `\|t\|` tests MEAN RETURN, not Sharpe, and h=20 has **not** been re-scored. At h=10 the Sharpe test says **one** arm loses (`cnn`, p = 0.001), not three, and `gbt` GAINS at a nominal p = 0.044 that does not survive six arms (§6-0-ter-2) |
 | **PRF-0** — is it buying names nobody could sell? | **Marginally, and removing it HELPS.** The model picks ceiling names 1.33× as often as chance (against 2.14× for a 5-day screen); excluding them takes test +1.484 → **+1.551**. ✅ Now applied BY DEFAULT in `backtest.build_panel`, not by a probe |
 
 ### ⚠️ 6-0-b. ✅ AND IT BEATS "PREDICT NO CHANGE" — the first thing here that does
@@ -1230,21 +1230,43 @@ The same test as `PRF-8`, one horizon down, **224× of capacity** (1,398 decisio
 `cnnlstm`, `tcn`, `transformer`); all seven trained on ONE build of each of 10 folds.
 **2h 48m sweep + 22m scoring, 0 errors.**
 
-| arm | capacity | Sharpe@30 | IC | **paired `t` vs `lstm`** | null z |
-|---|---|---|---|---|---|
-| **`gbt`** | **1,398 nodes** | **+2.891** | **+0.1460** | −1.02 | +22.57 |
-| `transformer` | 68,417 | +2.622 | +0.1433 | −0.33 | +20.08 |
-| `tcn` | 18,113 | +2.622 | +0.1426 | −0.20 | +20.25 |
-| `lstm` *(ref)* | 208,769 | +2.531 | +0.1412 | — | +18.58 |
-| `bilstm` | 313,153 | +2.474 | +0.1419 | **−2.09** ❌ | +17.55 |
-| `cnnlstm` | 30,369 | +2.367 | +0.1308 | **−2.15** ❌ | +16.80 |
-| `cnn` | 5,185 | +2.133 | +0.1171 | **−3.37** ❌ | +15.37 |
+⚠️ **THE TABLE BELOW WAS RE-SCORED ON 2026-08-21 WHEN `P1-9` SHIPPED, AND THE VERDICT
+COLUMN SPLIT IN TWO.** `t_ret` is the old `t_paired` — a test of the mean period-RETURN
+gap. `d_sharpe` now carries its own block-bootstrap interval, and **the two disagree about
+three of the six arms.** Both are paired against `lstm` over the same 236 periods (ρ
+0.91-0.94); at 30 bps, 2,000 circular block draws:
 
-⚠️ **ARCHITECTURE MATTERS AT h=10, BUT ONLY DOWNWARD.** No arm beats the LSTM
-significantly; **three lose to it significantly**. §6-0-ter's *"the architecture is worth
-nothing"* was measured at h=20 and does **not** reproduce here. The statement that survives
-both is narrower than either: **choosing the wrong architecture costs money; choosing a
-better one buys nothing.**
+| arm | capacity | Sharpe@30 | IC | `t_ret` (MEAN) | **`d_sharpe` [95 % CI]** | `p_sharpe` | null z |
+|---|---|---|---|---|---|---|---|
+| **`gbt`** | **1,398 nodes** | **+2.891** | **+0.1460** | −1.02 | **+0.360 [+0.013, +0.721]** | **0.044** ⚠️ | +22.57 |
+| `transformer` | 68,417 | +2.622 | +0.1433 | −0.33 | +0.091 [−0.171, +0.385] | 0.537 | +20.08 |
+| `tcn` | 18,113 | +2.622 | +0.1426 | −0.20 | +0.091 [−0.119, +0.339] | 0.406 | +20.25 |
+| `lstm` *(ref)* | 208,769 | +2.531 | +0.1412 | — | — | — | +18.58 |
+| `bilstm` | 313,153 | +2.474 | +0.1419 | **−2.09** ❌ | −0.058 [−0.279, +0.161] | **0.612** ✅ tie | +17.55 |
+| `cnnlstm` | 30,369 | +2.367 | +0.1308 | **−2.15** ❌ | −0.164 [−0.472, +0.157] | **0.295** ✅ tie | +16.80 |
+| **`cnn`** | 5,185 | +2.133 | +0.1171 | **−3.37** ❌ | **−0.398 [−0.678, −0.135]** | **0.001** ❌ | +15.37 |
+
+⚠️ **"THREE LOSE SIGNIFICANTLY" WAS A CLAIM ABOUT MEAN RETURN. ON SHARPE, ONE DOES.**
+`bilstm` and `cnnlstm` earn less per period at *lower volatility*, so their risk-adjusted
+gap is indistinguishable from zero (p = 0.61 and 0.30). Only `cnn` loses on both.
+
+⚠️ **AND `gbt` BEATS THE LSTM ON SHARPE AT A NOMINAL p = 0.044, WHICH DOES NOT SURVIVE THE
+SIX ARMS THAT WERE TRIED.** Bonferroni over one reference and six challengers is
+**0.05/6 = 0.0083**: `cnn`'s 0.001 clears it, `gbt`'s 0.044 does not. That is `NUL-1` one
+level up and the same shape §6-1 point 3 records for the five-ticker search — so the honest
+statement is *"`gbt` is the best arm measured and its advantage is not established"*, never
+*"`gbt` wins"*. ⚠️ Its `p_sharpe` also **rises with cost** (0.040 → 0.044 → 0.051 at
+20/30/50 bps), which is `backtest` §3's identity showing through: `gbt` trades more.
+
+⚠️ **SO THE SENTENCE THAT SURVIVES IS NARROWER THAN BOTH EARLIER ONES.** Not *"the
+architecture is worth nothing"* (§6-0-ter, h=20, and also read off the MEAN column) and not
+*"three lose"*. It is: **one architecture is measurably worse risk-adjusted (`cnn`, which
+pools the sequence away), the rest tie, and the best-looking one cannot be separated from
+the reference once the search is priced.**
+
+⚠️ **`ac1` IS THE REASON THE BOOTSTRAP IS TRUSTED HERE**: the lag-1 autocorrelation of every
+arm's difference series is **−0.09 … +0.06**, so the periods really are near-independent and
+`block=2` is not doing hidden work. Measured, not assumed — it is printed per row.
 
 ⚠️ **AND IT IS NOT A CAPACITY STORY.** The best arm is the SMALLEST (1,398 nodes); the
 largest (313 k) sits *below* the 209 k reference; the second-worst is 5,185 parameters.
@@ -1253,12 +1275,13 @@ Sharpe, while the two arms keeping a per-timestep view of the whole window tie. 
 reading that **the sequence inside the lookback is worth nothing** reproduces and is the
 better explanation of the whole table.
 
-⚠️ **`t_paired` DOES NOT TEST THE SHARPE GAP, AND §6-0-ter WAS READ OFF THAT COLUMN.**
-`compare.paired()` computes `t` on the mean period-RETURN difference while the table prints
-`d_sharpe` beside it — `gbt` shows them disagreeing in sign (`d_sharpe` **+0.36**, `t`
-**−1.02**: a lower mean return at lower volatility). So §6-0-ter's *"paired |t| < 1 at every
-cost level"* is a claim about **mean return**, not Sharpe, and on the Sharpe difference the
-architecture question has **never been tested at either horizon**. TODO **P1-9**.
+✅ **`P1-9` SHIPPED 2026-08-21 AND THIS IS WHAT IT MEASURED.** `compare.paired()` computed
+its `t` on the mean period-RETURN difference while the table printed `d_sharpe` beside it
+bare, so both this section and §6-0-ter were read off the wrong column. It now reports
+**both estimands**, each with its own interval, by reusing `walkforward.pair`'s
+`block_bootstrap_diff` rather than a second implementation. ⚠️ **The h=20 `PRF-8` sweep has
+NOT been re-scored**, so §6-0-ter's *"paired |t| < 1 at every cost level"* is still a claim
+about mean return only — one `walkforward.compare` run would settle it.
 
 ⚠️ **AND "BEST EPOCH IS 1" IS AN LSTM PROPERTY, NOT A PROPERTY OF THE PROBLEM.** That
 sentence has been quoted four times here as evidence capacity is worthless. Across these 70
@@ -1425,6 +1448,13 @@ tensors** — 15m 03s. Pooled over 118 non-overlapping periods, top-20 of 150, b
 returns, so `se_sharpe = 0.155` is the error bar on the wrong quantity): `lstm_small`
 `t = +0.87…+0.88`, `gbt` `t = +0.42…+0.47` at 20/30/50 bps. **Every |t| < 1.**
 
+⚠️ **THAT `t` TESTS THE MEAN RETURN, NOT THE SHARPE PRINTED BESIDE IT (`P1-9`, fixed
+2026-08-21), AND THIS SWEEP HAS NOT BEEN RE-SCORED.** `compare` now reports a bootstrap
+interval for the Sharpe difference too, and at h=10 the two columns disagreed about three
+of six arms (§6-0-ter-2). So the h=20 tie above is established **on mean return** and is
+merely *unmeasured*, not contradicted, on Sharpe — one `walkforward.compare` run over
+`results/walkforward/prf8` settles it. Until then quote this row as a return result.
+
 ⚠️ **THE RESULT LIVES IN THE 13 CHANNELS, NOT IN THE ARCHITECTURE**, and this is the fourth
 independent measurement pointing that way — after §5c's eleven architectures inside one
 error bar, `P2-3`'s *"best epoch 1 of 21"*, and PRF-1's nine-of-ten folds stopping at epoch
@@ -1434,8 +1464,10 @@ statistics where the LSTM sees 260 numbers**, and it ties.
 
 ⚠️ **So "try a bigger model" is closed as an answer to anything in this repo** — ⚠️ **but
 "any model will do" is NOT, and 2026-08-21 measured the difference** (§6-0-ter-2): at h=10 a
-CNN loses **0.40 Sharpe** to the LSTM at `t` = −3.37, and a bidirectional LSTM 60 % larger
-loses at −2.09. Bigger buys nothing; WRONGER costs. What is
+CNN loses **0.40 Sharpe** to the LSTM, and it is the ONE arm that loses on the
+risk-adjusted test as well as on mean return (**p = 0.001**, the only one surviving a
+correction for six arms). The bidirectional LSTM's `t` = −2.09 is a MEAN-RETURN loss whose
+Sharpe gap is a tie (p = 0.61). Bigger buys nothing; the WRONG INDUCTIVE BIAS costs. What is
 left is FEATURES (TODO `PRF-9`, 90 → 800 candidates), the HORIZON (`PRF-2`), honest
 EXECUTION (`PRF-4`/`PRF-5`) and new DATA (`PRF-6`). ⚠️ It also makes `PRF-7`'s bounded
 selection look-ahead close to the WHOLE story about where this Sharpe comes from rather
@@ -1750,7 +1782,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (**16 open**, 36 resolved, codes permanent — `PNL-2`/`PRB-1` closed, `VRM-1` and `FRZ-1` opened 2026-08-19).
+**Open issues live in [ISSUES.md](ISSUES.md)** (**16 open**, 35 resolved, codes permanent — `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -1802,7 +1834,7 @@ brokers' books are unreachable.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](ISSUES.md)** | 16 open / 36 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](ISSUES.md)** | 16 open / 35 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](TODO.md)** | the one backlog, priority-ordered, every item costed | deciding what to do next |
 | `README.md` | the front door; routes here | — |
 | `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |

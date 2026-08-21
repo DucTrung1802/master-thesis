@@ -216,3 +216,28 @@ experiment/experiment_10/_cache/
 # Before committing a new WIDE-pool run, check that one file: the deliverables are
 # `feature_importance.csv` and `outstanding.csv`, and `dropped_for` already records
 # what each channel was pruned into.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ `P1-8` / `WFO-1` + `RPR-1`, 2026-08-21 — THE WALK-FORWARD TRACKS WERE
+# SIMULTANEOUSLY UNTRACKED AND ONE OMITTED FLAG FROM BEING OVERWRITTEN.
+# Measured before writing this: `git ls-files results/` returned NOTHING. The
+# blanket `*.csv` on line 50 takes every artefact `walkforward` writes, and
+# `results/` — unlike `reports/`, which has negations — was never given any. So
+# the repo's strongest evidence (PRF-1 at h=20 and the h=10 track, ~33 GPU-min
+# each) existed only on this machine. The refusal in `walkforward/manifest.py`
+# fixes the overwrite half; this pair fixes the untracked half.
+#
+# ⚠️ `predictions_oos.csv` IS DELIBERATELY NOT NEGATED, and the number is why:
+# 18 of them total **323 MB** (16.5-19 MB each), against **19 KB** for all 18
+# `folds.csv` and **22 KB** for all 8 `per_fold.csv`. `per_fold.csv` carries the
+# per-fold Sharpe/IC/CAGR series every register quotes and `folds.csv` carries
+# the fold geometry and run names, so the pair below tracks the EVIDENCE at
+# 41 KB. The raw OOS predictions stay reproducible-only, which is `RPR-1`
+# accepted on purpose rather than discovered later — re-deriving one costs the
+# ~33 GPU-minutes recorded in `walkforward/CONTEXT.md`.
+#
+# `manifest.json` needs no rule: no blanket `*.json` exists, so the identity
+# that makes a track re-identifiable is already tracked. Verified with
+# `git check-ignore -v`.
+!results/**/folds.csv
+!results/**/per_fold.csv

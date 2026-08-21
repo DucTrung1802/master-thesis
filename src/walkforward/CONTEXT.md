@@ -600,19 +600,54 @@ times in this repo as evidence that capacity is worthless. It is an **LSTM and G
 property: the convolutional arms genuinely train for 6-20 epochs. The sentence must be
 attached to an architecture from now on, not to the problem.
 
-### 11c. ⚠️ `t_paired` DOES NOT TEST THE SHARPE GAP — and PRF-8 was read off this column
+### 11c. ✅ `P1-9` SHIPPED 2026-08-21 — AND THE SHARPE TEST DISAGREES ABOUT THREE OF SIX ARMS
 
-`compare.paired()` computes its `t` on the mean period-RETURN difference
-(`compare.py:110`), while the table prints `d_sharpe` beside it. `gbt` shows the two
-disagreeing in sign — `d_sharpe` **+0.36** against `t` **−1.02** — which is not a
-contradiction: it earns a *lower mean return at lower volatility*.
+`compare.paired()` computed its `t` on the mean period-RETURN difference while the table
+printed `d_sharpe` beside it bare, so §11a above and `PRF-8` were both read off the wrong
+column. It now returns **both estimands**, each with its own interval, by reusing
+`pair.block_bootstrap_diff` rather than writing a second one — the same blocks are drawn
+from both arms, so the pairing survives the resampling.
 
-⚠️ **So `PRF-8`'s headline — "paired |t| < 1 at every cost level" — is a statement about
-MEAN RETURN, not about Sharpe**, and *"the architecture is worth nothing"* should be
-quoted with that attached. On the Sharpe difference the question was never tested at
-either horizon. This is §10b's error one module over: **two numbers side by side are only
-a cross-check when they measure the same thing.** `walkforward.pair` bootstraps both
-estimands for exactly this reason; `compare` does not, and should (TODO **P1-9**).
+**Re-scored on the identical tracks, 3m 23s, 236 periods, ρ 0.91-0.94, 2,000 draws,
+`block=2`. At 30 bps, against `lstm`:**
+
+| arm | `t_ret` (MEAN) | verdict on RETURN | **`d_sharpe` [95 % CI]** | `p_sharpe` | verdict on SHARPE |
+|---|---|---|---|---|---|
+| `gbt` | −1.02 | tie | **+0.360 [+0.013, +0.721]** | **0.044** | ⚠️ **GAINS** (nominal) |
+| `transformer` | −0.33 | tie | +0.091 [−0.171, +0.385] | 0.537 | tie |
+| `tcn` | −0.20 | tie | +0.091 [−0.119, +0.339] | 0.406 | tie |
+| `bilstm` | **−2.09** | ❌ loses | −0.058 [−0.279, +0.161] | **0.612** | ✅ **tie** |
+| `cnnlstm` | **−2.15** | ❌ loses | −0.164 [−0.472, +0.157] | **0.295** | ✅ **tie** |
+| `cnn` | **−3.37** | ❌ loses | **−0.398 [−0.678, −0.135]** | **0.001** | ❌ **loses** |
+
+⚠️ **"THREE LOSE SIGNIFICANTLY" IS A MEAN-RETURN CLAIM. ON SHARPE, ONE DOES.** `bilstm`
+and `cnnlstm` earn less per period at *lower volatility*; the risk-adjusted gap is
+indistinguishable from zero. That is not a contradiction and it reads like one, which is
+precisely why the two columns had to be separated.
+
+⚠️ **AND `gbt`'s GAIN DOES NOT SURVIVE THE SIX ARMS THAT WERE TRIED.** Bonferroni over
+one reference and six challengers is **0.05/6 = 0.0083**: `cnn` (0.001) clears it, `gbt`
+(0.044) does not. `NUL-1` one level up — the same shape CLAUDE.md §6-1 point 3 records for
+the five-ticker search. **Quote it as "the best arm measured, advantage not established".**
+
+⚠️ **`gbt`'s `p_sharpe` RISES WITH COST** — 0.040 / 0.044 / 0.051 at 20/30/50 bps, and the
+CI's lower bound crosses zero between 30 and 50. `backtest` §3's identity showing through:
+`gbt` trades more, so the advantage is partly a gross-return one that fees eat.
+
+⚠️ **`ac1` IS WHY THE BOOTSTRAP IS TRUSTED HERE, and it is printed per row.** The lag-1
+autocorrelation of each arm's difference series is **−0.09 … +0.06**, so the periods really
+are near-independent and `block=2` is doing no hidden work. The block default is a fact
+about the DESIGN — `rebalance_dates` takes every `h`-th date, so periods do not overlap and
+`pair`'s `2 × horizon` (which exists for DAILY returns) has no analogue beyond 2.
+
+⚠️ **THE h=20 `PRF-8` SWEEP HAS NOT BEEN RE-SCORED.** Its ties are still mean-return
+results only. One `walkforward.compare` run over `results/walkforward/prf8` settles it, and
+until then §8's headline carries the same caveat this section just removed from §11a.
+
+⚠️ **A DEFECT IN THE PORTED CODE WAS FOUND BY THE TEST THAT COMPARES AN ARM WITH
+ITSELF** — `pair.summarise`'s two-sided p was `2 × min(P(x≤0), P(x≥0))`, which returns
+**2.0** when every draw is exactly 0. Clipped at 1.0; it never fired on §10's published
+numbers because two different strategies never tie exactly. `BOO-1` in ISSUES.md.
 
 ### 11d. What §11 does NOT establish
 
@@ -624,8 +659,10 @@ estimands for exactly this reason; `compare` does not, and should (TODO **P1-9**
    channels all seven arms read.
 3. **One `k`, one universe, one horizon.** `PRF-8`'s h=20 arms were not re-run here, so
    "h=20 ties and h=10 does not" is a comparison across two sweeps, not a paired test.
-4. ⚠️ **`gbt` leading is not a recommendation.** It is one arm, untuned, ahead by a gap the
-   tested statistic calls a tie.
+4. ⚠️ **`gbt` leading is STILL not a recommendation, and §11c changed the reason.** The
+   Sharpe test now calls its gap a nominal WIN (p = 0.044) rather than a tie — but that p
+   does not survive the six arms that were tried (Bonferroni 0.0083), and the arm is
+   untuned. *"Best measured, not established"* is the whole claim.
 
 ---
 
@@ -776,3 +813,90 @@ beside `rss` told the difference**, and `selector._tick` reports both for this r
 the ranker ensemble's own copies of a 1,398-column design, and `PRF-9` had already settled
 that the money question is downstream — so the marginal value of 233 over 162 did not
 justify a fifth wall. 162 is still 35 % wider than the previous best.
+
+---
+
+## 14. ✅ `WFO-1` CLOSED 2026-08-21 — one directory, one experiment, and a refusal
+
+`run.DEFAULT_OUT` is a single fixed path and all three artefacts are written by BASENAME,
+so `RUNBOOK.md` §3's documented command run at a second horizon overwrote the first
+horizon's whole OOS track — silently. It was caught on 2026-08-20 by reading `DEFAULT_OUT`
+before pressing enter, which is not a control.
+
+### 14a. The fix is a REFUSAL, and the rename was rejected on purpose
+
+Two candidates were on the table and only one survives contact with the repo as it is:
+
+| candidate | verdict |
+|---|---|
+| derive the leaf — `results/walkforward/<ticker>__<table>/` | ❌ **rejected.** Five tracks already exist under hand-chosen names (`walkforward`, `walkforward_h10`, `_h10_arch`, `_h10_wide`, `settings_h10/*`) that CLAUDE.md, RUNBOOK and this file cite BY PATH. Moving them trades a live citation for a guarantee the refusal gives anyway |
+| **refuse a mismatched directory** | ✅ **shipped.** `walkforward/manifest.py` |
+
+`manifest.claim(out_dir, ident)` runs **before a single fold is built**, so a refusal costs
+seconds rather than half an hour of training. The identity is everything that changes the
+TENSORS a fold is built from:
+
+```
+ticker  table  first_test  step_months  val_months  scale_target  rank_min_width
+```
+
+`table` carries the target, the lookback and the horizon; `arm` and `config` are recorded
+as **provenance and deliberately NOT identity**, or two arms of one sweep would read as two
+experiments and `compare` could never be run on them.
+
+### 14b. ⚠️ THE FIVE LEGACY TRACKS ARE COVERED — BUT ONLY ON THE TABLE
+
+They carry no manifest, so `claim` falls back to recovering the table from `folds.csv`'s
+run names (`<model>__<ticker>__<table>__<fold tag>__<stamp>`, so the table comes off by
+position). Verified against every track on disk, including the scoped
+`rank_10day__final__d20_h10__wide10`.
+
+⚠️ **`folds.csv` records NO KNOBS, and they are not inferred** (§5 rule 2 — an absent
+measurement is absent). So a legacy directory is guarded against the horizon collision that
+actually happened and **not** against a knob-only one. That limit is pinned by a test named
+after it, rather than left to be discovered. Re-running any legacy track once writes its
+manifest and closes the gap.
+
+### 14c. The half that misstates a number rather than destroying one
+
+`evaluate --horizon` and `compare --horizon` both **defaulted to 20**, and the horizon sets
+BOTH the interval the periods are cut at AND the `return_{h}day` column scored — so an h=10
+track scored without the flag silently scored the wrong label against the right
+predictions, with nothing in the output saying so.
+
+Both now **derive** it from the track (manifest, else `folds.csv`, via
+`train_test_creator.FINAL_TABLE` — the one parser that owns the name, per `TGT-1`) and
+**raise** when an explicit `--horizon` disagrees. `compare` additionally refuses arms built
+at different horizons and points at `walkforward.pair`, which is the only tool that can
+compare two (§10).
+
+### 14d. ⚠️ `RPR-1`'s half, fixed in the same commit — the tracks were UNTRACKED too
+
+`git ls-files results/` returned **nothing**: `.gitignore`'s blanket `*.csv` takes every
+artefact and `results/` — unlike `reports/`, which has negations — was never given any. So
+the repo's strongest evidence was simultaneously untracked and one omitted flag from being
+overwritten. Either half alone is survivable.
+
+**Measured before deciding, not after:**
+
+| artefact | count | total |
+|---|---|---|
+| `folds.csv` | 18 | **19 KB** |
+| `per_fold.csv` | 8 | **22 KB** |
+| `predictions_oos.csv` | 18 | **323 MB** |
+
+So `folds.csv` + `per_fold.csv` are negated — **26 files, 41 KB**, and `per_fold.csv` is
+where the per-fold Sharpe/IC/CAGR series every register quotes actually lives.
+`predictions_oos.csv` stays ignored: 323 MB in git to save the ~33 GPU-minutes that
+regenerate one is a bad trade, and recording it here makes it `RPR-1` **accepted on
+purpose** rather than discovered later. `manifest.json` needs no rule — no blanket `*.json`
+exists — so the identity that makes a track re-identifiable is tracked automatically.
+
+### 14e. What §14 does NOT establish
+
+1. **It is a guard, not a naming scheme.** Two sweeps of the SAME experiment still
+   overwrite each other, by design — a redo is legitimate.
+2. ⚠️ **A track swept before 2026-08-21 and never re-run carries no knobs**, so §14b's
+   limit applies to it until it is.
+3. **Nothing here re-derives a lost artefact.** `predictions_oos.csv` remains untracked and
+   the run folders it is assembled from are gitignored (`RPR-1`).

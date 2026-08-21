@@ -38,6 +38,7 @@ import numpy as np
 import pandas as pd
 
 from backtest import portfolio as P
+from walkforward import manifest
 from walkforward.evaluate import attach_returns, load_track, score
 
 COSTS = (20, 30, 50)
@@ -58,6 +59,25 @@ def _parse_arms(argv: Sequence[str]) -> List[Tuple[str, str]]:
             "lstm_small=../results/walkforward/prf8/lstm_small`"
         )
     return arms
+
+
+def _shared_horizon(arms: Sequence[Tuple[str, str]],
+                    requested: Optional[int] = None) -> int:
+    """The one horizon every arm was built at, or a refusal naming the disagreement."""
+    per_arm = {label: manifest.horizon_for(directory, requested)
+               for label, directory in arms}
+    distinct = set(per_arm.values())
+    if len(distinct) > 1:
+        raise SystemExit(
+            "\n⚠️  the arms were built at different horizons and cannot be compared "
+            "arm-for-arm:\n"
+            + "".join(f"    {label:<14s} h={h}\n" for label, h in per_arm.items())
+            + "    `compare` pairs arms INSIDE one sweep — same dates, same panel. Two "
+              "horizons produce different period counts over different holding "
+              "intervals, so use `python -m walkforward.pair` (P2-4), which pairs on "
+              "the CALENDAR.\n"
+        )
+    return distinct.pop()
 
 
 def load_arms(arms: Sequence[Tuple[str, str]]) -> Dict[str, pd.DataFrame]:
@@ -88,27 +108,73 @@ def net_series(panel: pd.DataFrame, horizon: int, column: str, top_k: int,
     return track.frame().set_index("date")["net"]
 
 
-def paired(a: pd.Series, b: pd.Series, horizon: int,
-           sessions: float = P.SESSIONS_PER_YEAR) -> Dict[str, float]:
-    """Paired difference `a - b` over the common rebalance dates.
+#: ⚠️ **TWO PERIODS, AND THE CHOICE IS ABOUT THE DESIGN RATHER THAN ABOUT TASTE.**
+#: `pair` bootstraps DAILY returns and must use `2 × horizon` because consecutive days
+#: share a holding window. Here the unit is a *non-overlapping* period — `rebalance_dates`
+#: takes every `h`-th date — so the mechanical overlap is one period and the analogue of
+#: `pair`'s `2 × lag` is 2. `paired` reports the difference series' lag-1 autocorrelation
+#: beside the result so the choice is auditable rather than asserted.
+DEFAULT_BLOCK = 2
 
-    Returns the mean difference annualised, its t-stat, and the correlation between the
-    two arms' period returns — which is the number that says how much the pairing bought.
+
+def paired(a: pd.Series, b: pd.Series, horizon: int,
+           sessions: float = P.SESSIONS_PER_YEAR, draws: int = 2000,
+           block: int = DEFAULT_BLOCK, seed: int = 7) -> Dict[str, float]:
+    """Paired difference `a - b` over the common rebalance dates — BOTH estimands.
+
+    ⚠️ **`P1-9`: THIS USED TO RETURN A `t` ON THE MEAN RETURN ONLY, WHILE `main` PRINTED
+    `d_sharpe` IN THE SAME ROW.** They are different questions and they can disagree in
+    SIGN — the h=10 arm sweep's `gbt` shows `d_sharpe` **+0.36** beside `t` **−1.02**, a
+    lower mean return at lower volatility, which is not a contradiction and reads like
+    one. `PRF-8`'s *"paired |t| < 1 at every cost level"* and §6-0-ter-2's ties were both
+    read off that `t`, so both are statements about MEAN RETURN; on the Sharpe difference
+    the architecture question had never been tested at either horizon.
+
+    A mean is a linear functional; a Sharpe is a ratio whose denominator also moves, so
+    the second estimand needs its own interval and cannot be inferred from the first.
+    `pair.block_bootstrap_diff` already makes exactly this distinction (P2-4, after its
+    own first version conflated them) and is REUSED here rather than rewritten.
     """
+    from walkforward.pair import block_bootstrap_diff, sharpe
+
     joined = pd.concat({"a": a, "b": b}, axis=1).dropna()
+    blank = {"n": len(joined), "corr": float("nan"), "mean_diff": float("nan"),
+             "t": float("nan"), "ac1": float("nan"), "d_sharpe": float("nan"),
+             "sharpe_lo": float("nan"), "sharpe_hi": float("nan"),
+             "p_sharpe": float("nan")}
     if len(joined) < 3:
-        return {"n": len(joined), "corr": float("nan"),
-                "mean_diff": float("nan"), "t": float("nan")}
-    diff = joined["a"].to_numpy(float) - joined["b"].to_numpy(float)
+        return blank
+
+    x = joined["a"].to_numpy(float)
+    y = joined["b"].to_numpy(float)
+    diff = x - y
     n = len(diff)
     sd = float(diff.std(ddof=1))
+    # ⚠️ The annualisation factor of ONE observation. A period is `horizon` sessions, so
+    # it is `252/h` and not 252 — the same constant `stats` uses, which is what makes the
+    # `d_sharpe` below reproduce the pooled table's difference exactly (asserted in
+    # `test_compare_sharpe.py`) instead of being a second, quietly different Sharpe.
     per_year = sessions / horizon
+
+    # The lag-1 autocorrelation of the DIFFERENCE, which is what the block length has to
+    # cover. Reported, not assumed away.
+    ac1 = (float(np.corrcoef(diff[:-1], diff[1:])[0, 1])
+           if n > 3 and diff[:-1].std() > 0 and diff[1:].std() > 0 else float("nan"))
+
+    boot = (block_bootstrap_diff(x, y, block=block, draws=draws, seed=seed,
+                                 sessions=per_year)
+            if draws > 0 else None)
     return {
         "n": n,
-        "corr": float(np.corrcoef(joined["a"], joined["b"])[0, 1]),
+        "corr": float(np.corrcoef(x, y)[0, 1]),
         # annualised, so it reads beside CAGR rather than as a 20-session number
         "mean_diff": float(diff.mean() * per_year),
         "t": float(diff.mean() / (sd / np.sqrt(n))) if sd > 0 else float("nan"),
+        "ac1": ac1,
+        "d_sharpe": sharpe(x, per_year) - sharpe(y, per_year),
+        "sharpe_lo": boot["sharpe"]["ci_lo"] if boot else float("nan"),
+        "sharpe_hi": boot["sharpe"]["ci_hi"] if boot else float("nan"),
+        "p_sharpe": boot["sharpe"]["p"] if boot else float("nan"),
     }
 
 
@@ -123,10 +189,22 @@ def main(argv: Optional[Sequence[str]] = None):
             stream.reconfigure(errors="replace")
 
     top_k = int(option("--top-k", 20))
-    horizon = int(option("--horizon", 20))
     universe = str(option("--universe", "all"))
     draws = int(option("--draws", 0))
     spec = _parse_arms(argv)
+    # ⚠️ `WFO-1`, scoring half. This was `int(option("--horizon", 20))`, so an h=10 arm
+    # sweep compared without the flag scored `return_20day` against h=10 predictions.
+    # Derived PER ARM and asserted equal — which is the check `load_arms` cannot make,
+    # since two tracks at two horizons can cover the same `(date, ticker)` index and
+    # still be two different experiments.
+    horizon = _shared_horizon(spec, int(option("--horizon")) if "--horizon" in argv
+                              else None)
+    # ⚠️ `--draws` already means the WITHIN-DATE shuffle null on each arm's own track and
+    # is expensive; the paired bootstrap is a different question and cheap (it resamples
+    # ~100-240 period returns), so it gets its own flag and is ON by default. P1-9 exists
+    # because the Sharpe gap had no interval at all.
+    boot_draws = int(option("--boot-draws", 2000))
+    block = int(option("--block", DEFAULT_BLOCK))
 
     from utils import runtime
 
@@ -163,21 +241,42 @@ def main(argv: Optional[Sequence[str]] = None):
         print("\n" + "=" * 108)
         print(f"PAIRED vs {reference} — the difference removes the common market factor")
         print("=" * 108)
+        print("⚠️  TWO ESTIMANDS, and they can disagree in SIGN (P1-9). `t_ret` tests the "
+              "MEAN period\n    RETURN difference; `d_sharpe` is risk-adjusted and "
+              "carries its OWN bootstrap interval.\n    Reading a Sharpe gap off `t_ret` "
+              "is what PRF-8 and §6-0-ter-2 did.\n")
         pair_rows = []
         for label, _ in spec[1:]:
             for cost in COSTS:
-                stat = paired(nets[label][cost], nets[reference][cost], horizon)
+                stat = paired(nets[label][cost], nets[reference][cost], horizon,
+                              draws=boot_draws, block=block)
                 a = float(pooled.loc[pooled["arm"] == label, f"sharpe@{cost}"].iloc[0])
                 b = float(pooled.loc[pooled["arm"] == reference,
                                      f"sharpe@{cost}"].iloc[0])
+                # ⚠️ The paired Sharpe difference is computed from the SAME `net` series
+                # the pooled table scores, so the two must agree. Asserted rather than
+                # trusted: a silent disagreement here is precisely the defect P1-9 is.
+                if np.isfinite(stat["d_sharpe"]) and abs((a - b) - stat["d_sharpe"]) > 1e-9:
+                    raise AssertionError(
+                        f"arm {label} @{cost}bps: the pooled Sharpe difference "
+                        f"{a - b:+.6f} does not reproduce the paired one "
+                        f"{stat['d_sharpe']:+.6f} — the two are scoring different rows"
+                    )
                 pair_rows.append({
                     "arm": label, "bps": cost, "sharpe": a,
-                    f"sharpe_{reference}": b, "d_sharpe": a - b,
-                    "corr": stat["corr"], "d_cagr_ann": stat["mean_diff"],
-                    "t_paired": stat["t"], "n": stat["n"],
+                    f"sharpe_{reference}": b,
+                    "corr": stat["corr"], "n": stat["n"], "ac1": stat["ac1"],
+                    "d_cagr_ann": stat["mean_diff"], "t_ret": stat["t"],
+                    "d_sharpe": stat["d_sharpe"],
+                    "sh_ci_lo": stat["sharpe_lo"], "sh_ci_hi": stat["sharpe_hi"],
+                    "p_sharpe": stat["p_sharpe"],
                 })
         pairs = pd.DataFrame(pair_rows)
         print(pairs.to_string(index=False, float_format=lambda v: f"{v:,.4f}"))
+        print(f"\n  bootstrap: {boot_draws} circular block draws, block={block} "
+              f"period(s), the SAME blocks drawn from both arms so the pairing survives."
+              f"\n  `ac1` is the lag-1 autocorrelation of the DIFFERENCE — the thing the "
+              f"block length has to cover.")
 
         print("\n" + "=" * 108)
         print("PER FOLD — sharpe@30bps, one column per arm")
@@ -222,12 +321,14 @@ def main(argv: Optional[Sequence[str]] = None):
                       f"{bar['sharpe_bar_p95']:+.3f}  MAX "
                       f"{bar['sharpe_null_max']:+.3f}  z={z:+.2f}  {verdict}")
 
-        print("\n⚠️ Read `t_paired`, not the Sharpe gap. The arms share the market "
-              "factor, so an\n   unpaired comparison of two ~0.16-SE Sharpes cannot "
-              "resolve a difference this size.")
-        print("⚠️ A TIE IS A FINDING: it says the result lives in the 13 CHANNELS and "
-              "not in the\n   architecture — which makes PRF-7's selection look-ahead "
-              "the whole story.")
+        print("\n⚠️ BOTH columns are paired and NEITHER is a summary of the other "
+              "(P1-9). `t_ret` tests\n   the mean period-RETURN gap; `d_sharpe` is "
+              "risk-adjusted and is read against its OWN\n   bootstrap CI. An arm can "
+              "lose on one and tie on the other — that is not a\n   contradiction, it "
+              "is a lower mean return at lower volatility.")
+        print("⚠️ A TIE ON BOTH is a finding: it says the result lives in the CHANNELS "
+              "and not in the\n   architecture — which makes PRF-7's selection "
+              "look-ahead the whole story. A tie on\n   ONE is not that finding.")
     return pooled, pairs, folds
 
 

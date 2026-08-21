@@ -241,12 +241,20 @@ def sharpe(x: np.ndarray, sessions: float = P.SESSIONS_PER_YEAR) -> float:
 
 
 def block_bootstrap_diff(
-    a: np.ndarray, b: np.ndarray, block: int, draws: int, seed: int = 7
+    a: np.ndarray, b: np.ndarray, block: int, draws: int, seed: int = 7,
+    sessions: float = P.SESSIONS_PER_YEAR
 ) -> Dict[str, float]:
     """Circular block bootstrap of `sharpe(a) - sharpe(b)`, resampling the SAME blocks.
 
     ⚠️ Both series are indexed by ONE block draw, which is what keeps the pairing.
     Resampling them independently would destroy the very correlation this exists to price.
+
+    ⚠️ **`sessions` IS THE ANNUALISATION FACTOR OF ONE OBSERVATION, NOT ALWAYS 252.**
+    This module feeds it DAILY returns, so the default is right here — but `compare`
+    (P1-9) feeds it non-overlapping PERIOD returns, where the factor is `252 / horizon`.
+    Getting it wrong scales the reported `d_sharpe` by a constant and leaves the p-value
+    untouched, i.e. it produces a level that silently disagrees with the pooled table
+    beside it while every significance test still looks fine.
     """
     rng = np.random.default_rng(seed)
     n = len(a)
@@ -257,16 +265,25 @@ def block_bootstrap_diff(
     for draw in range(draws):
         starts = rng.integers(0, n, size=n_blocks)
         idx = ((starts[:, None] + offsets[None, :]).ravel() % n)[:n]
-        d_sharpe[draw] = sharpe(a[idx]) - sharpe(b[idx])
+        d_sharpe[draw] = sharpe(a[idx], sessions) - sharpe(b[idx], sessions)
         d_mean[draw] = float(np.mean(a[idx] - b[idx]))
 
     def summarise(sample: np.ndarray, observed: float) -> Dict[str, float]:
+        # ⚠️ **CLIPPED AT 1.0, AND THE CLIP IS NOT COSMETIC.** `P(x<=0) + P(x>=0)` is
+        # `1 + P(x==0)`, so the bare `2 × min(...)` exceeds 1 exactly when the bootstrap
+        # produces EXACT ties at zero — and it returns **2.0** for two identical arms,
+        # which is not a p-value. Found 2026-08-21 by the P1-9 test that compares an arm
+        # with itself. ⚠️ It did NOT touch P2-4's published numbers (0.0004 / 0.067 /
+        # 0.141): two different strategies never tie exactly, so the degenerate branch
+        # had no way to fire there. Recorded because "it never fired" is a fact about the
+        # inputs, not about the formula.
         return {
             "observed": observed,
             "sd": float(sample.std(ddof=1)),
             "ci_lo": float(np.percentile(sample, 2.5)),
             "ci_hi": float(np.percentile(sample, 97.5)),
-            "p": float(2.0 * min((sample <= 0).mean(), (sample >= 0).mean())),
+            "p": float(min(1.0, 2.0 * min((sample <= 0).mean(),
+                                          (sample >= 0).mean()))),
         }
 
     # ⚠️ BOTH ESTIMANDS, because they are not the same question and the first version of
@@ -274,7 +291,7 @@ def block_bootstrap_diff(
     # SHARPE and read the disagreement as a method disagreement. It was not: a mean is a
     # linear functional and a Sharpe is a ratio whose denominator also moves.
     return {
-        "sharpe": summarise(d_sharpe, sharpe(a) - sharpe(b)),
+        "sharpe": summarise(d_sharpe, sharpe(a, sessions) - sharpe(b, sessions)),
         "mean": summarise(d_mean, float(np.mean(a - b))),
     }
 

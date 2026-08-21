@@ -4,9 +4,10 @@
 > (verdict, chain, standing rules, routing). Read that first; this file is the depth
 > behind one stage.
 
-> The eight stages as one chain, and the one question none of them could answer:
+> The **ten** stages as one chain, and the one question none of them could answer:
 > **which stage is stale?** Built 2026-08-09; the two selection layers split apart
-> 2026-08-16.
+> 2026-08-16; `backtest` and `walkforward` joined 2026-08-21, which is when this became
+> the gate `RUNBOOK.md` §8 rule 1 had always claimed it was.
 
 ```
 python -m pipeline                      # what exists, what is stale — writes nothing
@@ -16,7 +17,7 @@ python -m pipeline --only model --apply # force one stage
 python -m pipeline --ticker bank --table rank_5day__final__d20_h5
 ```
 
-## 1. The chain — EIGHT stages as of 2026-08-16
+## 1. The chain — TEN stages as of 2026-08-21
 
 ```
 raw_data/ → bronze → silver → unified_schema_<t>.pool__*   data   ⚠️ NEW, ⚠️ the network
@@ -34,7 +35,72 @@ src/train_test_set/<dataset>/                          train_test_creator
 src/model/runs/<run_id>/                               model.lstm
         ↓
 results/metrics.json + runs/index.csv                  result_evaluator
+        ↓
+<run_dir>/results/backtest_<split>.csv                 backtest       ⚠️ does it PAY?
+        ↓                                                             (gitignored, RPR-1)
+results/<track>/per_fold.csv                           walkforward    ⚠️ MANUAL, reports only
 ```
+
+### 1c. ⚠️ Stages 9 and W, added 2026-08-21 — and why they are stages rather than probes
+
+`result_evaluator` answers *does it rank?* and **only `backtest` answers *does it pay?***
+They are different questions and a run can pass the first and fail the second. One split
+cannot tell a decayed edge from a lucky window, and only `walkforward` can. Both produce
+every headline in CLAUDE.md §6-0 and **both were invisible to the gate**, so
+`python -m pipeline` could read green on a chain whose tradability and whose out-of-sample
+survival were each unmeasured.
+
+⚠️ **`walkforward` is `manual` with NO `apply`** — a sweep is ~35 GPU minutes and ten run
+folders, so `--apply` reports MANUAL rather than spending that, exactly as `selection_2`
+does. It REPORTS: it locates a track by the experiment recorded in its `manifest.json`
+(`WFO-1`), not by a fixed path, so *"is there a walk-forward for THIS table"* is answerable
+rather than assumed.
+
+⚠️ **A swept but UNSCORED track is not `ready`.** `per_fold.csv` is where the fold series
+lives, and the SHAPE across folds is the whole point of `PRF-1` — an average over a regime
+that worked and one that did not hides exactly what the sweep was run to see.
+
+⚠️ **`backtest` reports a missing null as ABSENT, never as a pass** (§5 rule 2). The bar is
+a separate file (`backtest_null_<split>.csv`); without it the row reads
+`⚠️ NO NULL (evidence=absent)` and a costed Sharpe beside it is descriptive.
+
+### 1d. ⚠️ THE CROSS-SECTIONAL CHAIN: stages 3-4 do not EXIST, and saying "would run" was worse than useless
+
+`RUNBOOK.md` §3a had to warn readers OFF `pipeline` for the chain that produces every
+headline, in two separate blocks, for two reasons — both now fixed:
+
+| was | now |
+|---|---|
+| `shortlist_pool` said *"would run"*, and `--apply` would build a `pool__shortlist__rank_20day__d20_h20` that **nothing can ever select over** | `n/a — CROSS-SECTIONAL chain … there is no layer 2 (CSP-1)`, and `ready=True` so `--apply` skips it |
+| `selection_2` named `feature_selection.run --pools pool__shortlist__…`, a command that **RAISES** for a `cs_` target | the same `n/a` row — work that is impossible must not read as work outstanding |
+
+⚠️ **`ready=True` IS LOAD-BEARING AND THE ALTERNATIVE WAS MEASURED.** `--apply` skips a
+ready stage; a `ready=False` here is precisely what would build the junk pool. The `detail`
+opens with `n/a` so nobody reads the green as *"this ran"*.
+
+⚠️ **`apply_shortlist_pool` RAISES on a cross-sectional chain, and that guard is not
+redundant.** `--only shortlist_pool` forces a stage regardless of its `ready`, so the
+status check alone would still let the junk pool be built.
+
+⚠️ **THE CHAIN IS DETECTED FROM THE SHORTLISTS, NEVER FROM THE TABLE NAME.**
+`final_features` drops the `cs_` prefix when it names a table (`cs_rank_20day` →
+`rank_20day__final__d20_h20`), so the name genuinely **cannot** say whether the selection
+was cross-sectional — `TrainTestCreator.resolve_target` makes the same point.
+`pipeline.selected_for` reads `outstanding.csv`'s `target` column under the same
+`(schema, lookback_d, horizon_h)` filter, so the two cannot answer differently. A
+comma-joined list of targets is **not** resolved to a rank, by the same rule
+`TrainTestCreator._is_ranked` applies: a mixed list is left alone rather than guessed at.
+
+**Measured 2026-08-21** — `python -m pipeline --ticker all --table
+rank_20day__final__d20_h20 --config lstm__all__rank_20day__final__d20_h20.yaml`:
+**10 stages, 5.8 s, every row `up to date`.**
+
+⚠️ **A `⋈` IN A STAGE `detail` KILLED THE WHOLE PLAN, AND THE FIX WAS ONE LEVEL UP.** The
+first run of the new row raised `UnicodeEncodeError` on U+22C8 at `print(frame.to_string())`
+— **after** six seconds of database queries. Two things were wrong: the glyph (CLAUDE.md §5
+rule 18 — cp1252 has none), and `pipeline/__main__.py` being **the one entry point with no
+`reconfigure(errors="replace")`**, while it is the one that prints text every OTHER stage
+owns. Both fixed; the driver that aggregates other modules' strings needs the guard most.
 
 ### 1b. ⚠️ Why the middle hop was split in two (2026-08-16)
 

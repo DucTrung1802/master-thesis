@@ -86,7 +86,7 @@ cannot ask about itself:**
 
 | tool | command | answers | measured |
 |---|---|---|---|
-| **walk-forward** | `python -m walkforward --ticker all --table <T> --config <C> --first-test 2017-01-01` then `python -m walkforward.evaluate --top-k 20 --draws 200 --horizon <h> --universe all` | *is this one lucky split?* 10 expanding folds, one OOS track | **~35 min**, 10 folds |
+| **walk-forward** | `python -m walkforward --ticker all --table <T> --config <C> --first-test 2017-01-01 --out <dir>` then `python -m walkforward.evaluate --top-k 20 --draws 200 --universe all --out <dir>` | *is this one lucky split?* 10 expanding folds, one OOS track. ⚠️ `--horizon` is DERIVED from the track since 2026-08-21; to re-read a FINISHED track's pooled row use `--draws 0` (§7b, ~2 min) | **~35 min**, 10 folds |
 | **arms** (`PRF-8`) | `python -m walkforward --out <dir> --arm lstm:<cfgA>.yaml --arm gbt:<cfgB>.yaml` then `python -m walkforward.compare --top-k 20 --draws 200 a=<dirA> b=<dirB>` | *does the ARCHITECTURE matter?* All arms train on ONE build of each fold | **15m 03s**, 10 folds × 2 arms |
 | **pair** (`P2-4`) | `python -m walkforward.pair --top-k 20 --draws 2000 h10=<dirA>:10 h20=<dirB>:20` | *does one HORIZON beat another?* Pairs on the CALENDAR, not on periods — the only tool that can compare two horizons | **48 s** |
 | **arm sweep, N arms** | `python -m walkforward --out <dir> --arm <pkg>:<cfg>.yaml ...` then `python -m walkforward.compare --top-k 20 --horizon <h> --draws 200 a=<dir>/a b=<dir>/b ...` | *does the ARCHITECTURE matter?* Every arm trains on ONE build of each fold | **2h 49m** for 7 arms × 10 folds; scoring **22m 25s** |
@@ -121,10 +121,26 @@ wanting 20 epochs under a patience of 15 is the visible case (`walkforward/CONTE
 ⚠️ **`--arm <pkg>:<cfg>` requires each arm's `run_name` to start with a DIFFERENT segment**,
 because `Arm.label` is `run_name.split("__")[0]` and the arms share one output directory.
 
-⚠️ **`walkforward` WRITES TO ONE DEFAULT DIRECTORY AND WILL OVERWRITE THE LAST SWEEP.**
-`DEFAULT_OUT` is `results/walkforward/`, and `folds.csv` / `per_fold.csv` /
-`predictions_oos.csv` are all written by basename — so the row above, run at a second
-horizon, **silently destroys the first**. One experiment, one `--out`:
+✅ **`WFO-1` FIXED 2026-08-21 — A SECOND SWEEP INTO AN OCCUPIED DIRECTORY IS NOW REFUSED.**
+`DEFAULT_OUT` is still `results/walkforward/` and the artefacts are still written by
+basename, but `run.main` now **claims** the directory before a single fold is built:
+`walkforward/manifest.py` writes a `manifest.json` recording the experiment
+(`ticker`, `table`, `first_test`, `step_months`, `val_months`, `scale_target`,
+`rank_min_width`) and raises on a mismatch, naming the offending field. Verified against
+the real command that nearly destroyed `PRF-1` — it now exits in **under a second**, before
+any GPU time.
+
+⚠️ **The five tracks that predate the manifest are protected too**, by recovering the table
+from `folds.csv`'s run names. ⚠️ **But only the TABLE is checked there** — `folds.csv`
+records no knobs, and §5 rule 2 says an absent measurement is absent rather than inferred.
+So a legacy directory is guarded against the horizon collision that actually happened and
+**not** against a knob-only one. Re-running any legacy track once writes its manifest and
+closes that gap.
+
+⚠️ **`--force-out` overrides the refusal** and is the only way to overwrite on purpose.
+
+**One experiment, one `--out` is still the practice** — the refusal is a backstop, not a
+licence to share a directory:
 
 ```powershell
 # h=20 — PRF-1, the default
@@ -140,9 +156,14 @@ python -m walkforward.evaluate --top-k 20 --draws 200 --horizon 10 --universe al
     --out ../results/walkforward_h10
 ```
 
-⚠️ **`--horizon` on `evaluate` is NOT cosmetic** — it sets the holding interval the periods
-are cut at and the `return_{h}day` column that is scored. Passing the default 20 against an
-h=10 track silently scores the wrong label.
+✅ **`--horizon` IS NOW DERIVED FROM THE TRACK AND THE FLAG IS OPTIONAL (2026-08-21).** It
+sets the holding interval the periods are cut at AND the `return_{h}day` column that is
+scored, and it used to default to **20** — so an h=10 track scored without it silently
+scored the wrong label against the right predictions. `evaluate` and `compare` both read
+the horizon out of the track's manifest (else its `folds.csv`) and **raise** when an
+explicit `--horizon` disagrees. The commands above keep it only because they document what
+was run. ⚠️ `compare` additionally refuses arms built at DIFFERENT horizons and points at
+`walkforward.pair`, which is the only tool that can compare two (`P2-4`).
 
 ⚠️ **`walkforward.compare` and `backtest.head2head` PAIR the difference, and that is not a
 nicety.** Every arm trades the same dates out of the same panel, so their period returns
@@ -150,9 +171,14 @@ correlate at **ρ 0.74-0.90** and `se_sharpe` ≈ 0.16-0.25 is the error bar on 
 quantity — unpaired, it cannot resolve the gaps these tools exist to measure. CLAUDE.md §5c
 is the cautionary case.
 
-⚠️ **Stages 2 and 4 are MANUAL.** `python -m pipeline --apply` stops before each of them
-and prints `MANUAL — cannot be produced here`, because a selection run is the expensive
-artefact and must be a deliberate act. Everything else `--apply` will do for you.
+⚠️ **Stages 2, 4 and W are MANUAL.** `python -m pipeline --apply` stops before each of them
+and prints `MANUAL — cannot be produced here`, because each is an expensive artefact that
+must be a deliberate act: a selection run is GPU-hours, and a walk-forward SWEEP is ~35 GPU
+minutes and ten run folders. Everything else `--apply` will do for you.
+
+⚠️ **`pipeline` KNOWS ABOUT STAGES 9 AND W SINCE 2026-08-21**, so it is now the gate rule 1
+in §8 always claimed it was. Ten rows, and on a cross-sectional chain stages 3-4 report
+`n/a` rather than proposing a pool nothing can read — §3a.
 
 ---
 
@@ -198,11 +224,34 @@ as well — two junk duplicates of VCB tables that already exist. Plain `--apply
 those two as `exists=True, fingerprint matches` and skips them. A scope separates two
 groups that COLLIDE on a name; nothing collides here.
 
-⚠️ **DO NOT use `python -m pipeline --apply` for this chain.** Its `shortlist_pool` row
-says *"would run"* and `--apply` would build a `pool__shortlist__rank_20day__d20_h20` that
-**nothing can ever select over** — a cross-sectional selection reads `pool__basic ⋈
-pool__targets` only (`CSP-1`), so there is no layer 2 and stages 3-4 do not exist here.
-Its `selection_2` row also reports another chain's runs as `up to date` (`P4-11`).
+✅ **`python -m pipeline` COVERS THIS CHAIN AS OF 2026-08-21 — the two warnings that used
+to sit here are fixed, not worked around.** Measured on the h=20 chain: **10 stages, 5.8 s,
+every row `up to date`.**
+
+```powershell
+python -m pipeline --ticker all --table rank_20day__final__d20_h20 `
+    --config lstm__all__rank_20day__final__d20_h20.yaml
+```
+
+| what used to be wrong | now |
+|---|---|
+| `shortlist_pool` said *"would run"*, and `--apply` would build a `pool__shortlist__rank_20day__d20_h20` that **nothing can ever select over** | both it and `selection_2` report **`n/a — CROSS-SECTIONAL chain … there is no layer 2 (CSP-1)`** and are `ready`, so `--apply` skips them. `apply_shortlist_pool` also **raises** if forced with `--only`, because `--only` ignores `ready` |
+| `selection_2` reported another chain's runs as `up to date` | ✅ `P4-11`, fixed 2026-08-21 (the detection is scoped) |
+| stages 9 and W were invisible to the gate | **`backtest` and `walkforward` are stages now** — the two tools that produce every headline in §6-0 |
+
+⚠️ **The chain is detected from the SHORTLISTS, never from the table name.**
+`final_features` drops the `cs_` prefix when it names a table (`cs_rank_20day` →
+`rank_20day__final__…`), so the name genuinely cannot say whether the selection was
+cross-sectional. `pipeline.selected_for` reads `outstanding.csv`'s `target` column under
+the same `(schema, d, h)` filter `TrainTestCreator` uses — one rule, not two.
+
+⚠️ **`walkforward` is `manual` and has NO `apply`.** A sweep is ~35 GPU minutes and ten run
+folders; `--apply` reports MANUAL rather than spending that for you, exactly as
+`selection_2` does on the single-series chain.
+
+⚠️ **`--config` is still not optional.** The `model` row keys on `--config`, not on
+`--table`, so without one it reports the DEFAULT chain's run as up to date — and the
+`backtest` row then scores that run too.
 
 ⚠️ **The model config cannot be written before stage 6 exists.** `n_features` is an
 ASSERTION `engine._verify` raises on, and the surviving channel count is only known once
@@ -478,6 +527,54 @@ a smoke test, never a number.
 
 ---
 
+## 7b. Re-reading a FINISHED track without re-running it — measured 2026-08-21
+
+⚠️ **The pooled row is printed, never stored.** `walkforward.evaluate` writes `per_fold.csv`
+(the fold series) but the POOLED line — the Sharpe, CAGR and `se_sharpe` every register
+quotes — only ever went to stdout. So *"check the number against the artefact"* needs a
+re-run, and the re-run is cheap **only if you drop the null**:
+
+```powershell
+# the pooled row alone, from the predictions already on disk. NO GPU, NO training.
+python -m walkforward.evaluate --top-k 20 --draws 0 --universe all `
+    --out ../results/walkforward          # h=20 — ~2 min
+python -m walkforward.evaluate --top-k 20 --draws 0 --universe all `
+    --out ../results/walkforward_h10      # h=10 — ~2 min
+```
+
+⚠️ **`--draws 200` is what costs the ~9 minutes**, not the scoring. Drop it when you are
+re-reading a level and keep it when you are claiming the level clears a bar.
+⚠️ **`--horizon` is no longer needed** — it is derived from the track (`WFO-1`, §3).
+⚠️ **It REWRITES `per_fold.csv`** with identical content; harmless, but it means the file's
+mtime is not evidence of when the sweep ran. `folds.csv` and `manifest.json` are.
+
+**Verified this way on 2026-08-21** — both tracks reproduce CLAUDE.md §6-0 to every digit
+(h=20: `ic` 0.1097, `ic_t` 6.8956, `sharpe@30` 1.9913, `cagr@30` 0.4753, 118 periods,
+`se_sharpe` 0.1553). That is `RUNBOOK` §8 rule 1's spirit applied to a result rather than to
+a stage.
+
+### 7c. ⚠️ SHARPE AND CAGR RANK THE ARMS DIFFERENTLY — say which one you are quoting
+
+The h=10 pooled table, read off disk the same day, at 30 bps over 236 periods:
+
+| arm | `sharpe@30` | `cagr@30` |
+|---|---|---|
+| **`gbt`** | **+2.891** ← best | +69.8 % |
+| `tcn` | +2.622 | +73.4 % |
+| `transformer` | +2.622 | +72.9 % |
+| **`lstm`** | +2.531 | **+74.0 %** ← best |
+
+**The highest-Sharpe arm is not the highest-CAGR arm**, and the gap is not rounding:
+`gbt` earns **4.2 pp/yr less** while scoring **0.36 more** Sharpe. It is the same fact
+`P1-9` separated into two columns (§8 rule 8) — a *lower mean return at lower volatility* —
+and it is visible in the pooled levels, not only in the paired test.
+
+⚠️ **So "the best model" is not a well-formed question here without an estimand.** Name it:
+*best risk-adjusted* is `gbt`, *best return* is `lstm`, and the paired test says neither
+advantage survives a correction for the six arms that were tried.
+
+---
+
 ## 8. Before you quote any number this chain produces
 
 1. **`python -m pipeline` must show `up to date` for every stage below the one you are
@@ -517,12 +614,21 @@ a smoke test, never a number.
    `skill_score` or `beats_naive`, and `test_mase` is **NaN** for every cross-sectional
    run. Rule 4 above and P2-3 both say `mase ≥ 1` is the line to quote; on a panel that
    line is simply **not measured yet** (TODO **P4-12**).
-8. ⚠️ **`walkforward.compare`'s `t_paired` TESTS THE MEAN RETURN, NOT the `d_sharpe`
-   printed beside it** (`compare.py:110`). They can disagree in sign — the h=10 sweep's
-   `gbt` arm shows `d_sharpe` **+0.36** against `t` **−1.02**, i.e. a lower mean return at
-   lower volatility. **Quote `t_paired` as a return test and leave `d_sharpe`
-   unqualified** until **P1-9** ships. `walkforward.pair` already bootstraps both
-   estimands and is the model for the fix.
+8. ✅ **`P1-9` FIXED 2026-08-21 — `walkforward.compare` NOW REPORTS BOTH ESTIMANDS, AND
+   THEY ARE NOT SUMMARIES OF EACH OTHER.** The column formerly called `t_paired` is now
+   **`t_ret`** (a test of the mean period-RETURN gap) and **`d_sharpe` carries its own
+   `sh_ci_lo` / `sh_ci_hi` / `p_sharpe`** from a paired circular block bootstrap. They
+   disagreed about **three of six arms** on the h=10 sweep: `bilstm` and `cnnlstm` lose on
+   return (`t_ret` −2.09 / −2.15) and TIE on Sharpe (p = 0.61 / 0.30), while `gbt` gains
+   +0.36 Sharpe at p = 0.044 against `t_ret` = −1.02.
+   ⚠️ **Read `p_sharpe` against the number of ARMS, not against 0.05.** Six challengers
+   against one reference is Bonferroni **0.0083**; `cnn` (0.001) clears it and `gbt`
+   (0.044) does not. `NUL-1` one level up.
+   ⚠️ **`ac1` is printed per row** — the lag-1 autocorrelation of the difference series,
+   which is what `--block` has to cover. It ran −0.09…+0.06 on that sweep, so the default
+   `block=2` was doing no hidden work. If it comes back large, raise `--block`.
+   ⚠️ **The h=20 `PRF-8` sweep has NOT been re-scored**, so §6-0-ter's ties are still
+   mean-return results only.
 9. **A rank target's `long_short` is NOT money.** The metric is documented "in return
    units", which holds when the label is a return; on `cs_rank_*` it is a spread of
    RANKS. The 2026-08-18 run's `+0.0635` is not 6.35 %.
