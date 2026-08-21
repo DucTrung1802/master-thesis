@@ -1,0 +1,47 @@
+# P2 — THE SEED FLOOR. One of five identical `gbt` arms that differ ONLY in the seed.
+#
+# ⚠️ THIS IS NOT AN ARCHITECTURE ARM AND MUST NOT BE READ AS ONE. Every architecture
+# verdict in CLAUDE.md §6-0-ter-2 rests on ONE fit per arm per fold, at `seed: 42` —
+# `grep '^seed:' src/model/*/configs/*.yaml` returned `seed: 42` 32 times out of 32 on
+# 2026-08-21. `pair.block_bootstrap_diff` resamples the realised RETURN series, so it
+# prices the market's sampling noise and NOTHING about the variance of the FIT. These
+# five arms measure that variance directly, and it is the yardstick every gap in §11
+# has to be read against.
+#
+# ⚠️ THE SEED THAT MATTERS FOR A GBT IS `model.random_state`, NOT the top-level `seed`.
+# `engine.set_seed(config["seed"])` seeds numpy and torch; XGBoost draws its
+# `subsample`/`colsample_bytree` rows and columns from its OWN `random_state`. Both are
+# moved together here so the file is honest and so the same edit would move a net's seed
+# too — but it is the `model.random_state` line that changes this fit.
+#
+# ⚠️ MEASURED BEFORE SPENDING THE SWEEP (test.py probe, 2026-08-21): four seeds on
+# 60,000 real h=10 windows give predictions correlating with seed 42 at Pearson
+# 0.956-0.968, NOT 1.0, and node counts 1,397-1,400. The seed genuinely moves the fit,
+# so this measures something.
+#
+# ⚠️ EVERYTHING ELSE IS COPIED UNCHANGED from gbt__all__rank_10day__final__d20_h10.yaml.
+# That is what makes the five comparable, and it is the same discipline §11 used for the
+# seven architectures: one variable moves.
+
+run_name: gbtseed21__all__rank_10day__final__d20_h10
+dataset: all__rank_10day__final__d20_h10__tr70_val15_test15__std
+task: regression
+
+lookback: 20
+n_features: 19
+
+model:
+  type: GBT
+  max_depth: 3
+  n_estimators: 200
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 5.0
+  reg_lambda: 1.0
+  random_state: 21
+
+null_draws: 200
+
+seed: 21
+device: cpu

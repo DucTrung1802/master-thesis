@@ -16,7 +16,7 @@
 > | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
 > | **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
 > | **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
-> | **[TODO.md](TODO.md)** | *what is NEXT?* | priority-ordered, every item with a measured cost |
+> | **[TODO.md](TODO.md)** | *what is NEXT?* | one list, `P1` first. ⚠️ **A bare `P<n>` is LIVE; a HYPHENATED code (`P1-9`, `PRF-8`, `M-3`) is RETIRED** — renumbered 2026-08-21, crosswalk at the top of that file |
 >
 > Movement between them is one-way and worth knowing: a TODO item that turns out to be a
 > defect **graduates to ISSUES.md with a code**; an ISSUES entry that gets fixed keeps its
@@ -1264,6 +1264,29 @@ architecture is worth nothing"* (§6-0-ter, h=20, and also read off the MEAN col
 pools the sequence away), the rest tie, and the best-looking one cannot be separated from
 the reference once the search is priced.**
 
+✅ **AND THE SEED FLOOR UNDER THIS WHOLE TABLE WAS MEASURED 2026-08-21 — it is
+`|d_sharpe| ≈ 0.09`.** Every config in the repo is `seed: 42` (32 of 32) and every row above
+is ONE fit per arm per fold, so five `gbt` arms differing only in the seed were run over the
+identical folds (13m 16s; `walkforward/CONTEXT.md` §15). Pooled Sharpe@30 came back
+**2.845 … 2.979, sd 0.054**, max paired `d_sharpe` **0.088**. Reading the table against it:
+
+| arm | `d_sharpe` | × the seed floor | verdict |
+|---|---|---|---|
+| `cnn` | −0.398 | **4.5×** | ✅ real |
+| `gbt` | +0.360 | **4.1×** | ✅ **not seed luck** — and still not established (Bonferroni) |
+| `cnnlstm` | −0.164 | 1.9× | tie |
+| `transformer` / `tcn` | +0.091 | **1.0×** | ⚠️ **the whole gap is one seed** |
+| `bilstm` | −0.058 | **0.7×** | ⚠️ **inside** the floor |
+
+⚠️ **SO THE ORDERING OF THE FOUR MIDDLE ARMS IS NOT AN ORDERING.** *"Tied"* and *"the
+measured gap is the size of a reseed"* are different statements and only the second closes
+it. ⚠️ **A PER-FOLD CELL IS 4.4× NOISIER STILL** — mean per-fold Sharpe range over five
+seeds **0.593** against the pooled **0.134**, worst fold **1.079**. Never compare two arms
+in one fold. ✅ **The DECAY is not a seed artefact** (slope −0.308 ± 0.027, the first-to-second
+half fall −55 % in all five). ⚠️ **One architecture, and the cheapest one**: `gbt` resamples
+only rows and columns, while an LSTM also varies its initialisation — the reference arm's
+floor could be larger and is unmeasured.
+
 ⚠️ **`ac1` IS THE REASON THE BOOTSTRAP IS TRUSTED HERE**: the lag-1 autocorrelation of every
 arm's difference series is **−0.09 … +0.06**, so the periods really are near-independent and
 `block=2` is not doing hidden work. Measured, not assumed — it is printed per row.
@@ -1279,9 +1302,17 @@ better explanation of the whole table.
 its `t` on the mean period-RETURN difference while the table printed `d_sharpe` beside it
 bare, so both this section and §6-0-ter were read off the wrong column. It now reports
 **both estimands**, each with its own interval, by reusing `walkforward.pair`'s
-`block_bootstrap_diff` rather than a second implementation. ⚠️ **The h=20 `PRF-8` sweep has
-NOT been re-scored**, so §6-0-ter's *"paired |t| < 1 at every cost level"* is still a claim
-about mean return only — one `walkforward.compare` run would settle it.
+`block_bootstrap_diff` rather than a second implementation. ✅ **The h=20 `PRF-8` sweep was
+re-scored the same day and ITS ties hold on both** (§6-0-ter) — so the disagreement is a
+property of h=10, not of the fix.
+
+⚠️ **AND `gbt` CHANGES SIGN BETWEEN THE HORIZONS — measured 2026-08-21, and it is the
+strongest argument against promoting it.** Same tool, same `k`, same universe, same
+reference arm: `d_sharpe` vs `lstm` is **+0.360 [+0.013, +0.721]** at h=10 and **−0.016
+[−0.299, +0.291]** at h=20 (`p_sharpe` 0.044 against **0.941**). Two estimates that
+disagree in SIGN across a neighbouring horizon are what a null effect looks like. ⚠️ It is
+**not** a paired test across horizons — only `walkforward.pair` can do that and it has not
+been run on the arms — so read it as two independent estimates.
 
 ⚠️ **AND "BEST EPOCH IS 1" IS AN LSTM PROPERTY, NOT A PROPERTY OF THE PROBLEM.** That
 sentence has been quoted four times here as evidence capacity is worthless. Across these 70
@@ -1448,12 +1479,15 @@ tensors** — 15m 03s. Pooled over 118 non-overlapping periods, top-20 of 150, b
 returns, so `se_sharpe = 0.155` is the error bar on the wrong quantity): `lstm_small`
 `t = +0.87…+0.88`, `gbt` `t = +0.42…+0.47` at 20/30/50 bps. **Every |t| < 1.**
 
-⚠️ **THAT `t` TESTS THE MEAN RETURN, NOT THE SHARPE PRINTED BESIDE IT (`P1-9`, fixed
-2026-08-21), AND THIS SWEEP HAS NOT BEEN RE-SCORED.** `compare` now reports a bootstrap
-interval for the Sharpe difference too, and at h=10 the two columns disagreed about three
-of six arms (§6-0-ter-2). So the h=20 tie above is established **on mean return** and is
-merely *unmeasured*, not contradicted, on Sharpe — one `walkforward.compare` run over
-`results/walkforward/prf8` settles it. Until then quote this row as a return result.
+✅ **RE-SCORED 2026-08-21 THROUGH THE FIXED `compare`, AND THE TIES HOLD ON BOTH
+ESTIMANDS.** That `t` tested the MEAN RETURN (`P1-9`); the run that settles it took
+**1m 29s** and reproduced §6-0-ter to every digit — Sharpe@30 **1.9913 / 1.9970 /
+1.9750**, `se_sharpe` 0.1553 — while adding the risk-adjusted column: `lstm_small`
+**`d_sharpe` +0.006 [−0.289, +0.381], p = 0.903**; `gbt` **−0.016 [−0.299, +0.291],
+p = 0.941**. ⚠️ **So *"a 101× capacity span ties at h=20"* is now a risk-adjusted result
+and not only a return one, and NO caveat is left on this row.** ⚠️ At h=10 the same code
+found the two columns disagreeing about three of six arms (§6-0-ter-2), so the fix is not
+biased toward finding disagreement — it finds it where it is.
 
 ⚠️ **THE RESULT LIVES IN THE 13 CHANNELS, NOT IN THE ARCHITECTURE**, and this is the fourth
 independent measurement pointing that way — after §5c's eleven architectures inside one
@@ -1682,7 +1716,7 @@ Only **164 distinct indicator roots** exist, and **122 of them carry ≤2 column
 | all columns | 922 | |
 | − 208 booleans − 3 keys | **711** | `prune.numeric_channels` already excludes them |
 | − coverage < 0.95 | 596 | `COV-1` |
-| − 133 pairwise MA-vs-MA − 26 `_dist_abs` | 437 | **construction, not movement** — a distance between two MAs is a deterministic function of two channels the pool already carries, and `|x|` of a present channel is not a new one. Correlation cannot make this drop: at \|ρ\| ≥ 0.50 **24 pairwise columns still survive** |
+| − 133 pairwise MA-vs-MA − 26 `_dist_abs` | 437 | **construction, not movement** — a distance between two MAs is a deterministic function of two channels the pool already carries, and `\|x\|` of a present channel is not a new one. Correlation cannot make this drop: at \|ρ\| ≥ 0.50 **24 pairwise columns still survive** |
 | − \|Spearman\| ≥ 0.70 redundancy | 152 | same operation `FeatureSelector` runs internally, moved earlier |
 | − 7 measured duplicates of `pool__basic` | **145** | see below |
 
@@ -1835,7 +1869,9 @@ brokers' books are unreachable.
 |---|---|---|
 | **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
 | **[ISSUES.md](ISSUES.md)** | 16 open / 35 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
-| **[TODO.md](TODO.md)** | the one backlog, priority-ordered, every item costed | deciding what to do next |
+| **[TODO.md](TODO.md)** | the one backlog — **one code scheme since 2026-08-21**: `P1` … `P32`, `P1` highest. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P12`, `P4-2` is now `P13`, …), and ⚠️ **a bare `P<n>` is stable only BETWEEN renumberings** — the list shifts up when an item is done, so cite the hyphenated code when you need a permanent reference. This file still says `PRF-4`/`P0-3`/`P1-9` in ~65 places and those were deliberately NOT rewritten — **TODO.md's crosswalk resolves them** | deciding what to do next |
+| **[pipeline.md](pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
+| **[PIPELINE_h10_CAGR74.md](PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
 | `README.md` | the front door; routes here | — |
 | `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |
 | `feature_groups.md` | canonical feature taxonomy | naming a feature group |

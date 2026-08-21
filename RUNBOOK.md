@@ -11,7 +11,7 @@
 > | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
 > | **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
 > | **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
-> | **[TODO.md](TODO.md)** | *what is NEXT?* | priority-ordered, every item with a measured cost |
+> | **[TODO.md](TODO.md)** | *what is NEXT?* | one list, `P1` first. ⚠️ **A bare `P<n>` is LIVE; a HYPHENATED code (`P1-9`, `PRF-8`, `M-3`) is RETIRED** — renumbered 2026-08-21, crosswalk at the top of that file |
 >
 > Movement between them is one-way and worth knowing: a TODO item that turns out to be a
 > defect **graduates to ISSUES.md with a code**; an ISSUES entry that gets fixed keeps its
@@ -627,11 +627,99 @@ advantage survives a correction for the six arms that were tried.
    ⚠️ **`ac1` is printed per row** — the lag-1 autocorrelation of the difference series,
    which is what `--block` has to cover. It ran −0.09…+0.06 on that sweep, so the default
    `block=2` was doing no hidden work. If it comes back large, raise `--block`.
-   ⚠️ **The h=20 `PRF-8` sweep has NOT been re-scored**, so §6-0-ter's ties are still
-   mean-return results only.
+   ✅ **The h=20 `PRF-8` sweep WAS re-scored 2026-08-21** — **1m 29s**, and its ties hold
+   on BOTH estimands (`lstm_small` `p_sharpe` 0.903, `gbt` 0.941). It reproduced the
+   published pooled row to every digit, which is what licensed reading the new column.
+   ⚠️ **`gbt`'s h=10 advantage does NOT reproduce there**: `d_sharpe` **+0.360** at h=10
+   against **−0.016** at h=20. Two estimates disagreeing in sign across a neighbouring
+   horizon are what a null effect looks like — `walkforward/CONTEXT.md` §8a-ter.
 9. **A rank target's `long_short` is NOT money.** The metric is documented "in return
    units", which holds when the label is a return; on `cs_rank_*` it is a spread of
    RANKS. The 2026-08-18 run's `+0.0635` is not 6.35 %.
+
+10. ⚠️ **AN ARM GAP BELOW `|d_sharpe| ~ 0.09` IS A RESEED, NOT A RESULT** (measured
+    2026-08-21, `walkforward/CONTEXT.md` §15). Every config in the repo is `seed: 42`, so
+    every arm row is one fit per fold. Five `gbt` seeds over the identical h=10 folds gave
+    pooled Sharpe@30 **2.845 … 2.979, sd 0.054**, max paired `d_sharpe` **0.088**. At h=10
+    that leaves `cnn` (4.5x) and `gbt` (4.1x) above the floor and puts `transformer`,
+    `tcn` and `bilstm` **at or inside** it.
+    ⚠️ **One architecture, and the cheapest one.** `gbt` resamples rows and columns; a net
+    also varies its initialisation and batch order, so the `lstm` floor is unmeasured and
+    could be larger.
+
+11. ⚠️ **NEVER COMPARE TWO ARMS IN ONE FOLD.** The same sweep measured a per-fold Sharpe
+    as **4.4x more seed-sensitive** than the pooled one — mean per-fold range **0.593**
+    against **0.134** pooled, worst fold **1.079**. The pooled row is the quotable one, and
+    that convention is now measured rather than assumed. ✅ The DECAY across folds survives
+    (slope -0.308 +/- 0.027 over five seeds), so §9a's finding is not a seed artefact.
+
+12. ⚠️ **WHEN TWO ARMS DIFFER, CHECK THE IC BEFORE BELIEVING THE SHARPE.** Pooled IC moves
+    **0.5 %** across seeds against Sharpe's **1.9 %** — `long_only_top_k` is a THRESHOLD
+    (top 20 of ~150), so a hair's change in the ranking swaps which names are held and the
+    portfolio inherits a discretisation the IC never sees.
+
+13. ⚠️ **A FIVE-ARM SWEEP IS NOT FIVE TRACKS.** `--arm` builds each fold's tensors ONCE and
+    every arm trains off that build, so five `gbt` arms cost **13m 16s**, not the ~1 h 40 m
+    that `5 x 20 min` predicts. Cost an arm sweep from the fold BUILD, not from the fit.
+
+---
+
+## 8a. ⚠️ CURRENT STATE — 2026-08-21: the chain CANNOT emit a pick list
+
+**Measured that day while documenting the output** (`pipeline.md`), and it is the first
+thing to check before running anything that reads `pool__basic`:
+
+| rebalance date | names scored & buyable |
+|---|---|
+| 2026-05-27 | 143 of 150 |
+| **2026-06-10** | **147** ← the last real book |
+| 2026-06-24 | **7** |
+| 2026-07-08 | **7** |
+| 2026-07-22 | **7** |
+
+⚠️ **`FRZ-1`: after 2026-06-11 only 7 of 150 names carry data**, all banks. Mean names
+scored per session runs **145-147 for 2017-2025** and **113.3 in 2026** — the annual average
+hides a cliff. ⚠️ **`MAX(date)` on `pool__basic` reports 2026-08-07 and conceals it
+completely**, which is §8 rule 1's mechanism at the row level.
+
+✅ **The published +74 %/yr is NOT affected.** `long_only_top_k` does
+`if len(day) < k: continue`, so those three stub dates were skipped: **239 rebalance dates
+− 3 = 236 periods**, exactly the `n_periods` on the artefact.
+
+⚠️ **But the skip is SILENT — a data freeze SHORTENS the track instead of failing it.**
+Check the width per rebalance date before reading any recent book:
+
+```powershell
+# names scored per rebalance date, straight off the track
+python -c "import pandas as pd; d=pd.read_csv('../results/walkforward_h10/predictions_oos.csv'); print(d.groupby('date').size().tail(40))"
+```
+
+**To get back to a usable chain**: re-scrape the 143 frozen tickers (`--rescrape` is
+opt-in and scoped to `--ticker` with `skip_existing=False` — **without both it either costs
+781 tickers or fetches nothing**), rebuild `pool__basic` → `rank_10day__final__d20_h10`,
+then re-run the sweep. TODO **`P1`**.
+
+⚠️ **And there is still no LIVE-SCORING path** — every stage writes predictions for a
+dataset's *test split*, so the chain cannot score today's cross-section even with fresh
+data. TODO **`P2`**. `pipeline.md` §6 has both.
+
+---
+
+## 8b. Reading the output as a PICK LIST — three rules
+
+`pipeline.md` is the full statistics; these are the three that change how a book is read.
+
+1. ⚠️ **ONE BOOK IS CLOSE TO A COIN FLIP.** Over 236 books the mean realised rank is
+   **+0.0688** and **81.8 %** are positive (`t` = +14.0), but individual picks land in the
+   top half only **60.2 %** of the time and **43 of 236 books were negative**. The
+   +74 %/yr is a 60/40 edge compounding over 236 periods — never a single book.
+2. ⚠️ **THE MODEL OVER-PICKS THE BOARDS YOU CAN LEAST TRADE.** UPCOM is **2.20×** its share
+   of scored rows, HNX 1.31×, HOSE **0.76×**. The most-selected names are `DCT` (108 of 236
+   books), `DCS` (106), `EFI` (87); `VCB` appears in 30, `HPG` and `VNM` in 12. **With no
+   ADV cap and no slippage modelled (`P12`), this is the biggest open threat to the
+   levels.**
+3. **Turnover is 65.1 % per rebalance** (median 65.0 %, range 20-90 %) → **8.2 %/yr** at
+   50 bps. ✅ That confirms `backtest/CONTEXT.md` §3's assumed `τ = 0.70` from the data.
 
 ---
 

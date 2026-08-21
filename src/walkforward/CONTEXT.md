@@ -207,6 +207,63 @@ GBT the two disagree in SIGN — it earns slightly more per period at slightly m
 volatility. Read them together: every |t| < 1, and every ΔSharpe is ~0.02 against an
 `se_sharpe` of 0.155. **Under either statistic this is a tie.**
 
+### 8a-bis. ✅ RE-SCORED 2026-08-21 THROUGH THE FIXED `compare` — AND THE TIES HOLD ON **BOTH** ESTIMANDS
+
+```powershell
+cd src
+python -m walkforward.compare --top-k 20 --draws 0 --universe all `
+    lstm=../results/walkforward `
+    lstm_small=../results/walkforward/prf8/lstm_small `
+    gbt=../results/walkforward/prf8/gbt          # 1m 29s, no GPU
+```
+
+`P1-9` shipped after this sweep was scored, so §8a's `t_paired` was a test of the MEAN
+period-RETURN gap with `d_sharpe` printed beside it bare. At h=10 that distinction flipped
+the verdict on **three of six** arms (§11c). **Here it flips nothing.** 118 periods,
+ρ 0.878-0.881, 2,000 circular block draws, `block=2`, at 30 bps against `lstm`:
+
+| arm | `t_ret` (MEAN) | **`d_sharpe` [95 % CI]** | `p_sharpe` | `ac1` | verdict |
+|---|---|---|---|---|---|
+| `lstm_small` | +0.88 | **+0.006 [−0.289, +0.381]** | **0.903** | −0.049 | ✅ **tie on both** |
+| `gbt` | +0.44 | **−0.016 [−0.299, +0.291]** | **0.941** | −0.089 | ✅ **tie on both** |
+
+✅ **§8a REPRODUCES TO EVERY DIGIT, WHICH IS WHAT LICENSES READING THE NEW COLUMN.** The
+pooled Sharpe@30 came back **1.9913 / 1.9970 / 1.9750** against the published
++1.991 / +1.997 / +1.975; `se_sharpe` **0.1553** against 0.155; mean per-fold IC
+**+0.0996 / +0.1178 / +0.1199** against §8b's +0.0996 / +0.1178 / +0.1199. And `t_ret`
+returned **+0.88 / +0.88 / +0.87** and **+0.42 / +0.44 / +0.47** — *the same numbers §8a
+published as `t_paired`*, confirming the column was renamed and not recomputed.
+
+⚠️ **SO PRF-8's HEADLINE IS NOW ESTABLISHED ON THE ESTIMAND IT WAS ALWAYS READ AS.** *"A
+101× capacity span ties at h=20"* was a mean-return result for two days; it is a
+risk-adjusted result as well. **No caveat is left on §8.**
+
+⚠️ **AND THE FIX IS NOT BIASED TOWARD FINDING DISAGREEMENT.** That was the live worry after
+§11c: a second estimand with its own interval could just be a second chance to find
+something. It finds disagreement at h=10 and agreement at h=20 **on the same code**, which
+is the behaviour a real instrument has.
+
+### 8a-ter. ⚠️ `gbt` CHANGES SIGN BETWEEN THE HORIZONS, AND THAT IS NEW
+
+Put the two re-scored tables beside each other — same tool, same `k`, same universe, same
+reference arm — and the best-measured arm at one horizon is a (statistically
+indistinguishable) LOSER at the other:
+
+| | h=10 (§11c) | **h=20 (above)** |
+|---|---|---|
+| `gbt` `d_sharpe` vs `lstm` | **+0.360** [+0.013, +0.721] | **−0.016** [−0.299, +0.291] |
+| `p_sharpe` | 0.044 *(nominal; Bonferroni 0.0083)* | **0.941** |
+| capacity span in the sweep | 224× | 101× |
+
+⚠️ **THIS IS THE STRONGEST AVAILABLE ARGUMENT AGAINST PROMOTING `gbt` ON ITS h=10 ROW.**
+§11d already said *"best measured, not established"* because the nominal p does not survive
+six arms. This adds an independent reason: **the advantage does not reproduce at the
+neighbouring horizon**, where the same arm sits fractionally below the reference. Two
+estimates that disagree in sign across a horizon are what a null effect looks like.
+⚠️ It is **not** a paired test between the horizons — only `walkforward.pair` can do that
+(§10) and it has not been run on the arms. Read it as two independent estimates, which is
+exactly the weakness §9c records for the horizon comparison itself.
+
 ### 8b. What it means, and it is not "we saved some GPU"
 
 ⚠️ **THE RESULT LIVES IN THE 13 CHANNELS, NOT IN THE ARCHITECTURE.** A model 101× smaller
@@ -640,9 +697,10 @@ are near-independent and `block=2` is doing no hidden work. The block default is
 about the DESIGN — `rebalance_dates` takes every `h`-th date, so periods do not overlap and
 `pair`'s `2 × horizon` (which exists for DAILY returns) has no analogue beyond 2.
 
-⚠️ **THE h=20 `PRF-8` SWEEP HAS NOT BEEN RE-SCORED.** Its ties are still mean-return
-results only. One `walkforward.compare` run over `results/walkforward/prf8` settles it, and
-until then §8's headline carries the same caveat this section just removed from §11a.
+✅ **THE h=20 `PRF-8` SWEEP WAS RE-SCORED 2026-08-21 — §8a-bis.** It took **1m 29s** and
+**its ties hold on BOTH estimands** (`lstm_small` `p_sharpe` 0.903, `gbt` 0.941), so §8's
+headline carries no caveat any more. ⚠️ **And `gbt`'s advantage does NOT reproduce there**:
+`d_sharpe` **+0.360** at h=10 against **−0.016** at h=20 — §8a-ter.
 
 ⚠️ **A DEFECT IN THE PORTED CODE WAS FOUND BY THE TEST THAT COMPARES AN ARM WITH
 ITSELF** — `pair.summarise`'s two-sided p was `2 × min(P(x≤0), P(x≥0))`, which returns
@@ -900,3 +958,158 @@ exists — so the identity that makes a track re-identifiable is tracked automat
    limit applies to it until it is.
 3. **Nothing here re-derives a lost artefact.** `predictions_oos.csv` remains untracked and
    the run folders it is assembled from are gitignored (`RPR-1`).
+
+---
+
+## 15. ⚠️ THE SEED FLOOR — how big is an arm gap that means NOTHING? 2026-08-21
+
+```powershell
+cd src
+python -m walkforward --ticker all --table rank_10day__final__d20_h10 `
+    --first-test 2017-01-01 --out ../results/seeds_h10 `
+    --arm gbt:gbtseed42__all__rank_10day__final__d20_h10.yaml `
+    --arm gbt:gbtseed01__... --arm gbt:gbtseed07__... `
+    --arm gbt:gbtseed13__... --arm gbt:gbtseed21__...      # 13m 16s, 50/50 arm-folds
+python -m walkforward.compare --top-k 20 --horizon 10 --universe all --draws 0 `
+    gbtseed42=../results/seeds_h10/gbtseed42 gbtseed01=… gbtseed07=… `
+    gbtseed13=… gbtseed21=… archgbt=../results/walkforward_h10_arch/gbt   # 3m 34s
+```
+
+**Why it had to be run.** `grep '^seed:' src/model/*/configs/*.yaml` returned **`seed: 42`
+32 times out of 32**, and `runs/index.csv` carries no seed column — so every architecture
+verdict in §11 rests on **one fit per arm per fold**. `pair.block_bootstrap_diff` resamples
+the realised RETURN series, which prices the market's sampling noise and **nothing about
+the variance of the FIT**. Five arms differing only in the seed measure that variance
+directly, with the same statistic, on the same folds.
+
+⚠️ **THE SEED THAT MOVES A GBT IS `model.random_state`, NOT the top-level `seed`.**
+`engine.set_seed(config["seed"])` seeds numpy and torch; XGBoost draws its `subsample` /
+`colsample_bytree` rows and columns from its own `random_state`. Both are moved together in
+the five configs. ⚠️ **Checked before the sweep was spent**: four seeds on 60,000 real h=10
+windows gave predictions correlating with seed 42 at Pearson **0.956-0.968**, not 1.0, and
+node counts 1,397-1,400. The seed genuinely moves the fit.
+
+### 15a. ✅ THE DETERMINISM CHECK PASSED EXACTLY, AND IT IS WHAT LICENSES THE REST
+
+`archgbt` — §11's `gbt` arm, from a **different sweep, alongside six neural arms** — was
+scored as a sixth arm here. Against `gbtseed42` it returns **corr 1.0000, `d_sharpe`
+0.0000, `t_ret` NaN** (the difference series has zero variance) and a **bit-identical
+per-fold column**. Two independent sweeps, different companion arms, same numbers: the fold
+builds are deterministic and arms do not contaminate each other. It also confirms
+`gbtseed42` **is** §11's `gbt` row — Sharpe@30 **2.8910**, IC **0.1460**.
+
+### 15b. THE FLOOR
+
+| pooled over 236 periods, top-20, 30 bps | |
+|---|---|
+| Sharpe@30 by seed | 2.8910 · 2.8871 · 2.8451 · 2.8488 · **2.9791** |
+| **sd** | **0.0540** |
+| range | **0.1340** (half-width ±0.067) |
+| **max paired `d_sharpe` vs seed 42** | **0.0882** |
+| every seed's `p_sharpe` | **0.308 … 0.964** — all tie, as they must |
+| pooled IC by seed | +0.1420 … +0.1449, **sd 0.00073** |
+
+**So the floor on the statistic §11c reports is `|d_sharpe| ≈ 0.09`.**
+
+### 15c. ⚠️ APPLYING IT TO §11c — TWO ARMS SURVIVE, THREE ARE AT OR INSIDE THE FLOOR
+
+| arm | `d_sharpe` vs `lstm` | **× the seed floor (0.088)** | `p_sharpe` | reading |
+|---|---|---|---|---|
+| `cnn` | **−0.398** | **4.5×** | 0.001 | ✅ real, and the only one clearing Bonferroni |
+| `gbt` | **+0.360** | **4.1×** | 0.044 | ✅ **not seed luck** — see below |
+| `cnnlstm` | −0.164 | 1.9× | 0.295 | above the floor, still a tie |
+| `transformer` | +0.091 | **1.0×** | 0.537 | ⚠️ **its whole advantage is one seed** |
+| `tcn` | +0.091 | **1.0×** | 0.406 | ⚠️ same |
+| `bilstm` | −0.058 | **0.7×** | 0.612 | ⚠️ **inside** the floor |
+
+⚠️ **WHAT THIS DOES AND DOES NOT DO FOR `gbt`.** It removes ONE alternative explanation —
+its +0.360 is 4.1× what a reseed produces, so it is not seed luck. It does **nothing** to
+the multiple-comparison problem: `p_sharpe` 0.044 against Bonferroni **0.0083** for six
+challengers is unchanged. §11d's *"best measured, not established"* stands, now for a
+narrower reason. ⚠️ And §8a-ter is the other half: `gbt`'s advantage **changes sign at
+h=20** (`d_sharpe` −0.016, p = 0.941).
+
+⚠️ **`transformer` AND `tcn` ARE THE NEW INFORMATION HERE.** Their bootstrap `p` already
+called them ties, but *"tied"* and *"the entire measured gap is the size of a random seed"*
+are different sentences, and only the second one closes the question. §11a's ranking of the
+seven arms below `cnn` should not be read as a ranking at all.
+
+### 15d. ⚠️ A PER-FOLD SHARPE IS **4.4× MORE SEED-SENSITIVE** THAN THE POOLED ONE
+
+| | mean per-fold range over 5 seeds | pooled range |
+|---|---|---|
+| Sharpe@30 | **0.593** | **0.134** |
+
+Worst folds: **oos2019 spans 4.818 … 5.897 (1.079)**, oos2018 0.923, oos2020 0.926,
+oos2026 0.750. Best: oos2022 at 0.213 — the bad fold is the stable one, because everything
+is near zero there.
+
+⚠️ **SO A CELL IN §3's OR §9's PER-FOLD TABLE IS NOT A STABLE NUMBER AND MUST NOT BE READ AS
+ONE.** A one-point difference between two arms in one fold is inside a reseed. Pooling over
+236 periods cuts the noise 4.4×, which is why the pooled row is the one every register
+quotes — that convention is now measured rather than asserted.
+
+### 15e. ✅ BUT THE DECAY IS **NOT** A SEED ARTEFACT
+
+The obvious worry after §15d: §9a's decay is fitted on exactly those unstable per-fold
+cells. It survives.
+
+| per seed | Sharpe@30 slope | first-half → second-half fall |
+|---|---|---|
+| 42 / 01 / 07 / 13 / 21 | −0.329 · −0.279 · −0.280 · −0.319 · −0.332 | −55 % · −54 % · −54 % · −57 % · −57 % |
+| **mean ± sd** | **−0.308 ± 0.027** | **−55.4 %** |
+
+**Five seeds, five slopes inside 0.05 of each other, and the proportional fall lands in a
+3-point band.** The decay is a property of the track, not of the fit. ⚠️ These are the
+**`gbt`** arm's numbers; §9a's −0.219/fold and −45.8 % are the **`lstm`** track's, so the
+levels are not comparable — what transfers is that the SHAPE is seed-stable.
+
+### 15f. ⚠️ IC IS 4× MORE SEED-STABLE THAN SHARPE, IN RELATIVE TERMS
+
+| | mean | sd over seeds | relative |
+|---|---|---|---|
+| pooled IC | 0.1465 | 0.00073 | **0.5 %** |
+| pooled Sharpe@30 | 2.8902 | 0.0540 | **1.9 %** |
+
+**The ranking barely moves; the money does.** `long_only_top_k` takes the top 20 of ~150,
+which is a THRESHOLD — a hair's change in the ranking swaps which names are held, and the
+portfolio inherits a discretisation the IC never sees. ⚠️ Practical consequence: **when two
+arms differ, check the IC before believing the Sharpe.** In §11 `cnn`'s IC (+0.1171) is
+genuinely below the field's +0.14 and its Sharpe loss is corroborated; `gbt`'s IC (+0.1460)
+is 0.005 above `lstm`'s, which is **7× the IC seed floor** and does corroborate its
+direction — but on a quantity whose whole spread across the seven arms is 0.03.
+
+### 15g. THE RECORDED PREDICTION, AND HOW IT SCORED
+
+> Written into TODO before the run: *"the seed spread on `gbt` Sharpe@30 is ±0.10-0.15, so
+> `cnn`'s −0.398 survives comfortably and `gbt`'s +0.360 does not become significant. If the
+> spread is ≥ 0.3, everything in §11 below `cnn` is noise."*
+
+| clause | outcome |
+|---|---|
+| *"`cnn` survives comfortably"* | ✅ **RIGHT** — 4.5× the floor |
+| *"`gbt` does not become significant"* | ✅ **RIGHT**, and for a reason the prediction did not state: the floor cannot touch `p_sharpe` at all. It removes seed luck and leaves the six-arm correction untouched |
+| *"spread ±0.10-0.15"* | ⚠️ **AMBIGUOUS, AND THAT IS THE LESSON.** As a RANGE, 0.134 is dead centre. As a HALF-WIDTH, ±0.067 is half of what I said. **A prediction that can be scored two ways is half a prediction** — state the estimator next time |
+| *"if ≥ 0.3, everything below `cnn` is noise"* | did not fire at 0.3, but a weaker form DID: at 0.088, **`transformer`, `tcn` and `bilstm` are at or inside the floor** |
+| **unpredicted** | §15d (per-fold cells are 4.4× noisier) and §15f (IC is 4× more stable than Sharpe). Neither was anticipated and both change how the existing tables are read |
+
+⚠️ **THE COST ESTIMATE WAS 7.5× TOO HIGH, AND THE ERROR IS INSTRUCTIVE.** TODO said
+**~1 h 40 m**, anchored on §12's *"~20 min per `gbt` track"* × 5. It took **13m 16s**,
+because `--arm` builds each fold's tensors **once** and every arm trains off that build —
+the expensive half is the fold build, not the fit. **A five-arm sweep is not five tracks**,
+and the same arithmetic error would have over-costed every future arm sweep on this page.
+
+### 15h. What §15 does NOT establish
+
+1. ⚠️ **ONE ARCHITECTURE, AND IT IS THE CHEAPEST ONE — this is the main limitation.**
+   `gbt` is shallow, scale-invariant and resamples only rows and columns. **A
+   205 k-parameter recurrent net has a second noise source this sweep cannot see** —
+   initialisation and batch order — so the `lstm` floor could be larger, and `lstm` is
+   §11's REFERENCE arm. The obvious follow-up is five `lstm` seeds, which by §15g's
+   corrected arithmetic is ~2 h 45 m, not 13 min.
+2. **Five seeds.** `sd = 0.054` on 4 degrees of freedom, so the floor is itself estimated
+   to roughly ±30 %.
+3. **One horizon, one `k`, one universe** — and `NUL-1` unchanged: no null here prices the
+   feature selection every arm reads.
+4. ⚠️ **It measures the SEED, not the SCHEDULE.** §11d's caveat stands: nothing was tuned
+   per arm, and a loss may still be a schedule mismatch rather than an architecture verdict.

@@ -1,0 +1,19 @@
+{
+  "arm": "gbtseed13",
+  "arms": [
+    "gbtseed42",
+    "gbtseed01",
+    "gbtseed07",
+    "gbtseed13",
+    "gbtseed21"
+  ],
+  "first_test": "2017-01-01",
+  "horizon": 10,
+  "rank_min_width": 5,
+  "run_name": "gbtseed13__all__rank_10day__final__d20_h10",
+  "scale_target": true,
+  "step_months": 12,
+  "table": "rank_10day__final__d20_h10",
+  "ticker": "all",
+  "val_months": 12
+}
