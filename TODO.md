@@ -139,6 +139,59 @@ in this file and in `walkforward/CONTEXT.md` are read:**
 
 ---
 
+## ⚠️ MEASURED 2026-08-22 — THE TRADABILITY GATE, AND WHAT IT DOES TO THIS LIST
+
+**Nothing was renumbered.** This is evidence attached to items that already exist, recorded
+here because it changes their ORDER OF IMPORTANCE without changing their positions. Full
+measurement in `pipeline.md` §9 and §10; the operating rules are RUNBOOK §8 rules 14-16.
+
+**What was asked:** cap the book at 5 names and re-run. **What was found:** `--top-k` already
+IS that cap (no code needed), all ten stages were `up to date`, and re-scoring the published
+h=10 track at k=5 gives CAGR@30 **+181.3 %** against k=20's +74.0 %, clearing a 200-draw null
+at **z = +15.01**. Then three things turned that from a result into a warning:
+
+| measured | number |
+|---|---|
+| median matched turnover of a PICKED row at k=5 | **0.03 bn VND/day** (universe median 2.22) |
+| picks under 0.1 bn/day at k=5 / k=20 | **61.4 %** / 38.6 % |
+| daily IC across h=1 … h=30 | **FLAT**, +0.1403 … +0.1328 — it should peak at its own label |
+| rows with a forward 1-day return of EXACTLY zero, ADV60 < 0.1 bn | **51.2 %** |
+| CAGR h=10 k=5 under ADV60 ≥ 1 bn / ≥ 5 bn | **+36.5 %** / **+19.9 %** (from +181.3 %) |
+| `z` at k=5 vs k=20, gated, all 8 cells | **k=20 is higher in every one** |
+
+✅ All eight gated cells still clear their own null (null MAX below observed), so **the signal
+survives the gate — the LEVELS do not.**
+
+### What this does to the existing items
+
+| item | what changed |
+|---|---|
+| **`P12`** (execution realism — ADV cap, sell-side floor, ATC) | ⚠️ **It now has a measured price tag: roughly 145 pp of CAGR at k=5, and it is the difference between a headline and a strategy.** It was ranked on argument; it is now ranked on a number. Nothing else on this list moves a number this far |
+| **`P5`** (portfolio construction — `k`, weighting, laddering) | ⚠️ **The `k` half is answered and the answer is NO.** Lowering `k` raises CAGR only by concentrating into unbuyable names; on a gated basket k=5 and k=20 earn within a point of each other while k=20 carries the stronger `z`. What is left of `P5` is **weighting and the ladder**, not `k` |
+| **`P16`** (survivorship / point-in-time listing) | unchanged in rank, but the stale-price finding is adjacent: a name that stops trading is not delisted in this data, it just returns 0 forever — and 0 ranks well in a falling cross-section |
+| **`P21`** (`cs_rank_5day`) | ⚠️ **Do not read the h=5 numbers above as `P21` being done.** They are the h=10 MODEL traded every 5 sessions, not a chain selected and trained on `cs_rank_5day`. Confirmed on disk: `unified_schema_all` holds only `rank_10day` / `rank_20day` finals, and the only `cs_*` selection runs are `cs_rank_20day` ×2 and `cs_rank_10day` ×1 |
+| **`P2`** (live scoring) | ✅ **Cheaper than believed.** The 2026-06-11 cliff is in the LABEL, not the price — all 150 names carry a close through **2026-06-25**, so a live ranker has ~10 more usable sessions than `pipeline.md` used to claim. Ranking a book and scoring a book fail on different dates |
+| **`plan.md`** (the `screen_schema` plan, `main_v4`) | ⚠️ **These numbers are the first measurement of what that screen is worth**, and they cut both ways: it removes most of the reported return, and what remains still clears a null |
+
+### ⚠️ A PREDICTION, RECORDED BEFORE THE SCREENED CHAIN RUNS
+
+Per this file's convention (five recorded, four wrong — which is why the rest are worth
+anything). When `plan.md`'s screen is built and the chain re-selected and retrained on the
+screened basket, I predict:
+
+1. **Sharpe@30 lands near 1.0-1.4 at h=10, not near 2.5**, and CAGR near **+25 … +45 %/yr** —
+   i.e. close to the post-hoc gated figures above, because re-selecting on a cleaner basket
+   recovers only the part of the edge that was not stale-price ranking.
+2. **Daily IC falls to ~0.06-0.09** from 0.1412.
+3. **The horizon ladder flattens** — h=1 will no longer "earn" an order of magnitude more
+   than h=10, because that gap is a staleness artefact.
+4. ⚠️ **The screened chain will still clear its within-date null.**
+
+If (1) comes back near +2.5 Sharpe on a genuinely liquid basket, this whole block is wrong and
+the post-hoc gate was the flawed instrument — say so here rather than editing it out.
+
+---
+
 ## THE LIST — P3 … P31, highest priority first
 
 ### P3 … P12 · the live program

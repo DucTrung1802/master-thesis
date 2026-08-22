@@ -548,6 +548,22 @@ re-reading a level and keep it when you are claiming the level clears a bar.
 ⚠️ **It REWRITES `per_fold.csv`** with identical content; harmless, but it means the file's
 mtime is not evidence of when the sweep ran. `folds.csv` and `manifest.json` are.
 
+⚠️ **AND IT IS NOT HARMLESS AT A DIFFERENT `--top-k`** (measured 2026-08-22). The rewrite
+keys on the basename, not on `k`, so `--top-k 5` **overwrites the published k=20 fold table**
+with a k=5 one and nothing says so. To score a finished track at another `k`, copy the two
+inputs somewhere else and point `--out` at the copy — `manifest.horizon_for` recovers the
+horizon from `folds.csv`, so the copy scores identically:
+
+```powershell
+mkdir $env:TEMP\wf_k5
+copy ..\results\walkforward_h10\predictions_oos.csv $env:TEMP\wf_k5\
+copy ..\results\walkforward_h10\folds.csv           $env:TEMP\wf_k5\
+python -m walkforward.evaluate --top-k 5 --draws 200 --universe all --out $env:TEMP\wf_k5
+```
+
+✅ Verified the same day: scoring the copy at k=20 reproduces CAGR@30 **0.7398** / Sharpe
+**2.5310** / 236 periods, and the published `per_fold.csv` md5 was unchanged afterwards.
+
 **Verified this way on 2026-08-21** — both tracks reproduce CLAUDE.md §6-0 to every digit
 (h=20: `ic` 0.1097, `ic_t` 6.8956, `sharpe@30` 1.9913, `cagr@30` 0.4753, 118 periods,
 `se_sharpe` 0.1553). That is `RUNBOOK` §8 rule 1's spirit applied to a result rather than to
@@ -662,6 +678,36 @@ advantage survives a correction for the six arms that were tried.
     every arm trains off that build, so five `gbt` arms cost **13m 16s**, not the ~1 h 40 m
     that `5 x 20 min` predicts. Cost an arm sweep from the fold BUILD, not from the fit.
 
+14. ⚠️ **`--top-k` IS THE CAP ON HOW MANY STOCKS MAY BE BOUGHT, AND LOWERING IT BUYS LESS
+    TRADABLE NAMES** (measured 2026-08-22, `pipeline.md` §9). CAGR@30 rises monotonically as
+    `k` falls — +74.0 % (k=20) → +181.6 % (k=5) → +217.9 % (k=3) — but so does the
+    concentration into names nobody can buy: the median matched turnover of a picked row goes
+    0.30 bn (k=20) → **0.03 bn** (k=5), and the share of picks under 0.1 bn/day goes 38.6 % →
+    **61.4 %**. **Quote `k` beside any CAGR from this chain.**
+    ⚠️ **And at k=5 the width guard stops protecting the track.** `long_only_top_k` skips a
+    date on `len(day) < k`; at k=20 that excluded the three frozen 2026 books, at k=5 it does
+    not (7 ≥ 5) and the track becomes **239 periods instead of 236**. Worth ~0.35 pp of CAGR
+    here — and on a LIVE book it would print five bank tickers off a seven-name panel.
+
+15. ⚠️ **UNDER A TRADABILITY GATE THE LEVELS COLLAPSE, AND `k=20` BEATS `k=5` ON EVIDENCE.**
+    Gating on trailing 60-session median `value_matched` (`shift(1)`, no look-ahead) takes
+    h=10 k=5 from **+181.3 %** to **+36.5 %** (ADV ≥ 1 bn) and **+19.9 %** (ADV ≥ 5 bn); daily
+    IC falls 0.1412 → 0.0816 → 0.0667 and max drawdown WORSENS to −50.7 % / −64.0 %.
+    ✅ All eight gated cells still clear a 200-draw within-date null with MAX below observed —
+    but **`z` is higher at k=20 than at k=5 in every one of them** (h=10, ADV ≥ 1 bn: +7.64 vs
+    +5.23), and at ADV ≥ 5 bn the two CAGRs are within a point. **On a buyable basket, cutting
+    `k` weakens the evidence and adds almost nothing.** ⚠️ The gated null MEAN is +0.22…+0.34,
+    not zero. ⚠️ This is a post-hoc filter on a model trained over all 150 names; the screened
+    chain in `plan.md` is the real test.
+
+16. ⚠️ **CHECK THAT THE IC DECAYS WITH THE HORIZON BEFORE BELIEVING ANY CAGR LADDER.** The
+    h=10 model's IC is **FLAT from h=1 to h=30** (+0.1403 … +0.1328) when it should peak at
+    its own label. With a constant IC, `CAGR ∝ 1/√h` is arithmetic, not skill — which is why
+    the same predictions "earn" **+1416.9 %/yr** rebalanced daily. The cause is measured:
+    **51.2 %** of rows with ADV60 < 0.1 bn have a forward 1-day return of **exactly zero**, and
+    a frozen price ranks the same at every horizon. ✅ Under the ADV ≥ 1 bn gate the ladder
+    flattens (h=1 +44.4 % vs h=10 +36.5 %). `pipeline.md` §9e.
+
 ---
 
 ## 8a. ⚠️ CURRENT STATE — 2026-08-21: the chain CANNOT emit a pick list
@@ -677,10 +723,18 @@ thing to check before running anything that reads `pool__basic`:
 | 2026-07-08 | **7** |
 | 2026-07-22 | **7** |
 
-⚠️ **`FRZ-1`: after 2026-06-11 only 7 of 150 names carry data**, all banks. Mean names
-scored per session runs **145-147 for 2017-2025** and **113.3 in 2026** — the annual average
-hides a cliff. ⚠️ **`MAX(date)` on `pool__basic` reports 2026-08-07 and conceals it
-completely**, which is §8 rule 1's mechanism at the row level.
+⚠️ **`MAX(date)` on `pool__basic` reports 2026-08-07 and conceals this completely**, which
+is §8 rule 1's mechanism at the row level. Mean names scored per session runs **145-147 for
+2017-2025** and **113.3 in 2026** — the annual average hides a cliff.
+
+⚠️ **CORRECTED 2026-08-22 — THE 2026-06-11 CLIFF IS IN THE LABEL, NOT IN THE PRICE.** This
+file used to say *"after 2026-06-11 only 7 of 150 names carry data"*. The date is right and
+the mechanism was wrong: **all 150 names carry a close through 2026-06-25** (98 on 06-26, then
+7 from 06-29). What ends on 2026-06-11 is `return_10day`, because it needs a close ten sessions
+later. Last session with ≥100 names LABELLED: **2026-06-18** at h=5, **2026-06-11** at h=10,
+**2026-05-28** at h=20. So the horizon decides where a track ends — and a live-scoring module
+(`P2`) has about ten more sessions of usable FEATURES than the old sentence implied, because
+**ranking a book and scoring a book fail on different dates**. `pipeline.md` §6.1-bis.
 
 ✅ **The published +74 %/yr is NOT affected.** `long_only_top_k` does
 `if len(day) < k: continue`, so those three stub dates were skipped: **239 rebalance dates
@@ -743,6 +797,8 @@ data. TODO **`P2`**. `pipeline.md` §6 has both.
 | a memory fix lands and `peak` does not move | you fixed a real allocation that was not the BINDING one | measured 2026-08-21: row-blocking `window_design` moved a 23.3 GB cube and the peak by **0.1 GB**, because the panel path allocates in `panel_window_design` instead. ⚠️ `rss` went UP while `peak` held — **read `peak`, never `rss` alone** |
 | `walkforward.compare` raises *"arm X covers N rows against the reference arm's M"* | the two tracks do not span the same panel — a wider pool changes coverage, a different `rank_min_width` changes the label | **the refusal is correct.** Price them on the INTERSECTION (`backtest/CONTEXT.md`, and §3's wide-vs-narrow recipe), never by comparing two unpaired Sharpes |
 | `final_features --scope X` plans a table you did not ask for | ⚠️ **a scope names EVERY table in the plan**, and a report root holding two experiments plans both | give the second experiment its own `--root` — **and add its `.gitignore` negation pair in the same commit**, or its CSVs are silently dropped |
+| a long background run's log holds only the banner, then the process is gone | **stdout buffering** — CLAUDE.md §5 rule 20. Redirecting to a file re-buffers, so nothing lands until the flush at exit, and an interim `tail` reads as a crash | run it as `python -u -m ...`, and read the exit status before concluding it died. Measured 2026-08-21: a 200-draw null that looked dead had in fact finished in 8m 40s |
+| a scratchpad script raises `KeyError: 'exchange'` inside `portfolio.mark_ceiling` | the `pool__basic` read dropped a column the screen needs | `mark_ceiling` needs `date, exchange, ticker, close_adjust` plus a `day_ret`; select all four |
 | `Unknown top-level keys in kaggle_config.json` | a comment or note added at the top level; the schema is closed | put prose in `kaggle_gpu/README.md`, not in the config |
 
 ---
