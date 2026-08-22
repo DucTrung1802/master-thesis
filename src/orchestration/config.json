@@ -665,7 +665,7 @@
     "run": {
         "// skip_existing": "FALSE re-fetches every symbol (a real refresh). TRUE fetches only symbols absent from disk - right for RESUMING an interrupted run, wrong for refreshing.",
         "skip_existing": true,
-        "// max_browsers": "Hard cap on concurrent Chrome instances; also sizes the scraper's thread pool, so this IS the number of browsers. Overridable per shell with $env:SCRAPER_MAX_CONCURRENT_BROWSERS. 12 as of 2026-08-06 (constants.py default is 4); the 2026-08-06 economy LINKS run did 209 leaves in 16m43s at 10 with 0 failures. If leaves start coming back short, halve this first - a starved window is what truncated every leaf to 50 rows on 2026-08-05.",
+        "// max_browsers": "Hard cap on concurrent Chrome instances; also sizes the scraper's thread pool, so this IS the number of browsers. Overridable per shell with $env:SCRAPER_MAX_CONCURRENT_BROWSERS. 12 as of 2026-08-06, and constants.py's default was RAISED 4 -> 12 on 2026-08-22 so the two agree at every entry point; the 2026-08-06 economy LINKS run did 209 leaves in 16m43s at 10 with 0 failures. If leaves start coming back short, halve this first - a starved window is what truncated every leaf to 50 rows on 2026-08-05.",
         "max_browsers": 12
     }
 }

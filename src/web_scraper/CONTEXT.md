@@ -724,7 +724,8 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   driver is ever born outside it.
   > ⚠️ **The cap and the POOL are one number now (2026-08-05).**
   > `TradingViewScraper(max_browsers=…)` defaults to
-  > `SCRAPER_MAX_CONCURRENT_BROWSERS` (**4**, and `os.getenv`-overridable) and sizes
+  > `SCRAPER_MAX_CONCURRENT_BROWSERS` (**12** since 2026-08-22, was 4, and
+  > `os.getenv`-overridable) and sizes
   > `ThreadManager(max_workers=…)` from the same value. It had to: the cap was 8 in
   > the prose and 1 in `constants.py`, against a pool of `SCRAPER_MAX_WORKERS=2` — so
   > the effective concurrency was **1**, and a wider cap alone could never have been

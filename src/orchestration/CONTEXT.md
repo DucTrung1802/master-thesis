@@ -29,7 +29,7 @@
 >   },
 >   "partitions": { "raw/trading_view": { "economy": true, "forex": false, … } },
 >   "parameters": { "trading_view": { "economy": { "vietnam": { "gdp": true, … } } } },
->   "run":        { "skip_existing": false, "max_browsers": 4 }
+>   "run":        { "skip_existing": false, "max_browsers": 12 }
 > }
 > ```
 >
@@ -2732,12 +2732,16 @@ doubles them:
 
 | tag | limit | why |
 |---|---|---|
-| `resource: browser` | 1 | `SCRAPER_MAX_CONCURRENT_BROWSERS` (**4**) is an in-process semaphore — 4 processes is 16 Chrome instances, and 4× the global stagger against TradingView |
+| `resource: browser` | 1 | `SCRAPER_MAX_CONCURRENT_BROWSERS` (**12** since 2026-08-22, was 4) is an in-process semaphore — 4 processes is **48** Chrome instances, and 4× the global stagger against TradingView |
 | `resource: gpu` | 1 | OCR runs onnxruntime-gpu on a 4 GB RTX 3050; two partitions is VRAM exhaustion |
 
-**So a materialize opens at most 4 Chrome instances**, and only while a TradingView
-step runs — nothing else in the repo imports Selenium. The 4 is per PROCESS and the
-`browser` tag keeps exactly one browser step running, so the two multiply to 4, not 4×N.
+**So a materialize opens at most 12 Chrome instances**, and only while a TradingView
+step runs — nothing else in the repo imports Selenium. The 12 is per PROCESS and the
+`browser` tag keeps exactly one browser step running, so the two multiply to 12, not 12×N.
+⚠️ **Raised 4 → 12 on 2026-08-22 to match `config.json`'s `run.max_browsers`**, which had
+been 12 since 2026-08-06 — so every Dagster run was already opening 12 and only a
+directly-constructed scraper saw 4. The disagreement meant the browser budget depended on
+the entry point; it is one number now.
 
 ⚠️ **Fixed 2026-07-31: the links phase ignored the semaphore.**
 `_scrape_links_attempt` created its driver outside it, so the effective cap there was
@@ -2758,7 +2762,8 @@ Raise it only for work with no browser in it.
 ### The browser budget is ONE number, and it is a parameter
 
 `SCRAPER_MAX_CONCURRENT_BROWSERS` in [utils/constants.py](../utils/constants.py) —
-**default 4** — is the whole cap. Three ways to change it, in ascending precedence:
+**default 12** (raised from 4 on 2026-08-22) — is the whole cap. Three ways to change it,
+in ascending precedence:
 
 ```powershell
 # 1. the file            src/utils/constants.py

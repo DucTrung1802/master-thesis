@@ -400,7 +400,7 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 | **P35** | `logs/app.log` has many writers now, so records interleave | — | *old `P27`* | The executor is multiprocess and every step appends. Fix is per-process filenames in `Logger` |
 | **P36** | `raw/trading_view` partitions `crypto` and `options` are permanently red | — | *old `P28`* | Both `true` in config, folders never existed, `landed(require=True)` fails them |
 | **P37** | Decide the fate of `raw/trading_view_collected_links` — nothing reads it | — | *old `P29`* | It is a leaf, not a hub |
-| **P38** | ⚠️ If ever backfilling TradingView, use a **single-run backfill** | — | *old `P30`* | `tag_concurrency_limits` is per-RUN, so 9 partitions the default way is 9 runs × 8 browsers = **72 Chrome** |
+| **P38** | ⚠️ If ever backfilling TradingView, use a **single-run backfill** | — | *old `P30`* | `tag_concurrency_limits` is per-RUN, so 9 partitions the default way is 9 runs × 12 browsers = **108 Chrome** (the budget was raised 4 → 12 on 2026-08-22; this row said 8 × 9 = 72 when the code said 4) |
 | **P39** | Four heavy assets have never been observed running end to end through Dagster | — | *old `P31`* | `trading_view_links`/`data`, the 5 CafeF stock tabs + news, `cafef_pdfs` (100 partitions), `cafef_financials` (~2.4 h each). *"Built is not run"* |
 
 ⚠️ **THREE GAPS ARE DELIBERATE AND ARE NOT ON THIS LIST**, on measured evidence

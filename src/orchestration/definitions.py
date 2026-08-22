@@ -133,9 +133,9 @@ def _enabled(asset_defs):
 # Two limits exist because two resources are physical and are capped INSIDE a single
 # process, so a second process silently doubles them:
 #
-#   * `browser` (limit 1) — `SCRAPER_MAX_CONCURRENT_BROWSERS` (4) is an in-process
-#     semaphore. Four TradingView partitions in four processes is 16 Chrome instances,
-#     not 4, on a machine tuned for 4. It also multiplies the global 8-second
+#   * `browser` (limit 1) — `SCRAPER_MAX_CONCURRENT_BROWSERS` (12 since 2026-08-22) is
+#     an in-process semaphore. Four TradingView partitions in four processes is 48 Chrome
+#     instances, not 12, on a machine tuned for 12. It also multiplies the global 8-second
 #     navigation stagger by four against TradingView, which is the thing the stagger
 #     exists to avoid. ⚠️ This tag limit is per RUN; the multi-run escape hatch is shut
 #     by `max_concurrent_runs: 1` in `.dagster/dagster.yaml`, not here.

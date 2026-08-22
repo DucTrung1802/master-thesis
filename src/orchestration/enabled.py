@@ -7,7 +7,7 @@ One file, three sections:
 {
   "assets":     { "raw/trading_view_data": true },        // which assets load
   "partitions": { "raw/trading_view": { "stocks": false } },  // which SUB-SOURCES exist
-  "run":        { "skip_existing": false, "max_browsers": 4 } // what the job launches with
+  "run":        { "skip_existing": false, "max_browsers": 12 } // what the job launches with
 }
 ```
 

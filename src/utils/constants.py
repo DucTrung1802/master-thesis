@@ -319,8 +319,12 @@ SCRAPER_RETRY_DELAY = 5  # seconds to wait between retries
 # ⚠️ It is an IN-PROCESS semaphore. One Dagster run holds one TradingView step at a time
 # (the `resource: browser` tag limit), so the cap is exact there — but a multi-run
 # backfill launches one process per partition and multiplies it. See orchestration §2a.
+# ⚠️ 12 SINCE 2026-08-22, RAISED FROM 4 TO MATCH config.json's `run.max_browsers`, which
+# has been 12 since 2026-08-06. The two disagreed for two weeks: every Dagster run read
+# 12 from config.json while this default served anything constructing the scraper
+# directly, so the "browser budget" depended on the entry point. They are one number now.
 SCRAPER_MAX_CONCURRENT_BROWSERS = int(
-    os.getenv("SCRAPER_MAX_CONCURRENT_BROWSERS", "4")
+    os.getenv("SCRAPER_MAX_CONCURRENT_BROWSERS", "12")
 )
 SCRAPER_NAV_STAGGER = 8.0  # minimum seconds between browser page navigations
 SCRAPER_MAX_WORKERS = 2  # thread-pool size for I/O-bound (requests) scrapers
