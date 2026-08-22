@@ -15,7 +15,8 @@
 > ## ⚠️ THE ONE-LINE ANSWER
 >
 > **The pipeline outputs `(date, ticker, weight)` — 4,720 picks across 236 dated books —
-> and it CANNOT produce one for today.** The mechanism is complete and measured; the
+> and it CANNOT produce one for today.** ⚠️ **And §9d is the number that
+> matters most: under a tradability gate the CAGR falls from +181 % to +36.5 %.** The mechanism is complete and measured; the
 > *live* end is missing for three specific reasons in §6. Read §5 before treating any
 > single book as a recommendation.
 
@@ -231,8 +232,38 @@ Names scored and buyable per rebalance date:
 | 2026-07-22 | **7** |
 
 Mean names scored per session, by year: **145-147 for 2017-2025**, and **113.3 in 2026** —
-the average hides a cliff. After **2026-06-11** only seven names, all banks, carry fresh
-data. ⚠️ `MAX(date)` on `pool__basic` reports **2026-08-07** and conceals this completely.
+the average hides a cliff. ⚠️ `MAX(date)` on `pool__basic` reports **2026-08-07** and
+conceals this completely.
+
+### ⚠️ 6.1-bis. CORRECTED 2026-08-22 — THE CLIFF AT 2026-06-11 IS IN THE **LABEL**, NOT IN THE PRICE
+
+The sentence this section used to carry — *"after 2026-06-11 only seven names carry fresh
+data"* — had the DATE right and the MECHANISM wrong, and the difference decides what a live
+chain could do today. Measured on the 150-name universe:
+
+| session | rows with a `close` | with `return_5day` | with `return_10day` | with `return_20day` |
+|---|---|---|---|---|
+| 2026-06-11 | **150** | 150 | **150** | 7 |
+| 2026-06-12 | **150** | 150 | **98** | 7 |
+| 2026-06-18 | **150** | **150** | 7 | 7 |
+| 2026-06-19 | **150** | 98 | 7 | 7 |
+| 2026-06-25 | **150** | 7 | 7 | 7 |
+| 2026-06-26 | 98 | 7 | 7 | 7 |
+| 2026-06-29 | **7** | 7 | 7 | 7 |
+
+⚠️ **All 150 names carry a PRICE through 2026-06-25.** The cliff in the price data is
+2026-06-26 → 06-29 (150 → 98 → 7). What ends on 2026-06-11 is the **forward return**, because
+`return_10day` at date `t` needs a close at `t+10` and that runs off the end of the data.
+
+Three consequences, and each one changes a decision:
+
+1. ✅ **The 2026-06-10 book's realised returns are REAL prices**, not a carried-forward stub.
+   Its label needs 2026-06-24, which all 150 names have.
+2. **The horizon decides where the usable track ends**: last session with ≥100 names labelled
+   is **2026-06-18** at h=5, **2026-06-11** at h=10, **2026-05-28** at h=20.
+3. ⚠️ **A live-scoring module (`P2`) has ~10 more sessions of usable FEATURES than the old
+   sentence implied.** You can rank the cross-section on 2026-06-25; you simply cannot score
+   the outcome yet. *Scoring a book and evaluating a book fail on different dates.*
 
 **Fix: re-scrape the 143 frozen tickers.** Until then the chain cannot emit a book at all,
 because a 7-name cross-section is not a cross-section. TODO **`P1`**.
@@ -281,3 +312,169 @@ Restated because a pick list invites forgetting them — the full versions are i
   within-date ranks.
 
 **This is a research backtest. It is not a recommendation to buy any security.**
+
+---
+
+## 9. ⚠️ HOW MANY NAMES TO BUY — `k`, and what lowering it actually buys
+
+Measured 2026-08-22 on the published `results/walkforward_h10/` track. **No new parameter was
+needed: `--top-k` IS the cap on how many stocks may be bought** (`backtest.portfolio.
+long_only_top_k`, equal weight `1/k`), and it is already wired through `backtest`,
+`walkforward.evaluate` and `walkforward.compare`. Nothing upstream of stage ⑪ moves with it —
+`python -m pipeline` reported all ten stages `up to date` — so re-scoring the existing track
+is the whole experiment.
+
+✅ The harness was checked against the artefact first: at k=20 it reproduces the published
+row to every digit (CAGR@30 **0.7398**, Sharpe **2.5310**, 236 periods).
+
+### 9a. The k ladder, 30 bps, on the 236 comparable books
+
+| k | CAGR@30 | Sharpe@30 | max DD | cost drag |
+|---|---|---|---|---|
+| 3 | **+217.9 %** | +3.134 | −29.1 % | 6.2 % |
+| **5** | **+181.6 %** | **+3.163** | −33.5 % | 6.0 % |
+| 10 | +113.3 % | +2.979 | −36.3 % | 5.5 % |
+| 15 | +91.1 % | +2.735 | −37.7 % | 5.2 % |
+| **20** *(published)* | **+74.0 %** | +2.531 | −39.9 % | 4.9 % |
+| 30 | +56.9 % | +2.191 | −45.8 % | 4.4 % |
+| 50 | +40.8 % | +1.738 | −45.2 % | 3.6 % |
+
+Monotone in both directions — the shape a real cross-sectional ranking makes. The equal-weight
+universe over the same books is **+13.5 %**. At k=5 the null still clears easily: **z = +15.01**
+at 30 bps (200 within-date shuffles, null MAX +0.748 below the observed +3.155), against k=20's
++18.58.
+
+### 9b. ⚠️ AT k=5 THE WIDTH GUARD STOPS PROTECTING THE TRACK
+
+`long_only_top_k` skips a date with `if len(day) < k`. At k=20 that silently excluded the three
+frozen 2026 rebalance dates (§6.1); **at k=5 the guard passes them, because 7 ≥ 5** — the track
+becomes **239 periods, not 236**, and those three books hold five HOSE banks drawn from a
+seven-name panel. Worth only ~0.35 pp of CAGR, measured both ways — ⚠️ **but on a LIVE book it
+would print five bank tickers as if they were a recommendation.** The guard was doing work
+nobody had specified, and lowering `k` removed it.
+
+### 9c. ⚠️ AND THIS IS WHAT LOWERING `k` REALLY BUYS: LESS TRADABLE NAMES
+
+§4c measured the model over-picking UPCOM at k=20. Lowering `k` makes it monotonically worse.
+Median matched turnover **of a picked row**, against a universe median of **2.22 bn VND/day**:
+
+| k | median turnover of a pick | picks under 0.1 bn/day | UPCOM share | HOSE share |
+|---|---|---|---|---|
+| 3 | **0.02 bn** | **65.8 %** | 42.9 % | 35.6 % |
+| **5** | **0.03 bn** | **61.4 %** | 38.1 % | 39.2 % |
+| 10 | 0.09 bn | 50.2 % | 29.6 % | 47.3 % |
+| **20** | 0.30 bn | 38.6 % | 21.7 % | 55.4 % |
+| 50 | 1.21 bn | 26.7 % | 13.7 % | 67.0 % |
+
+The names carrying k=5 are `DCT` (61 books), `DCS` (54), `VST` (40), `EFI` (39), `PVV`/`SD7`
+(37) — **every one with a median matched turnover of 0.00-0.02 bn VND/day.** Turnover per
+rebalance also rises, 65.1 % → **78.7 %**.
+
+⚠️ **So the ladder in §9a is not a menu.** The extra return at low `k` is earned in names that
+cannot absorb a position, and the backtest models no ADV cap and no slippage (`P12`).
+
+### 9d. ⚠️ THE DECISIVE TEST — a tradability gate, and the CAGR collapses
+
+Gate on **trailing 60-session median `value_matched`, `shift(1)`** — known at entry, so no
+look-ahead. Applied to the same track and the same predictions, k=5, 30 bps:
+
+| gate | daily IC h=10 | CAGR h=5 | CAGR h=10 | Sharpe h=10 | max DD |
+|---|---|---|---|---|---|
+| **none** | 0.1412 | **+249.0 %** | **+181.3 %** | 3.16 | −33.5 % |
+| ADV60 ≥ 1 bn | 0.0816 | **+39.4 %** | **+36.5 %** | 1.08 | −50.7 % |
+| ADV60 ≥ 5 bn | 0.0667 | +25.2 % | +19.9 % | 0.72 | −64.0 % |
+| ADV60 ≥ 20 bn | 0.0569 | +14.4 % | +10.2 % | 0.47 | — |
+
+✅ **All eight gated cells still CLEAR a 200-draw within-date null, MAX below observed in every
+one** — ADV ≥ 1 bn: h=10 k=5 **z = +5.23**, k=20 **+7.64**; h=5 k=5 **+7.40**, k=20 **+12.32**.
+ADV ≥ 5 bn: h=10 k=5 **+3.28**, k=20 **+5.60**; h=5 k=5 **+6.42**, k=20 **+10.58**.
+
+⚠️ **`k=20` HAS A HIGHER `z` THAN `k=5` IN ALL EIGHT GATED CELLS**, and at ADV ≥ 5 bn their
+CAGR is within a point of each other (+19.9 % vs +19.0 %) while `z` is 3.28 against 5.60. **On a
+basket you can actually buy, cutting `k` to 5 weakens the evidence and adds almost no return.**
+⚠️ The gated null MEAN is **+0.22 … +0.34**, not zero, so the excess at h=10 is ~0.75 Sharpe.
+
+⚠️ **This is a post-hoc filter on a model trained over all 150 names.** A properly screened
+chain re-selects and retrains on the screened basket — that is `plan.md`'s `screen_schema`, and
+these numbers are the first measurement of what it is worth.
+
+### 9e. ⚠️ THE SIGNAL DOES NOT DECAY WITH THE HORIZON — and that is a warning, not a feature
+
+The same `y_pred`, scored against every forward horizon:
+
+| h | daily IC | `ic_t` | CAGR@30 k=5 | Sharpe |
+|---|---|---|---|---|
+| 1 | +0.1403 | +52.6 | **+1416.9 %** | 7.59 |
+| 3 | +0.1523 | +32.7 | +416.8 % | 5.06 |
+| 5 | +0.1478 | +24.1 | +249.0 % | 4.05 |
+| **10** *(the trained label)* | **+0.1412** | +16.1 | **+181.3 %** | 3.16 |
+| 20 | +0.1347 | +10.4 | +87.6 % | 1.82 |
+| 30 | +0.1328 | +9.1 | +63.7 % | 1.41 |
+
+⚠️ **A genuine 10-day forecast should peak near h=10 and fall away. This one is FLAT from h=1
+to h=30.** When the IC does not decay, `CAGR ∝ 1/√h` is pure arithmetic — the same edge
+collected 252 times a year instead of 25. **The ladder is not evidence that trading faster is
+better; it is evidence that the model is ranking a persistent property rather than forecasting.**
+
+**And the property is measurable — prices that do not move.** Share of rows whose forward
+return is **exactly zero**:
+
+| | all rows | ADV60 < 0.1 bn | ADV60 ≥ 1 bn |
+|---|---|---|---|
+| h=1 | 21.9 % | **51.2 %** | 10.3 % |
+| h=5 | 8.9 % | 23.1 % | 3.3 % |
+| h=10 | 6.3 % | 16.5 % | 2.2 % |
+
+Half of the illiquid rows do not move in a session. A frozen price returns 0 at *every*
+horizon, and in a falling cross-section 0 is a good rank — which is exactly what a flat IC
+looks like. ✅ **Under the ADV ≥ 1 bn gate the horizon ladder flattens too** (h=1 +44.4 % against
+h=10 +36.5 %), so nearly the whole advantage of trading fast lived in the unbuyable names.
+
+---
+
+## 10. Two named books, read end to end — 2026-08-22
+
+Both are read with the chain's own rules (ceiling screen on, `y_pred` from
+`predictions_oos.csv`).
+
+**2026-06-10** — on the 10-session rebalance grid, 150 scored, 3 at ceiling, **147 buyable**:
+
+| # | ticker | board | `y_pred` | ADV60 | matched that day | sessions with NO trade since 06-01 |
+|---|---|---|---|---|---|---|
+| 1 | **DCS** | UPCOM | +0.2807 | **0.00 bn** | **0.00** | ⚠️ **16 of 18** |
+| 2 | LAS | HNX | +0.2350 | 5.94 bn | 1.45 | 0 |
+| 3 | PFL | UPCOM | +0.2283 | 0.11 bn | 0.06 | 0 |
+| 4 | DXP | HNX | +0.2180 | 4.71 bn | 2.29 | 0 |
+| 5 | BCC | HNX | +0.2110 | 0.26 bn | 0.46 | 0 |
+
+⚠️ **The #1 pick is unbuyable** — DCS trades at 700 VND and did not trade at all on the entry
+date. Under ADV ≥ 1 bn the book is **LAS, DXP, TNG, NTP, VGS**.
+
+**2026-06-01** — ⚠️ **NOT on the rebalance grid** (seven sessions before 06-10, so a 10-session
+hold overlaps the next book; no published statistic covers trading this way). 150 scored, 4 at
+ceiling, 146 buyable:
+
+| # | ticker | board | `y_pred` | matched that day | price |
+|---|---|---|---|---|---|
+| 1 | **DCS** | UPCOM | +0.3158 | **0.00** | 700 đ |
+| 2 | **DCT** | UPCOM | +0.2980 | **0.00** | 500 đ |
+| 3 | **PGS** | HNX | +0.2697 | **0.00** | 48,800 đ |
+| 4 | **DIC** | UPCOM | +0.2623 | **0.00** | 900 đ |
+| 5 | TNG | HNX | +0.2589 | 5.13 | 18,900 đ |
+
+⚠️ **Four of the five did not trade a single dong on the entry date.** Under ADV ≥ 1 bn the book
+is **TNG, LAS, NBC, VGS, DXP**; under ADV ≥ 5 bn, **TNG, LAS, VGS, DXP, PVC**.
+
+**Realised over the following 10 sessions** — recorded because it shows how little one book
+says, not as evidence:
+
+| book | mean realised |
+|---|---|
+| 06-01 raw | **+6.58 %** — ⚠️ *all of it is `DCT` +40 %, a 500 đ stock that never traded* |
+| 06-01 ADV ≥ 1 bn | **−2.07 %** |
+| 06-10 raw | **−0.97 %** |
+| 06-10 ADV ≥ 1 bn | **+0.29 %** |
+
+⚠️ §5.1 already measured why these four numbers carry nothing: 43 of 236 books were negative and
+only 60.2 % of picks land in the top half. **The edge is 236 books deep, and it is not in any
+one of them.**
