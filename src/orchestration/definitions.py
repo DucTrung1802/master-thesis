@@ -18,6 +18,14 @@ Five layers, kept in separate modules on purpose:
                           panels. Every assumption that makes a panel dense — publication
                           lag, as-of carry, staleness cap — lives HERE and never in
                           silver.
+  * `assets/filter.py`  — `silver_schema`/`gold_schema` → `filter_schema` (1,
+                          partitioned by SCREEN): the universe screen that decides WHICH
+                          TICKERS a unified schema may hold. The only layer producing no
+                          time series — one row per (exchange, ticker) with every
+                          condition's measurement and verdict. ⚠️ Its edge into
+                          `unified` is deliberately NOT declared: the two are
+                          partitioned on different sets, so the check lives in
+                          `_helper_unified_member_filter` instead.
   * `assets/unified.py` — `silver_schema` → `unified_schema_<ticker>` (2): ONE ticker,
                           cut into the feature groups a model selects over. The first
                           layer scoped to a single company rather than the universe.
@@ -60,7 +68,15 @@ bootstrap()
 from utils.constants import SCRAPER_MAX_CONCURRENT_BROWSERS
 
 from orchestration import enabled
-from orchestration.assets import bronze, gold, scrape, selection, silver, unified
+from orchestration.assets import (
+    bronze,
+    filter as filter_assets,
+    gold,
+    scrape,
+    selection,
+    silver,
+    unified,
+)
 from orchestration.resources import PreprocessorResource, RepoLogger, SwitchConfig
 
 # ── Which assets are loaded — src/orchestration/config.json ───────────────────
@@ -229,6 +245,7 @@ defs = Definitions(
             *bronze.assets,
             *silver.assets,
             *gold.assets,
+            *filter_assets.assets,
             *unified.assets,
             *selection.assets,
         ]

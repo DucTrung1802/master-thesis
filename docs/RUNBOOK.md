@@ -71,6 +71,7 @@ for yet.
 
 | # | stage | command (from `src\`) | writes | measured |
 |---|---|---|---|---|
+| **0** | **filter** *(NEW 2026-08-22, optional)* | `dagster asset materialize -f orchestration/definitions.py --select "filter/universe" --partition PRICE10K` | `filter_schema.universe__price10k` | **~1 s** |
 | 1 | data | `dagster asset materialize -f orchestration/definitions.py --select "group:unified" --partition VCB` | `unified_schema_vcb.pool__*` | minutes–hours |
 | 2 | selection | `python -m feature_selection.run --pools pool__basic --null-draws 10` | `reports/feature_selection/<run>/` | **~1 min** per country pool |
 | 3 | shortlist_pool | `python -m final_features --apply --shape shortlist` | `pool__shortlist__<target>__d20_h5` | seconds |
@@ -313,6 +314,80 @@ that does not beat three ranked columns has not earned its complexity. At h=10 t
 returns **+2.442** against the hand rule's **−0.263** on one panel (paired `t` = +5.94).
 
 ---
+
+## 3d. ⚠️ SCREENING A UNIVERSE — the filter layer, as run 2026-08-22
+
+Stage 0 is optional and only exists if you want a universe that is **not** `ALL`, `BANK`,
+`VN30` or one company. A **screen** is a named list of conditions defined in
+[src/orchestration/preprocessor/filters.py](../src/orchestration/preprocessor/filters.py);
+materialising it writes the membership table, and the matching `unified` partition then
+builds against it.
+
+```powershell
+cd D:\GIT\master-thesis
+.\mt_env\Scripts\Activate.ps1
+$env:DAGSTER_HOME = "D:\GIT\master-thesis\.dagster"
+Clear-Content logs\app.log
+
+# 0. the membership table — ~1 s, writes filter_schema.universe__price10k
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "filter/universe" --partition PRICE10K
+
+# 1. the schema it gates. pool__basic FIRST — every other pool joins to it as the spine.
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "unified/pool__basic"   --partition PRICE10K     # 7m 36s at 480 tickers
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "unified/pool__targets" --partition PRICE10K     # 40 s
+```
+
+**The three screens shipped, measured 2026-08-22:**
+
+| partition | what it means | tickers | `pool__basic` |
+|---|---|---|---|
+| `PRICE10K` | `close_raw` never below **10,000 VND** on any session since 2026-01-01 | **480 / 781** | 1,503,958 × 101 |
+| `LIQUID` | ≥1 bn VND/session median matched turnover, ≥80 % traded days, ≥200 sessions, still quoted | **206 / 781** | 657,892 × 101 |
+| `QUALITY` | `LIQUID` + a 5,000 VND median price floor + a debt/equity ceiling | **200 / 781** | 635,919 × 101 |
+
+⚠️ **`--select "group:unified"` builds ALL TWELVE pools** — `pool__ta`, `pool__fa`, 19
+`pool__economy_*` and 48 `pool__forex_*` among them. On a 480-ticker screen that is
+hours. Name the two pools you need, as above.
+
+### Reading the screen table before you trust the universe
+
+```sql
+SELECT ticker, val__turnover_median_1bn, first_failed
+FROM filter_schema.universe__quality WHERE NOT passes ORDER BY 2 DESC NULLS LAST;
+```
+
+⚠️ **EVERY CANDIDATE IS IN THE TABLE, not only the survivors** — 781 rows with each
+condition's measured value, its verdict, `passes` and `first_failed`. That is what makes
+"why is this ticker out" answerable without re-running anything.
+
+⚠️ **A PASS RATE IS NOT A COVERAGE RATE.** `SELECT COUNT(val__<cond>)` is how many names
+the condition could be MEASURED on; a condition everything cleared and a condition
+nothing was measured for both report 100 % passing. `debt_to_equity_max_12` is the live
+case: `gold.stocks_financials_bank_fa` holds **2 tickers of 781**, so it abstains on 779
+(`on_missing="keep"`) and the asset logs a WARNING naming its 0.3 % coverage. Rule 22 at
+the filter, and §8 rule 1's gate applies here too.
+
+### ⚠️ Two things that will bite
+
+1. **Re-running a screen does NOT rebuild the unified schema.** The edge is deliberately
+   not declared (the two assets are partitioned on different sets), so a changed
+   threshold leaves the old universe on disk looking current. Rebuild `pool__basic` and
+   `pool__targets` for that partition yourself.
+2. **A screen is NOT point-in-time.** Membership is decided from a window and applied to
+   the whole history — `PRICE10K` picks names on 2026 prices and carries that back to
+   2009. **A `z` against a within-date shuffle is protected; a CAGR read off one of these
+   universes is not.** Every window is recorded in the table `COMMENT`:
+   `SELECT obj_description('filter_schema.universe__price10k'::regclass, 'pg_class');`
+
+### Adding a condition
+
+One `register(Condition(...))` in `filters.py`, one entry in `SCREENS`, and the new key
+under **both** `filter` and `unified` in `src/orchestration/config.json`. Then
+`python -m pytest src/orchestration/preprocessor/test_filters.py -q` (30 tests, no
+database) and `dagster definitions validate -f src/orchestration/definitions.py`.
 
 ## 4. The two flags that decide whether you destroy something
 
@@ -733,7 +808,7 @@ the mechanism was wrong: **all 150 names carry a close through 2026-06-25** (98 
 7 from 06-29). What ends on 2026-06-11 is `return_10day`, because it needs a close ten sessions
 later. Last session with ≥100 names LABELLED: **2026-06-18** at h=5, **2026-06-11** at h=10,
 **2026-05-28** at h=20. So the horizon decides where a track ends — and a live-scoring module
-(`P2`) has about ten more sessions of usable FEATURES than the old sentence implied, because
+(`P10`) has about ten more sessions of usable FEATURES than the old sentence implied, because
 **ranking a book and scoring a book fail on different dates**. `pipeline.md` §6.1-bis.
 
 ✅ **The published +74 %/yr is NOT affected.** `long_only_top_k` does
@@ -755,7 +830,7 @@ then re-run the sweep. TODO **`P1`**.
 
 ⚠️ **And there is still no LIVE-SCORING path** — every stage writes predictions for a
 dataset's *test split*, so the chain cannot score today's cross-section even with fresh
-data. TODO **`P2`**. `pipeline.md` §6 has both.
+data. TODO **`P10`**. `pipeline.md` §6 has both.
 
 ---
 
@@ -770,7 +845,7 @@ data. TODO **`P2`**. `pipeline.md` §6 has both.
 2. ⚠️ **THE MODEL OVER-PICKS THE BOARDS YOU CAN LEAST TRADE.** UPCOM is **2.20×** its share
    of scored rows, HNX 1.31×, HOSE **0.76×**. The most-selected names are `DCT` (108 of 236
    books), `DCS` (106), `EFI` (87); `VCB` appears in 30, `HPG` and `VNM` in 12. **With no
-   ADV cap and no slippage modelled (`P12`), this is the biggest open threat to the
+   ADV cap and no slippage modelled (`P14`), this is the biggest open threat to the
    levels.**
 3. **Turnover is 65.1 % per rebalance** (median 65.0 %, range 20-90 %) → **8.2 %/yr** at
    50 bps. ✅ That confirms `backtest/CONTEXT.md` §3's assumed `τ = 0.70` from the data.

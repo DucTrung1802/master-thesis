@@ -113,6 +113,13 @@ SILVER_SCHEMA = "silver_schema"
 GOLD_SCHEMA = "gold_schema"
 UNIFIED_SCHEMA = "unified_schema"
 
+# ⚠️ THE FILTER LAYER (2026-08-22) — one table per SCREEN, `universe__<screen>`, holding
+# every `(exchange, ticker)` silver knows with the measurement and the verdict of every
+# condition that screen names. It sits BETWEEN gold and unified: gold answers "what
+# happened to this ticker on this date", this answers "is this ticker allowed into a
+# unified schema at all". `orchestration/preprocessor/filters.py` is the registry.
+FILTER_SCHEMA = "filter_schema"
+
 # GOLD_PROTOTYPE_TICKERS: list = ["VNM", "VIC", "FPT", "VCB"]
 
 # Stocks (by ticker) to build a per-stock unified table for (unified_<ticker>).

@@ -154,6 +154,13 @@
             "gold/market_breadth": true
         },
         "// ---- unified ----": "UNIFIED TABLES - silver_schema -> unified_schema_<universe>. One universe per partition, cut into feature groups.",
+        "// filter": "THE FILTER LAYER (2026-08-22) -- silver/gold -> filter_schema.universe__<screen>. It sits BETWEEN gold and unified and produces no time series: one row per (exchange, ticker) with every condition's measured value and verdict. The screens themselves live in src/orchestration/preprocessor/filters.py; this group only says whether the asset loads.",
+        "filter": {
+            "// enabled": "ON. Cheap - seconds per screen, one CTAS.",
+            "enabled": true,
+            "// filter/universe": "Writes EVERY candidate, not only the survivors, so `first_failed` can answer 'why is this ticker out'. WARNING: re-running it does NOT mark unified stale (CLAUDE.md rule 14) - rebuild group:unified for the same partition yourself.",
+            "filter/universe": true
+        },
         "unified": {
             "// enabled": "ON. Reads silver/gold into unified_schema_<universe>; pick a partition (VCB / BANK / ALL).",
             "enabled": true,
@@ -218,6 +225,12 @@
             "HOSE_ACB": true
         },
         "// unified": "The universes of the unified schema, shared by all pool__* assets. Same rule as before: the group's `enabled` under `assets` is the off switch, NOT setting every partition false (enabled.register raises on that). VCB / BANK / ALL are the sentinels and VN30 is a fourth - ⚠ VN30 is today's vn30.csv membership and is NOT point-in-time; see UNIFIED_VN30 in preprocessor.py for why that is survivorship in its worst form. The 30 single names are one schema per company for the SINGLE-STOCK track. This block IS listed, so absent means OFF: a new ticker must appear here AND in UNIFIED_PARTITIONS or it is silently unmaterialisable.",
+        "// filter": "THE SCREENS of the FILTER LAYER, one key per entry in preprocessor/filters.py SCREENS. A screen is a named list of conditions over silver/gold that decides WHICH TICKERS unified_schema_<screen> may hold. Setting one false removes it from this PartitionsDefinition but NOT from the `unified` set below, so switch both -- otherwise the unified partition survives and raises for want of its membership table.",
+        "filter": {
+            "PRICE10K": true,
+            "LIQUID": true,
+            "QUALITY": true
+        },
         "unified": {
             "VCB": true,
             "ALL": true,
@@ -228,6 +241,10 @@
             "VIC": true,
             "STB": true,
             "VN30": true,
+            "// the SCREENS": "Universes gated by filter_schema.universe__<screen> instead of by a hard-coded predicate. Materialise filter/universe for the SAME key first -- unified/pool__basic raises with the exact command if the membership table is absent. WARNING: a screen is NOT point-in-time, so any CAGR read off one of these schemas is biased; a within-date shuffle null is not. See preprocessor/filters.py.",
+            "PRICE10K": true,
+            "LIQUID": true,
+            "QUALITY": true,
             "ACB": true,
             "BCM": true,
             "BID": true,

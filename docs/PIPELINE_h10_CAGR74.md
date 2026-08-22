@@ -357,7 +357,7 @@ reseed, not a result** (measured 2026-08-21 on five seeds).
 |---|---|---|
 | positions | **top 20 of ~150** | Sharpe decays monotonically 1.53 (k=10) → 0.81 (k=75); k=20 is not a knife-edge |
 | direction | **long only** | HOSE offers no shorting |
-| weights | equal, `1/k` | ⚠️ never varied — TODO `P5` |
+| weights | equal, `1/k` | ⚠️ never varied — TODO `P13` |
 | rebalance | every **10 sessions**, non-overlapping | so periods do not overlap and `n_eff` is honest |
 | **ceiling screen** | **ON by default** | a name at its daily price ceiling on the entry date has **no sellers**; buying it is fiction. Drops **9,259 of 349,581 rows = 2.65 %** |
 | cost | `round_trip × ½ × Σ\|Δw\|`, `ROUND_TRIP_COST` = 50 bps | the same constant the sentiment study uses |
@@ -495,7 +495,7 @@ dataset's own `drift.csv`:
 ✅ The *channel set* is representation-invariant (re-running under `feature_normalize=none`
 keeps 12 of 13 at h=20, +5.90 sd above chance). ⚠️ **But the BAR does not transfer**, so
 `z = +13.78` is a `cs_rank` number describing a model that does not use `cs_rank` features.
-**This is TODO `P3`.**
+**This is TODO `P11`.**
 
 ### 12.6 It ranks, it does not price
 
@@ -595,4 +595,4 @@ re-derivable from §13 in about 35 minutes.
 | [src/feature_selection/CONTEXT.md](../src/feature_selection/CONTEXT.md) | the selector, the nulls, the ranker comparison |
 | [src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md) | every asset, pool and source table above |
 | [ISSUES.md](ISSUES.md) | `NUL-1`, `FNM-1`, `COV-1`, `DRF-1`, `RPR-1`, `STA-1`, `CSP-1` — all cited above |
-| [TODO.md](TODO.md) | `P1` (`FRZ-1`, the output blocker), `P2` (live scoring), `P3` (the `FNM-1` fix), `P5` (portfolio construction), `P12` (execution realism) |
+| [TODO.md](TODO.md) | ⚠️ **re-prioritised 2026-08-22 — DATA FIRST.** `P1` (`FRZ-1`, the output blocker), `P2` (carry it up to gold), `P6`-`P9` (fundamentals: the JSON gate, then OCR on Kaggle), `P10` (live scoring), `P11` (the `FNM-1` fix), `P13` (portfolio construction), `P14` (execution realism) |

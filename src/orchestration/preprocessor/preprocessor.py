@@ -29,12 +29,18 @@ from utils.constants import (
     BRONZE_SCHEMA,
     SILVER_SCHEMA,
     GOLD_SCHEMA,
+    FILTER_SCHEMA,
     UNIFIED_SCHEMA,
 )
 from utils.enums import *
 from utils.exceptions import MissingSourceDataError, PipelineError
 from utils.utils import *
 from utils.switch_handler import SwitchHandler
+
+# ⚠️ THE FILTER LAYER'S REGISTRY, imported as a MODULE rather than by name. Every screen
+# and every condition lives in `filters.py`; this file executes them and owns nothing
+# about what they mean. Adding a filter must never require editing a 9,000-line module.
+from orchestration.preprocessor import filters as filter_registry
 
 load_dotenv()
 
@@ -6028,6 +6034,182 @@ class DataPreprocessor:
     # `gold_schema.indices` table was dropped the same day, so the schema matches the
     # code.
 
+    # ── FILTER — the universe screen, gold/silver -> filter_schema ─────────────
+    #
+    # ⚠️ THE FIFTH LAYER, AND THE ONLY ONE THAT PRODUCES NO TIME SERIES. It answers the
+    # one question sitting between gold and unified: WHICH TICKERS ARE ALLOWED IN. The
+    # WHAT — every condition, every threshold, every window — lives in
+    # `orchestration/preprocessor/filters.py`; this method is only the HOW, and that
+    # split is the point. Adding a filter is an entry in a registry, never a change here.
+    #
+    # ⚠️ A SCREEN IS NOT POINT-IN-TIME. Membership is decided from a window and applied
+    # to the whole history of every pool built on it — CLAUDE.md 2c's defect in its
+    # purest form, benign for a within-date shuffle null and fatal for any CAGR. The
+    # windows are written into the table COMMENT so a later reader can see which one
+    # chose the basket. `filters.py`'s docstring is the full argument.
+
+    def _ingest_filter_universe(self, screen: str) -> dict:
+        """A screen -> `filter_schema.universe__<screen>`. Returns a metadata dict.
+
+        ⚠️ **EVERY CANDIDATE IS WRITTEN, NOT ONLY THE SURVIVORS.** One row per
+        `(exchange, ticker)` in `silver.stocks_basic` — 781 today — carrying every
+        condition's measured `val__*`, its `pass__*`, the conjunction `passes`, and
+        `first_failed`. A table of survivors answers "who is in" and nothing else; this
+        one answers "why is HPG out", which is the question anyone moving a threshold
+        actually has.
+
+        ⚠️ **`CREATE TABLE AS`, not a pandas round-trip** — CLAUDE.md 5 rule 15.
+        psycopg2 hands `numeric` back as `Decimal`, a DataFrame carries that as dtype
+        `object`, and the writer maps `object` to VARCHAR; a read-then-write would turn
+        every measurement into TEXT while looking like it worked.
+
+        ⚠️ **THE TABLE IS DROPPED AS LATE AS POSSIBLE**, so a failing screen leaves the
+        previous universe intact — the same ordering `_ingest_gold_table` and
+        `_ingest_unified_pool_basic` use. A half-built screen is worse than a stale one
+        because `pool__basic` would silently build on it.
+        """
+        scr = filter_registry.screen(screen)
+        conditions = scr.resolve()
+        self._logger.log_info(
+            f"Ingesting filter {scr.qualified_table} "
+            f"({len(conditions)} condition(s): "
+            f"{', '.join(c.name for c in conditions)})..."
+        )
+
+        # Every source must exist before anything is dropped. A screen naming a table
+        # that is not built yet would otherwise fail INSIDE the CTAS, after the old
+        # universe had already gone.
+        for condition in conditions:
+            source_schema, source_table = condition.source.split(".", 1)
+            if not self._helper_column_types(source_schema, source_table):
+                raise MissingSourceDataError(
+                    f"Screen {scr.name!r} condition {condition.name!r} reads "
+                    f"`{condition.source}`, which does not exist. Build that layer "
+                    f"first."
+                )
+
+        self._database_driver.create_schema(FILTER_SCHEMA)
+        sql, params = filter_registry.build_universe_sql(scr)
+        comment = filter_registry.build_comment(scr)
+
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT COUNT(*) FROM ("
+                f"  SELECT DISTINCT exchange, ticker "
+                f"  FROM {filter_registry.CANDIDATE_SOURCE}) s"
+            )
+            candidates = int(cur.fetchone()[0])
+            if not candidates:
+                raise MissingSourceDataError(
+                    f"`{filter_registry.CANDIDATE_SOURCE}` holds no tickers, so "
+                    f"{scr.qualified_table} would be empty. Build silver "
+                    f"`stocks_basic` first."
+                )
+
+            cur.execute(f"DROP TABLE IF EXISTS {scr.qualified_table}")
+            cur.execute(sql, params)
+            # CTAS copies types but never constraints. `(exchange, ticker)` is the grain
+            # and asserting it is what proves the LEFT JOINs stayed one-to-one — a
+            # condition CTE returning two rows for one ticker would otherwise duplicate
+            # that ticker silently and hand `pool__basic` a doubled member list.
+            cur.execute(
+                f"ALTER TABLE {scr.qualified_table} ADD PRIMARY KEY (exchange, ticker)"
+            )
+            cur.execute(f"COMMENT ON TABLE {scr.qualified_table} IS %s", (comment,))
+
+            cur.execute(
+                f"SELECT COUNT(*), COUNT(*) FILTER (WHERE passes), "
+                f"       COUNT(*) FILTER (WHERE passes IS NULL) "
+                f"FROM {scr.qualified_table}"
+            )
+            written, selected, unknown = (int(x) for x in cur.fetchone())
+
+            # Per condition: how many were MEASURED at all, and how many passed. Rule 22
+            # one level down — a condition that measured nothing and a condition that
+            # everything cleared both report 100% pass, and only the first number tells
+            # them apart. `debt_to_equity_max_12` is exactly that case at 2 of 781.
+            measured: dict = {}
+            passed: dict = {}
+            for condition in conditions:
+                cur.execute(
+                    f'SELECT COUNT("{condition.value_column}"), '
+                    f'       COUNT(*) FILTER (WHERE "{condition.pass_column}") '
+                    f"FROM {scr.qualified_table}"
+                )
+                measured[condition.name], passed[condition.name] = (
+                    int(x) for x in cur.fetchone()
+                )
+
+            # Why each rejected name was rejected, in screen order. The audit the
+            # `first_failed` column exists for, summarised so it reaches a log line.
+            cur.execute(
+                f"SELECT first_failed, COUNT(*) FROM {scr.qualified_table} "
+                f"WHERE NOT passes GROUP BY 1 ORDER BY 2 DESC"
+            )
+            rejected_by = {row[0]: int(row[1]) for row in cur.fetchall()}
+
+        if written != candidates:
+            raise PipelineError(
+                f"{scr.qualified_table} wrote {written} rows against "
+                f"{candidates} candidate ticker(s). A screen may only mark a name, "
+                f"never add or lose one — a mismatch means a condition CTE is not "
+                f"one row per (exchange, ticker)."
+            )
+        # ⚠️ `passes` MUST BE TOTAL. A NULL there reads downstream as "not selected"
+        # while meaning "not known", and `_pass_expression`'s IS NULL / IS NOT NULL
+        # guards exist precisely so three-valued logic cannot reach this column.
+        if unknown:
+            raise PipelineError(
+                f"{scr.qualified_table} has {unknown} row(s) with `passes` NULL. Every "
+                f"condition must resolve to TRUE or FALSE — check `on_missing`."
+            )
+        if not selected:
+            raise MissingSourceDataError(
+                f"Screen {scr.name!r} selected 0 of {written} tickers, so "
+                f"`unified_schema_{scr.slug}` would be empty. Rejections by first "
+                f"failed condition: {rejected_by or 'none'}."
+            )
+
+        self._logger.log_info(
+            f"{scr.qualified_table}: {selected} of {written} ticker(s) pass "
+            f"({100.0 * selected / max(written, 1):.1f}%); rejected by "
+            + (
+                ", ".join(f"{name} {n}" for name, n in rejected_by.items())
+                or "nothing"
+            )
+        )
+        return {
+            "screen": scr.name,
+            "table": scr.qualified_table,
+            "candidates": written,
+            "selected": selected,
+            "conditions": [c.name for c in conditions],
+            "measured": measured,
+            "passed": passed,
+            "rejected_by": rejected_by,
+            "comment": comment,
+        }
+
+    def _helper_filter_universe_exists(self, screen: str) -> bool:
+        """Has this screen been materialised?
+
+        Asked BEFORE a unified build rather than after, so the error names the command
+        to run instead of surfacing as `relation "filter_schema.universe__x" does not
+        exist` from inside a 200-line CTAS.
+        """
+        scr = filter_registry.screen(screen)
+        return bool(self._helper_column_types(FILTER_SCHEMA, scr.table))
+
+    def _helper_filter_universe_members(self, screen: str) -> List[Tuple[str, str]]:
+        """`[(exchange, ticker), ...]` this screen selected, for logs and assertions."""
+        scr = filter_registry.screen(screen)
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                f"SELECT exchange, ticker FROM {scr.qualified_table} "
+                f"WHERE passes ORDER BY exchange, ticker"
+            )
+            return [(row[0], row[1]) for row in cur.fetchall()]
+
     # ── UNIFIED — the per-ticker modelling schema ───────────────────────────────
     #
     # `unified_schema_<ticker>` is the fourth layer, and it is not a fourth copy of the
@@ -6117,6 +6299,17 @@ class DataPreprocessor:
         UNIFIED_UNIVERSE: (None, ()),
         UNIFIED_BANK: ("industry_code = %s", ("401010",)),
         UNIFIED_VN30: ("ticker = ANY(%s)", (list(UNIFIED_VN30_TICKERS),)),
+        # ⚠️ EVERY SCREEN IS A SENTINEL TOO, and they are ADDED HERE rather than written
+        # out, so `filters.SCREENS` is the single place a universe is defined. The
+        # predicate is a SUB-SELECT over the screen's table, not an inlined ticker list:
+        # re-materialise the filter layer, rebuild `pool__basic`, and membership tracks
+        # it. The three above stay literal because they are not screens — `ALL` has no
+        # predicate at all, `BANK` reads a GICS code silver already carries, and `VN30`
+        # is a frozen list whose staleness is the thing being made visible.
+        **{
+            name: filter_registry.member_predicate(name)
+            for name in filter_registry.SCREENS
+        },
     }
 
     def _helper_unified_is_universe(self, ticker: str) -> bool:
@@ -6142,10 +6335,41 @@ class DataPreprocessor:
         has no business being interpolated.
         """
         key = (ticker or "").upper()
+        # ⚠️ A SCREEN'S PREDICATE READS A TABLE, so the table has to be there. Checked
+        # HERE, at the one place every unified builder resolves membership, because the
+        # alternative is PostgreSQL raising `relation does not exist` from inside a CTAS
+        # — a message that names neither the screen nor the command that builds it.
+        if filter_registry.is_screen(key) and not self._helper_filter_universe_exists(
+            key
+        ):
+            scr = filter_registry.screen(key)
+            raise MissingSourceDataError(
+                f"Screen {key!r} has no universe table - `{scr.qualified_table}` does "
+                f"not exist, so `unified_schema_{scr.slug}` cannot know its members. "
+                f"Build the filter layer first:\n  dagster asset materialize -f "
+                f"src/orchestration/definitions.py --select \"filter/universe\" "
+                f"--partition {key}"
+            )
         if key in self.UNIFIED_MEMBER_FILTERS:
             predicate, params = self.UNIFIED_MEMBER_FILTERS[key]
             return (predicate or "", params)
         return ("ticker = %s", (ticker,))
+
+    @staticmethod
+    def _helper_unified_describe_predicate(predicate: str, params: tuple) -> str:
+        """A member predicate with its bound values inlined, FOR LOGGING ONLY.
+
+        ⚠️ Never used to build SQL — the real statement binds every one of these, and
+        this exists so the assertion that fails names the same scope the ingest logged.
+
+        ⚠️ **ANY NUMBER OF PARAMETERS, INCLUDING ZERO.** A screen's predicate is a
+        sub-select over `filter_schema.universe__<screen>` and binds nothing, so the
+        one-parameter version this replaced raised on it.
+        """
+        text = predicate
+        for value in params or ():
+            text = text.replace("%s", repr(value), 1)
+        return text
 
     def _helper_unified_schema(self, ticker: str) -> str:
         """`unified_schema_vcb` for `VCB`. Raises if the ticker is not identifier-safe.
@@ -7709,10 +7933,17 @@ class DataPreprocessor:
         predicate, params = self._helper_unified_member_filter(ticker)
         # What was selected, for the log and for every error message below — one
         # phrase, so the assertion that fails names the same scope the ingest logged.
+        # ⚠️ ONE PARAM WAS ASSUMED AND THAT WAS A BUG (fixed 2026-08-22). This was
+        # `predicate.replace('%s', repr(*params))`, which works for the three original
+        # sentinels — `BANK`, `VN30` and a bare ticker each bind exactly one value —
+        # and raises `TypeError: repr() takes exactly one argument (0 given)` for a
+        # SCREEN, whose predicate is a self-contained sub-select binding NONE. A
+        # display helper taking down a build is the worst kind of failure: nothing was
+        # wrong with the data or the SQL.
         scope = (
             "the whole universe"
             if not predicate
-            else f"{predicate.replace('%s', repr(*params))}"
+            else self._helper_unified_describe_predicate(predicate, params)
         )
         self._logger.log_info(
             f"Ingesting unified {schema}.pool__basic "

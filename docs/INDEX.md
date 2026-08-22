@@ -16,7 +16,7 @@
 
 | file | ~tokens | what it answers |
 |---|---|---|
-| [../CLAUDE.md](../CLAUDE.md) | **32.5k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state |
+| [../CLAUDE.md](../CLAUDE.md) | **35.2k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state |
 | **docs/INDEX.md** *(this file)* | ~2k | *where is everything else, and what does it cost to open?* |
 
 ---
@@ -30,9 +30,9 @@ its row and is struck through; a done TODO item leaves its measurement in `CLAUD
 
 | file | ~tokens | open it when |
 |---|---|---|
-| [RUNBOOK.md](RUNBOOK.md) | **13.5k** | *how do I RUN it?* 8 stages with measured runtimes, stage order, the two flags that destroy things, §8 rule 1 (the gate on quoting any number), **§8c the before-you-commit state check** |
-| [ISSUES.md](ISSUES.md) | **16.1k** | *what is BROKEN?* 16 open / 35 resolved, codes permanent, never renumbered or reused. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`) |
-| [TODO.md](TODO.md) | **40.1k** ⚠️ | *what is NEXT?* One list, `P1` first. ⚠️ A bare `P<n>` is LIVE; a HYPHENATED code (`P1-9`, `PRF-8`) is RETIRED — crosswalk at the top. **The largest file here: read the top, not the whole thing** |
+| [RUNBOOK.md](RUNBOOK.md) | **14.6k** | *how do I RUN it?* 8 stages with measured runtimes, stage order, the two flags that destroy things, §8 rule 1 (the gate on quoting any number), **§8c the before-you-commit state check** |
+| [ISSUES.md](ISSUES.md) | **16.5k** | *what is BROKEN?* 16 open / 36 resolved, codes permanent, never renumbered or reused. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`) |
+| [TODO.md](TODO.md) | **44.9k** ⚠️ | *what is NEXT?* ⚠️ **RE-PRIORITISED 2026-08-22 (evening): DATA FIRST.** 39 open tasks in six lettered groups — **A scrape `P1`-`P5`, B OCR→Kaggle `P6`-`P9`**, C output `P10`-`P11`, D model `P12`-`P20`, E honesty `P21`-`P24`, F backlog `P25`-`P39`. ⚠️ A HYPHENATED code is RETIRED — **and that renumbering was BARE → BARE**, so a `P<n>` written before then means a different item; the 2026-08-22 crosswalk resolves it. **The largest file here: read the top, not the whole thing** |
 | [pipeline.md](pipeline.md) | **5.5k** | *which ticker, on which date?* What the chain OUTPUTS — `(date, ticker, weight)`, 4,720 picks across 236 books. §6 is why there is no book for today |
 | [PIPELINE_h10_CAGR74.md](PIPELINE_h10_CAGR74.md) | **7.3k** | *how does ONE number get made, end to end?* The h=10 chain returning CAGR +74.0 %/yr. **§12 is the caveat section and is why the file exists** |
 | [feature_groups.md](feature_groups.md) | **0.8k** | naming a feature group — the canonical taxonomy |
@@ -66,7 +66,7 @@ one or two.**
 | open this | ~tokens | when you are… |
 |---|---|---|
 | [../src/feature_selection/CONTEXT.md](../src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar. §15a the country-sweep guide, §16 the GPU conversion, §19 the ranker measurement |
-| [../src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md) | **44.7k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, or a scrape |
+| [../src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md) | **47.0k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER") |
 | [../src/web_scraper/CONTEXT.md](../src/web_scraper/CONTEXT.md) | **28.7k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [../src/orchestration/preprocessor/CONTEXT.md](../src/orchestration/preprocessor/CONTEXT.md) | **25.8k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library |
 | [../src/walkforward/CONTEXT.md](../src/walkforward/CONTEXT.md) | **16.0k** | asking whether a result survives more than ONE split, or which MODEL to use. §8 is PRF-8 (three architectures, 101× capacity, all tied) |

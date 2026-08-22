@@ -2526,6 +2526,161 @@ sessions — a data defect already known (`feature_selection.cross_sectional` ex
 puts it in plain sight instead of inside a ratio. Anything fitting on
 `close_adjust_{h}day` over `ALL` must exclude `VNX` the same way.
 
+### FILTER — the fifth layer, and the only one holding no time series (2026-08-22)
+
+`filter_schema.universe__<screen>` sits between gold and unified and answers the one
+question the unified layer could not previously express: **which tickers are allowed
+in.** Before it, that had exactly three answers hard-coded in
+`DataPreprocessor.UNIFIED_MEMBER_FILTERS` — everything (`ALL`), one GICS industry
+(`BANK`), one frozen index list (`VN30`) — and a fourth meant writing SQL inside a
+class constant.
+
+A **screen** is a named list of **conditions**; a condition measures ONE number per
+`(exchange, ticker)` and compares it to a threshold. Both live in
+[`preprocessor/filters.py`](preprocessor/filters.py), which is **pure** — no I/O, no
+database — so [`preprocessor/test_filters.py`](preprocessor/test_filters.py) pins the
+whole definition half without PostgreSQL (**30 tests**).
+
+```
+dagster asset materialize -f src/orchestration/definitions.py \
+  --select "filter/universe" --partition PRICE10K     # the membership table
+dagster asset materialize -f src/orchestration/definitions.py \
+  --select "group:unified"  --partition PRICE10K      # the schema it gates
+```
+
+**Built and verified 2026-08-22, all three screens, ~1 s each:**
+
+| screen | conditions | selected | rejected by (first failure) | `unified_schema_*` |
+|---|---|---|---|---|
+| **`PRICE10K`** | 1 | **480 / 781** | `close_raw_min_10k` 301 | **1,503,958 × 101**, 480 tickers |
+| **`LIQUID`** | 4 | **206 / 781** | `turnover_median_1bn` 545, `sessions_min_200` 30 | **657,892 × 101**, 206 tickers |
+| **`QUALITY`** | 6 | **200 / 781** | `turnover_median_1bn` 426, `close_raw_median_5k` 125, `sessions_min_200` 30 | **635,919 × 101**, 200 tickers |
+
+`pool__basic` + `pool__targets` built on all three; every one spans 2009-01-02 →
+2026-08-19 and carries the cross-sectional derived block, because a screen answers
+`_helper_unified_is_universe` True the same way `ALL` and `BANK` do.
+
+✅ **Verified against silver with code that shares nothing with the builder**: the 480
+`PRICE10K` members are exactly the 480 `(exchange, ticker)` pairs whose
+`MIN(close_raw) >= 10000` over `date >= 2026-01-01`, **0 extra and 0 missing**, and
+`unified_schema_price10k.pool__basic` holds **0 rows below 10,000 VND after 2026-01-01**.
+Row counts match `silver.stocks_basic` filtered to each member set exactly (1,503,958 /
+657,892 / 635,919), and **0 `QUALITY` members are outside `LIQUID`** — the nesting its
+definition claims.
+
+#### ⚠️ EVERY CANDIDATE IS WRITTEN, NOT ONLY THE SURVIVORS
+
+781 rows, always, with `val__<cond>` and `pass__<cond>` per condition plus `passes` and
+`first_failed`. A table of survivors answers *"who is in"* and nothing else; this one
+answers *"why is HPG out"*, which is the question anyone moving a threshold actually
+has. The PK `(exchange, ticker)` is asserted after the CTAS, so a condition CTE that
+returned two rows for one ticker fails instead of doubling that ticker's membership.
+
+#### ⚠️ `passes` IS TOTAL — three-valued logic is not allowed to reach it
+
+`NULL` there would read downstream as "not selected" while meaning "not known". Every
+condition therefore carries `on_missing`, and it is the field to get right:
+
+| | means | measured example |
+|---|---|---|
+| `"reject"` | no measurement ⇒ the ticker is OUT | anything from price/volume — an absent value means the name did not trade |
+| `"keep"` | no measurement ⇒ the condition ABSTAINS | **`debt_to_equity_max_12`, and it is not optional there** |
+
+⚠️ **`gold.stocks_financials_bank_fa` HOLDS TWO TICKERS OF 781** — ACB and VCB, measured
+2026-08-22. On `"reject"` that one condition cuts any screen it joins down to two names.
+On `"keep"` it reports a **100 % pass rate against a 0.3 % measurement rate**, which is
+rule 22's shape at the filter: a condition everything cleared and a condition nothing
+was measured for look identical, and only the second number tells them apart. The asset
+logs a WARNING naming the condition and its coverage whenever it is below 100 %, and
+`measured` is in the metadata beside `passed` for exactly this reason.
+
+⚠️ **AND THE THRESHOLD IS 12, NOT 3.** The only fundamentals this database holds are
+BANK fundamentals, and a bank is levered by construction: ACB is **9.44×** and VCB
+**9.90×** (measured 2026-08-22). A 2-3 ceiling, right for an industrial, rejects every
+bank in Vietnam.
+
+#### ⚠️ A SCREEN IS NOT POINT-IN-TIME, and that is the trap
+
+Membership is decided ONCE from a window and applied to the **whole history** of every
+pool built on it. `PRICE10K` picks the names that traded above 10,000 VND *in 2026* and
+carries that back to 2009 — a 2012 row exists because of something measured fourteen
+years later. That is [CLAUDE.md](../../CLAUDE.md) §2c's defect in its purest form, the
+same one `UNIFIED_VN30` carries.
+
+* **Benign** for a within-date shuffle null — every draw sees the same basket, so a `z`
+  is protected.
+* **Fatal** for any CAGR, Sharpe or hit rate read off a screened universe.
+
+There is no defence beyond saying so, so the saying-so is structural: every condition's
+window is JSON-encoded into the table's `COMMENT` along with its metric, test,
+`on_missing` and description, and the asset re-reads that comment and refuses to finish
+if its fingerprint disagrees with the definition that built it. `built_at` is excluded
+from the fingerprint — it moves every run and says nothing about the definition. The
+honest version of a screen is a window that ENDS before the first test fold, which is
+what `kgpu.export`'s `liquidity_before` does.
+
+#### ⚠️ THE EDGE INTO `unified` IS NOT DECLARED, ON PURPOSE
+
+`filter/universe` is partitioned by SCREEN; `unified/pool__basic` is partitioned by
+UNIVERSE — a set that also holds `VCB`, `ALL`, `BANK` and 29 single names, none of which
+has a screen. A Dagster dependency is per-ASSET, not per-partition, so declaring it
+would claim `unified_schema_vcb` needs a membership table. The check lives where it can
+be exact instead: `_helper_unified_member_filter` raises with the materialize command in
+the message when a screen's table is absent.
+
+⚠️ **The cost is §5 rule 14 from the other side: re-running a screen does NOT mark the
+unified schema stale.** Rebuild `group:unified` for that partition yourself.
+
+#### ⚠️ ONE LATENT DEFECT WAS FOUND BY BUILDING THE FIRST SCREEN
+
+`_ingest_unified_pool_basic`'s log-scope string was
+`predicate.replace('%s', repr(*params))` — correct for all three original sentinels,
+because `BANK`, `VN30` and a bare ticker each bind exactly **one** value. A screen's
+predicate is a self-contained sub-select binding **none**, so it raised
+`TypeError: repr() takes exactly one argument (0 given)` — **a display helper taking
+down a build**, with nothing wrong with the data or the SQL. Replaced by
+`_helper_unified_describe_predicate`, which takes any number including zero, and pinned
+in `test_filters.py`.
+
+#### Adding a filter
+
+One entry in `CONDITIONS`, one in `SCREENS`, one partition key in `config.json` under
+both `filter` and `unified`. `UNIFIED_PARTITIONS` and `UNIFIED_MEMBER_FILTERS` are both
+built FROM the registry, so neither is edited.
+
+```python
+register(Condition(
+    name="foreign_room_min_5pct",
+    description="…",
+    source=f"{SILVER_SCHEMA}.stocks_basic",
+    metric="AVG(foreign_room_left / NULLIF(volume_matched, 0))",
+    op=">=", threshold=0.05, unit="fraction",
+    where="date >= %(start)s", params={"start": date(2025, 8, 22)},
+    on_missing="reject",
+))
+```
+
+⚠️ **`metric` and `where` are raw SQL and every VALUE is bound.** They are code in this
+repository, reviewed in `git diff` — the same trust boundary `UNIFIED_MEMBER_FILTERS`
+already sat on. `name`, `source` and `latest_by` are validated as identifiers, `op` comes
+from a whitelist, and a test asserts the literal `10000` never appears in the generated
+statement. ⚠️ **Parameters are namespaced `c<i>__<name>`**: `LIQUID`'s four conditions
+all call their window `start`, and without the prefix the last one written would set the
+window for all of them. ⚠️ **A dangling declared parameter RAISES** — it is a renamed
+placeholder, i.e. a window silently still set to whatever it used to be. ⚠️ **A screen
+name must be 4+ characters**: every VN ticker is exactly 3 (measured over all 781), so
+that length rule is what makes collision with a listing structurally impossible rather
+than checked one name at a time.
+
+⚠️ **`AND` only, never `OR`.** A screen is a list of reasons to be excluded, which is
+what lets `first_failed` name exactly one. An `OR` belongs inside a single condition's
+`metric`, where it is visible as the one number it really is.
+
+⚠️ **A DATE metric is expressed as a numeric DISTANCE.** `value` is one
+`double precision` column for every condition — that is what lets six unrelated
+measurements sit side by side — so `still_trading_2026_06` is `MAX(date) - cutoff >= 0`
+and the number stored is days past the cutoff.
+
 ## 2a. Cost of a full materialize (2026-07-31)
 
 | | before | after |

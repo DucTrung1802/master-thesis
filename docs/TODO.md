@@ -73,6 +73,39 @@ table survives and is still the best thing in it.
 
 ## ⚠️ START HERE — ONE CODE, ONE ORDER. `P1` is the highest priority.
 
+> # ⚠️ RE-PRIORITISED 2026-08-22 (evening) — DATA FIRST, AND **A BARE `P<n>` WRITTEN BEFORE TONIGHT MEANS SOMETHING ELSE**
+>
+> **Requested:** put the SCRAPE first, then the OCR — and push the OCR to Kaggle. **Nothing
+> was run**; only the priority marking changed. The list is now six lettered groups, and the
+> numbers still equal the rank:
+>
+> | group | items | what it is |
+> |---|---|---|
+> | **A · SCRAPE** | **`P1`-`P5`** | the data has to EXIST and be FRESH. `P1`+`P2` are one job |
+> | **B · OCR → KAGGLE** | **`P6`-`P9`** | ⚠️ `P6` is a **1-day gate that can cancel `P7`-`P9`** |
+> | **C · OUTPUT** | `P10`-`P11` | unblocked the moment A lands, and on a DIFFERENT resource from B |
+> | **D · MODEL & MONEY** | `P12`-`P20` | a better number, not more data |
+> | **E · HONESTY** | `P21`-`P24` | makes an EXISTING number readable |
+> | **F · BACKLOG** | `P25`-`P39` | |
+>
+> ⚠️ ⚠️ **THIS RENUMBERING IS BARE → BARE, WHICH THE 2026-08-21 ONE WAS NOT.** That one
+> retired HYPHENATED codes, so a stale citation was visibly stale. Tonight's moves `P2`
+> (live scoring) to `P10` and `P12` (execution realism) to `P14` — **a citation written
+> yesterday now resolves to a different item with nothing saying so.** Two defences, and
+> both are needed:
+>
+> 1. **[The 2026-08-22 crosswalk](#the-2026-08-22-crosswalk--old-bare-code--new-bare-code)
+>    is OLD bare → NEW bare.** Use it for any `P<n>` in a message, commit or run folder
+>    dated before tonight.
+> 2. **The live pointers in `CLAUDE.md`, `RUNBOOK.md`, `pipeline.md` and
+>    `PIPELINE_h10_CAGR74.md` WERE rewritten tonight** — unlike 2026-08-21, when they were
+>    deliberately left. A silently-wrong pointer is worse than a visibly retired one.
+>
+> ⚠️ **Everything DATED in this file — every archive block, every recorded prediction, every
+> "what was next on <date>" section — keeps the numbering it was written with.** Those are
+> records of the past, not pointers; renumbering them once already destroyed information
+> (see the crosswalk's own warning).
+
 > **Renumbered 2026-08-21.** This file used to carry **five** code schemes at once —
 > `P0-*`/`P1-*`/`P2-*`/`P3-*`/`P4-*` (priority BANDS with sub-numbers), `PRF-*` (the profit
 > track), `SSK-*` (the single-stock track) and `M-*` (the model program). An item's code
@@ -139,6 +172,121 @@ in this file and in `walkforward/CONTEXT.md` are read:**
 
 ---
 
+## ⚠️ MEASURED 2026-08-22 (evening) — THE DATA AUDIT: what the database HOLDS, per ticker
+
+⚠️ **THIS BLOCK WAS WRITTEN BEFORE THE SAME DAY'S EVENING RENUMBERING, and its codes were
+rewritten with it** — the exception to the "dated blocks keep their numbering" rule, made
+because it is hours old and every pointer in it is live. What it added as `P32`…`P36` that
+morning is now **`P2`** (carry up to gold), **`P6`** (the JSON gate), **`P8`** (the non-bank
+template), **`P32`** (insider scope) and **`P4`** (freshness) — and the evening re-prioritisation
+put the first three at the head of the list rather than leaving them appended.
+
+**What was asked:** *"what has to be built so the pipeline has enough data for the whole
+universe?"* **What was measured:** every ticker-keyed table in all three schemas, the raw
+folders on disk, and the per-ticker last date. The answer splits cleanly into **three
+things worth building, two that are blocked by physics, and three that must NOT be built.**
+
+### ⚠️ THE CROSS-SECTION ENDS 2026-06-25, NOT 2026-08-19 — and `MAX(date)` says otherwise
+
+`silver.stocks_basic` reports `MAX(date) = 2026-08-19`, and **five tickers** produce it.
+Names per session at the tail:
+
+| session | names |
+|---|---|
+| 2026-06-24 / 06-25 | **779** |
+| **2026-06-26** | **627** ← the cliff |
+| 2026-06-29 → 07-08 | **28** |
+| 2026-07-09 → 08-07 | **24** |
+| 2026-08-10 → 08-19 | **5** |
+
+**757 of 781 tickers are stale** (last date before 2026-08-01); **599 stop dead on
+2026-06-26** and 152 on 2026-06-25. This is `FRZ-1`/`P1`, and **`P1`'s framing understates
+it**: it says *"143 frozen tickers"* and *"after 2026-06-11 only 7 of 150 names"*. The true
+shape is that the **whole universe** stops in late June and a 24-name tail was refreshed
+afterwards — which is worse in one specific way, because a 24-name cross-section looks like
+a working pipeline to anything that reads `MAX(date)`. §5 rule 10, at full scale.
+
+### The per-ticker audit — every table keyed by ticker
+
+| layer | table | tickers | last date | verdict |
+|---|---|---|---|---|
+| bronze | `cafef_price` / `cafef_order_stats` / `cafef_foreign` | **781 / 781** | 2026-08-19 *(5 names)* | ✅ complete, ⚠️ stale |
+| bronze | `cafef_prop_trading` | 431 | 2026-08-18 | ✅ **genuine** — an optional LEFT JOIN, and the source itself starts 2023 |
+| bronze | `cafef_news` | 777 | — | ✅ |
+| bronze | `simplize_stocks` | 777 | 2026-06-26 | ✅ (not in the price spine) |
+| bronze | `trading_view_stocks` | **571** | 2026-06-26 | ⚠️ 73 % — 576 folders on disk of 777. **Not the price spine either** |
+| bronze | `cafef_insider_shareholder_transactions` | **100** | — | ⚠️ the partition list IS 100 |
+| bronze | `cafef_financials_bank_*` | **2** | — | ❌ **the hole** |
+| silver | `stocks_basic` | **781** | 2026-08-19 *(5 names)* | ✅ complete, ⚠️ stale |
+| silver | `cafef_news_sentiment` | **3** | — | ❌ and deliberately so |
+| silver | `stocks_basic_financials_bank_fa` | **2** | 2026-06-25 | ❌ |
+| gold | `stocks` | 781 | **2026-07-08** | ⚠️ **30 sessions behind silver** |
+| gold | `news_daily_panel` / `news_weekly_panel` | 781 | 2026-07-08 | ⚠️ same lag |
+| gold | `stocks_ta` | 777 | **2026-06-26** | ⚠️ **54 sessions behind** — and `STA-1`/`P15` |
+| gold | `stocks_financials_bank_fa` | **2** | 2026-06-25 | ❌ **0.3 % of the universe** |
+
+⚠️ **`silver.stocks_basic` IS CafeF ONLY** — `cafef_price` as the spine, LEFT JOINed to
+`order_stats` / `foreign` / `prop_trading`, plus the GICS tree from
+`simplize_industry × gics`. Verified in `_ingest_silver_stocks_basic`. So **TradingView
+stocks at 571/781 and Simplize at 777 block NOTHING on the price side** — TV is the
+universe, Simplize is an unused alternative. That is why re-scraping TradingView stocks is
+in the **"do not build"** table below rather than anywhere in the list.
+
+### ⚠️ FUNDAMENTALS CANNOT REACH 781 TICKERS ON THIS MACHINE, and the numbers say why
+
+The FA chain is 0.3 % covered (ACB, VCB) and **three independent walls** stand between it
+and the universe — all three measured 2026-08-22, none of them a code problem:
+
+| wall | measured | what it means |
+|---|---|---|
+| **disk** | PDFs on disk for **112 tickers**, 15,215 files, **100 GB** — median **906 MB**/ticker, max 2.1 GB. **144 GB free on `D:`** | 781 tickers ≈ **700 GB**. It does not fit, and it is not close |
+| **time** | the OCR statement parse is **~2.4 h per ticker** | 781 × 2.4 h ≈ **1,874 h ≈ 78 days** sequential on one 4 GB RTX 3050 |
+| **schema** | `raw_data/cafef/financials/statements/` holds **one** template family: `bank` | **761 of 781 names are NOT banks** — 230 industrials, 117 materials, 93 consumer staples, … Only **20** are GICS 401010. A corporate balance sheet / income statement / cash-flow template **does not exist in this repo** |
+
+⚠️ **THE SCHEMA WALL IS THE REAL ONE.** Disk and time are budget; the missing non-bank
+template means that even with infinite disk and time, the current chain would parse 20 of
+781 names. **Nobody has ever written a non-bank statement mapping here**, and the two
+tickers that exist are both banks — so the parser has never once been tested against the
+shape 97 % of the universe files.
+
+⚠️ **AND THAT IS WHY `P6` IS A ONE-DAY EVALUATION, NOT A BUILD.** Before spending 78 days
+and 700 GB on OCR, price a JSON source: `api.simplize.vn` is already used for prices
+(memory `reference-simplize-price-endpoint`) and its site renders fundamentals; `vnstock`
+is the other candidate. **If either returns balance-sheet lines for non-banks, the entire
+PDF+OCR route is the wrong instrument for this question** and 112 tickers of PDFs become an
+audit sample rather than a start.
+
+### ⚠️ THREE THINGS THAT MUST **NOT** BE BUILT, on measured evidence
+
+| gap | why NOT |
+|---|---|
+| `silver.cafef_news_sentiment` 3 → 781 | **§2a**: PhoBERT tone had no signal on 3 tickers, and adding it made price/TA models **worse** (QWK 0.175 → 0.045). `pool__news_daily` — counts, no tone — was then measured at `z = +0.53`, mid-pack of six failing pools. Building this to 781 buys a third negative |
+| `cafef_prop_trading` 431 → 781 | Proprietary flow **starts 2023-01-03**, coverage 0.197-0.203 of the sample. §6-1 measured it being shortlisted by 4 of 5 tickers, all-NaN in the training slice of folds 1-4, imputed to a constant `0.0` and then **ranked** (rule 23). ⚠️ **It should be EXCLUDED at this timescale, not extended** |
+| `trading_view_stocks` 571 → 777 | Not in the price spine. ~**10 h** of Selenium for a source nothing reads for prices. Only re-scrape it when the UNIVERSE needs refreshing |
+
+### Where this landed in the evening re-prioritisation
+
+⚠️ **`P2` is `P1`'s second half and cannot be separated from it** — a scrape that is not
+carried up to gold leaves `gold.stocks` 30 sessions and `gold.stocks_ta` 54 sessions behind,
+which is the state on disk *right now*. **Read `P1 → P2` as one job**, and `P3` (`STA-1`) as
+the decision `P2` forces.
+
+⚠️ **`P6` is the only item that could change what the FEATURE side of this project can ever
+contain**, which is why it sits at the head of group B as a **1-day gate** rather than at the
+head of a backlog. `P7`-`P9` are the OCR program it gates; `P32` (insider scope) is genuine
+backlog.
+
+### ⚠️ AND `plan.md`'s SCREEN IS BUILT — the reference below is now stale
+
+The row about `plan.md` (the `screen_schema` / `main_v4` plan) in the block below predates
+**2026-08-22's filter layer**: `filter_schema.universe__<screen>` exists, with three screens
+materialised (`PRICE10K` 480/781, `LIQUID` 206/781, `QUALITY` 200/781) and their
+`unified_schema_*` built. ⚠️ **What is built is the MECHANISM, not the measurement** — no
+selection and no model has been run on a screened basket, so **the prediction recorded below
+is still unscored** and remains the thing to test.
+
+---
+
 ## ⚠️ MEASURED 2026-08-22 — THE TRADABILITY GATE, AND WHAT IT DOES TO THIS LIST
 
 **Nothing was renumbered.** This is evidence attached to items that already exist, recorded
@@ -192,9 +340,9 @@ the post-hoc gate was the flawed instrument — say so here rather than editing 
 
 ---
 
-## THE LIST — P3 … P31, highest priority first
+## THE LIST — P1 … P39, highest priority first  ⚠️ **RENUMBERED 2026-08-22 (evening)**
 
-### P3 … P12 · the live program
+### P1 … P20 · the live program
 
 ⚠️ **EVERY COST IN THIS BLOCK THAT IS MARKED `est.` IS AN ESTIMATE ANCHORED TO A MEASURED
 RUN**, and marked so it cannot be read back as a measurement. The anchors are `walkforward`
@@ -204,44 +352,67 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 
 | # | item | ⏱ | local? | was | why it is here |
 |---|---|---|---|---|---|
-| **P1** | ⚠️ **`FRZ-1` — RE-SCRAPE THE 143 FROZEN TICKERS**, then put the per-ticker freshness split in `pipeline.status_data` | ~1 h + the scrape | ✅ | *promoted from 12* | ⚠️ **IT BLOCKS THE CHAIN'S OUTPUT, NOT JUST A NUMBER — measured 2026-08-21.** After **2026-06-11 only 7 of 150 names carry data**, so the last three rebalance dates hold 7 names and `long_only_top_k` skips them silently (`len(day) < k`). ✅ The published +74 % is clean (239 − 3 = **236** periods, matching the artefact) — ⚠️ **but no pick list can be emitted until this is fixed**, and it also blocks `P6`, `P7` and any re-run. `MAX(date)` says 2026-08-07 and hides it completely. `pipeline.md` §6.1 |
-| **P2** | ⚠️ **THE LIVE-SCORING MODULE — it does not exist** | ~½ day *est.* | ✅ | — | Every stage writes predictions for a **dataset's test split**. Nothing loads a trained fold, windows the last 20 sessions for all 150 names on today's date and emits a ranking — so the chain cannot answer *"which ticker, on which date"* for any date not already in a split. ⚠️ **Blocked behind `P1`**: a 7-name cross-section is not a cross-section. `pipeline.md` §6.2 |
-| **P3** | ⭐ **rank the FEATURES within date, as the selection did** (`FNM-1`) | ~1 h + 20 min *est.* | ✅ | `M-1` | **The largest single untried lever**, and three independent measurements already on disk point at it. **↓ detail block** |
-| **P4** | **ensemble the seven arms** — predictions already on disk | ~30 min *est.* | ✅ CPU | `M-3` | Free variance reduction at ρ 0.91-0.94; no GPU, no training. **↓ detail block** |
-| **P5** | **portfolio construction** — `k`, weighting, a laddered book | ~4 h *est.* | ✅ CPU | `M-4` | The only place with a **−55 % drawdown** to spend and no retraining to pay for it. ⚠️ Run it WITH `P12`. **↓ detail block** |
-| **P6** | ⚠️ **take the 30-name VN30 result DOWNSTREAM** | ~2 h | ✅ | — | `t = +3.77` is a **SELECTION bar**, and §5d + `P2-3`: a cleared selection bar has **never once** survived to a model here. Run `final_features → train_test_creator → model → result_evaluator` on 2-3 names that cleared individually (VJC z +3.67, SSB +2.60, PLX +2.55). ⚠️ **A negative closes the thread cleanly** — that is the value |
-| **P7** | **a wider cross-section at h=10 that is NOT VN30** | ~1 h | ✅ | — | §6-1-quater cannot separate **N** from the **date window** from the **universe rule** — all three moved together. Top-150 by `liquidity_before` restricted to 2017→ isolates the window; top-30 by the same rule isolates the RULE. Reuses `ProvidedPanel`, no Kaggle quota |
-| **P8** | **train the estimand** — a ranking loss instead of MSE | ~½ day *est.* | ✅ | `M-5` | The only untried change aimed at **what is actually scored**. **↓ detail block** |
-| **P9** | **BUILD cross-sectional channels** — selection is nearly exhausted, construction is not | ~1 day + T4 *est.* | ⚠️ **quota** | `M-6` | The only real feature lever left, and the **only item on this page that spends Kaggle quota**. **↓ detail block** |
-| **P10** | **sweep `lookback`** — the one dataset knob never swept | ~4 h *est.* | ✅ | `M-7` | `walkforward` §12c named it and nothing has moved since. **↓ detail block** |
-| **P11** | **date-only pools as a REGIME OVERLAY**, not as ranking channels | ~1 day *est.* | ✅ CPU | `M-8` | Risk control, **not** a fix for the decay — §9b already located that in the features. **↓ detail block** |
-| **P12** | **execution realism** — ADV cap, sell-side floor days, the ATC auction | ~1 day | ✅ CPU | `PRF-4` | Moves the LEVELS, and after the architecture and width tests the levels are the only thing still moving. **↓ detail block** |
+| | **⬛ A · SCRAPE — the data has to EXIST and be FRESH before anything else is worth running** | | | | |
+| **P1** | ⚠️ **`FRZ-1` — RE-SCRAPE THE UNIVERSE.** CafeF price / order_stats / foreign / prop, 781 tickers, `skip_existing=False`, then rebuild `silver.stocks_basic` | ~1 h + the scrape | ✅ | *old `P1`* | ⚠️ **IT BLOCKS THE CHAIN'S OUTPUT, NOT JUST A NUMBER.** **757 of 781 tickers are stale and 599 stop dead on 2026-06-26** (measured 2026-08-22); the last three rebalance dates hold 7 names and `long_only_top_k` skips them silently. ⚠️ `MAX(date)` reads **2026-08-19 and five tickers produce it** — §5 rule 10 at full scale. **No pick list can be emitted until this is fixed.** `pipeline.md` §6.1 |
+| **P2** | ⚠️ **CARRY THE RE-SCRAPE UP TO GOLD** — `gold/stocks`, `gold/stocks_ta`, `gold/news_daily_panel`, then `filter/universe` and the `unified` partitions | ~2-4 h | ✅ | *old `P32`* | ⚠️ **THE HALF OF `P1` THAT IS NOT A SCRAPE, and it is already owed on today's data**: `gold.stocks` stops **2026-07-08** (30 sessions behind silver), `gold.stocks_ta` **2026-06-26** (54). §5 rule 11 — *"re-scraped" never implies "re-ingested"* — with a number. ⚠️ **`filter_schema` and every `unified_schema_*` are downstream and re-materialise themselves never** |
+| **P3** | ⚠️ **`STA-1` — decide whether `gold.stocks_ta` is REBUILT**, because `P2` forces the question | see `STA-1` | ✅ | *old `P15`* | **BLOCKING, not untidy, and it costs two things.** (a) It disagrees with `silver.stocks_basic` for all 30 VN30 names in BOTH directions (ACB 4,882 vs 4,383), so the single-stock track can **never see a technical indicator**. (b) `pool__ta` stops 2026-06-26 and the INNER join drops the `return_5day` chain 4,266 → **4,235 rows**. Rebuild = 13 renamed columns + 289 k moved rows. ⚠️ **Its own decision — never a side effect of `P2`** |
+| **P4** | **PER-TICKER FRESHNESS**, in `pipeline.status_data` AND as a queryable view | ~2 h | ✅ | *old `P36`* | ⚠️ This is how you VERIFY `P1` rather than believe it. `MAX(date)` on `silver.stocks_basic` reads 2026-08-19 while 5 tickers produce it and 757 are stale, and every consumer that sanity-checks a table reads exactly that number. A `(ticker, last_date, sessions_behind)` view makes rule 10 queryable instead of remembered |
+| **P5** | ⚠️ **SCRAPE FILING PDFs AT SCALE — inside a MEASURED disk budget** (`raw/cafef_pdfs`, currently 100 partitions of which 112 tickers landed) | scrape hours + disk | ✅ | — | ⚠️ **THE INPUT TO THE WHOLE OCR PROGRAM, AND DISK IS THE BINDING CONSTRAINT.** Measured 2026-08-22: **112 tickers = 15,215 PDFs = 100 GB**, median **906 MB**/ticker, max 2.1 GB, against **144 GB free on `D:`**. The universe is ≈ **700 GB** and does not fit. ⚠️ **So this item is "choose N and justify it", not "scrape everything"** — a sector-stratified sample sized to the free disk, decided WITH `P8`, since a name whose template does not exist is a name whose PDFs are dead weight |
+| | **⬛ B · OCR → KAGGLE — the time wall is solvable; the SCHEMA wall is not, and they are different problems** | | | | |
+| **P6** | ⚠️ **THE 1-DAY GATE: price a JSON fundamentals source FIRST** — `api.simplize.vn`, `vnstock`. Does either return balance-sheet lines for a **non-bank**? | ~1 day | ✅ | *old `P33`* | ⚠️ **RUNS BEFORE `P7`-`P9` BECAUSE IT CAN CANCEL THEM.** FA coverage is **2 of 781**. The OCR route needs ~700 GB, ~78 days of GPU and a template that does not exist; a JSON endpoint would make all three vanish. One day against weeks is a cheap option to buy. ⚠️ **Record the answer either way** — a negative closes §2d's second-ranked lever, which is itself a result |
+| **P7** | ⚠️ **PUSH THE OCR TO KAGGLE — a `kgpu` job for the statement parse** | ~2-3 days | ⚠️ **quota** | — | **What it fixes:** ~**2.4 h/ticker** on a 4 GB RTX 3050 → 781 tickers ≈ **78 days**. A T4 is 15 GiB and free 30 GPU-h/week. ⚠️ **BUT `kgpu` HAS NEVER SHIPPED A NON-TABLE PAYLOAD.** Every existing job exports `unified_schema` tables to parquet; this one ships **PDFs**, so three things are unmeasured and must be measured before any quota is spent: (a) the **Kaggle dataset size limit** against 100 GB of PDFs — if it binds, the job is per-ticker-batch, not per-universe; (b) whether the **onnx OCR stack** installs on Kaggle's image (`kgpu` §3d already records xgboost 3.2.0 / sklearn 1.6.1 vs `mt_env`, so an image difference is expected, not surprising); (c) the **5.2-min queue floor** (§3d) makes many small jobs the wrong shape — batch. ⚠️ **`rehearse` runs the worker side locally and spends NO quota — do that first, on the two banks that already parse** |
+| **P8** | ⚠️ **NON-BANK STATEMENT TEMPLATE + parser mapping** | ~1-2 weeks | ✅ | *old `P34`* | ⚠️ **THIS IS THE WALL THAT KAGGLE DOES NOT MOVE.** `raw_data/cafef/financials/statements/` holds exactly **one** family — `bank` — and **761 of 781 names are not banks** (230 industrials, 117 materials, 93 consumer staples; only **20** are GICS 401010). With infinite disk and infinite T4 hours the current parser reaches **20 names**. ⚠️ The parser has **never once been run against a corporate filing**, so budget discovery, not just mapping |
+| **P9** | **THE MASS OCR RUN** — every scraped ticker, on Kaggle, with `skip_existing` doing real work | days of quota | ⚠️ **quota** | — | The payoff of `P5` + `P7` + `P8`, and pointless before all three. ⚠️ **The parse skips complete YEARS, not quarters** (`orchestration` §2a) — a year is the unit because `_decumulate` needs this run's priors, so a partial skip deletes the very quarter the run exists to fix. ⚠️ **`skip_existing=False` is the AUTHORITATIVE run**: skipping makes every run a subset run and flips the `sane` magnitude guard to failing open |
+| | **⬛ C · THE CHAIN'S OUTPUT — unblocked the moment A lands, and it runs on a DIFFERENT resource from B** | | | | |
+| **P10** | ⚠️ **THE LIVE-SCORING MODULE — it does not exist** | ~½ day *est.* | ✅ | *old `P2`* | Every stage writes predictions for a **dataset's test split**. Nothing loads a trained fold, windows the last 20 sessions for all 150 names on today's date and emits a ranking — so the chain cannot answer *"which ticker, on which date"* for any date not already in a split. ⚠️ **Blocked behind `P1`** (a 7-name cross-section is not a cross-section) and **not behind B at all** — half a day of local CPU while Kaggle runs. `pipeline.md` §6.2 |
+| **P11** | ⭐ **rank the FEATURES within date, as the selection did** (`FNM-1`) | ~1 h + 20 min *est.* | ✅ | *old `P3`* | **The largest single untried MODELLING lever**, and three independent measurements already on disk point at it. **↓ detail block** |
+| | **⬛ D · MODEL AND MONEY — everything below is a better number, not more data** | | | | |
+| **P12** | **ensemble the seven arms** — predictions already on disk | ~30 min *est.* | ✅ CPU | *old `P4`* | Free variance reduction at ρ 0.91-0.94; no GPU, no training. **↓ detail block** |
+| **P13** | **portfolio construction** — weighting, a laddered book | ~4 h *est.* | ✅ CPU | *old `P5`* | The only place with a **−55 % drawdown** to spend and no retraining to pay for it. ⚠️ Run it WITH `P14`. ⚠️ **The `k` half is already answered and the answer is NO**. **↓ detail block** |
+| **P14** | **execution realism** — ADV cap, sell-side floor days, the ATC auction | ~1 day | ✅ CPU | *old `P12`* | ⚠️ **It has a measured price tag: ~145 pp of CAGR at k=5.** Moves the LEVELS, and after the architecture and width tests the levels are the only thing still moving. **↓ detail block** |
+| **P15** | ⚠️ **take the 30-name VN30 result DOWNSTREAM** | ~2 h | ✅ | *old `P6`* | `t = +3.77` is a **SELECTION bar**, and §5d + `P2-3`: a cleared selection bar has **never once** survived to a model here. ⚠️ **A negative closes the thread cleanly** — that is the value |
+| **P16** | **a wider cross-section at h=10 that is NOT VN30** | ~1 h | ✅ | *old `P7`* | §6-1-quater cannot separate **N** from the **date window** from the **universe rule** — all three moved together. Reuses `ProvidedPanel`, no Kaggle quota |
+| **P17** | **train the estimand** — a ranking loss instead of MSE | ~½ day *est.* | ✅ | *old `P8`* | The only untried change aimed at **what is actually scored**. **↓ detail block** |
+| **P18** | **BUILD cross-sectional channels** — selection is nearly exhausted, construction is not | ~1 day + T4 *est.* | ⚠️ **quota** | *old `P9`* | The only real FEATURE lever left inside the data already held. **↓ detail block** |
+| **P19** | **sweep `lookback`** — the one dataset knob never swept | ~4 h *est.* | ✅ | *old `P10`* | `walkforward` §12c named it and nothing has moved since. **↓ detail block** |
+| **P20** | **date-only pools as a REGIME OVERLAY**, not as ranking channels | ~1 day *est.* | ✅ CPU | *old `P11`* | Risk control, **not** a fix for the decay — §9b already located that in the features. **↓ detail block** |
 
-### P13 … P31 · the backlog
+### P21 … P39 · the backlog
 
 | # | item | ⏱ | was | note |
 |---|---|---|---|---|
-| **P13** | Emit **`n_dead_train` / `n_dead_test`** from `validation.csv` | ~2 h | `P4-2` | Rule 23 explains **both** apparent clearances in §6-1 and the column still does not exist, so every ragged-pool run needs a hand computation to read at all. ⚠️ Confirmed still open 2026-08-19: the file carries `n_train`/`n_test`/`ic`/`r2`/`hit_rate` and nothing about dead channels |
-| **P14** | **re-run each LEGACY walk-forward track once** | ~0 | — | ⚠️ **A limit CREATED on 2026-08-21, not discovered.** The `WFO-1` guard covers the five pre-existing tracks on their **TABLE only** — `folds.csv` records no dataset knobs and §5 rule 2 forbids inferring them. One re-run writes the manifest and closes it. `walkforward/CONTEXT.md` §14b |
-| **P15** | ⚠️ **`STA-1`** — decide whether `gold.stocks_ta` is rebuilt | see `STA-1` | `P4-1` + *item 7* | **BLOCKING, not untidy, and it costs two different things.** (a) It disagrees with `silver.stocks_basic` for all 30 VN30 names in BOTH directions (ACB 4,882 vs 4,383; BID 3,096 vs 3,121), so the single-stock track can **never see a technical indicator**. (b) `pool__ta` stops 2026-06-26 and the INNER join drops the whole `return_5day` chain 4,266 → **4,235 rows**. Rebuild = 13 renamed columns + 289 k moved rows — its own decision, not a side effect |
-| **P16** | **survivorship** — a point-in-time listing/delisting table | ~2 days | `PRF-5` | `z = +18.6` is protected by the null; **+74 %/yr is not**. A DATA problem, not a code one. **↓ detail block** |
-| **P17** | **the rolling-vs-expanding training window** | ~1 day | `PRF-3` | Mostly answered by `PRF-2` — the post-2022 break is in the FEATURES, not the market. Only the training-window half is left, untested at h=10 and h=20. **↓ detail block** |
-| **P18** | ⚠️ **new information** — intraday/tick, point-in-time listing, dated fundamentals | months | `PRF-6` | ⚠️ **The main lever, not the last resort**, and it sits at 19 only because nothing here is actionable this week. **↓ detail block** |
-| **P19** | **re-fit the cost model into ONE function** | ~2 h | `P1-1` | Two models exist, disagree, and were both fitted with `lasso` — dropped 2026-08-16. The guard over-predicts by 4-13×. **↓ detail block** |
-| **P20** | **the streaming design** — cut the host-side peak so a top-300 panel fits | days | `P1-4b` + `P3-2` + `VRM-1`'s host half | Three codes for one piece of work: stop materialising the whole design; window per fold or per ticker-chunk. 4.03 GB per million rows, measured. **↓ detail block** |
-| **P21** | **`cs_rank_5day` on the top ~300 by turnover** | ~1 h | `P2-2` | Puts a number against §2b's `ALL` row, which still reads *"never ran — unverified"*. ⚠️ Blocked behind `P20` at that width. **↓ detail block** |
-| **P22** | **`CSP-1`** — give `read_universe_panel` the `UnifiedSchemaReader.join()` the single-ticker path uses | days | `P3-1` | ⚠️ Makes `MEM-1` worse by the width joined; `pool__ta` at 922 channels is ~10× the design |
-| **P23** | `_ingest_gold_stocks` still carries a legacy column (`close`/`volume` check: 1 of 2 present) | — | `P3-3` | ⚠️ Fixing it redefines `gold.stocks`' OHLC as adjusted and commits to a ~2.4 M × ~900 col rebuild. Its own decision. Related to `P15` |
-| **P24** | **262 rows in `bronze.cafef_price` have `high < low`** (ACB 2018-07-31: high 35,800, low 36,500) | — | `P4-3` | CafeF's defect; surfaces in gold as a negative `range_hl`. Needs a bronze data-quality screen, not a gold patch. ⚠️ Re-verified 2026-08-17, still 262. Probably deserves an ISSUES.md code |
-| **P25** | XGBoost warns in **every** run: *"Falling back to prediction using DMatrix due to mismatched devices"* | — | `P4-4` | If the design is copied host→device per prediction, the GPU conversion is leaving speed on the table |
-| **P26** | `landed()` cannot answer *"did THIS run produce anything"* | — | `P4-5` | It rglobs a folder where the previous run's dated files still sit; 140 header-only CSVs went green (2026-07-31). §5 rule 10's mechanism; the fix is to compare against the run's own outputs |
-| **P27** | `logs/app.log` has many writers now, so records interleave | — | `P4-6` | The executor is multiprocess and every step appends. Fix is per-process filenames in `Logger`, **not** going back to sequential |
-| **P28** | `raw/trading_view` partitions `crypto` and `options` are permanently red | — | `P4-7` | Both `true` in config, folders never existed, `landed(require=True)` fails them. Choose `require=False` or accept two red partitions |
-| **P29** | Decide the fate of `raw/trading_view_collected_links` — nothing reads it | — | `P4-8` | It is a leaf, not a hub |
-| **P30** | ⚠️ If ever backfilling TradingView, use a **single-run backfill** | — | `P4-9` | `tag_concurrency_limits` is per-RUN, so 9 partitions the default way is 9 runs × 8 browsers = **72 Chrome**. `.dagster/dagster.yaml` is empty |
-| **P31** | Four heavy assets have never been observed running end to end through Dagster | — | `P4-10` | `trading_view_links`/`data`, the 5 CafeF stock tabs + news, `cafef_pdfs` (100 partitions), `cafef_financials` (~2.4 h each). *"Built is not run"* |
+| | **⬛ E · HONESTY — each one makes an EXISTING number readable, not bigger** | | | |
+| **P21** | **survivorship** — a point-in-time listing/delisting table | ~2 days | *old `P16`* | `z = +18.6` is protected by the null; **+74 %/yr is not**. A DATA problem, not a code one. ⚠️ Adjacent to the stale-price finding: a name that stops trading is not delisted here, it returns 0 forever — and 0 ranks well in a falling cross-section. **↓ detail block** |
+| **P22** | ⚠️ **new information** — intraday/tick, point-in-time listing, dated fundamentals | months | *old `P18`* | ⚠️ **The main lever, not the last resort.** ⚠️ **`P6`-`P9` ARE ITS THIRD ITEM STARTING**, so this is no longer purely aspirational. **↓ detail block** |
+| **P23** | **the rolling-vs-expanding training window** | ~1 day | *old `P17`* | Mostly answered by `PRF-2` — the post-2022 break is in the FEATURES, not the market. Only the training-window half is left. **↓ detail block** |
+| **P24** | Emit **`n_dead_train` / `n_dead_test`** from `validation.csv` | ~2 h | *old `P13`* | Rule 23 explains **both** apparent clearances in §6-1 and the column still does not exist, so every ragged-pool run needs a hand computation to read at all |
+| | **⬛ F · BACKLOG** | | | |
+| **P25** | **re-run each LEGACY walk-forward track once** | ~0 | *old `P14`* | ⚠️ A limit CREATED on 2026-08-21, not discovered. The `WFO-1` guard covers the five pre-existing tracks on their **TABLE only**. One re-run writes the manifest and closes it |
+| **P26** | **re-fit the cost model into ONE function** | ~2 h | *old `P19`* | Two models exist, disagree, and were both fitted with `lasso` — dropped 2026-08-16. The guard over-predicts by 4-13×. **↓ detail block** |
+| **P27** | **the streaming design** — cut the host-side peak so a top-300 panel fits | days | *old `P20`* | Stop materialising the whole design; window per fold or per ticker-chunk. 4.03 GB per million rows, measured. **↓ detail block** |
+| **P28** | **`cs_rank_5day` on the top ~300 by turnover** | ~1 h | *old `P21`* | Puts a number against §2b's `ALL` row, which still reads *"never ran — unverified"*. ⚠️ Blocked behind `P27` at that width. **↓ detail block** |
+| **P29** | **`CSP-1`** — give `read_universe_panel` the `UnifiedSchemaReader.join()` the single-ticker path uses | days | *old `P22`* | ⚠️ Makes `MEM-1` worse by the width joined; `pool__ta` at 922 channels is ~10× the design |
+| **P30** | `_ingest_gold_stocks` still carries a legacy column (`close`/`volume` check: 1 of 2 present) | — | *old `P23`* | ⚠️ Fixing it redefines `gold.stocks`' OHLC as adjusted and commits to a ~2.4 M × ~900 col rebuild. Related to `P3` |
+| **P31** | **262 rows in `bronze.cafef_price` have `high < low`** (ACB 2018-07-31: high 35,800, low 36,500) | — | *old `P24`* | CafeF's defect; surfaces in gold as a negative `range_hl`. Needs a bronze data-quality screen. ⚠️ Re-verified 2026-08-17, still 262. Probably deserves an ISSUES.md code |
+| **P32** | `bronze.cafef_insider_shareholder_transactions` covers **100 of 781** — decide whether that partition list is the intended scope | ~1 h | *old `P35`* | It matches `raw/cafef_pdfs`' 100-ticker list exactly, so probably deliberate and undocumented rather than broken. ⚠️ Right now a reader cannot tell a scope from a gap |
+| **P33** | XGBoost warns in **every** run: *"Falling back to prediction using DMatrix due to mismatched devices"* | — | *old `P25`* | If the design is copied host→device per prediction, the GPU conversion is leaving speed on the table |
+| **P34** | `landed()` cannot answer *"did THIS run produce anything"* | — | *old `P26`* | It rglobs a folder where the previous run's dated files still sit; 140 header-only CSVs went green. §5 rule 10's mechanism. ⚠️ **`P1` is exactly the run that would be misread by it** |
+| **P35** | `logs/app.log` has many writers now, so records interleave | — | *old `P27`* | The executor is multiprocess and every step appends. Fix is per-process filenames in `Logger` |
+| **P36** | `raw/trading_view` partitions `crypto` and `options` are permanently red | — | *old `P28`* | Both `true` in config, folders never existed, `landed(require=True)` fails them |
+| **P37** | Decide the fate of `raw/trading_view_collected_links` — nothing reads it | — | *old `P29`* | It is a leaf, not a hub |
+| **P38** | ⚠️ If ever backfilling TradingView, use a **single-run backfill** | — | *old `P30`* | `tag_concurrency_limits` is per-RUN, so 9 partitions the default way is 9 runs × 8 browsers = **72 Chrome** |
+| **P39** | Four heavy assets have never been observed running end to end through Dagster | — | *old `P31`* | `trading_view_links`/`data`, the 5 CafeF stock tabs + news, `cafef_pdfs` (100 partitions), `cafef_financials` (~2.4 h each). *"Built is not run"* |
 
-⚠️ **EVERYTHING EXCEPT `P9` IS LOCAL OR CPU** — nothing else touches the 30 GPU-h/week
+⚠️ **THREE GAPS ARE DELIBERATE AND ARE NOT ON THIS LIST**, on measured evidence
+(2026-08-22): `silver.cafef_news_sentiment` **3 of 781** — §2a measured tone making
+price/TA models WORSE (QWK 0.175 → 0.045); `cafef_prop_trading` **431 of 781** — the source
+starts 2023 and §6-1 says **EXCLUDE** `prop_*` at this timescale, not extend it;
+`bronze.trading_view_stocks` **571 of 781** — ⚠️ **not in the price spine at all**
+(`silver.stocks_basic` is CafeF only, verified in `_ingest_silver_stocks_basic`), so it is
+~10 h of Selenium for a source nothing reads for prices. Re-scrape it only when the
+UNIVERSE itself needs refreshing.
+
+⚠️ **EVERYTHING EXCEPT `P7`, `P9` AND `P18` IS LOCAL OR CPU** — nothing else touches the 30 GPU-h/week
 Kaggle quota.
 
 ⚠️ **What is deliberately NOT on this list**, on measured evidence: **another architecture**
@@ -250,10 +421,64 @@ both horizons), and **another dataset setting** (six tracks, every `|t|` < 1.4).
 `P16` and `P18` make the number **honest**, not bigger, and that is why they rank where
 they do rather than higher.
 
-⚠️ **A PREDICTION IS RECORDED FOR `P4` … `P11`, BEFORE EACH RUNS.** This file already holds
+⚠️ **A PREDICTION IS RECORDED FOR `P12` … `P20`, BEFORE EACH RUNS.** This file already holds
 five predictions made that way and **four were wrong** (`PRF-1`, `P4-12`, and both of the
 arm sweep's) — which is the only reason the numbers that followed are worth anything. Score
 them; do not quietly edit them.
+
+---
+
+## THE 2026-08-22 CROSSWALK — OLD bare code → NEW bare code
+
+⚠️ **Use this for any `P<n>` written before 2026-08-22 evening.** It is the one crosswalk
+in this file that is bare → bare, so `grep` cannot tell an old code from a new one — only
+the DATE of the thing you are reading can.
+
+| old | new | item | moved because |
+|---|---|---|---|
+| `P1` | **`P1`** | `FRZ-1` re-scrape the universe | — *(unchanged)* |
+| `P2` | **`P10`** | the live-scoring module | ⚠️ the data program went above it |
+| `P3` | **`P11`** | rank features within date (`FNM-1`) | ⚠️ |
+| `P4` | **`P12`** | ensemble the seven arms | |
+| `P5` | **`P13`** | portfolio construction | |
+| `P6` | **`P15`** | VN30 downstream | |
+| `P7` | **`P16`** | a wider cross-section at h=10 | |
+| `P8` | **`P17`** | ranking loss | |
+| `P9` | **`P18`** | build cross-sectional channels | |
+| `P10` | **`P19`** | sweep `lookback` | |
+| `P11` | **`P20`** | date-only pools as a regime overlay | |
+| `P12` | **`P14`** | execution realism | ⚠️ **up**, it prices `P13` |
+| `P13` | **`P24`** | emit `n_dead_train`/`n_dead_test` | |
+| `P14` | **`P25`** | re-run the legacy walk-forward tracks | |
+| `P15` | **`P3`** | `STA-1` — rebuild `gold.stocks_ta`? | ⚠️ **up**, `P2` forces it |
+| `P16` | **`P21`** | survivorship | |
+| `P17` | **`P23`** | rolling vs expanding window | |
+| `P18` | **`P22`** | new information | |
+| `P19` | **`P26`** | re-fit the cost model | |
+| `P20` | **`P27`** | the streaming design | |
+| `P21` | **`P28`** | `cs_rank_5day` on the top ~300 | |
+| `P22` | **`P29`** | `CSP-1` | |
+| `P23` | **`P30`** | `_ingest_gold_stocks` legacy column | |
+| `P24` | **`P31`** | 262 rows with `high < low` | |
+| `P25` | **`P33`** | the XGBoost device warning | |
+| `P26` | **`P34`** | `landed()` cannot answer | |
+| `P27` | **`P35`** | `app.log` interleaving | |
+| `P28` | **`P36`** | `crypto`/`options` permanently red | |
+| `P29` | **`P37`** | `trading_view_collected_links` | |
+| `P30` | **`P38`** | single-run backfill | |
+| `P31` | **`P39`** | four heavy assets never observed | |
+| `P32` | **`P2`** | carry the re-scrape up to gold | ⚠️ **up**, it is `P1`'s second half |
+| `P33` | **`P6`** | the JSON fundamentals gate | ⚠️ **up**, it gates B |
+| `P34` | **`P8`** | non-bank statement template | ⚠️ **up** |
+| `P35` | **`P32`** | insider-txn scope | |
+| `P36` | **`P4`** | per-ticker freshness | ⚠️ **up**, it verifies `P1` |
+| — | **`P5`** | scrape filing PDFs at scale | ⭐ **NEW** |
+| — | **`P7`** | the `kgpu` OCR job | ⭐ **NEW** |
+| — | **`P9`** | the mass OCR run | ⭐ **NEW** |
+
+⚠️ **One correction made while rewriting the external pointers**: `pipeline.md` cited
+`P10` for the ADV-cap / slippage gap. That is **execution realism**, which was `P12` and is
+now **`P14`** — the citation was already pointing at the wrong item before tonight.
 
 ---
 
@@ -320,7 +545,7 @@ what is broken, the `P<n>` is what somebody is going to do about it.**
 
 ---
 
-### P3 · ⚠️ FEED THE MODEL THE REPRESENTATION THE SELECTION USED ⏱ ~1 h + 20 min *est.*  ·  *(was `M-1`)*
+### P11 · ⚠️ FEED THE MODEL THE REPRESENTATION THE SELECTION USED ⏱ ~1 h + 20 min *est.*  ·  *(was `M-1`)*
 
 **Three independent measurements already on disk point at this, and the third is the one
 that makes it first rather than fifth.**
@@ -380,7 +605,7 @@ about the era and the decay is something else again.
 
 ---
 
-### P4 · ENSEMBLE THE SEVEN ARMS — THE PREDICTIONS ARE ALREADY ON DISK ⏱ ~30 min *est.*  ·  *(was `M-3`)*
+### P12 · ENSEMBLE THE SEVEN ARMS — THE PREDICTIONS ARE ALREADY ON DISK ⏱ ~30 min *est.*  ·  *(was `M-3`)*
 
 Seven arms exist at h=10, pairwise **ρ 0.91-0.94**, and **all seven clear the within-date
 null with the null MAX below the observed**. Their inductive biases genuinely differ —
@@ -407,7 +632,7 @@ arm is the expected outcome at ρ 0.93 and is not a failure.**
 
 ---
 
-### P5 · PORTFOLIO CONSTRUCTION — NO RETRAINING, AND A −55 % DRAWDOWN TO SPEND ⏱ ~4 h *est.*  ·  *(was `M-4`)*
+### P13 · PORTFOLIO CONSTRUCTION — NO RETRAINING, AND A −55 % DRAWDOWN TO SPEND ⏱ ~4 h *est.*  ·  *(was `M-4`)*
 
 `backtest.long_only_top_k` is **equal-weight, one book, one rebalance grid** —
 `weight = 1.0 / len(picks)`, and `rebalance_dates` takes every `h`-th date from a fixed
@@ -435,7 +660,7 @@ not a peak.
 
 ---
 
-### P8 · TRAIN THE ESTIMAND — A RANKING LOSS INSTEAD OF MSE ⏱ ~½ day *est.*  ·  *(was `M-5`)*
+### P17 · TRAIN THE ESTIMAND — A RANKING LOSS INSTEAD OF MSE ⏱ ~½ day *est.*  ·  *(was `M-5`)*
 
 `engine.CRITERIA[REGRESSION]` is **`nn.MSELoss`** and `model.gbt` uses XGBoost's default
 squared error. **Every verdict this repo quotes is the ORDER**: test R² **+0.0003**,
@@ -462,7 +687,7 @@ the estimand itself, and a tie is a *stronger* version of §11a rather than a wa
 
 ---
 
-### P9 · ⚠️ SELECTION IS NEARLY EXHAUSTED; CONSTRUCTION IS WIDE OPEN ⏱ ~1 day + T4 *est.*  ·  *(was `M-6`)*
+### P18 · ⚠️ SELECTION IS NEARLY EXHAUSTED; CONSTRUCTION IS WIDE OPEN ⏱ ~1 day + T4 *est.*  ·  *(was `M-6`)*
 
 **State this precisely, because "try more features" is not actionable in this database.**
 
@@ -497,7 +722,7 @@ removes, so the two are close to the same operation.
 
 ---
 
-### P10 · SWEEP `lookback` — THE ONE DATASET KNOB NEVER SWEPT ⏱ ~4 h *est.*  ·  *(was `M-7`)*
+### P19 · SWEEP `lookback` — THE ONE DATASET KNOB NEVER SWEPT ⏱ ~4 h *est.*  ·  *(was `M-7`)*
 
 `walkforward` §12c point 4 names it and nothing has moved since: **`d` comes from the
 source TABLE NAME**, `engine._verify` asserts it, so it is not a flag — every value needs
@@ -522,7 +747,7 @@ WINS, §11a's *"the sequence inside the lookback is worth nothing"* has to be re
 
 ---
 
-### P11 · DATE-ONLY POOLS AS A REGIME OVERLAY, NOT AS RANKING CHANNELS ⏱ ~1 day *est.*  ·  *(was `M-8`)*
+### P20 · DATE-ONLY POOLS AS A REGIME OVERLAY, NOT AS RANKING CHANNELS ⏱ ~1 day *est.*  ·  *(was `M-8`)*
 
 The structural fact that kills the date-only pools for RANKING does not kill them for
 TIMING. `pool__market_breadth` (8 channels compressing all 781 names to one row per
@@ -1141,7 +1366,7 @@ width**. ⚠️ **So the pre-2017 comparison has to be re-run at the new width**
 to carry over — it is one extra Kaggle job on the same job definition, and it is what
 keeps a +1.991 defensible after the widening.
 
-### P17 · ⚠️ The regime question — **PARTLY ANSWERED by `PRF-1`, and the answer flipped** ⏱ ~1 day  ·  *(was `PRF-3`)*
+### P23 · ⚠️ The regime question — **PARTLY ANSWERED by `PRF-1`, and the answer flipped** ⏱ ~1 day  ·  *(was `PRF-3`)*
 
 ⚠️ **UPDATE 2026-08-19.** This item was written when three independent measurements all
 found the edge dying after 2022. **PRF-1's walk-forward found the opposite at h=20**:
@@ -1184,7 +1409,7 @@ Two hypotheses that make different predictions, which is what makes this worth r
 even a model that has only ever seen the new regime cannot find an edge in it, that is
 hypothesis 1 and the honest conclusion is that this data cannot be traded now.
 
-### P12 · ⚠️ Execution realism — the remaining fictions ⏱ ~1 day  ·  *(was `PRF-4`)*
+### P14 · ⚠️ Execution realism — the remaining fictions ⏱ ~1 day  ·  *(was `PRF-4`)*
 
 Each is a way the backtest is still kinder than the market. Ordered by expected damage:
 
@@ -1197,7 +1422,7 @@ Each is a way the backtest is still kinder than the market. Ordered by expected 
 | ~~**`se_sharpe` on the h=20 cell**~~ | ✅ **CLOSED by PRF-1, 2026-08-19** — the walk-forward produced **118 periods** and `se_sharpe` **0.155**, against the single split's 32 and 0.256. Fixed the way it was predicted to be: more OOS periods, not a wider window | ✅ 2026-08-19 |
 | **max drawdown −55 to −58 %** | at every `k` on the h=10 screen. Statistically tradable ≠ holdable; a vol target or a market-regime filter is the standard answer and neither is tested | ⚠️ known |
 
-### P16 · Survivorship — the one bias that flatters a momentum screen ⏱ ~2 days  ·  *(was `PRF-5`)*
+### P21 · Survivorship — the one bias that flatters a momentum screen ⏱ ~2 days  ·  *(was `PRF-5`)*
 
 `silver.stocks_basic` holds **no delisted name** (§2c). A screen that buys recent winners
 is the strategy most flattered by that, because the names that crashed out are absent.
@@ -1207,7 +1432,7 @@ is the strategy most flattered by that, because the names that crashed out are a
 Fix is data, not code: a point-in-time listing/delisting table. Related to §2d's
 "point-in-time index membership" lever, and it makes PRF-1's fold series interpretable.
 
-### P18 · New information — the only lever §2d says is left ⏱ months  ·  *(was `PRF-6`)*
+### P22 · New information — the only lever §2d says is left ⏱ months  ·  *(was `PRF-6`)*
 
 Ranked by expected impact **on this specific problem**, which differs from §2d's original
 single-stock ranking:
@@ -1411,7 +1636,7 @@ under `cs_rank` it becomes a clean within-date SIZE factor and under `none` it i
 level carrying era structure. `PRF-7` found it stable across the pre-2017 WINDOW; this
 finds it the most representation-SENSITIVE of the 13.
 
-### P19 · Re-fit the cost model into ONE function ⏱ ~2 h  ·  *(was `P1-1`)*
+### P26 · Re-fit the cost model into ONE function ⏱ ~2 h  ·  *(was `P1-1`)*
 
 Two models exist, disagree, and were both fitted with `lasso` — dropped 2026-08-16:
 
@@ -1430,7 +1655,7 @@ ran **35 min 12 s**. Rewrite the raise message with the measured number.
 **Payoff:** a 20-draw null on each of the 19 country pools becomes **~2-3 hours**, not the
 ~1,000 CPU-hours `EVD-1` is scoped at. This is what makes EVD-1 closable.
 
-### P20 · Cut the host-side peak so the top-300 panel fits ⏱ days  ·  *(was `P1-4b`, merged with `P3-2` and `VRM-1`'s host half)*
+### P27 · Cut the host-side peak so the top-300 panel fits ⏱ days  ·  *(was `P1-4b`, merged with `P3-2` and `VRM-1`'s host half)*
 
 ⚠️ **THE FIRST EXTRAPOLATION HERE WAS WRONG AND THE SECOND MEASUREMENT KILLED IT.** It
 read *"~1.5 GB of the smoke run's RSS is data over 48,521 rows, so the top-300 panel is
@@ -1521,7 +1746,7 @@ h=20 at h=10's cadence) is still unbuilt and is the one that would settle a tie.
 (ADV cap, floor days on the sell side) are expected to hit **h=10 harder**, since it pays
 double the fee drag — but "harder" is a difference between two tracks, which is this item.
 
-### P21 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h  ·  *(was `P2-2`)*
+### P28 · `cs_rank_5day` on the top ~300 by turnover ⏱ ~1 h  ·  *(was `P2-2`)*
 
 `read_universe_panel` already takes a `tickers` list and filters in SQL, so this is a CLI
 flag, not a new schema. ~1.3 M rows — ⚠️ **the same width as P2-1 v2, so assume the same

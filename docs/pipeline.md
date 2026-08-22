@@ -138,7 +138,7 @@ are `DCT` (108 books), `DCS` (106), `EFI` (87), `PVV` (84); the liquid blue chip
 
 **This is the single most important tradability finding in this file.** The backtest charges
 30-50 bps and models **no ADV cap and no slippage**, on a book that concentrates in small
-UPCOM names where a real position would move the price against itself. See TODO `P10`.
+UPCOM names where a real position would move the price against itself. See TODO `P14` (⚠️ this line cited `P10` until 2026-08-22 and that was already the wrong item).
 
 ### 4d. A worked example — the last book with a real cross-section
 
@@ -261,7 +261,7 @@ Three consequences, and each one changes a decision:
    Its label needs 2026-06-24, which all 150 names have.
 2. **The horizon decides where the usable track ends**: last session with ≥100 names labelled
    is **2026-06-18** at h=5, **2026-06-11** at h=10, **2026-05-28** at h=20.
-3. ⚠️ **A live-scoring module (`P2`) has ~10 more sessions of usable FEATURES than the old
+3. ⚠️ **A live-scoring module (`P10`) has ~10 more sessions of usable FEATURES than the old
    sentence implied.** You can rank the cross-section on 2026-06-25; you simply cannot score
    the outcome yet. *Scoring a book and evaluating a book fail on different dates.*
 
@@ -272,14 +272,14 @@ because a 7-name cross-section is not a cross-section. TODO **`P1`**.
 
 Every stage writes predictions for a **dataset's test split**. Nothing in the repo loads a
 trained fold, windows the last 20 sessions for all 150 names on today's date, and emits a
-ranking. It is a small module — but it does not exist. TODO **`P2`**.
+ranking. It is a small module — but it does not exist. TODO **`P10`**.
 
 ### 6.3 Execution realism is unpriced, and §4c makes it urgent
 
 No ADV cap, no slippage, and the ceiling screen covers **entry only** — a name at its floor
 on the exit date cannot be sold either, which is precisely when a loser is. On a book
 **2.2× overweight UPCOM**, this is not a refinement; it is the question of whether the
-strategy is tradable at any size. TODO **`P12`**.
+strategy is tradable at any size. TODO **`P14`**.
 
 ---
 
@@ -289,8 +289,8 @@ strategy is tradable at any size. TODO **`P12`**.
 |---|---|---|---|
 | 1 | re-scrape the 143 frozen tickers, verify **per-ticker** max date | ~1 h + scrape | **`P1`** |
 | 2 | rebuild `pool__basic` → `rank_10day__final__d20_h10` | ~12 min | — |
-| 3 | write the live-scoring module (load fold, window 20 sessions × 150 names, rank) | ~½ day | **`P2`** |
-| 4 | ADV cap + sell-side floor screen **before** trusting any level | ~1 day | **`P12`** |
+| 3 | write the live-scoring module (load fold, window 20 sessions × 150 names, rank) | ~½ day | **`P10`** |
+| 4 | ADV cap + sell-side floor screen **before** trusting any level | ~1 day | **`P14`** |
 
 ⚠️ **Steps 1-3 give you a list. Step 4 tells you whether it is worth anything at your
 size**, and on the evidence in §4c that is the one most likely to change the answer.
@@ -371,7 +371,7 @@ The names carrying k=5 are `DCT` (61 books), `DCS` (54), `VST` (40), `EFI` (39),
 rebalance also rises, 65.1 % → **78.7 %**.
 
 ⚠️ **So the ladder in §9a is not a menu.** The extra return at low `k` is earned in names that
-cannot absorb a position, and the backtest models no ADV cap and no slippage (`P12`).
+cannot absorb a position, and the backtest models no ADV cap and no slippage (`P14`).
 
 ### 9d. ⚠️ THE DECISIVE TEST — a tradability gate, and the CAGR collapses
 

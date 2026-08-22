@@ -200,6 +200,11 @@ silver_schema                 20 assets                 canonical, cross-source 
 gold_schema                   11 assets                 + features (TA battery ~900 cols,
       │                                                 returns, vol, as-of macro)
       ▼
+filter_schema                  1 asset × 3 SCREENS      ⚠️ NEW 2026-08-22 — universe__<screen>,
+      │                                                 the MEMBERSHIP table. No time series:
+      │                                                 one row per (exchange, ticker) with
+      │                                                 every condition's value and verdict
+      ▼
 unified_schema_<universe>     12 assets × 3 partitions  pool__basic (⚠️ 38 silver +
                                                         58 drv_*, 2026-08-16) / __targets /
                                                         __economy_<country>×19 / __forex /
@@ -208,7 +213,8 @@ unified_schema_<universe>     12 assets × 3 partitions  pool__basic (⚠️ 38 
                                                         __ta / __fa /
                                                         __news_daily / __market_breadth
                                                         (last two NEW 2026-08-17, VCB only)
-                              partitions: VCB | BANK | ALL
+                              partitions: VCB | BANK | ALL | VN30 | 29 single names
+                                          | ⚠️ PRICE10K | LIQUID | QUALITY (screens)
       ▼
 reports/feature_selection/     1 asset × 19 partitions   analysis/feature_selection_economy
                               partitions: the 19 countries — ⚠️ writes NO table
@@ -428,6 +434,72 @@ archives a run folder; `feature_selection` is read-only by design. It defaults t
 the country pool is behind `pool__basic`'s calendar and when its fitted cost estimate
 exceeds `budget_minutes` — `usa` is 1,458 channels, 7.2 h with no null and **6.3 days**
 at 20 draws. `feature_selection/CONTEXT.md` §15.
+
+### ⚠️ 3a-bis. THE FILTER LAYER — a universe is a DECLARED SCREEN now (2026-08-22)
+
+`filter_schema.universe__<screen>` sits between gold and unified and answers the one
+question the unified layer could not previously express: **which tickers are allowed
+in.** Until now that had exactly three answers hard-coded in `UNIFIED_MEMBER_FILTERS` —
+everything (`ALL`), one GICS industry (`BANK`), one frozen index list (`VN30`) — and a
+fourth meant writing SQL inside a class constant.
+
+A **screen** is a named list of **conditions**; a condition measures ONE number per
+`(exchange, ticker)` and compares it to a threshold. Both live in
+`src/orchestration/preprocessor/filters.py`, which is **pure** — no I/O — so
+`test_filters.py` pins the definition half without a database (**30 tests**).
+
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "filter/universe" --partition PRICE10K    # the membership table (~1 s)
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "group:unified"  --partition PRICE10K     # the schema it gates
+```
+
+**Built and verified 2026-08-22.** ⚠️ Every one is `pool__basic` + `pool__targets` only;
+the other pools are unbuilt for these partitions.
+
+| screen | conditions | selected | first failure | `unified_schema_*` |
+|---|---|---|---|---|
+| **`PRICE10K`** | 1 — `close_raw` never below 10,000 VND since 2026-01-01 | **480 / 781** | `close_raw_min_10k` 301 | **1,503,958 × 101** |
+| **`LIQUID`** | 4 — 1 bn/session median matched turnover, 80 % traded days, 200+ sessions, still quoted | **206 / 781** | `turnover_median_1bn` 545, `sessions_min_200` 30 | **657,892 × 101** |
+| **`QUALITY`** | 6 — `LIQUID` + a 5,000 VND median price floor + a debt/equity ceiling | **200 / 781** | `turnover_median_1bn` 426, `close_raw_median_5k` 125 | **635,919 × 101** |
+
+✅ **Verified against silver with code sharing nothing with the builder**: `PRICE10K`'s
+480 members are exactly the 480 pairs with `MIN(close_raw) >= 10000` since 2026-01-01 —
+**0 extra, 0 missing** — and the built schema holds **0 rows below 10,000 VND after
+2026-01-01**. Row counts match silver-filtered-to-members exactly on all three, and **0
+`QUALITY` members sit outside `LIQUID`**.
+
+Four things worth carrying forward:
+
+1. ⚠️ **A SCREEN IS NOT POINT-IN-TIME.** Membership is decided from a window and applied
+   to the WHOLE history — `PRICE10K` picks names that traded above 10,000 VND *in 2026*
+   and carries that back to 2009. §2c's defect in its purest form: **benign for a
+   within-date shuffle null** (every draw sees the same basket, so a `z` is protected)
+   and **fatal for any CAGR** read off one of these schemas. Every window is JSON-encoded
+   into the table `COMMENT`, and the asset refuses to finish if that comment's
+   fingerprint disagrees with the definition that built it.
+2. ⚠️ **`gold.stocks_financials_bank_fa` HOLDS TWO TICKERS OF 781** (ACB, VCB), so the
+   debt/equity condition is `on_missing="keep"` and **abstains on 779 names**, reporting
+   a **100 % pass rate against a 0.3 % measurement rate**. That is rule 22 at the filter:
+   a condition everything cleared and a condition nothing was measured for look
+   identical. `measured` sits beside `passed` in the metadata and the asset WARNs. ⚠️ Its
+   threshold is **12×, not 3** — ACB is 9.44 and VCB 9.90, because the only fundamentals
+   here are bank fundamentals.
+3. ⚠️ **THE EDGE INTO `unified` IS NOT DECLARED**, because the two are partitioned on
+   different sets and a Dagster dep is per-ASSET. `_helper_unified_member_filter` raises
+   with the materialize command instead. **The cost is rule 14 from the other side:
+   re-running a screen does NOT mark the unified schema stale** — rebuild it yourself.
+4. ⚠️ **EVERY CANDIDATE IS WRITTEN, NOT ONLY THE SURVIVORS** — 781 rows with
+   `val__<cond>`, `pass__<cond>`, `passes` and `first_failed`. A survivor list answers
+   "who is in"; this answers "why is HPG out", which is the question a threshold change
+   actually raises.
+
+⚠️ **Building the first screen found a latent defect in `_ingest_unified_pool_basic`**:
+its log-scope string was `predicate.replace('%s', repr(*params))`, correct for all three
+original sentinels (each binds exactly one value) and `TypeError: repr() takes exactly
+one argument (0 given)` for a screen, whose sub-select binds none. **A display helper
+took down a build.** Fixed and pinned. `orchestration/CONTEXT.md` §"FILTER".
 
 ### 3b. Model — EIGHT stages, each `python -m <pkg>`, dry-run by default
 
@@ -1047,7 +1119,7 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-20)
+## 6. State today (2026-08-22)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section
 is the bug.** It was 7 days stale once already.
@@ -1781,6 +1853,47 @@ outliers. ⚠️ And `pool__ta` carries a **price LEVEL** (`close`, ρ +0.997 wi
 | datasets on disk | 3 | 1 | **1** |
 | model runs | 2 | 0 | **31** — 1 single-split + 10 PRF-1 folds + 20 PRF-8 folds (2 arms × 10) |
 
+### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
+
+Measured across every ticker-keyed table in all three schemas. Full tables and the
+resulting program (`P1`-`P9`, re-prioritised 2026-08-22) is in **[TODO.md](docs/TODO.md)**; three numbers belong
+here because they change how any current result is read.
+
+**1. ⚠️ `MAX(date)` SAYS 2026-08-19 AND FIVE TICKERS PRODUCE IT.** Names per session at
+the tail of `silver.stocks_basic`: **779** on 2026-06-25, **627** on 2026-06-26, then
+**28**, then **24**, then **5** from 2026-08-10. **757 of 781 tickers are stale**; 599 stop
+dead on 2026-06-26. `FRZ-1`/`P1` records this as *"143 frozen tickers"* and that
+understates it — **the whole universe stops in late June** and a 24-name tail was refreshed
+after. §5 rule 10 at full scale: a 24-name cross-section looks like a working pipeline to
+anything reading one number.
+
+**2. ⚠️ GOLD IS BEHIND SILVER AND NOTHING SAYS SO.** `gold.stocks` stops **2026-07-08**
+(30 sessions), `gold.stocks_ta` **2026-06-26** (54 sessions, and `STA-1` on top). §5 rule
+11 — *"re-scraped" never implies "re-ingested"* — with a measured size. **`filter_schema`
+and every `unified_schema_*` sit downstream of both and re-materialise themselves never.**
+
+**3. ⚠️ FUNDAMENTALS ARE 2 OF 781 AND THREE WALLS STAND IN FRONT OF THE OTHER 779** —
+none of them a code problem: **disk** (PDFs for 112 tickers = 100 GB, median 906 MB each →
+~700 GB for the universe, against **144 GB free**), **time** (~2.4 h/ticker of OCR →
+**~78 days**), and **schema** — `raw_data/cafef/financials/statements/` holds **one**
+template family, `bank`, while **761 of 781 names are not banks** (230 industrials, 117
+materials, 93 consumer staples; only 20 are GICS 401010). ⚠️ **The schema wall is the real
+one**: with infinite disk and time the current parser reaches 20 names. So `P6` prices a
+JSON source (`api.simplize.vn`, `vnstock`) *before* anything else is built — §2d's
+second-ranked lever is a data-acquisition question, not an OCR question.
+
+⚠️ **Three gaps are deliberate and must NOT be filled**: `cafef_news_sentiment` (3 of 781 —
+§2a measured tone making models *worse*), `cafef_prop_trading` (431 of 781 — starts 2023,
+and §6-1 says EXCLUDE `prop_*` at this timescale, not extend it), `trading_view_stocks`
+(571 of 781 — ⚠️ **not in the price spine at all**; `silver.stocks_basic` is CafeF only,
+verified in `_ingest_silver_stocks_basic`).
+
+⚠️ **AND THREE SCREENED UNIVERSES SINCE 2026-08-22** — `unified_schema_price10k`
+(480 tickers, 1,503,958 rows), `unified_schema_liquid` (206, 657,892),
+`unified_schema_quality` (200, 635,919), each holding `pool__basic` + `pool__targets`
+only. Nothing has been SELECTED or MODELLED on any of them; they are universes, not
+results. §3a-bis.
+
 ⚠️ **The 16 pre-2026-08-16 model runs were deleted on request** and archived to
 `D:\GIT\_archive\master-thesis\model_runs_2026-08-16.zip` (2.2 MB, outside the repo,
 untracked). `src/model/runs/*/` is gitignored (`RPR-1`), so **that zip is the only copy**
@@ -1827,7 +1940,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**16 open**, 35 resolved, codes permanent — `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**16 open**, 36 resolved, codes permanent — ⚠️ **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -1852,7 +1965,7 @@ what a session budgets against.
 
 | open this | ~tokens | when you are… |
 |---|---|---|
-| [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | **44.7k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, or a scrape |
+| [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | **47.0k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER" — screens, `filter_schema`, and why a screen is not point-in-time) |
 | [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | **25.8k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
 | [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **28.7k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
@@ -1891,8 +2004,8 @@ still resolves; only the PATH gained a `docs/` prefix.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](docs/ISSUES.md)** | 16 open / 35 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
-| **[TODO.md](docs/TODO.md)** | the one backlog — **one code scheme since 2026-08-21**: `P1` … `P32`, `P1` highest. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P12`, `P4-2` is now `P13`, …), and ⚠️ **a bare `P<n>` is stable only BETWEEN renumberings** — the list shifts up when an item is done, so cite the hyphenated code when you need a permanent reference. This file still says `PRF-4`/`P0-3`/`P1-9` in ~65 places and those were deliberately NOT rewritten — **TODO.md's crosswalk resolves them** | deciding what to do next |
+| **[ISSUES.md](docs/ISSUES.md)** | 16 open / 36 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **RE-PRIORITISED 2026-08-22 (evening): DATA FIRST.** `P1` … `P39` in six lettered groups — **A scrape `P1`-`P5`, B OCR→Kaggle `P6`-`P9`**, C output `P10`-`P11`, D model `P12`-`P20`, E honesty `P21`-`P24`, F backlog `P25`-`P39`. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P14`, `P4-2` is now `P24`, …). ⚠️ **AND THAT RENUMBERING WAS BARE → BARE**, so a `P<n>` written before 2026-08-22 evening resolves to a DIFFERENT item — `P2` was live scoring and is now `P10`. **TODO.md's 2026-08-22 crosswalk is the bridge**; the live pointers in this file, RUNBOOK.md, pipeline.md and PIPELINE_h10_CAGR74.md were rewritten with it | deciding what to do next |
 | **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
 | **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
 | `README.md` | the front door; routes here — ⚠️ **stays at the repo ROOT** | — |

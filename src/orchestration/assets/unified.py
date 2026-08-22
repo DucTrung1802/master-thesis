@@ -76,6 +76,7 @@ from orchestration._bootstrap import bootstrap
 bootstrap()
 
 from orchestration import enabled
+from orchestration.preprocessor import filters as filter_registry
 from orchestration.resources import PreprocessorResource
 
 # ⚠️ The two sentinels here must stay in step with
@@ -97,6 +98,14 @@ UNIFIED_PARTITIONS = StaticPartitionsDefinition(
         # must stay deduplicated or StaticPartitionsDefinition raises on it.
         [
             "VCB", "ALL", "BANK", "VN30",
+            # ⚠️ THE SCREENS, from `preprocessor/filters.py`. Each one is a universe
+            # gated by `filter_schema.universe__<screen>` — a SENTINEL like `ALL` and
+            # `BANK`, not a ticker, and safe as one because every VN ticker is exactly
+            # 3 characters while `Screen` refuses a name shorter than 4. They are read
+            # from the registry rather than listed here so a screen is defined ONCE.
+            # ⚠️ `filter/universe` must be materialised for a screen BEFORE this;
+            # `_helper_unified_member_filter` raises with the command if it is not.
+            *sorted(filter_registry.SCREENS),
             "ACB", "BCM", "BID", "BVH", "CTG", "FPT",
             "GAS", "GVR", "HDB", "HPG", "MBB", "MSN",
             "MWG", "PLX", "POW", "SAB", "SHB", "SSB",
