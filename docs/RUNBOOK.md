@@ -8,7 +8,7 @@
 >
 > | file | answers | when you touch it |
 > |---|---|---|
-> | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
+> | **[CLAUDE.md](../CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
 > | **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
 > | **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
 > | **[TODO.md](TODO.md)** | *what is NEXT?* | one list, `P1` first. ⚠️ **A bare `P<n>` is LIVE; a HYPHENATED code (`P1-9`, `PRF-8`, `M-3`) is RETIRED** — renumbered 2026-08-21, crosswalk at the top of that file |
@@ -55,7 +55,7 @@ cd src                                                # every `python -m` below 
 ## 3. The chain, and what each stage costs
 
 The chain's DEFAULT is **`vcb` / `close_adjust_5day` / `d=20, h=5`**, named in exactly one
-place: [src/utils/chain.py](src/utils/chain.py). Every stage derives from there.
+place: [src/utils/chain.py](../src/utils/chain.py). Every stage derives from there.
 
 ⚠️ **The default is not the live experiment, and knowing which is which matters.** Both
 chains are built in the database as of 2026-08-17:
@@ -774,6 +774,47 @@ data. TODO **`P2`**. `pipeline.md` §6 has both.
    levels.**
 3. **Turnover is 65.1 % per rebalance** (median 65.0 %, range 20-90 %) → **8.2 %/yr** at
    50 bps. ✅ That confirms `backtest/CONTEXT.md` §3's assumed `τ = 0.70` from the data.
+
+---
+
+## 8c. ⚠️ BEFORE YOU COMMIT — record the state
+
+**One command, and it takes about two seconds:**
+
+```powershell
+python docs/state_check.py
+```
+
+⚠️ **It REPORTS and never rewrites.** Every finding is handed back as a decision, because
+the numbers here cannot be derived mechanically without getting them wrong — `ISSUES.md`
+keeps four FIXED rows struck-through *inside* its Open table on purpose, so a naive
+row-counter reports **17** where the truth is **16**. A confidently wrong number is worse
+than no number, since it is what the next session budgets against.
+
+| the check | what a failure means, and where the fix goes |
+|---|---|
+| **`CLAUDE.md` §6 date** | `## 6. State today (YYYY-MM-DD)` is older than the `.md` files in this commit. If the commit changes what the project KNOWS, bump the date and write the measurement in. If it is a typo fix, ignore the row |
+| **`CONTEXT.md` ↔ `CLAUDE.md`** | a package `CONTEXT.md` changed and `CLAUDE.md` did not. ⚠️ **A measurement that never reaches the hub is invisible** — every session loads `CLAUDE.md`, almost none open a given `CONTEXT.md`. Decide deliberately; "the detail stays local" is a valid answer |
+| **issue counts** | `CLAUDE.md`'s *"N open, M resolved"* disagrees with `ISSUES.md`'s own `## Open (n)` headings. Re-SCAN the tables — do not decrement |
+| **`INDEX.md` completeness** | a `.md` file exists that `docs/INDEX.md` does not route. **A file missing from the index is a file no session knows exists.** Add it to a tier |
+| **`INDEX.md` token costs** | a claimed cost drifted >20 % from measured. ⚠️ **This check exists because all 16 of `CLAUDE.md` §7's costs had gone stale** — `walkforward` was listed at 6k against a true 16.0k |
+| **relative links** | a markdown link points at nothing. ⚠️ **11 are known-broken and pre-date the docs move** (stale `#L` anchors in `NULL_DRAWS.md` and two `CONTEXT.md` files) — the row is a watermark, so read the count, not just the colour |
+
+**Where each kind of change is recorded** — this is the whole convention in one table:
+
+| you changed | it goes in |
+|---|---|
+| a new measurement, or one that moves a verdict | `CLAUDE.md` §6 (+ bump the date), or the package's `CONTEXT.md` |
+| a new defect | `docs/ISSUES.md`, with a **permanent** code — never renumbered, never reused |
+| a finished backlog item | its number moves to `CLAUDE.md` / `CONTEXT.md`; the item is **deleted from `docs/TODO.md`, not ticked** |
+| a new `.md` file | a row in `docs/INDEX.md` (`python docs/check_index.py` fails without one) |
+| a new command or stage | this file |
+
+⚠️ **NOTHING ENFORCES THIS AT COMMIT TIME, AND THAT IS A CHOICE** (2026-08-22). There is no
+git hook and no `PreToolUse` hook: a hook that blocks an unrelated commit costs more than
+the drift it prevents, and `--no-verify` would train the reflex to bypass it. Running the
+command is the discipline. `state_check.py` exits **1** on drift, so it *can* be wired into
+`.git/hooks/pre-commit` later if that trade changes.
 
 ---
 

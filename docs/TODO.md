@@ -8,7 +8,7 @@
 >
 > | file | answers | when you touch it |
 > |---|---|---|
-> | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
+> | **[CLAUDE.md](../CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
 > | **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
 > | **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
 > | **[TODO.md](TODO.md)** | *what is NEXT?* | priority-ordered, every item with a measured cost |
@@ -1564,7 +1564,7 @@ bands are retired and the list is flat.
 | **Silver leaf assets** (old item 17: bonds, forex, funds, indices, gics) | ✅ all five exist |
 | **Gold leaf assets** (old item 18: bonds, forex, funds) | ✅ all three exist |
 | **`switch_config.json` cleanup** (old items 22, 23) | ✅ moot — the file is gone (§5a); a leftover copy now RAISES |
-| **`execution.finished_at = None`** in every `metadata.json` | ✅ **working as designed** ([runtime.py:329](src/utils/runtime.py#L329)) — `summary()` is called mid-run because `write_report` writes the file, and waiting for `stop()` would record a runtime of zero. `None` "rather than a guess" is §5 rule 2 at the clock. I called it a bug on 2026-08-16 and was wrong |
+| **`execution.finished_at = None`** in every `metadata.json` | ✅ **working as designed** ([runtime.py:329](../src/utils/runtime.py#L329)) — `summary()` is called mid-run because `write_report` writes the file, and waiting for `stop()` would record a runtime of zero. `None` "rather than a guess" is §5 rule 2 at the clock. I called it a bug on 2026-08-16 and was wrong |
 
 ---
 

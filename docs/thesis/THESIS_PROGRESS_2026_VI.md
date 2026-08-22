@@ -1,8 +1,8 @@
 # Luận văn Thạc sĩ — Báo cáo Tiến độ, Tháng 01 → Tháng 07/2026
 
 > ⚠️ **Deliverable write-up, not an operating document.** For how to run the pipeline see
-> [RUNBOOK.md](RUNBOOK.md); for what it has proved, [CLAUDE.md](CLAUDE.md); for what is
-> broken, [ISSUES.md](ISSUES.md); for what is next, [TODO.md](TODO.md).
+> [RUNBOOK.md](../RUNBOOK.md); for what it has proved, [CLAUDE.md](../../CLAUDE.md); for what is
+> broken, [ISSUES.md](../ISSUES.md); for what is next, [TODO.md](../TODO.md).
 
 **Repository:** `master-thesis` · **Tác giả:** DucTrung1802
 **Giai đoạn:** 2026-01-01 → 2026-07-27 (commit cuối cùng tại thời điểm viết báo cáo)

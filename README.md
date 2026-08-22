@@ -8,17 +8,26 @@ able to prove.
 pipeline end to end, the standing rules, the current state, and a routing table to the
 twelve per-package `CONTEXT.md` files that hold the detail.
 
-## The four root registers — one job each, no overlap
+**All prose documentation lives in [`docs/`](docs/)**, mapped by
+**[docs/INDEX.md](docs/INDEX.md)** — 127 `.md` files in four tiers with a measured token
+cost each. `CLAUDE.md` imports that index (`@docs/INDEX.md`), so every Claude Code session
+starts holding the map. ⚠️ The corpus is ~511k tokens, ~2.5× a context window, so the index
+routes rather than inlines: **open one file, when you touch that thing.**
+
+## The four registers — one job each, no overlap
 
 | file | answers |
 |---|---|
 | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* |
-| **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* |
-| **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* |
-| **[TODO.md](TODO.md)** | *what is NEXT?* |
+| **[docs/RUNBOOK.md](docs/RUNBOOK.md)** | *how do I RUN it?* |
+| **[docs/ISSUES.md](docs/ISSUES.md)** | *what is BROKEN?* |
+| **[docs/TODO.md](docs/TODO.md)** | *what is NEXT?* |
 
-Deliverable write-ups live in `THESIS_PROGRESS_2026.md` (EN),
-`THESIS_PROGRESS_2026_VI.md` and `THESIS_SUMMARY_2026_VI.md` (VI).
+Deliverable write-ups live in [`docs/thesis/`](docs/thesis/) — `THESIS_PROGRESS_2026.md`
+(EN), `THESIS_PROGRESS_2026_VI.md` and `THESIS_SUMMARY_2026_VI.md` (VI).
+
+⚠️ `CLAUDE.md` and this file stay at the repo root on purpose: Claude Code auto-loads
+`CLAUDE.md` from the root only.
 
 ⚠️ **The headline result is negative and deliberately so.** Single-stock short-horizon
 prediction does not work on this data, established four independent times; CLAUDE.md §2

@@ -2,7 +2,7 @@
 
 > Tổng kết experiment_10. Nguồn: 23 paper trong [CONTEXT.md](CONTEXT.md) · kế hoạch trong
 > [guidance.md](guidance.md) · nhật ký thi công trong
-> [TODO.md](../../TODO.md) — ⚠️ **thay cho `src/orchestration/todo.md`, đã gộp và xoá
+> [TODO.md](../../docs/TODO.md) — ⚠️ **thay cho `src/orchestration/todo.md`, đã gộp và xoá
 > 2026-08-17**; nội dung cũ lấy lại bằng `git show <commit>^:src/orchestration/todo.md` ·
 > mã và kết quả trong
 > [news_result.py](news_result.py).
@@ -114,7 +114,7 @@ BNA  2021-10-07   close_raw 38.700   close_adjust 23.950   ← raw −43%, adjus
 Chuỗi raw nhận đúng đợt phát hành thêm; chuỗi adjusted nhảy thay vì liên tục. Chỉ 0,04% số
 dòng — **nhưng chúng nằm trọn trong đuôi phân phối, đúng chỗ định nghĩa lớp cực trị.**
 **Chỗ sửa thật là data-quality screen ở bronze**, cạnh 262 dòng `high < low` đã ghi ở mục
-25 của todo.md (nay là **P4-3** trong [TODO.md](../../TODO.md)).
+25 của todo.md (nay là **P4-3** trong [TODO.md](../../docs/TODO.md)).
 
 Trùng lặp chéo giữa các mã **không** phải vấn đề: 382.829 URL riêng / 405.320 dòng =
 **1,06×**; chỉ 1,9% URL gắn >1 mã.
@@ -207,7 +207,7 @@ từng mã** (chia cho median của chính mã đó).
 
 | | lý do |
 |---|---|
-| **Fine-tune bộ chấm sentiment tiếng Việt** | Mục 7–13 của todo.md bị **dừng có chủ đích** (nay ở mục *Closed* của [TODO.md](../../TODO.md)) sau khi nhóm A cho kết quả null ở nơi độ phủ cao nhất. Bước đầu tiên và rẻ nhất (publication effect) đã trắng. |
+| **Fine-tune bộ chấm sentiment tiếng Việt** | Mục 7–13 của todo.md bị **dừng có chủ đích** (nay ở mục *Closed* của [TODO.md](../../docs/TODO.md)) sau khi nhóm A cho kết quả null ở nơi độ phủ cao nhất. Bước đầu tiên và rẻ nhất (publication effect) đã trắng. |
 | **Gán nhãn thủ công 600–800 câu** | Cùng lý do — nút thắt là dữ liệu, không phải bộ chấm. |
 | **Đồ thị quan hệ (paper 44)** | Wikidata không phủ mã VN ở mức dùng được. |
 | **Google Trends (paper 58)** | Chưa cào; là hướng còn lại đáng nhất (xem §5). |
@@ -391,7 +391,7 @@ Việt Nam" — một kết quả null được đo tử tế, không phải m�
 
 | | |
 |---|---|
-| ⚠️ **`close_adjust` sai ở corporate action** | 1.002 dòng; cần data-quality screen ở **bronze**, cạnh 262 dòng `high < low` ([TODO.md](../../TODO.md) **P4-3**, đo lại 2026-08-17 vẫn đúng 262) |
+| ⚠️ **`close_adjust` sai ở corporate action** | 1.002 dòng; cần data-quality screen ở **bronze**, cạnh 262 dòng `high < low` ([TODO.md](../../docs/TODO.md) **P4-3**, đo lại 2026-08-17 vẫn đúng 262) |
 | **Hố dữ liệu 2012-06→11** | Đã né bằng `PANEL_START`; nếu cào lại được thì mở rộng được 4 năm |
 | **~52% corpus gắn nhầm mã** | Cờ `relevance_score` đã có trong silver; cần quyết định ngưỡng nếu dùng lại |
 | `gold.news_daily_panel` | 2 triệu dòng, chưa ai đọc ngoài `run_weekly_prototype.py` |
@@ -408,7 +408,7 @@ Việt Nam" — một kết quả null được đo tử tế, không phải m�
 | **Runner** | [`run_weekly_prototype.py`](../../src/sentiment/run_weekly_prototype.py) · [`news_result.py`](news_result.py) · [`phobert_capacity.py`](phobert_capacity.py) |
 | **Biểu đồ** | `news_result_1_impact.png` · `news_result_2_model_{3,5}class.png` · `news_result_3_class_schemes.png` |
 | **Ví dụ kiểm chứng** | [`news_result_examples.md`](news_result_examples.md) — 6 nhóm, toàn bộ ngoài mẫu, kèm URL gốc |
-| **Tài liệu** | [`CONTEXT.md`](CONTEXT.md) (23 paper) · [`guidance.md`](guidance.md) (kế hoạch) · [`TODO.md`](../../TODO.md) (backlog, đã gộp `src/orchestration/todo.md` vào 2026-08-17) · file này |
+| **Tài liệu** | [`CONTEXT.md`](CONTEXT.md) (23 paper) · [`guidance.md`](guidance.md) (kế hoạch) · [`TODO.md`](../../docs/TODO.md) (backlog, đã gộp `src/orchestration/todo.md` vào 2026-08-17) · file này |
 
 Mọi kết quả tái lập được: `random_state=0`, cache theo `row_id`, hai lần chạy liên tiếp cho
 số liệu giống hệt.

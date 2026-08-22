@@ -1,22 +1,33 @@
 # CLAUDE.md — master-thesis
 
+@docs/INDEX.md
+
 > **ONE FILE, WHOLE PROJECT.** This is the map. The twelve `CONTEXT.md` files are the
-> evidence behind it (~145k tokens total) — **open one only when you touch that
-> package**, and §7 says which. Hub written 2026-08-10 against the state at commit
-> `fcac8904`.
+> evidence behind it (**~227k tokens** — re-measured 2026-08-22, up from the ~145k this
+> line claimed for months) — **open one only when you touch that package**, and §7 says
+> which. Hub written 2026-08-10 against the state at commit `fcac8904`.
+>
+> ⚠️ **ALL PROSE DOCUMENTATION LIVES IN [`docs/`](docs/) SINCE 2026-08-22**, and the line
+> above this paragraph is why: `@docs/INDEX.md` imports the documentation map into every
+> session automatically. **[docs/INDEX.md](docs/INDEX.md) routes all 127 `.md` files with
+> a measured token cost each** — read it before opening anything, and add a row to it when
+> you write a new doc (`python docs/check_index.py` fails if you forget). ⚠️ **The corpus
+> is ~511k tokens, ~2.5× a context window, so it can never be bulk-loaded** — the index is
+> deliberately routing and not content. `CLAUDE.md` itself stays at the repo root because
+> that is the only place Claude Code auto-loads it from.
 >
 > ⚠️ **Everything here is a claim that was MEASURED.** This repo's convention is that a
 > number without a null is descriptive, not evidence. Keep it: verify before acting, and
 > when you measure something new, write the measurement down where it was made.
 >
-> ### The four root registers — one job each, no overlap
+> ### The four registers — one job each, no overlap
 >
 > | file | answers | when you touch it |
 > |---|---|---|
-> | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict |
-> | **[RUNBOOK.md](RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
-> | **[ISSUES.md](ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
-> | **[TODO.md](TODO.md)** | *what is NEXT?* | one list, `P1` first. ⚠️ **A bare `P<n>` is LIVE; a HYPHENATED code (`P1-9`, `PRF-8`, `M-3`) is RETIRED** — renumbered 2026-08-21, crosswalk at the top of that file |
+> | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict. **Root, not `docs/`** |
+> | **[docs/RUNBOOK.md](docs/RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
+> | **[docs/ISSUES.md](docs/ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
+> | **[docs/TODO.md](docs/TODO.md)** | *what is NEXT?* | one list, `P1` first. ⚠️ **A bare `P<n>` is LIVE; a HYPHENATED code (`P1-9`, `PRF-8`, `M-3`) is RETIRED** — renumbered 2026-08-21, crosswalk at the top of that file |
 >
 > Movement between them is one-way and worth knowing: a TODO item that turns out to be a
 > defect **graduates to ISSUES.md with a code**; an ISSUES entry that gets fixed keeps its
@@ -1816,7 +1827,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](ISSUES.md)** (**16 open**, 35 resolved, codes permanent — `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**16 open**, 35 resolved, codes permanent — `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -1831,26 +1842,34 @@ below 0.95 coverage, `RPR-1` datasets/runs are git-ignored.
 
 ## 7. Where to read more — open ONE, only when you touch it
 
+⚠️ **[docs/INDEX.md](docs/INDEX.md) is the complete map and it is already in your context**
+(`@docs/INDEX.md`, top of this file). This table is the same routing for the packages,
+kept here because the *when you are…* column is the part worth reading twice.
+⚠️ **The token costs below were re-measured 2026-08-22 and every one of the 16 had gone
+stale as the files grew** — `walkforward` was listed at 6k against a true 16.0k, and
+`feature_selection` at 25k against 45.0k. A stale cost is worse than none, because it is
+what a session budgets against.
+
 | open this | ~tokens | when you are… |
 |---|---|---|
-| [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | 25k | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, or a scrape |
-| [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | 17k | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
-| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | 22k | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
-| [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | 25k | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
-| [src/feature_selection/docs/RANKER_COMPARISON.md](src/feature_selection/docs/RANKER_COMPARISON.md) | 4k | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
-| [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | 3k | building or rebuilding a `__final__` table |
-| [src/train_test_creator/CONTEXT.md](src/train_test_creator/CONTEXT.md) | 3k | building a dataset, or asking about the purge/impute/scale/window steps |
-| **[src/model/CONTEXT.md](src/model/CONTEXT.md)** | **9k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |
-| **[src/walkforward/CONTEXT.md](src/walkforward/CONTEXT.md)** | **6k** | asking whether a result survives more than ONE split, or which MODEL to use. §3 the 10-fold h=20 result (pooled Sharpe **+1.991**, IC positive 9/10 folds, beats the market 10/10); §4 the recorded prediction that was half wrong; §5 the no-mechanical-leak check; **§8 is PRF-8 — three architectures from 205 k params to 1,400 tree nodes, all tied**, and §8c the concurrency trap that voided a whole sweep |
-| **[src/backtest/CONTEXT.md](src/backtest/CONTEXT.md)** | **5k** | asking whether a signal is TRADABLE — stage 9, the costed non-overlapping backtest. §3 is the cost identity that decides the horizon (h=5 pays **17.6 %/yr** in fees, above the top-100 benchmark's entire return); §4 the first result here to clear a costed null (top-15, z = **+4.29** test / +6.10 val); **§5 is the single-stock answer and it is "no trade"** |
-| [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | 3k | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
-| [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **3.5k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
-| [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | 2.5k | anything news/text/PhoBERT |
-| [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | 5k | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
-| [experiment/CONTEXT.md](experiment/CONTEXT.md) | 7k | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
-| [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | 36k | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
+| [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | **44.7k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, or a scrape |
+| [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | **25.8k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
+| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **28.7k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
+| [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
+| [src/feature_selection/docs/RANKER_COMPARISON.md](src/feature_selection/docs/RANKER_COMPARISON.md) | **4.5k** | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
+| [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | **6.8k** | building or rebuilding a `__final__` table |
+| [src/train_test_creator/CONTEXT.md](src/train_test_creator/CONTEXT.md) | **4.9k** | building a dataset, or asking about the purge/impute/scale/window steps |
+| **[src/model/CONTEXT.md](src/model/CONTEXT.md)** | **12.0k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |
+| **[src/walkforward/CONTEXT.md](src/walkforward/CONTEXT.md)** | **16.0k** | asking whether a result survives more than ONE split, or which MODEL to use. §3 the 10-fold h=20 result (pooled Sharpe **+1.991**, IC positive 9/10 folds, beats the market 10/10); §4 the recorded prediction that was half wrong; §5 the no-mechanical-leak check; **§8 is PRF-8 — three architectures from 205 k params to 1,400 tree nodes, all tied**, and §8c the concurrency trap that voided a whole sweep |
+| **[src/backtest/CONTEXT.md](src/backtest/CONTEXT.md)** | **8.1k** | asking whether a signal is TRADABLE — stage 9, the costed non-overlapping backtest. §3 is the cost identity that decides the horizon (h=5 pays **17.6 %/yr** in fees, above the top-100 benchmark's entire return); §4 the first result here to clear a costed null (top-15, z = **+4.29** test / +6.10 val); **§5 is the single-stock answer and it is "no trade"** |
+| [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | **4.1k** | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
+| [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **5.8k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
+| [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | **3.4k** | anything news/text/PhoBERT |
+| [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | **6.4k** | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
+| [experiment/CONTEXT.md](experiment/CONTEXT.md) | **9.2k** | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
+| [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | **44.0k** | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
-⚠️ **[ISSUES.md](ISSUES.md) (~4k) is the second file to open, not an afterthought.** Sixteen
+⚠️ **[ISSUES.md](docs/ISSUES.md) (~4k) is the second file to open, not an afterthought.** Sixteen
 open issues. **SHP-1** is the one to read first — a `value`-only filter silently
 discarded 71% of the forex folder for as long as that ingest existed, and the same
 filter sits unchecked on four sibling ingests. **Four** change how a number may be read:
@@ -1863,19 +1882,24 @@ the extremes before selecting on any foreign or prop channel). **FLT-1**
 bounds what forex data can exist at all: 19 of 47 broker filters fail open, so 37
 brokers' books are unreachable.
 
-### The other root files
+### The other files in `docs/`
+
+⚠️ **These moved out of the repo root on 2026-08-22.** The filenames did not change, so a
+prose citation like *"`RUNBOOK.md` §8 rule 1"* — including the ~12 in Python docstrings —
+still resolves; only the PATH gained a `docs/` prefix.
 
 | file | what it is | read it when |
 |---|---|---|
-| **[RUNBOOK.md](RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](ISSUES.md)** | 16 open / 35 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
-| **[TODO.md](TODO.md)** | the one backlog — **one code scheme since 2026-08-21**: `P1` … `P32`, `P1` highest. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P12`, `P4-2` is now `P13`, …), and ⚠️ **a bare `P<n>` is stable only BETWEEN renumberings** — the list shifts up when an item is done, so cite the hyphenated code when you need a permanent reference. This file still says `PRF-4`/`P0-3`/`P1-9` in ~65 places and those were deliberately NOT rewritten — **TODO.md's crosswalk resolves them** | deciding what to do next |
-| **[pipeline.md](pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
-| **[PIPELINE_h10_CAGR74.md](PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
-| `README.md` | the front door; routes here | — |
-| `THESIS_PROGRESS_2026*.md`, `THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |
-| `feature_groups.md` | canonical feature taxonomy | naming a feature group |
-| `vn30.csv` / `vn100.csv` | index membership — ⚠️ **current, not point-in-time** | never as a historical universe |
+| **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
+| **[ISSUES.md](docs/ISSUES.md)** | 16 open / 35 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[TODO.md](docs/TODO.md)** | the one backlog — **one code scheme since 2026-08-21**: `P1` … `P32`, `P1` highest. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P12`, `P4-2` is now `P13`, …), and ⚠️ **a bare `P<n>` is stable only BETWEEN renumberings** — the list shifts up when an item is done, so cite the hyphenated code when you need a permanent reference. This file still says `PRF-4`/`P0-3`/`P1-9` in ~65 places and those were deliberately NOT rewritten — **TODO.md's crosswalk resolves them** | deciding what to do next |
+| **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
+| **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
+| `README.md` | the front door; routes here — ⚠️ **stays at the repo ROOT** | — |
+| `docs/thesis/THESIS_PROGRESS_2026*.md`, `docs/thesis/THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |
+| `docs/feature_groups.md` | canonical feature taxonomy | naming a feature group |
+| `vn30.csv` / `vn100.csv` | index membership — ⚠️ **current, not point-in-time**; ⚠️ **repo ROOT, they are data not docs** | never as a historical universe |
+| **[docs/INDEX.md](docs/INDEX.md)** | ⚠️ **the auto-loaded map** — all 127 `.md` files routed with a measured token cost each, in four tiers. `CLAUDE.md` pulls it in via `@docs/INDEX.md`; `python docs/check_index.py` fails if a doc is unrouted | before opening ANY file below, and whenever you add one |
 
 ⚠️ **`TODO.md` absorbed `src/orchestration/todo.md` on 2026-08-17** (28 items, Vietnamese).
 If an older message or `CONTEXT.md` points at that path, it is a history reference —
@@ -1888,6 +1912,17 @@ workflow, log truncation) live in the auto-loaded memory index and are not dupli
 
 ## 8. Conventions that hold across the repo
 
+- ⚠️ **BEFORE YOU COMMIT, RECORD THE STATE.** Run **`python docs/state_check.py`** and
+  resolve what it reports. A commit that changes what this project KNOWS must also change
+  where that knowledge is read: a new measurement lands in `CLAUDE.md` (§6 "State today",
+  and its date is bumped) or in the package's own `CONTEXT.md`; a new defect gets a
+  permanent code in `docs/ISSUES.md`; a finished item leaves its number behind and is
+  deleted from `docs/TODO.md`; a new `.md` file gets a row in `docs/INDEX.md`. ⚠️ **The
+  script REPORTS and never rewrites** — the counts here are a SCAN, not a decrement
+  (`ISSUES.md` keeps four fixed rows struck-through inside its Open table, so a row-counter
+  returns 17 where the truth is 16), and a confidently wrong number is worse than none.
+  ⚠️ **Nothing enforces this at commit time by choice** (2026-08-22): no git hook, so
+  running it is the discipline. `RUNBOOK.md` §8c is the procedure.
 - **`⚠️` marks a claim that cost something to learn.** Do not strip them; add them when you
   measure a new one.
 - **Dates on findings, always.** A number without a date cannot be told from a stale one.

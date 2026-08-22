@@ -7,7 +7,7 @@
 >
 > | file | answers |
 > |---|---|
-> | [CLAUDE.md](CLAUDE.md) | *what is this, and what has it PROVED?* |
+> | [CLAUDE.md](../CLAUDE.md) | *what is this, and what has it PROVED?* |
 > | [RUNBOOK.md](RUNBOOK.md) | *how do I RUN it?* |
 > | [ISSUES.md](ISSUES.md) | *what is BROKEN?* |
 > | [TODO.md](TODO.md) | *what is NEXT?* |
@@ -98,7 +98,7 @@ OHLC and foreign flow through a plain JSON endpoint; **MSCI GICS** supplies the 
 tree that `drv_cs_ret_vs_industry` needs.
 
 **Orchestration** is Dagster, 83 assets, `src/orchestration/` — see
-[src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md). Nothing in this chain is a
+[src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md). Nothing in this chain is a
 manual step.
 
 ⚠️ **A green asset is not evidence of fresh data** (CLAUDE.md §5 rule 10). `landed()` asks
@@ -590,9 +590,9 @@ re-derivable from §13 in about 35 minutes.
 
 | open this | for |
 |---|---|
-| [src/walkforward/CONTEXT.md](src/walkforward/CONTEXT.md) | §9 the h=10 track · §9b the leak check · §9e the look-ahead probe · §11 seven architectures · **§15 the seed floor** |
-| [src/backtest/CONTEXT.md](src/backtest/CONTEXT.md) | §3 the cost identity · §5 the single-stock answer · §10 the indicator survey |
-| [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | the selector, the nulls, the ranker comparison |
-| [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | every asset, pool and source table above |
+| [src/walkforward/CONTEXT.md](../src/walkforward/CONTEXT.md) | §9 the h=10 track · §9b the leak check · §9e the look-ahead probe · §11 seven architectures · **§15 the seed floor** |
+| [src/backtest/CONTEXT.md](../src/backtest/CONTEXT.md) | §3 the cost identity · §5 the single-stock answer · §10 the indicator survey |
+| [src/feature_selection/CONTEXT.md](../src/feature_selection/CONTEXT.md) | the selector, the nulls, the ranker comparison |
+| [src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md) | every asset, pool and source table above |
 | [ISSUES.md](ISSUES.md) | `NUL-1`, `FNM-1`, `COV-1`, `DRF-1`, `RPR-1`, `STA-1`, `CSP-1` — all cited above |
 | [TODO.md](TODO.md) | `P1` (`FRZ-1`, the output blocker), `P2` (live scoring), `P3` (the `FNM-1` fix), `P5` (portfolio construction), `P12` (execution realism) |

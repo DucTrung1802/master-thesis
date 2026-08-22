@@ -1,7 +1,7 @@
 # Feature Groups (standardized)
 
 > ⚠️ **Reference table, not an operating document.** Root registers:
-> [CLAUDE.md](CLAUDE.md) (map) · [RUNBOOK.md](RUNBOOK.md) (run) ·
+> [CLAUDE.md](../CLAUDE.md) (map) · [RUNBOOK.md](RUNBOOK.md) (run) ·
 > [ISSUES.md](ISSUES.md) (broken) · [TODO.md](TODO.md) (next).
 
 Canonical taxonomy for every feature produced by `train_test_creator` (the assembled
