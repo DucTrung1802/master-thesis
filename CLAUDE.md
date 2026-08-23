@@ -1934,6 +1934,41 @@ the config; ⚠️ **`incremental: true` needs `skip_existing: false` beside it*
 ⚠️ **THIS CLOSES `P1`, NOT `P2`** — see §6-3 point 2. Gold was 30/54 sessions behind
 BEFORE this scrape and is further behind after it.
 
+### ✅ 6-2-ter. `P2` CARRIED IT UP TO GOLD AND UNIFIED — 2026-08-23, same session
+
+A scrape that stops at `raw_data/` changes nothing a model reads (§5 rule 11). Every layer
+downstream of `silver.stocks_basic` was rebuilt in the same session, and **verified
+per-ticker, never by `MAX(date)`**:
+
+| layer | result |
+|---|---|
+| `bronze.cafef_price` / `_order_stats` / `_foreign` / `_prop_trading` | 2,428,227 / 2,549,544 / 1,810,336 / 76,368 rows |
+| `silver.stocks_basic` | **2,428,227 × 38**, 771 of 784 tickers at 2026-08-21 |
+| `gold.stocks` | **771 of 784 at 2026-08-21** — was 2026-07-08, 30 sessions behind |
+| `gold.market_breadth`, `gold.news_daily_panel`, `gold.news_weekly_panel` | rebuilt |
+| `filter_schema.universe__*` | ⚠️ **membership MOVED** — see below |
+| `unified_schema_all` | `pool__basic` + `pool__targets`, **2,428,227 rows, 771 names on the last session** |
+| `unified_schema_{price10k,liquid,quality}` | 1,454,674 / 710,683 / 688,466 rows, all to 2026-08-21 |
+
+⚠️ **THE SCREENS RE-MEASURED DIFFERENTLY ON FRESH DATA, AND THAT IS THE FILTER LAYER
+WORKING**: `PRICE10K` **480 → 461**, `LIQUID` **206 → 228**, `QUALITY` **200 → 222`. A
+screen is a window over data, so extending the data moves the membership — `PRICE10K` lost
+19 names that dipped below 10,000 VND in the newly-arrived June-August sessions, while
+`LIQUID` and `QUALITY` GAINED names that now clear the 200-session minimum. ⚠️ **They are
+still not point-in-time** (§3a-bis point 1); this changes which basket, not that caveat.
+
+⚠️ **RULE 14 BIT EXACTLY AS DOCUMENTED, AND IT IS WORTH SEEING ONCE.** After re-running
+`filter/universe` the three `unified_schema_*` still read **2026-08-19 with 5 names on the
+last session** — a fresh screen against a stale schema, with nothing raising. Re-running a
+screen does **not** mark its unified schema stale; the rebuild is a separate command and
+was issued explicitly.
+
+⚠️ **`gold.stocks_ta` WAS DELIBERATELY NOT REBUILT** and is now the widest gap in the repo:
+**2026-06-26 against silver's 2026-08-21**. That is `STA-1`/`P3`, an own decision and never
+a side effect of `P2` — rebuilding it renames 13 legacy columns and moves ~289k rows, and
+`pool__ta` inherits all of it. **Any `basic + ta` INNER join now truncates ~40 trading
+sessions**, which is the cost of leaving it, stated so the next session does not rediscover it.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
