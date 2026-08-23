@@ -808,7 +808,7 @@ the mechanism was wrong: **all 150 names carry a close through 2026-06-25** (98 
 7 from 06-29). What ends on 2026-06-11 is `return_10day`, because it needs a close ten sessions
 later. Last session with ≥100 names LABELLED: **2026-06-18** at h=5, **2026-06-11** at h=10,
 **2026-05-28** at h=20. So the horizon decides where a track ends — and a live-scoring module
-(`P8`) has about ten more sessions of usable FEATURES than the old sentence implied, because
+(`P7`) has about ten more sessions of usable FEATURES than the old sentence implied, because
 **ranking a book and scoring a book fail on different dates**. `pipeline.md` §6.1-bis.
 
 ✅ **The published +74 %/yr is NOT affected.** `long_only_top_k` does
@@ -881,7 +881,7 @@ either costs 781 tickers or fetches nothing. CLAUDE.md §6-2-bis.
 
 ⚠️ **And there is still no LIVE-SCORING path** — every stage writes predictions for a
 dataset's *test split*, so the chain cannot score today's cross-section even with fresh
-data. TODO **`P8`**. `pipeline.md` §6 has both.
+data. TODO **`P7`**. `pipeline.md` §6 has both.
 
 ---
 
@@ -896,7 +896,7 @@ data. TODO **`P8`**. `pipeline.md` §6 has both.
 2. ⚠️ **THE MODEL OVER-PICKS THE BOARDS YOU CAN LEAST TRADE.** UPCOM is **2.20×** its share
    of scored rows, HNX 1.31×, HOSE **0.76×**. The most-selected names are `DCT` (108 of 236
    books), `DCS` (106), `EFI` (87); `VCB` appears in 30, `HPG` and `VNM` in 12. **With no
-   ADV cap and no slippage modelled (`P12`), this is the biggest open threat to the
+   ADV cap and no slippage modelled (`P11`), this is the biggest open threat to the
    levels.**
 3. **Turnover is 65.1 % per rebalance** (median 65.0 %, range 20-90 %) → **8.2 %/yr** at
    50 bps. ✅ That confirms `backtest/CONTEXT.md` §3's assumed `τ = 0.70` from the data.

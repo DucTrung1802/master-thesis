@@ -1933,8 +1933,10 @@ the config; ⚠️ **`incremental: true` needs `skip_existing: false` beside it*
 
 ⚠️ **THIS CLOSED THE SCRAPE AND NOT THE CARRY-UP** — see §6-2-ter, which ran the same
 session. Gold was 30/54 sessions behind BEFORE this scrape and further behind after it.
-⚠️ **Both were `P1` and `P2` when this was written; both left the list the same day**, so
-TODO's codes shifted down by 2 and today's `P1` is `STA-1`.
+⚠️ **Both were `P1` and `P2` when this was written, and both left the list the same day** —
+as did `STA-1` a few hours later (§6-2-quater). TODO's codes shifted **down by 3** in total
+on 2026-08-23, so a `P<n>` written before that date means something else; the file's
+2026-08-23 crosswalk resolves it.
 
 ### ✅ 6-2-ter. THE CARRY-UP TO GOLD AND UNIFIED — 2026-08-23, same session
 
@@ -1966,10 +1968,55 @@ screen does **not** mark its unified schema stale; the rebuild is a separate com
 was issued explicitly.
 
 ⚠️ **`gold.stocks_ta` WAS DELIBERATELY NOT REBUILT** and is now the widest gap in the repo:
-**2026-06-26 against silver's 2026-08-21**. That is `STA-1`/`P1`, an own decision and never
-a side effect of `P2` — rebuilding it renames 13 legacy columns and moves ~289k rows, and
-`pool__ta` inherits all of it. **Any `basic + ta` INNER join now truncates ~40 trading
-sessions**, which is the cost of leaving it, stated so the next session does not rediscover it.
+**2026-06-26 against silver's 2026-08-21**. That is `STA-1` — its own decision and never a
+side effect of the carry-up, because rebuilding it renames 13 legacy columns and moves
+~289k rows, and `pool__ta` inherits all of it. ✅ **It was taken and executed a few hours
+later the same day — see §6-2-quater**, which is also why the *"any `basic + ta` INNER join
+now truncates ~40 trading sessions"* warning that stood here is no longer true.
+
+### ✅ 6-2-quater. `STA-1` CLOSED 2026-08-23 — `gold.stocks_ta` is rebuilt, and it cost 40 minutes
+
+The table on disk had never been built by the builder that owns it: it was the
+2026-08-03 rename of a pre-2026-07-19 `gold.stocks`, carrying **13 legacy column names**
+that no Python in the repo produces. §6-2-ter deliberately left it, and the re-scrape had
+widened the gap to **56 calendar days**, which is what put it at the head of the list.
+
+**Rebuilt, and all three of `STA-1`'s signatures are gone:**
+
+| signature | before | after |
+|---|---|---|
+| rows | **2,678,167** over 777 tickers | **2,428,227** over **784** — matches `silver.stocks_basic` EXACTLY |
+| `MAX(date)` | **2026-06-26** | **2026-08-21**, same day as silver, **771 of 784** tickers producing it |
+| column names | 13 legacy (`val_matched_bn`, `f_net_val`, `vol_matched`, …) | **0 legacy**; silver's own names carried through, 946 columns |
+
+✅ **AND IT CLOSES `SKW-1` AS A NUMBER**: on VCB's 4,276 shared stock-days, `gold.stocks_ta`
+and `silver.stocks_basic` now disagree on `value_matched` for **0 rows**. Before the rebuild
+the same stock-day gave two answers — `pool__ta` carried pre-`OUT-1` flow values while
+`pool__basic` had been rebuilt with the screen — so a run offering both handed the ranker one
+measurement twice and disagreed with itself about the outliers.
+
+⚠️ **THE BLAST RADIUS WAS MEASURED BEFORE THE REBUILD, NOT ASSUMED, AND IT IS SMALLER THAN
+`STA-1` FEARED.** Querying `information_schema` for the 13 names across every table:
+
+- ✅ **The headline cross-sectional chain names NONE of them** — `rank_20day__final__d20_h20`,
+  `rank_10day__final__d20_h10` and both `__wide` variants carry **0 legacy columns**. The
+  result §6-0 quotes is untouched.
+- ⚠️ **Exactly two artefacts break**, both in the VCB `return_5day` chain that §6 already
+  marks *"do not quote it"*: `pool__shortlist__return_5day__d20_h5` (2 legacy columns) and
+  `return_5day__final__d20_h5` (1). They are stale now and must be rebuilt before reuse.
+- The other `information_schema` hits (`bronze.trading_view_*`, `silver.funds/indices`) are
+  the unrelated column `volume`, not this defect.
+
+⚠️ **"~11 GB and hours of compute" WAS AN OVERESTIMATE — it took 40 minutes** (10:49 → 11:29,
+784/784 tickers, 0 errors) and disk did not move measurably. The estimate had been carried in
+`STA-1` and TODO since 2026-08-16 without anyone running it, which is its own small lesson
+about unmeasured costs deterring work: **the item sat open for a week on a number that was
+wrong by an order of magnitude.**
+
+⚠️ **`pool__ta` INHERITS ALL OF IT AND MUST BE REBUILT PER PARTITION** — five exist
+(`all`, `vcb`, `bank`, `vn30`, `acb`), and a `pool__ta` not rebuilt still carries the legacy
+names, the extra ~250k rows and the pre-`OUT-1` flow values. Rule 14 again: gold moving does
+not mark the unified layer stale.
 
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
@@ -1996,7 +2043,7 @@ none of them a code problem: **disk** (PDFs for 112 tickers = 100 GB, median 906
 **~78 days**), and **schema** — `raw_data/cafef/financials/statements/` holds **one**
 template family, `bank`, while **761 of 781 names are not banks** (230 industrials, 117
 materials, 93 consumer staples; only 20 are GICS 401010). ⚠️ **The schema wall is the real
-one**: with infinite disk and time the current parser reaches 20 names. So `P4` prices a
+one**: with infinite disk and time the current parser reaches 20 names. So `P3` prices a
 JSON source (`api.simplize.vn`, `vnstock`) *before* anything else is built — §2d's
 second-ranked lever is a data-acquisition question, not an OCR question.
 
@@ -2058,7 +2105,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**15 open**, 37 resolved, codes permanent — ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**14 open**, 38 resolved, codes permanent — ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -2122,8 +2169,8 @@ still resolves; only the PATH gained a `docs/` prefix.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](docs/ISSUES.md)** | 15 open / 37 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
-| **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** `P1` … `P37` in six lettered groups — **A data `P1`-`P3`, B OCR→Kaggle `P4`-`P7`**, C output `P8`-`P9`, D model `P10`-`P18`, E honesty `P19`-`P22`, F backlog `P23`-`P37`. ⚠️ **RENUMBERED AGAIN 2026-08-23** — the scrape and the gold carry-up closed, so every code moved DOWN BY 2 and today's `P1` is `STA-1`, not the re-scrape. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P12`, `P4-2` is now `P22`, …). ⚠️ **AND THAT RENUMBERING WAS BARE → BARE**, so a `P<n>` written before 2026-08-22 evening resolves to a DIFFERENT item — `P2` was live scoring and is now `P8`. **TODO.md's 2026-08-22 crosswalk is the bridge**; the live pointers in this file, RUNBOOK.md, pipeline.md and PIPELINE_h10_CAGR74.md were rewritten with it | deciding what to do next |
+| **[ISSUES.md](docs/ISSUES.md)** | 14 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** `P1` … `P36` in six lettered groups — **A data `P1`-`P2`, B OCR→Kaggle `P3`-`P6`**, C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ⚠️ **RENUMBERED TWICE ON 2026-08-23** — the re-scrape, the gold carry-up and `STA-1` all closed that day, so every code moved **DOWN BY 3**. A `P<n>` written earlier means a different item; the file's 2026-08-23 crosswalk resolves it. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P11`, `P4-2` is now `P21`, …). ⚠️ **AND THAT RENUMBERING WAS BARE → BARE**, so a `P<n>` written before 2026-08-22 evening resolves to a DIFFERENT item — `P1` was live scoring and is now `P7`. **TODO.md's 2026-08-22 crosswalk is the bridge**; the live pointers in this file, RUNBOOK.md, pipeline.md and PIPELINE_h10_CAGR74.md were rewritten with it | deciding what to do next |
 | **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
 | **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
 | `README.md` | the front door; routes here — ⚠️ **stays at the repo ROOT** | — |
