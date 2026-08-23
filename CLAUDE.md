@@ -1119,7 +1119,7 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-22)
+## 6. State today (2026-08-23)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section
 is the bug.** It was 7 days stale once already.
@@ -1853,6 +1853,87 @@ outliers. ⚠️ And `pool__ta` carries a **price LEVEL** (`close`, ρ +0.997 wi
 | datasets on disk | 3 | 1 | **1** |
 | model runs | 2 | 0 | **31** — 1 single-split + 10 PRF-1 folds + 20 PRF-8 folds (2 arms × 10) |
 
+### ✅ 6-2-bis. `P1`/`FRZ-1` CLOSED 2026-08-23 — the price universe is FRESH, and the fix was a SCRAPE MODE
+
+The audit below (§6-3) is what this answers, and its headline number is inverted:
+**771 of 784 tickers now carry data to 2026-08-21**, against 5 producing the max date the
+day before. The cross-section holds **771-783 names on EVERY session** from 2026-06-22 to
+2026-08-21 — the old `779 → 627 → 28 → 5` cliff is gone.
+
+| | before (2026-08-22) | after (2026-08-23) |
+|---|---|---|
+| `silver.stocks_basic` rows | 2,389,137 | **2,428,227** |
+| tickers at the max date | **5** of 781 | **771** of 784 |
+| names on the last session | **5** | **771** |
+| tickers stale (< 2026-08-01) | **757** | **13** |
+
+⚠️ **THE 13 STRAGGLERS ARE REAL, AND THEIR SHAPE IS HOW YOU KNOW.** IHK 2026-05-21, DDG
+06-23, VNE 06-26, SSN/STL 07-06, DSE/KOS/SIP/VPI/DZM 07-08, TCD/VE2 07-14, CYC 07-30 —
+**thirteen distinct dates**, which is the signature of individual delistings and
+suspensions. A scrape failure clusters on ONE date; that is exactly what the old
+599-tickers-all-on-2026-06-26 cliff was.
+
+#### ⚠️ The scrape could only refetch from 2009, and that is why it had not been done
+
+Measured 2026-08-22 before changing anything: a full 4-tab refetch of ONE ticker is
+**615 s** (price 200.5 / order_stats 157.7 / foreign 138.3 / prop 118.9). At the
+then-current `SCRAPER_MAX_WORKERS = 2` the universe was **~67 h** — which is the real
+reason `FRZ-1` sat open for two months while being a one-command fix in principle.
+
+Two changes made it a 65-minute job, and only the second is interesting:
+
+1. **`SCRAPER_MAX_WORKERS` 2 → 12**, on a measurement: per-ticker cost is **flat** at
+   200.5 s alone, 203.8 s with 8 concurrent, 206.8 s with 16 — CafeF was never
+   rate-limiting, and the old 2 left ~6× on the table. ⚠️ **This is the CafeF knob and it
+   is NOT the browser budget** — CafeF is `requests` against JSON `.ashx` endpoints and
+   opens no Chrome at all; `SCRAPER_MAX_CONCURRENT_BROWSERS` (also 12 now) is TradingView's
+   Selenium cap and is unrelated. Confusing the two is easy and buys nothing.
+2. ⭐ **A third scrape mode, `incremental=True`** — resume each CSV from its OWN last date
+   and merge, instead of refetching from `start_year`. **2.9-5.2 s** per stale ticker
+   against 615 s, and the resumed file reproduces the full scrape **cell for cell** (PNJ,
+   4,344 rows × 12 columns, zero differing cells).
+
+#### ⚠️ AND IT NEEDS A RESTATEMENT GUARD, WHICH FIRED ON 304 OF 780 TICKERS
+
+`close_adjust` **is not a fact about a day; it is a fact about a day as seen from today.**
+A split or dividend re-bases the WHOLE history, so appending fresh rows to stored ones
+splices two price bases into one series — a step change at the join that looks exactly
+like a real price move, and that **no freshness check can see**: the row count is right,
+the date range is right, the last date is today.
+
+So the resume refetches a **45-day overlap** behind the last stored date, compares it
+cell-by-cell against what is stored, and falls back to the full refetch on any
+disagreement. ⚠️ **It fired on 304 of 780 price tickers — 39 %** — because June-August is
+VN dividend season and the corpus had stood still for two months. **Those 304 series are
+exactly what a naive incremental scrape would have corrupted**, and the corruption would
+have been invisible. It fired on **0** of `order_stats`, `foreign` and `prop_trading`,
+which carry no adjusted column — the guard is specific, not trigger-happy.
+
+⚠️ **THE GUARD IS ALSO WHY `price` WAS THE SLOW TAB** (39 % paying 200 s each), while
+`foreign` and `order_stats` finished 780 tickers in ~2 minutes. **A high restatement rate
+is a property of how STALE the corpus is, not of the mechanism** — refreshed weekly it
+would approach zero and the whole run would be minutes.
+
+✅ **Verified 2026-08-23 by four checks on a throwaway folder before it touched
+`raw_data/`**: equivalence (cell-for-cell), cheapness (38.3×), restatement (halving
+`close_adjust` across 4,304 stored rows IS detected, and the fallback repairs history far
+outside the overlap), and no-false-positive (an honest stale CSV resumes in 2.9 s).
+⚠️ **An earlier version of check 3 corrupted a cell in 2017 and "failed" — the TEST was
+wrong, not the guard**: a date outside the overlap is never refetched, so no incremental
+scheme could see it. Recorded because the distinction is the whole design.
+
+⚠️ **`insider_txn` ACCEPTS `incremental` AND IGNORES IT** — it is paginated by event index
+with no date to resume from, and a row is amended in place upstream, so "rows after X" is
+not well defined. ⚠️ **`incremental` helps only where a CSV EXISTS**: 348 of 780 tickers
+have no prop-desk history at all and correctly take the full path every time.
+
+**Run:** 1h 05m, **0 errors**, all four tabs at 780/780. `RUNBOOK.md` has the command and
+the config; ⚠️ **`incremental: true` needs `skip_existing: false` beside it** or
+`skip_existing` returns first and the run refreshes nothing while going green.
+
+⚠️ **THIS CLOSES `P1`, NOT `P2`** — see §6-3 point 2. Gold was 30/54 sessions behind
+BEFORE this scrape and is further behind after it.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -1940,7 +2021,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**16 open**, 36 resolved, codes permanent — ⚠️ **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**15 open**, 37 resolved, codes permanent — ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -2004,7 +2085,7 @@ still resolves; only the PATH gained a `docs/` prefix.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](docs/ISSUES.md)** | 16 open / 36 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](docs/ISSUES.md)** | 15 open / 37 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **RE-PRIORITISED 2026-08-22 (evening): DATA FIRST.** `P1` … `P39` in six lettered groups — **A scrape `P1`-`P5`, B OCR→Kaggle `P6`-`P9`**, C output `P10`-`P11`, D model `P12`-`P20`, E honesty `P21`-`P24`, F backlog `P25`-`P39`. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P14`, `P4-2` is now `P24`, …). ⚠️ **AND THAT RENUMBERING WAS BARE → BARE**, so a `P<n>` written before 2026-08-22 evening resolves to a DIFFERENT item — `P2` was live scoring and is now `P10`. **TODO.md's 2026-08-22 crosswalk is the bridge**; the live pointers in this file, RUNBOOK.md, pipeline.md and PIPELINE_h10_CAGR74.md were rewritten with it | deciding what to do next |
 | **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
 | **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |

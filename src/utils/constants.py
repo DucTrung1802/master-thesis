@@ -327,7 +327,16 @@ SCRAPER_MAX_CONCURRENT_BROWSERS = int(
     os.getenv("SCRAPER_MAX_CONCURRENT_BROWSERS", "12")
 )
 SCRAPER_NAV_STAGGER = 8.0  # minimum seconds between browser page navigations
-SCRAPER_MAX_WORKERS = 2  # thread-pool size for I/O-bound (requests) scrapers
+# ⚠️ 12 SINCE 2026-08-23, RAISED FROM 2 ON A MEASUREMENT, NOT ON TASTE.
+# Thread-pool size for the I/O-bound (requests) scrapers -- CafeF, not Selenium; the
+# browser budget is SCRAPER_MAX_CONCURRENT_BROWSERS above and the two are unrelated.
+# Measured against CafeF on 2026-08-22: one ticker's full price history takes 200.5 s
+# alone, 203.8 s with 8 running concurrently and 206.8 s with 16 -- per-ticker cost is
+# FLAT, so CafeF was not rate-limiting and the old 2 was leaving ~6x on the table. It
+# set the whole P1 universe refresh at ~67 h where 12 workers put it near 11 h.
+# ⚠️ Verify with ROW COUNTS, never with errors: a throttled fetch comes back as a short
+# series, not as an exception (CLAUDE.md rule 10's shape). The probe checked those.
+SCRAPER_MAX_WORKERS = 12
 
 TRADING_VIEW_HOME_PAGE_URL = "https://www.tradingview.com/"
 TRADING_VIEW_TABLE_SCHEMA = [

@@ -60,6 +60,14 @@ class CafeFScraper(BaseScraper):
     # bounds a runaway loop; it is never expected to be reached.
     MAX_WINDOW_PAGES = 12
 
+    # ⚠️ HOW FAR AN INCREMENTAL SCRAPE REACHES BACK BEHIND THE LAST STORED DATE.
+    # It is not a safety margin against missed rows — the windows already overlap for
+    # that. It is the RESTATEMENT DETECTOR's sample: these are the dates fetched twice,
+    # once into the stored CSV and once now, and comparing them is the only way to
+    # notice that CafeF has retroactively re-based the series (see `_scrape_tab`).
+    # 45 days is ~30 trading sessions, one or two windows, a few seconds per ticker.
+    INCREMENTAL_OVERLAP_DAYS = 45
+
     # Price-history tab (cafef .../vcb-1.chn → PriceHistory.ashx).
     PRICE_COLUMNS = [
         "date", "exchange", "symbol",
@@ -133,12 +141,23 @@ class CafeFScraper(BaseScraper):
     # ──────────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _windows(start_year: int, step_months: int = 2, overlap_days: int = 6):
+    def _windows(start_year: int, step_months: int = 2, overlap_days: int = 6,
+                 start_date: date = None):
         """Yield (StartDate, EndDate) MM/dd/yyyy windows of ~step_months, each
         overlapped a few days into the next so no boundary trading day is lost.
-        Span stays under CafeF's ~63-row cap."""
+        Span stays under CafeF's ~63-row cap.
+
+        `start_date` overrides `start_year` and is what makes an INCREMENTAL scrape
+        cheap: windows begin at the month containing that date instead of at
+        January of `start_year`. A full VNM price history is ~106 windows and
+        ~200 s; the same ticker resumed from its last stored date is 1-2 windows
+        and a few seconds.
+        """
         today = date.today()
-        y, m = start_year, 1
+        if start_date is not None:
+            y, m = start_date.year, start_date.month
+        else:
+            y, m = start_year, 1
         while date(y, m, 1) <= today:
             sd = date(y, m, 1)
             em = m + step_months - 1
@@ -169,7 +188,8 @@ class CafeFScraper(BaseScraper):
         return []
 
     def _collect(self, ashx: str, symbol: str, start_year: int, exchange: str,
-                 list_key: str = None, date_key: str = "Ngay") -> dict:
+                 list_key: str = None, date_key: str = "Ngay",
+                 start_date: date = None) -> dict:
         """Fetch all rows for a symbol across windows, keyed by the row's date (dedup).
 
         ExchangeType (HOSE/HNX/UPCOM, UPPERCASE) is required for HNX/UPCOM — without
@@ -190,7 +210,7 @@ class CafeFScraper(BaseScraper):
         seen (which is how a repeated page terminates).
         """
         by_date: dict = {}
-        for sd, ed in self._windows(start_year):
+        for sd, ed in self._windows(start_year, start_date=start_date):
             seen_in_window: set = set()
             page = 1
             while page <= self.MAX_WINDOW_PAGES:
@@ -382,29 +402,69 @@ class CafeFScraper(BaseScraper):
     # Per-stock scrape
     # ──────────────────────────────────────────────────────────────────────
 
-    def scrape_price(self, exchange: str, symbol: str, skip_existing: bool = True) -> None:
+    def scrape_price(self, exchange: str, symbol: str, skip_existing: bool = True,
+                     incremental: bool = False) -> None:
         """Price-history tab (vcb-1.chn → PriceHistory.ashx)."""
         self._scrape_tab(
             "price", "PriceHistory.ashx", self.PRICE_START_YEAR,
             self.PRICE_COLUMNS, self._build_price_rows,
             exchange, symbol, skip_existing, date_key="Ngay",
+            incremental=incremental,
         )
 
-    def scrape_foreign(self, exchange: str, symbol: str, skip_existing: bool = True) -> None:
+    def scrape_foreign(self, exchange: str, symbol: str, skip_existing: bool = True,
+                       incremental: bool = False) -> None:
         """Foreign-trading tab (vcb-3.chn → GDKhoiNgoai.ashx)."""
         self._scrape_tab(
             "foreign", "GDKhoiNgoai.ashx", self.FOREIGN_START_YEAR,
             self.FOREIGN_COLUMNS, self._build_foreign_rows,
             exchange, symbol, skip_existing, date_key="Ngay",
+            incremental=incremental,
         )
+
+    @staticmethod
+    def _read_rows(file_path: str) -> List[dict]:
+        """Read a previously written tab CSV back as its list of row dicts, ordered
+        by date. Every value stays a STRING — the comparison in `_scrape_tab` is
+        against freshly formatted strings, so no parse/format round trip can
+        manufacture a difference that is not in the data."""
+        with open(file_path, newline="", encoding="utf-8") as f:
+            rows = [r for r in csv.DictReader(f) if r.get("date")]
+        rows.sort(key=lambda r: r["date"])
+        return rows
 
     def _scrape_tab(self, folder_name: str, ashx: str, start_year: int,
                     columns: List[str], build_rows, exchange: str, symbol: str,
                     skip_existing: bool = True,
-                    list_key: str = None, date_key: str = "Date") -> None:
+                    list_key: str = None, date_key: str = "Date",
+                    incremental: bool = False) -> None:
         """Generic single-tab per-stock scrape → CAFEF_RAW_DATA_DIR/<folder_name>/
         <EXCHANGE>_<SYMBOL>.csv. Shares the temp-file + atomic-rename write so an
-        interrupted run never leaves a partial CSV that skip_existing trusts."""
+        interrupted run never leaves a partial CSV that skip_existing trusts.
+
+        Three modes, and they are not points on one scale:
+
+        * `skip_existing=True` — fetch only symbols ABSENT from disk. Refreshes
+          nothing. Right for resuming an interrupted run, wrong for fresh data.
+        * `incremental=True` — resume each existing CSV from its own last date and
+          MERGE. Costs 1-2 windows per ticker instead of ~106.
+        * neither — the authoritative full-history refetch from `start_year`.
+
+        ⚠️ **INCREMENTAL IS ONLY SAFE BECAUSE OF THE RESTATEMENT CHECK BELOW, and
+        without it this would silently corrupt every split-adjusted series.**
+        `close_adjust` is not a fact about a day; it is a fact about a day *as seen
+        from today*. When a stock splits or pays a dividend, CafeF re-bases the WHOLE
+        history, so appending fresh rows to stored ones splices two different bases
+        into one series — a step change at the join that looks exactly like a real
+        price move and is invisible in the row count, the date range, or any check
+        that asks "how fresh is this?".
+
+        So the overlap is refetched and COMPARED, and any disagreement on a date both
+        agree on triggers the full refetch. The last stored date is excluded from that
+        comparison and always overwritten: a row captured intraday holds a partial
+        volume that legitimately differs from its settled value, and treating that as a
+        restatement would send every ticker down the slow path.
+        """
         folder = os.path.join(CAFEF_RAW_DATA_DIR, folder_name)
         os.makedirs(folder, exist_ok=True)
         file_path = os.path.join(folder, f"{exchange}_{symbol}.csv")
@@ -413,13 +473,72 @@ class CafeFScraper(BaseScraper):
             self._logger.log_info(f"CafeF {folder_name}: '{symbol}' already scraped, skipping.")
             return
 
-        self._logger.log_info(f"CafeF {folder_name}: scraping '{exchange}:{symbol}'...")
+        existing: List[dict] = []
+        start_date = None
+        if incremental and os.path.exists(file_path):
+            try:
+                existing = self._read_rows(file_path)
+            except Exception as e:
+                self._logger.log_warning(
+                    f"CafeF {folder_name}: '{symbol}' existing CSV unreadable ({e}) "
+                    f"- falling back to a full scrape."
+                )
+                existing = []
+            if existing:
+                last = date.fromisoformat(existing[-1]["date"])
+                start_date = last - timedelta(days=self.INCREMENTAL_OVERLAP_DAYS)
+
+        scope = f"from {start_date.isoformat()}" if start_date else "full history"
+        self._logger.log_info(
+            f"CafeF {folder_name}: scraping '{exchange}:{symbol}' ({scope})..."
+        )
         raw = self._collect(ashx, symbol, start_year, exchange,
-                            list_key=list_key, date_key=date_key)
-        if not raw:
-            self._logger.log_warning(f"CafeF {folder_name}: no data for '{symbol}', skipping.")
-            return
-        rows = build_rows(exchange, symbol, raw)
+                            list_key=list_key, date_key=date_key,
+                            start_date=start_date)
+        rows = build_rows(exchange, symbol, raw) if raw else []
+
+        if start_date is not None:
+            stored = {r["date"]: r for r in existing}
+            fresh = {r["date"]: r for r in rows}
+            # The last stored date is refetched and overwritten but never judged --
+            # see the docstring. Everything else the two agree on is the sample.
+            pinned = existing[-1]["date"]
+            shared = [d for d in fresh if d in stored and d != pinned]
+            changed = [
+                d for d in shared
+                if any(str(stored[d].get(c, "")) != str(fresh[d].get(c, "")) for c in columns)
+            ]
+            if changed:
+                # ⚠️ A restatement, not a fetch error: CafeF re-based the series. The
+                # stored history is on the OLD basis and cannot be merged with the new
+                # one, so the only correct move is to pay for the full refetch.
+                self._logger.log_warning(
+                    f"CafeF {folder_name}: '{symbol}' RESTATED - {len(changed)} of "
+                    f"{len(shared)} overlap dates disagree (e.g. {changed[0]}); "
+                    f"stored history is on a stale basis, refetching in full."
+                )
+                return self._scrape_tab(
+                    folder_name, ashx, start_year, columns, build_rows,
+                    exchange, symbol, skip_existing=False,
+                    list_key=list_key, date_key=date_key, incremental=False,
+                )
+            if not fresh:
+                self._logger.log_info(
+                    f"CafeF {folder_name}: '{symbol}' no rows returned since "
+                    f"{start_date.isoformat()}; leaving {file_path} unchanged."
+                )
+                return
+            n_new = len([d for d in fresh if d not in stored])
+            stored.update(fresh)          # a refetched date always wins
+            rows = [stored[d] for d in sorted(stored)]
+            verb = f"merged +{n_new} new"
+        else:
+            if not rows:
+                self._logger.log_warning(
+                    f"CafeF {folder_name}: no data for '{symbol}', skipping."
+                )
+                return
+            verb = "saved"
 
         tmp_path = file_path + ".tmp"
         with open(tmp_path, "w", newline="", encoding="utf-8") as f:
@@ -428,33 +547,47 @@ class CafeFScraper(BaseScraper):
             writer.writerows(rows)
         os.replace(tmp_path, file_path)
         self._logger.log_info(
-            f"CafeF {folder_name}: saved {len(rows)} rows "
+            f"CafeF {folder_name}: {verb}, {len(rows)} rows "
             f"({rows[0]['date']}..{rows[-1]['date']}) -> {file_path}"
         )
 
-    def scrape_order_stats(self, exchange: str, symbol: str, skip_existing: bool = True) -> None:
+    def scrape_order_stats(self, exchange: str, symbol: str, skip_existing: bool = True,
+                           incremental: bool = False) -> None:
         """Order-placement statistics tab (vcb-2.chn → ThongKeDL.ashx)."""
         self._scrape_tab(
             "order_stats", "ThongKeDL.ashx", self.ORDER_STATS_START_YEAR,
             self.ORDER_STATS_COLUMNS, self._build_order_stats_rows,
             exchange, symbol, skip_existing, date_key="Date",
+            incremental=incremental,
         )
 
-    def scrape_prop_trading(self, exchange: str, symbol: str, skip_existing: bool = True) -> None:
+    def scrape_prop_trading(self, exchange: str, symbol: str, skip_existing: bool = True,
+                            incremental: bool = False) -> None:
         """Proprietary-desk trading tab (vcb-4.chn → GDTuDoanh.ashx)."""
         self._scrape_tab(
             "prop_trading", "GDTuDoanh.ashx", self.PROP_START_YEAR,
             self.PROP_COLUMNS, self._build_prop_rows,
             exchange, symbol, skip_existing,
             list_key="ListDataTudoanh", date_key="Date",
+            incremental=incremental,
         )
 
-    def scrape_insider_txn(self, exchange: str, symbol: str, skip_existing: bool = True) -> None:
+    def scrape_insider_txn(self, exchange: str, symbol: str, skip_existing: bool = True,
+                           incremental: bool = False) -> None:
         """Insider / major-shareholder transactions tab (fpt-6.chn → GDCoDong.ashx).
 
         Event-based: one row per registered/executed transaction, not a daily series,
         so it paginates the full history (PageIndex) rather than date-windowing, and
-        writes to its own CAFEF_RAW_DATA_DIR/insider_txn/<EXCHANGE>_<SYMBOL>.csv."""
+        writes to its own CAFEF_RAW_DATA_DIR/insider_txn/<EXCHANGE>_<SYMBOL>.csv.
+
+        ⚠️ `incremental` is ACCEPTED AND IGNORED HERE, deliberately. `_scrape_all`
+        queues one uniform task signature for all five tabs, and this tab cannot honour
+        the flag: the incremental path resumes from a date window, and this endpoint is
+        paginated by event index with no date parameter to resume from. A row is also
+        AMENDED in place upstream (a registered transaction later gains its executed
+        volume), so "rows after date X" is not a well-defined increment. Ignoring the
+        flag re-fetches the full history, which is correct but not cheap — this tab is
+        not part of the P1 refresh for that reason."""
         folder = os.path.join(CAFEF_RAW_DATA_DIR, "insider_txn")
         os.makedirs(folder, exist_ok=True)
         file_path = os.path.join(folder, f"{exchange}_{symbol}.csv")
@@ -567,38 +700,52 @@ class CafeFScraper(BaseScraper):
 
     def _scrape_all(self, label: str, scrape_fn, skip_existing: bool,
                     exchanges: Tuple[str, ...] = None,
-                    tickers: Tuple[str, ...] = None) -> None:
+                    tickers: Tuple[str, ...] = None,
+                    incremental: bool = False) -> None:
         """Queue one per-stock task per symbol over the exchange universe and run them."""
         symbols = self.get_stock_symbols(exchanges, tickers)
         self._thread_manager.remove_all_tasks()
         for exchange, symbol in symbols:
             self._thread_manager.add_task(
                 Task(f"cafef/{label}/{exchange}_{symbol}",
-                     scrape_fn, exchange, symbol, skip_existing)
+                     scrape_fn, exchange, symbol, skip_existing, incremental)
             )
         self._logger.log_info(
             f"CafeF: executing {self._thread_manager.get_current_number_of_task()} "
-            f"{label} scraping tasks (skip_existing={skip_existing})."
+            f"{label} scraping tasks (skip_existing={skip_existing}, "
+            f"incremental={incremental})."
         )
         self._thread_manager.execute()
         self._logger.log_info(f"CafeF: finished scraping all {label}.")
 
     def scrape_all_price(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
-                         tickers: Tuple[str, ...] = None) -> None:
-        self._scrape_all("price", self.scrape_price, skip_existing, exchanges, tickers)
+                         tickers: Tuple[str, ...] = None,
+                         incremental: bool = False) -> None:
+        self._scrape_all("price", self.scrape_price, skip_existing, exchanges, tickers,
+                         incremental=incremental)
 
     def scrape_all_foreign(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
-                           tickers: Tuple[str, ...] = None) -> None:
-        self._scrape_all("foreign", self.scrape_foreign, skip_existing, exchanges, tickers)
+                           tickers: Tuple[str, ...] = None,
+                           incremental: bool = False) -> None:
+        self._scrape_all("foreign", self.scrape_foreign, skip_existing, exchanges, tickers,
+                         incremental=incremental)
 
     def scrape_all_order_stats(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
-                               tickers: Tuple[str, ...] = None) -> None:
-        self._scrape_all("order_stats", self.scrape_order_stats, skip_existing, exchanges, tickers)
+                               tickers: Tuple[str, ...] = None,
+                               incremental: bool = False) -> None:
+        self._scrape_all("order_stats", self.scrape_order_stats, skip_existing, exchanges, tickers,
+                         incremental=incremental)
 
     def scrape_all_prop_trading(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
-                                tickers: Tuple[str, ...] = None) -> None:
-        self._scrape_all("prop_trading", self.scrape_prop_trading, skip_existing, exchanges, tickers)
+                                tickers: Tuple[str, ...] = None,
+                                incremental: bool = False) -> None:
+        self._scrape_all("prop_trading", self.scrape_prop_trading, skip_existing, exchanges, tickers,
+                         incremental=incremental)
 
     def scrape_all_insider_txn(self, skip_existing: bool = True, exchanges: Tuple[str, ...] = None,
-                               tickers: Tuple[str, ...] = None) -> None:
-        self._scrape_all("insider_txn", self.scrape_insider_txn, skip_existing, exchanges, tickers)
+                               tickers: Tuple[str, ...] = None,
+                               incremental: bool = False) -> None:
+        # ⚠️ `incremental` reaches `scrape_insider_txn`, which ignores it on purpose --
+        # see that method for why an event-paginated tab has no date to resume from.
+        self._scrape_all("insider_txn", self.scrape_insider_txn, skip_existing, exchanges,
+                         tickers, incremental=incremental)

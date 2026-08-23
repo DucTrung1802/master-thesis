@@ -182,16 +182,34 @@ class CafeFTabConfig(Config):
     refresh affordable: 1 ticker × 4 tabs instead of 781. ⚠️ A name matching nothing
     RAISES rather than queueing zero tasks (`get_stock_symbols`).
 
+    ⚠️ **`incremental: true` IS THE ONE TO USE FOR A REFRESH**, and it is a third mode
+    rather than a faster `skip_existing=False`. Each existing CSV is resumed from its
+    OWN last date and merged, so a ticker 40 sessions behind costs 1-2 date windows
+    instead of the ~106 a 2009→ refetch pays. Measured 2026-08-22: a full 4-tab
+    refetch of one ticker is **615 s**, which is ~67 h for the universe at the old
+    2-worker pool.
+
+    ⚠️ **It is safe only because it CHECKS FOR RESTATEMENT** — `close_adjust` is
+    re-based across the whole history when a stock splits or pays a dividend, so a
+    naive append splices two bases into one series. `_scrape_tab` refetches an overlap
+    behind the last stored date, compares it against what is stored, and falls back to
+    the full refetch for that ticker on any disagreement. A restatement is a WARNING in
+    `logs/app.log`, not a silent repair.
+
     ```yaml
     ops:
       raw__cafef_price:
         config:
-          skip_existing: false
+          incremental: true          # refresh: resume each ticker from its last date
+      raw__cafef_foreign:
+        config:
+          skip_existing: false       # authoritative: refetch every history in full
           tickers: ["HOSE_VCB"]
     ```
     """
 
     skip_existing: bool = True
+    incremental: bool = False
     exchanges: List[str] = []
     tickers: List[str] = []
 
@@ -453,6 +471,7 @@ def _build_cafef_tab_asset(tab: str, method: str, folder: str, what: str):
             skip_existing=config.skip_existing,
             exchanges=tuple(config.exchanges) or None,
             tickers=tuple(config.tickers) or None,
+            incremental=config.incremental,
         )
         # ⚠️ `landed()` answers "is this folder non-empty", which a 781-file folder
         # satisfies whether or not THIS run fetched anything. The scope is reported
@@ -461,6 +480,7 @@ def _build_cafef_tab_asset(tab: str, method: str, folder: str, what: str):
             metadata={
                 **landed(f"{CAFEF_RAW_DATA_DIR}/{folder}"),
                 "skip_existing": config.skip_existing,
+                "incremental": config.incremental,
                 "scope": ", ".join(config.tickers) or "whole universe",
             }
         )

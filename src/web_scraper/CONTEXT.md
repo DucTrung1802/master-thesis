@@ -794,6 +794,58 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   (price 12 cols, foreign 11, order_stats 9, prop_trading 7, insider_txn 21). `scrape()`
   runs all five batch drivers (`scrape_all_price/_foreign/_order_stats/_prop_trading/
   _insider_txn`) over the universe via the shared `_scrape_all(label, fn, …)`.
+### ⚠️ THREE SCRAPE MODES SINCE 2026-08-23, AND `incremental` IS THE ONE FOR A REFRESH
+
+Added for `P1`/`FRZ-1`, where 757 of 781 tickers had gone stale and the only refresh the
+scraper could do was a full refetch from 2009. **They are three modes, not points on one
+scale**, and picking the wrong one is how the price universe froze for two months:
+
+| mode | fetches | cost per ticker, MEASURED 2026-08-22/23 | right for |
+|---|---|---|---|
+| `skip_existing=True` *(default)* | only symbols **absent** from disk | ~0 s, and **refreshes nothing** | resuming an interrupted run |
+| **`incremental=True`** | each CSV resumed from **its own last date**, then merged | **2.9-5.2 s** for a ticker ~40 sessions behind | ⭐ **a refresh** |
+| neither | the whole history from `start_year` | **615 s** for all 4 tabs (price 200.5 / order_stats 157.7 / foreign 138.3 / prop 118.9) | the authoritative rebuild |
+
+⚠️ **THE FULL REFETCH IS 38× DEARER THAN THE RESUME AND BUYS NOTHING WHEN NOTHING WAS
+RESTATED** — measured on PNJ: 198.9 s against 5.2 s, and the resumed CSV reproduced the
+full one **cell for cell**, all 4,344 rows × 12 columns. At the universe scale that is
+the difference between **~67 h and well under an hour**.
+
+#### ⚠️ Why the resume needs a RESTATEMENT CHECK, and what it would corrupt without one
+
+`close_adjust` is **not a fact about a day; it is a fact about a day as seen from today.**
+When a stock splits or pays a dividend, CafeF re-bases the **whole history**. So appending
+fresh rows to stored ones splices two different bases into one series — a step change at
+the join that **looks exactly like a real price move**, and that no freshness check can
+see: the row count is right, the date range is right, the last date is today.
+
+So `_scrape_tab` refetches an overlap (`INCREMENTAL_OVERLAP_DAYS = 45`, ~30 sessions)
+*behind* the last stored date and **compares it cell-by-cell against what is stored**. Any
+disagreement means the basis moved, and the ticker falls back to the full refetch. A
+restatement is a **WARNING in `logs/app.log`**, never a silent repair.
+
+⚠️ **THE LAST STORED DATE IS REFETCHED, OVERWRITTEN, AND NEVER JUDGED.** A row captured
+intraday holds a partial volume that legitimately differs from its settled value; counting
+that as a restatement would send every ticker down the slow path and quietly undo the whole
+optimisation.
+
+✅ **Verified 2026-08-23, four checks, on a throwaway folder:** *equivalence* — a truncated
+CSV resumed incrementally reproduces the full scrape exactly (4,344 × 12, zero differing
+cells); *cheapness* — 198.9 s → 5.2 s, **38.3×**; *restatement* — halving `close_adjust`
+across all 4,304 stored rows (what a 2:1 split does) **is detected**, triggers the full
+refetch, and repairs both the overlap and history far outside it (2015-01-08); *no false
+positive* — an honest stale CSV resumes in 2.9 s without falling back.
+
+⚠️ **`insider_txn` ACCEPTS `incremental` AND IGNORES IT, deliberately.** `_scrape_all`
+queues one uniform task signature for all five tabs, but that tab is paginated by event
+index with no date to resume from — and a row is **amended in place** upstream (a
+registered transaction later gains its executed volume), so "rows after date X" is not a
+well-defined increment. It is not part of the `P1` refresh for that reason.
+
+⚠️ **`incremental` HELPS ONLY WHERE A CSV ALREADY EXISTS**, which is why `prop_trading` is
+the slow tab in a universe run: **350 of 781 tickers have no prop-desk history at all**, so
+those correctly take the full path every time.
+
 - **Universe = all three VN exchanges** (`VN_EXCHANGES = HOSE, HNX, UPCOM`; ~777 unique
   tickers). `get_stock_symbols(exchanges=…)` reads the TradingView stock links and
   filters to those exchanges (default = all three); `scrape()` and every `scrape_all_*`

@@ -823,6 +823,54 @@ Check the width per rebalance date before reading any recent book:
 python -c "import pandas as pd; d=pd.read_csv('../results/walkforward_h10/predictions_oos.csv'); print(d.groupby('date').size().tail(40))"
 ```
 
+### ⚠️ REFRESHING THE PRICE UNIVERSE — use `incremental`, not `skip_existing: false`
+
+Added 2026-08-23 for `P1`/`FRZ-1`. The four CafeF daily tabs can now resume each ticker
+from **its own last date** instead of refetching from 2009, which is what made a universe
+refresh affordable at all: **615 s per ticker** for a full 4-tab refetch (~67 h for 781
+tickers at the old 2-worker pool) against **2.9-5.2 s** to resume one.
+
+```powershell
+$env:DAGSTER_HOME = "D:\GIT\master-thesis\.dagster"
+Clear-Content logs\app.log
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "raw/cafef_price,raw/cafef_order_stats,raw/cafef_foreign,raw/cafef_prop_trading" `
+  --config refresh.yaml
+```
+
+```yaml
+# refresh.yaml — all four tabs, every ticker
+ops:
+  raw__cafef_price:        {config: {skip_existing: false, incremental: true}}
+  raw__cafef_order_stats:  {config: {skip_existing: false, incremental: true}}
+  raw__cafef_foreign:      {config: {skip_existing: false, incremental: true}}
+  raw__cafef_prop_trading: {config: {skip_existing: false, incremental: true}}
+```
+
+⚠️ **`incremental: true` NEEDS `skip_existing: false` BESIDE IT.** `skip_existing` is
+checked first and returns before the resume is ever reached, so `incremental: true` alone
+refreshes **nothing** and still goes green — the exact failure mode §8 rule 10 is about.
+
+⚠️ **A RESTATEMENT IS A WARNING, NOT A FAILURE, AND YOU SHOULD READ THEM.** CafeF re-bases
+a whole history when a stock splits or pays a dividend, so the resume refetches a 45-day
+overlap and compares it; a ticker that disagrees falls back to the full refetch on its own.
+Count them after a run — **13 fired within the first two minutes of the 2026-08-23 run**,
+and each one is a series that a naive append would have spliced across two price bases:
+
+```powershell
+Select-String -Path logs\app.log -Pattern "RESTATED" | Measure-Object
+```
+
+⚠️ **The four assets run CONCURRENTLY**, so a universe refresh is 4 × `SCRAPER_MAX_WORKERS`
+threads against CafeF (48 at the current 12). `foreign` and `order_stats` finish in ~2
+minutes; **`prop_trading` is the long pole** because 350 of 781 tickers have no prop history
+at all and correctly take the full path every time.
+
+⚠️ **Then carry it up** — a scrape that stops at `raw_data/` changes nothing a model reads.
+`bronze/cafef_*` → `silver/cafef_*` → `silver/stocks_basic` is `P1`; `gold/*` →
+`filter/universe` → `group:unified` is `P2`. §8 rule 11: *"re-scraped" never implies
+"re-ingested"*.
+
 **To get back to a usable chain**: re-scrape the 143 frozen tickers (`--rescrape` is
 opt-in and scoped to `--ticker` with `skip_existing=False` — **without both it either costs
 781 tickers or fetches nothing**), rebuild `pool__basic` → `rank_10day__final__d20_h10`,
