@@ -71,45 +71,87 @@ table survives and is still the best thing in it.
 
 ---
 
-## ⚠️ START HERE — ONE CODE, ONE ORDER. `P1` is the highest priority.
+## ⚠️ START HERE — NUMBERS ARE FROZEN. THE TOP ROW IS THE HIGHEST PRIORITY.
 
-> # ⚠️ RENUMBERED 2026-08-23 — **THREE** ITEMS CLOSED THAT DAY, SO **EVERY CODE MOVED DOWN BY 3**
+> # ⚠️ THE NUMBERS STOPPED MOVING ON 2026-08-23 — identity is PERMANENT, order is PRIORITY
 >
-> **What happened:** three items completed on 2026-08-23 — the `FRZ-1` universe re-scrape
-> (**§6-2-bis**), the carry-up to gold/filter/unified (**§6-2-ter**) and `STA-1`, the
-> `gold.stocks_ta` rebuild (**§6-2-quater**). The list no longer started at 1, so every
-> remaining item shifted: **`new = old − 3`**.
-> ⚠️ **Nothing was re-prioritised.** The order is identical; only the labels moved.
+> **In one line: a `P<n>` means the same item forever, and what to do next is the TOP ROW
+> of the list, not the smallest number.**
+>
+> ⚠️ **WHY IT CHANGED, AND THE REASON IS MEASURED RATHER THAN AESTHETIC.** Until today a
+> code carried two jobs at once — *which item* and *how urgent* — and those two move for
+> different reasons: an item closes, or a priority is revised. Only the first was ever
+> renumbered, so the label had to shift every time anything finished. It shifted **three
+> times in two days** (2026-08-21 the five-scheme merge, 2026-08-22 bare → bare,
+> 2026-08-23 bare → bare, `new = old − 3`), and each shift cost the same four things:
+>
+> 1. **A `P<n>` in yesterday's message silently means something else today** — `grep`
+>    cannot see the difference, which this file already called *"the standing cost of bare
+>    codes"*.
+> 2. **Resolving one code became a two-step lookup**: find the DATE of what you are
+>    reading, pick the matching crosswalk, then translate. Every renumber adds a step.
+> 3. **Live pointers in five other files had to be rewritten by hand** — `CLAUDE.md`,
+>    `RUNBOOK.md`, `INDEX.md`, `pipeline.md`, `PIPELINE_h10_CAGR74.md`. Five chances for a
+>    pointer to go quietly wrong.
+> 4. **It destroys information.** This file says so itself, about the first renumber.
+>
+> ⚠️ **`ISSUES.md` HAD THIS RIGHT ALL ALONG AND IS THE MODEL** — *"permanent codes; a code
+> is never renumbered or reused"*. `FRZ-1` is `FRZ-1` whether it is open, fixed or five
+> months old, and nobody has ever needed a crosswalk to read one. What that register does
+> is keep **identity** separate from **status**; this list now does the same, keeping
+> identity separate from **priority**.
+>
+> ### The rule, complete
+>
+> | | |
+> |---|---|
+> | **identity** | the number. Assigned once, **never** reused, never renumbered — for OPEN items now, as it already was for done ones |
+> | **priority** | the ORDER OF THE ROWS in the tables below. Re-order freely; that is the only thing a re-prioritisation touches |
+> | **status** | a `✅ DONE <date>` marker in the row, with the measurement and where it landed |
+>
+> ⚠️ **NO RANK COLUMN, DELIBERATELY.** A written-down rank is a second copy of what the row
+> order already says, and a second copy is a thing that can disagree with the first. The
+> order is visible; that is enough.
+>
+> ⚠️ **AND A DONE ITEM IS NOT STRUCK THROUGH.** `~~P1~~` renders as damaged text and reads
+> as *"ignore this"*, which is the opposite of what a closed item is for here — the
+> measurement it leaves behind is the point, and it is cited BY CODE from `CLAUDE.md` and
+> the `CONTEXT.md` files. A closed item is marked `✅ DONE <date>` and keeps its number,
+> its row and its evidence in ordinary type.
+>
+> ### ⚠️ What this costs, named rather than hidden
+>
+> **The list no longer starts at `P1`, and the numbers will not stay monotonic.** `P1`
+> closed on 2026-08-23, so group A opens at `P2`; when a later item is re-prioritised
+> upward you will see `P14` sitting above `P9`. That is exactly how `ISSUES.md` reads, and
+> it is the price of a code that means one thing forever. **Read the order, cite the
+> number.**
 >
 > | group | items | what it is |
 > |---|---|---|
-> | **A · DATA** | **`P1`-`P2`** | ✅ **the re-scrape, the carry-up and `STA-1` all closed 2026-08-23** — what is left is the per-ticker freshness VIEW and the filing PDFs |
+> | **A · DATA** | **`P2`** | ✅ **`P1` DONE 2026-08-23** — per-ticker freshness shipped. What is left is the filing PDFs |
 > | **B · OCR → KAGGLE** | **`P3`-`P6`** | ⚠️ `P3` is a **1-day gate that can cancel `P4`-`P6`** |
 > | **C · OUTPUT** | `P7`-`P8` | ✅ **`P7` UNBLOCKED 2026-08-23** — the cross-section is 771 names again, not 7 |
 > | **D · MODEL & MONEY** | `P9`-`P17` | a better number, not more data |
 > | **E · HONESTY** | `P18`-`P21` | makes an EXISTING number readable |
 > | **F · BACKLOG** | `P22`-`P36` | |
 >
-> ⚠️ ⚠️ **THIS IS THE SECOND BARE → BARE RENUMBER, AND TODAY'S `P1` IS NOT YESTERDAY'S.**
-> Yesterday `P1` meant *"re-scrape the universe"*; today it means `STA-1`. A citation
-> written before today resolves to a different item **with nothing saying so** — `grep`
-> cannot see the difference, which is the standing cost of bare codes. Two defences:
+> ### ⚠️ THE TWO CROSSWALKS BELOW ARE STILL LOAD-BEARING — for anything written BEFORE today
 >
-> 1. **[The 2026-08-23 crosswalk](#-the-2026-08-23-crosswalk--the-second-bare--bare-renumber-and-the-newest-one)
->    is the one to use** for any `P<n>` written before today (`new = old − 2`). The
->    [2026-08-22 crosswalk](#the-2026-08-22-crosswalk--old-bare-code--new-bare-code) is
->    still below for anything older, so resolving a code takes **the DATE of what you are
->    reading**, then the matching table.
-> 2. **The live pointers in `CLAUDE.md`, `RUNBOOK.md`, `pipeline.md` and
->    `PIPELINE_h10_CAGR74.md` were rewritten today**, as they were on 2026-08-22. A
->    silently-wrong pointer is worse than a visibly retired one.
+> Freezing the numbers stops NEW drift; it cannot undo the old. A `P<n>` written before
+> 2026-08-23 still resolves to a different item, so resolving one takes **the DATE of what
+> you are reading**, then the matching table: the
+> [2026-08-23 crosswalk](#-the-2026-08-23-crosswalk--the-second-bare--bare-renumber-and-the-newest-one)
+> for yesterday's codes, the
+> [2026-08-22 crosswalk](#the-2026-08-22-crosswalk--old-bare-code--new-bare-code) for
+> anything older. **They are the last two that will ever be needed.**
 >
 > ⚠️ **Everything DATED in this file — every archive block, every recorded prediction, every
 > "what was next on <date>" section — keeps the numbering it was written with.** Those are
 > records of the past, not pointers; renumbering them once already destroyed information
 > (see the crosswalk's own warning). ⚠️ **The block below this one, and the two audit
 > sections that follow, are dated records in exactly that sense** — where they carry a LIVE
-> pointer it was rewritten today, and where they recount history it was left alone.
+> pointer it was rewritten on 2026-08-23, and where they recount history it was left alone.
 
 > **Renumbered 2026-08-21.** This file used to carry **five** code schemes at once —
 > `P0-*`/`P1-*`/`P2-*`/`P3-*`/`P4-*` (priority BANDS with sub-numbers), `PRF-*` (the profit
@@ -193,7 +235,7 @@ universe?"* **What was measured:** every ticker-keyed table in all three schemas
 folders on disk, and the per-ticker last date. The answer splits cleanly into **three
 things worth building, two that are blocked by physics, and three that must NOT be built.**
 
-### ~~⚠️ THE CROSS-SECTION ENDS 2026-06-25~~ — ✅ **FIXED 2026-08-23, kept as the before-picture**
+### ⚠️ THE CROSS-SECTION ENDS 2026-06-25 — ✅ **FIXED 2026-08-23, kept as the before-picture**
 
 > ⚠️ **Everything in this subsection is the state on 2026-08-22 and is no longer true.** `P1` closed on 2026-08-23: the cross-section now holds **771-783 names on every session** through 2026-08-21. It is kept because the SHAPE of the failure — a scalar `MAX(date)` advancing six weeks while the universe stood still — is what `P4` exists to make queryable, and `P4` is still open. CLAUDE.md §6-2-bis.
 
@@ -350,9 +392,9 @@ the post-hoc gate was the flawed instrument — say so here rather than editing 
 
 ---
 
-## THE LIST — P1 … P36, highest priority first  ⚠️ **RENUMBERED 2026-08-23 (twice)**
+## THE LIST — read TOP-DOWN; the number is a NAME, not a rank  ⚠️ **FROZEN 2026-08-23 — no code here will move again**
 
-### P1 … P17 · the live program
+### the live program — `P1` … `P17` as named today
 
 ⚠️ **EVERY COST IN THIS BLOCK THAT IS MARKED `est.` IS AN ESTIMATE ANCHORED TO A MEASURED
 RUN**, and marked so it cannot be read back as a measurement. The anchors are `walkforward`
@@ -363,7 +405,7 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 | # | item | ⏱ | local? | was | why it is here |
 |---|---|---|---|---|---|
 | | **⬛ A · SCRAPE — the data has to EXIST and be FRESH before anything else is worth running** | | | | |
-| ~~**P1**~~ | ✅ **DONE 2026-08-23 — PER-TICKER FRESHNESS SHIPPED** — `pipeline.freshness`, the two `health_schema` views, and three new columns in `pipeline.status_data` | ~35 min *actual* | ✅ | *old `P36`* | ⚠️ **AND IT CORRECTED TWO DOCUMENTED CLAIMS ON ITS FIRST RUN.** (1) The 13 post-re-scrape stragglers carry **SEVEN** distinct dates, not thirteen — `FRZ-1`'s own parenthetical list disproved its prose, and the number was the diagnostic separating a delisting from a scrape failure. The conclusion survives, re-verified another way (each of the 13 raw CSVs ends exactly where silver does). (2) **27 single-name unified schemas are stale**, in three layers that are a fossil record of every scoped re-scrape: 5 at 2026-08-19, 10 banks at 2026-08-07, 13 at 2026-06-25/26. ⚠️ The alarm is a **SHARE**, not a count — an absolute floor of 5 tickers was written first and fired immediately on five genuine delistings; the two measured regimes are 0.6 % and 77 %. ⚠️ And `sessions_behind` is counted against the **price spine's** calendar, never the measured table's own — a frozen table's own dates cannot contain the sessions it is missing, so it would report every ticker 0 behind. **22 tests, no database.** CLAUDE.md §6-2-quinquies; `pipeline/CONTEXT.md` §1a-bis; RUNBOOK.md §8a |
+| **P1** ✅ | **DONE 2026-08-23 — PER-TICKER FRESHNESS SHIPPED** — `pipeline.freshness`, the two `health_schema` views, and three new columns in `pipeline.status_data` | ~35 min *actual* | ✅ | *old `P36`* | ⚠️ **AND IT CORRECTED TWO DOCUMENTED CLAIMS ON ITS FIRST RUN.** (1) The 13 post-re-scrape stragglers carry **SEVEN** distinct dates, not thirteen — `FRZ-1`'s own parenthetical list disproved its prose, and the number was the diagnostic separating a delisting from a scrape failure. The conclusion survives, re-verified another way (each of the 13 raw CSVs ends exactly where silver does). (2) **27 single-name unified schemas are stale**, in three layers that are a fossil record of every scoped re-scrape: 5 at 2026-08-19, 10 banks at 2026-08-07, 13 at 2026-06-25/26. ⚠️ The alarm is a **SHARE**, not a count — an absolute floor of 5 tickers was written first and fired immediately on five genuine delistings; the two measured regimes are 0.6 % and 77 %. ⚠️ And `sessions_behind` is counted against the **price spine's** calendar, never the measured table's own — a frozen table's own dates cannot contain the sessions it is missing, so it would report every ticker 0 behind. **22 tests, no database.** CLAUDE.md §6-2-quinquies; `pipeline/CONTEXT.md` §1a-bis; RUNBOOK.md §8a |
 | **P2** | ⚠️ **SCRAPE FILING PDFs AT SCALE — inside a MEASURED disk budget** (`raw/cafef_pdfs`, currently 100 partitions of which 112 tickers landed) | scrape hours + disk | ✅ | — | ⚠️ **THE INPUT TO THE WHOLE OCR PROGRAM, AND DISK IS THE BINDING CONSTRAINT.** Measured 2026-08-22: **112 tickers = 15,215 PDFs = 100 GB**, median **906 MB**/ticker, max 2.1 GB, against **144 GB free on `D:`**. The universe is ≈ **700 GB** and does not fit. ⚠️ **So this item is "choose N and justify it", not "scrape everything"** — a sector-stratified sample sized to the free disk, decided WITH `P5`, since a name whose template does not exist is a name whose PDFs are dead weight |
 | | **⬛ B · OCR → KAGGLE — the time wall is solvable; the SCHEMA wall is not, and they are different problems** | | | | |
 | **P3** | ⚠️ **THE 1-DAY GATE: price a JSON fundamentals source FIRST** — `api.simplize.vn`, `vnstock`. Does either return balance-sheet lines for a **non-bank**? | ~1 day | ✅ | *old `P33`* | ⚠️ **RUNS BEFORE `P4`-`P6` BECAUSE IT CAN CANCEL THEM.** FA coverage is **2 of 781**. The OCR route needs ~700 GB, ~78 days of GPU and a template that does not exist; a JSON endpoint would make all three vanish. One day against weeks is a cheap option to buy. ⚠️ **Record the answer either way** — a negative closes §2d's second-ranked lever, which is itself a result |
@@ -384,7 +426,7 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 | **P16** | **sweep `lookback`** — the one dataset knob never swept | ~4 h *est.* | ✅ | *old `P10`* | `walkforward` §12c named it and nothing has moved since. **↓ detail block** |
 | **P17** | **date-only pools as a REGIME OVERLAY**, not as ranking channels | ~1 day *est.* | ✅ CPU | *old `P11`* | Risk control, **not** a fix for the decay — §9b already located that in the features. **↓ detail block** |
 
-### P18 … P36 · the backlog
+### the backlog — `P18` … `P36` as named today
 
 | # | item | ⏱ | was | note |
 |---|---|---|---|---|
@@ -926,7 +968,7 @@ LEVELS rather than only in the paired test: `gbt` earns **4.2 pp/yr less** than 
 scoring **0.36 more** Sharpe. **"The best model" is not well-formed without an estimand** —
 RUNBOOK §7c.
 
-### ~~What is left, in order~~ — ⚠️ SUPERSEDED, its eleven items are now `P3` … `P18`
+### What is left, in order — ⚠️ SUPERSEDED, its eleven items are now `P3` … `P18`
 
 The table that stood here listed eleven items by POSITION (*"item 1"*, *"item 2"*) with no
 codes, which is half of why this file needed renumbering at all. **They were not dropped —
@@ -1159,7 +1201,7 @@ One-line each:
 
 | # | item | ⏱ | where | output |
 |---|---|---|---|---|
-| ~~1~~ | ~~**the h=10 WALK-FORWARD**~~ | ~~**~20 min** *est.*~~ | ✅ **DONE 2026-08-20** | **42 min actual**, not 20. See the block at the top of this file. ⚠️ **Its last clause was wrong and is worth keeping visible**: *"`walkforward.compare` pairs the two tracks"* — it **cannot**, and the reason is structural (different holding intervals ⇒ no period-wise correspondence). Pairing two horizons is an OPEN problem, now **P2-4** |
+| 1 | **the h=10 WALK-FORWARD** | **~20 min** *est.* | ✅ **DONE 2026-08-20** | **42 min actual**, not 20. See the block at the top of this file. ⚠️ **Its last clause was wrong and is worth keeping visible**: *"`walkforward.compare` pairs the two tracks"* — it **cannot**, and the reason is structural (different holding intervals ⇒ no period-wise correspondence). Pairing two horizons is an OPEN problem, now **P2-4** |
 | 2 | **`PRF-4`** — execution realism | ~1 day | **CPU** | ADV/size cap, floor days on the SELL side, the ATC auction. ⚠️ These move the LEVELS, and after PRF-8/PRF-9 the levels are the only thing still moving |
 | 3 | **`PRF-5`** — survivorship | ~2 days | **data** | `z` is protected, `+47.5 %/yr` is not. A point-in-time listing table |
 | 4 | **`PRF-3`** — ⚠️ **mostly ANSWERED by `PRF-2`**; what is left is the training-window test | ~1 day | local | PRF-2 showed the post-2022 break is in the FEATURES, not the market (19 selected channels +2.44 vs 3 hand-picked −0.26, same window and horizon). The rolling-vs-expanding half is still untested at h=10/h=20 |
@@ -1502,7 +1544,7 @@ Each is a way the backtest is still kinder than the market. Ordered by expected 
 | **floor days on the SELL side** | the ceiling exclusion covers ENTRY only. A name at its floor on the exit date cannot be sold either, and a loser is exactly when that happens — so this is biased against the strategy in the direction that matters | ❌ |
 | **the ATC auction** | signals built from full-day order counts settle only after close; but a partial-day version could be submitted into ATC. That recovers part of the ~19 pp/yr the t+1 lag costs at h=5 | ❌ |
 | **the ceiling exclusion is a PROBE, not a default** | `PRF-0` measured it and the model survives (+1.484 → **+1.551** test), but `backtest.portfolio` still applies no exclusion, so the next run reproduces the untested number. Needs `exchange` on the panel, which `build_panel` does not carry. ⏱ ~1 h — **the cheapest row here, and the only one already measured** | ✅ measured, ❌ not shipped |
-| ~~**`se_sharpe` on the h=20 cell**~~ | ✅ **CLOSED by PRF-1, 2026-08-19** — the walk-forward produced **118 periods** and `se_sharpe` **0.155**, against the single split's 32 and 0.256. Fixed the way it was predicted to be: more OOS periods, not a wider window | ✅ 2026-08-19 |
+| **`se_sharpe` on the h=20 cell** | ✅ **CLOSED by PRF-1, 2026-08-19** — the walk-forward produced **118 periods** and `se_sharpe` **0.155**, against the single split's 32 and 0.256. Fixed the way it was predicted to be: more OOS periods, not a wider window | ✅ 2026-08-19 |
 | **max drawdown −55 to −58 %** | at every `k` on the h=10 screen. Statistically tradable ≠ holdable; a vol target or a market-regime filter is the standard answer and neither is tested | ⚠️ known |
 
 ### P18 · Survivorship — the one bias that flatters a momentum screen ⏱ ~2 days  ·  *(was `PRF-5`)*
@@ -1527,7 +1569,7 @@ single-stock ranking:
 2. **Point-in-time listing status** — **`P16`** *(was PRF-5)*.
 3. **Fundamentals with filing dates** — `experiment_4` already recovered VCB's publish
    dates, so the method exists for one name and needs scaling.
-4. ~~News / sentiment~~ — **closed**, see the Closed table. `pool__news_daily` measured
+4. News / sentiment — **closed**, see the Closed table. `pool__news_daily` measured
    z = +0.53 at layer 1.
 
 ---
@@ -1631,7 +1673,7 @@ chain's run as up to date. Pass `--config`.
 
 **The original entry, kept:**
 
-### ~~P4-11~~ · `pipeline` CALLS ANOTHER EXPERIMENT'S RUN `up to date` — promoted from P4 2026-08-19 ⏱ ~2 h
+### P4-11 ✅ · `pipeline` CALLS ANOTHER EXPERIMENT'S RUN `up to date` — promoted from P4 2026-08-19 ⏱ ~2 h
 
 ⚠️ **`pipeline`'s `selection_2` ROW DESCRIBES A DIFFERENT EXPERIMENT AND CALLS IT
 `up to date`.** Measured 2026-08-18: `python -m pipeline --ticker all --table
@@ -1797,7 +1839,7 @@ and the SHARPE. **Two tests are only a cross-check when they test the same thing
 
 **The original framing, kept because it is the reason the tool exists:**
 
-### ~~P2-4~~ · Nothing can PAIR two horizons, and the old TODO assumed something could ⏱ ~1 day
+### P2-4 ✅ · Nothing can PAIR two horizons, and the old TODO assumed something could ⏱ ~1 day
 
 ⚠️ **Opened 2026-08-20.** The retired item above promised *"`walkforward.compare` pairs the
 two tracks"*. It does not, and cannot: it pairs ARMS inside one sweep — arms that trade the
@@ -2378,7 +2420,7 @@ still read 15.50. **Both flags, in that order, or the leaderboard keeps the old 
 That is not a regression from this fix; it is a gap this fix made visible. New item
 **P4-12**.
 
-**Left:** ~~`FNM-1` (P1-6)~~ ✅ **measured 2026-08-19** — the shortlist does not depend on the representation, so neither side has to move.
+**Left:** `FNM-1` (P1-6) ✅ **measured 2026-08-19** — the shortlist does not depend on the representation, so neither side has to move.
 
 **Why it is the question this repo has never answered.** Twice now a selection has cleared an honest
 bar and the model below it has shown nothing (§5d, P2-3) — and `RNK-1` says that on a
@@ -2493,7 +2535,7 @@ benchmark CAGR of 9.75 %. **h=5 pays more in fees than the market returns.**
 4. **Slippage / ADV cap** — a 15-name book at size moves a top-150 VN name.
    `pool__basic.value_matched` makes this buildable; stage 9 currently assumes fills.
 
-### ~~P2-1~~ · RETIRED 2026-08-17 — the first version was a bad experiment (kept for the reasoning)
+### P2-1 · RETIRED 2026-08-17 — the first version was a bad experiment (kept for the reasoning)
 
 **What it said:** "run the chain at a 4-week horizon", where *the chain* is the VCB
 single-stock chain. **That does not reproduce the evidence it cites.** CLAUDE.md §2a-bis
