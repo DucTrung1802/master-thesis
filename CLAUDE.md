@@ -888,8 +888,16 @@ stream per device, so the kept set moves (58 of 62 in common). `feature_selectio
 and deliberately left on the host.
 
 ⚠️ **NEVER `Materialize all` / `*` / a bare backfill.** With every partition live that
-takes `raw/cafef_pdfs` (100 tickers × ~1-1.7 GB), `raw/trading_view@stocks` (777 tickers,
-~10 h) and `raw/cafef_financials` (~2.4 h/ticker). Materialise a group or a named asset.
+takes `raw/cafef_pdfs` (⚠️ **784 tickers since 2026-08-23, was 100** — and with NO year
+window that is **~555 GiB**), `raw/trading_view@stocks` (777 tickers, ~10 h) and
+`raw/cafef_financials` (~2.4 h/ticker). Materialise a group or a named asset.
+
+⚠️ **AND EVERY SCRAPE RUNS THROUGH DAGSTER — never a script, never ad-hoc code**, even for
+a one-off backfill and even when the scraper class already has a batch method that would
+do it. A run outside Dagster leaves no materialisation, no metadata and no partition
+status, so a later session cannot tell what was fetched or with what scope. If a run needs
+a knob the asset does not have, **the work is adding the knob to the asset** (a `Config`
+class), not writing a wrapper around it. `RUNBOOK.md` §3e.
 
 ---
 
@@ -2142,6 +2150,82 @@ or a dependency on it, and the observer is written by someone who is not thinkin
 the writer. Ask of any new monitor: *what does this stop the repair path from doing?*
 `pipeline/CONTEXT.md` §1a-bis; `ISSUES.md` `DEP-1`.
 
+### ✅ 6-2-septies. THE FILING ARCHIVE — 784 TICKERS, PHASE 1 DONE 2026-08-23 in 74 min
+
+`P2`'s input exists now for every listed code up to and including 2020. It had sat open on
+a number that was never measured, and measuring it is most of the story.
+
+**The count came before the download, and cost 123 seconds.** `FileBCTC.ashx` lists a
+ticker's documents without serving one, so the universe can be SIZED without fetching a
+byte — 784 codes, 0 errors, every ticker returns filings:
+
+| | |
+|---|---|
+| universe | **784 codes · 84,076 PDF documents** |
+| size model | **7.02 MB/doc**, from the 15,217 PDFs already on disk whose index CSVs record `bytes`; rising 2.75 MB (2008) → 9.32 MB (2025) |
+| whole corpus | **≈ 555 GiB** — not the ~700 GB carried since 2026-08-22 |
+| **phase 1 (`≤2020`)** | **50,382 docs ≈ 286 GiB** |
+| phase 2 (`2021+`) | 33,694 docs ≈ 269 GiB |
+
+**The run**: one Dagster run, `--partition-range HNX_ADC...UPCOM_XMC` with
+`year_max: 2020`, **74 minutes**, 784/784 materialisations, 0 errors. On disk now
+**56,351 PDFs / 366.8 GiB**; `D:` (extended 318 → 636 GiB) went 461 → **197 GiB** free.
+
+⚠️ **THE COST IS THE YEAR WINDOW, NOT THE TICKER COUNT — and that inverts `P2`.** The item
+had read *"choose N tickers and justify it"* for as long as it existed, on the belief that
+the universe could not fit. The universe fits; **every filing year at once** does not.
+Nothing about the ticker list was ever the constraint.
+
+⚠️ **AN EXTRAPOLATION FROM THE EXISTING SAMPLE WAS WRONG BY 2×, AND THE REASON IS NOT
+"SMALL SAMPLE".** The 112 tickers on disk are **96 % HOSE**, and their 5 non-HOSE members
+average 52 MB — which read as *"HNX/UPCOM are ~18× smaller"* and gave 240 GiB. Those five
+are **partial scrapes, not small companies**: `HNX_AMV` held 9 files where CafeF lists
+**160**, `UPCOM_CMT` held **1 of 112**. Measured properly, HNX averages 102 docs/ticker and
+UPCOM 75 against HOSE's 134. *"The sample is small"* and *"the sample is a different
+thing"* are different failures and only the first is fixed by more data.
+
+✅ **VERIFIED PER TICKER AGAINST THE PRE-RUN COUNT, not off the green run** (§5 rule 10):
+**50,345 of 50,382** expected documents landed. The 37 absent ones are **CafeF's dead
+links** — sampled 6 across 3 tickers, all **404 on BOTH hosts**. ⚠️ **The first check said
+4 missing on one ticker and 2 of them downloadable; it was matching by FILENAME**, which
+misses documents stored under the collision-hash suffix. Matching by URL is the honest
+comparison and gives 2, both dead.
+
+**Three defects the work exposed, all measured:**
+
+1. ⚠️ **`link.endswith(".pdf")` was silently skipping 1,408 of 84,076 documents (1.7 %)** —
+   CafeF appends a cache-buster (`…_31072026105556.pdf?v=1785470157744`), VCB's own
+   Q2-2026 filing among them. Fixed by testing `urlsplit(link).path`.
+2. ⚠️ **A dead link vanished without a word** — 37 documents, and the log carried **0
+   warnings**. A ticker missing files and a complete one looked identical (§5 rule 22 at
+   the document). The count is now in the summary line and a WARNING names the first three.
+3. ⚠️ **The year-scoped index merge had never been run.** `years` had existed for months
+   and was never passed; the first scoped run over an existing index raised `int + str`
+   from `csv.DictReader`. The quiet half would not have raised: **`"False"` is truthy**, so
+   `consolidated` and `half_year` would have counted every carried row.
+
+⚠️ **AND THE PHASE BOUNDARY HAD TO BE MADE LEAKPROOF ON PURPOSE.** CafeF files 10 of the
+84,076 documents with a `Year` that is not a year (eight `0`, one `202`, one `203`).
+`year_max` keeps them, `year_min` does not — so the two phases partition the corpus exactly
+and no document falls between them. Verified after the run: the 5,865 index rows dated
+2021+ sit in exactly the 112 tickers that were already complete, and the merge preserved
+them rather than erasing them. **21 tests** pin both pure decisions without a network.
+
+⚠️ **THE SCRAPE RUNS THROUGH DAGSTER AND ONLY THROUGH DAGSTER** (2026-08-23, standing
+rule). `raw/cafef_pdfs` is partitioned over all 784 codes and carries
+`BackfillPolicy.single_run()` — **not a speed tweak: it is the only way the concurrency
+exists.** One partition per run would pay ~19 s of process start-up each (~4 h over the
+universe) *and* scrape one ticker at a time, discarding the scraper's 12-way thread
+manager. A run outside Dagster leaves no materialisation, no metadata and no partition
+status. If a run needs a knob the asset lacks, **the work is adding the knob to the
+asset**. `RUNBOOK.md` §3e.
+
+⚠️ **What this does NOT buy.** Phase 2 is unrun and should stay unrun until the OCR has
+been through phase 1 — `D:` has 197 GiB free against phase 2's ~269 GiB, so the disk
+question returns exactly when it is supposed to. And **none of this touches the schema
+wall**: 761 of 781 names are not banks and the non-bank template still does not exist, so
+these PDFs feed a parser that has never once been run against a corporate filing (`P5`).
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -2161,14 +2245,17 @@ anything reading one number.
 11 — *"re-scraped" never implies "re-ingested"* — with a measured size. **`filter_schema`
 and every `unified_schema_*` sit downstream of both and re-materialise themselves never.**
 
-**3. ⚠️ FUNDAMENTALS ARE 2 OF 781 AND THREE WALLS STAND IN FRONT OF THE OTHER 779** —
-none of them a code problem: **disk** (PDFs for 112 tickers = 100 GB, median 906 MB each →
-~700 GB for the universe, against **144 GB free**), **time** (~2.4 h/ticker of OCR →
-**~78 days**), and **schema** — `raw_data/cafef/financials/statements/` holds **one**
-template family, `bank`, while **761 of 781 names are not banks** (230 industrials, 117
-materials, 93 consumer staples; only 20 are GICS 401010). ⚠️ **The schema wall is the real
-one**: with infinite disk and time the current parser reaches 20 names. So `P3` prices a
-JSON source (`api.simplize.vn`, `vnstock`) *before* anything else is built — §2d's
+**3. ⚠️ FUNDAMENTALS ARE 2 OF 781 AND TWO WALLS STAND IN FRONT OF THE OTHER 779 —
+WAS THREE** — ✅ **the DISK wall fell on 2026-08-23 and it fell by being MEASURED, not by buying
+hardware** (§6-2-septies). It read *"PDFs for 112 tickers = 100 GB, median 906 MB each →
+~700 GB for the universe, against 144 GB free"*; counted from CafeF the whole universe is
+**555 GiB**, and phasing it by filing year makes the first half **286 GiB**. What remains:
+**time** (~2.4 h/ticker of OCR → **~78 days**), and **schema** —
+`raw_data/cafef/financials/statements/` holds **one** template family, `bank`, while
+**761 of 781 names are not banks** (230 industrials, 117 materials, 93 consumer staples;
+only 20 are GICS 401010). ⚠️ **The schema wall is the real one and is now the ONLY
+structural one**: with infinite disk and time the current parser reaches 20 names. So `P3`
+prices a JSON source (`api.simplize.vn`, `vnstock`) *before* anything else is built — §2d's
 second-ranked lever is a data-acquisition question, not an OCR question.
 
 ⚠️ **Three gaps are deliberate and must NOT be filled**: `cafef_news_sentiment` (3 of 781 —

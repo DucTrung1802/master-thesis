@@ -189,6 +189,66 @@ class CafeFPdfScraper(BaseScraper):
                   else f"FY-{year}" if quarter == 5 else f"NA-{year}")
         return f"{period}_{self._slug((d.get('Name') or '').strip())}.pdf"
 
+    # A `Year` below this is not a filing year — CafeF holds 0, 202 and 203. Treated as
+    # UNDATED rather than as year 0, so `year_max` keeps them and `year_min` does not.
+    EARLIEST_REAL_YEAR = 1990
+
+    @classmethod
+    def _in_year_window(cls, docs, years=None, year_min=None, year_max=None):
+        """-> (kept, n_undated). Every filter that is set must be satisfied.
+
+        An undated document (`Year` missing or below EARLIEST_REAL_YEAR) is kept by a
+        `year_max` and by an unset `year_min`, and is never matched by an exact `years`
+        set — a document that cannot be dated must not silently join a dated year."""
+        kept, n_undated = [], 0
+        for d in docs:
+            try:
+                y = int(d.get("Year"))
+            except (TypeError, ValueError):
+                y = None
+            undated = y is None or y < cls.EARLIEST_REAL_YEAR
+            if undated:
+                if years is not None or year_min is not None:
+                    continue
+                n_undated += 1
+                kept.append(d)
+                continue
+            if years is not None and y not in years:
+                continue
+            if year_min is not None and y < year_min:
+                continue
+            if year_max is not None and y > year_max:
+                continue
+            kept.append(d)
+        return kept, n_undated
+
+    @staticmethod
+    def _row_from_index(row: dict) -> dict:
+        """One row read back from an index CSV, typed as the fresh rows are."""
+        out = dict(row)
+        try:
+            out["bytes"] = int(row.get("bytes") or 0)
+        except (TypeError, ValueError):
+            out["bytes"] = 0
+        for k in ("consolidated", "half_year"):
+            v = row.get(k)
+            out[k] = v if isinstance(v, bool) else str(v).strip().lower() == "true"
+        return out
+
+    @staticmethod
+    def _is_pdf_link(link: str) -> bool:
+        """Is this document a PDF? Read the URL **PATH**, never the whole URL.
+
+        ⚠️ CafeF appends a cache-buster to some links — VCB's Q2-2026 filing is
+        `…_31072026105556.pdf?v=1785470157744` — so the obvious
+        `link.endswith(".pdf")` calls a PDF something else and the document is
+        skipped without a word. Measured 2026-08-23 over all 784 tickers:
+        **1,408 of 84,076 documents (1.7 %)** were invisible to this scraper that
+        way, VCB's own latest quarter among them.
+        """
+        path = urllib.parse.urlsplit((link or "").strip()).path
+        return path.lower().endswith(".pdf")
+
     @staticmethod
     def _url_tag(link: str) -> str:
         """A short, stable discriminator for two documents CafeF gives the same title."""
@@ -240,10 +300,21 @@ class CafeFPdfScraper(BaseScraper):
     # ──────────────────────────────────────────────────────────────────────
 
     def scrape_pdfs(self, exchange: str, symbol: str, skip_existing: bool = True,
-                    years: Optional[Tuple[int, ...]] = None) -> None:
-        """`years` limits the download to those filing years. A full archive is ~1.7 GB per
-        ticker, so pulling one year across a wide universe is the difference between a few GB
-        and tens of them."""
+                    years: Optional[Tuple[int, ...]] = None,
+                    year_min: Optional[int] = None,
+                    year_max: Optional[int] = None) -> None:
+        """`years` is an exact set of filing years; `year_min`/`year_max` are an inclusive
+        WINDOW, and the two compose (a document must satisfy every filter that is set).
+
+        A full archive is ~1.7 GB per ticker, so scoping in time is the difference between
+        a few GB and hundreds. Measured 2026-08-23 across all 784 listed codes: 84,076
+        documents ≈ **555 GiB**, of which `year_max=2020` is **50,382 docs ≈ 286 GiB** and
+        everything from 2021 on is the other 269 GiB.
+
+        ⚠️ **AN UNDATED DOCUMENT IS KEPT BY `year_max`, NEVER DROPPED.** CafeF files 10 of
+        the 84,076 with a `Year` that is not a year at all — eight carry `0`, one `202`,
+        one `203`. They are treated as EARLIEST, so a `year_max` phase collects them and no
+        document can fall between two phases and be lost. The count is logged."""
         base = os.path.join(CAFEF_RAW_DATA_DIR, self.FOLDER)
         pdf_dir = os.path.join(base, self.FILES_DIR, f"{exchange}_{symbol}")
         index_dir = os.path.join(base, self.INDEX_DIR)
@@ -255,12 +326,21 @@ class CafeFPdfScraper(BaseScraper):
             self._logger.log_warning(f"CafeF pdf: no documents for '{symbol}'.")
             return
         listed = len(docs)
-        if years:
-            wanted = set(years)
-            docs = [d for d in docs if d.get("Year") in wanted]
-        self._logger.log_info(
-            f"CafeF pdf: '{exchange}:{symbol}' — {listed} documents listed"
-            + (f", {len(docs)} in {sorted(years)}" if years else ""))
+        scoped = years is not None or year_min is not None or year_max is not None
+        if scoped:
+            wanted = set(years) if years else None
+            docs, n_undated = self._in_year_window(docs, wanted, year_min, year_max)
+            window = (f"{year_min if year_min is not None else '..'}"
+                      f"-{year_max if year_max is not None else '..'}")
+            self._logger.log_info(
+                f"CafeF pdf: '{exchange}:{symbol}' — {listed} documents listed, "
+                f"{len(docs)} kept by year ({'set ' + str(sorted(years)) + ' + ' if years else ''}"
+                f"window {window})"
+                + (f", of which {n_undated} UNDATED (Year not a year — kept as earliest)"
+                   if n_undated else ""))
+        else:
+            self._logger.log_info(
+                f"CafeF pdf: '{exchange}:{symbol}' — {listed} documents listed")
 
         # Name every file BEFORE fetching anything, so a collision can be seen. CafeF lists
         # the same document twice under an identical title when a filing is re-uploaded (VCB
@@ -269,7 +349,7 @@ class CafeFPdfScraper(BaseScraper):
         # index still claimed 206. Only the colliding names get a URL-hash suffix, so every
         # other file keeps its stable name and is not re-downloaded.
         planned = [(d, self._base_name(d)) for d in docs
-                   if (d.get("Link") or "").strip().lower().endswith(".pdf")]
+                   if self._is_pdf_link(d.get("Link"))]
         clashes = {n for n, c in Counter(n for _, n in planned).items() if c > 1}
         names = {
             id(d): (f"{base[:-4]}_{self._url_tag(d['Link'])}.pdf"
@@ -277,9 +357,17 @@ class CafeFPdfScraper(BaseScraper):
             for d, base in planned
         }
 
+        # ⚠️ A DOCUMENT THAT CANNOT BE FETCHED USED TO VANISH WITHOUT A WORD. `one()`
+        # returned None on a dead link and the run finished green, so a ticker missing
+        # files and a ticker with all of them looked identical — §5 rule 22 at the
+        # document. Measured 2026-08-23 over the phase-1 backfill: **37 of 50,382
+        # documents (0.073 %)** are listed by CafeF and 404 on BOTH hosts, and the log
+        # carried 0 warnings about it. They are collected here and reported below.
+        unfetchable: List[dict] = []
+
         def one(d: dict) -> Optional[dict]:
             link = (d.get("Link") or "").strip()
-            if not link.lower().endswith(".pdf"):
+            if not self._is_pdf_link(link):
                 return None                    # a few entries are .rar / .xls
             name = (d.get("Name") or "").strip()
             year, quarter = d.get("Year"), d.get("Quarter")
@@ -299,6 +387,7 @@ class CafeFPdfScraper(BaseScraper):
                     if raw:
                         break
                 if not raw:
+                    unfetchable.append(d)
                     return None
                 tmp = dest + ".tmp"            # atomic: never leave a half file behind
                 with open(tmp, "wb") as f:
@@ -324,10 +413,19 @@ class CafeFPdfScraper(BaseScraper):
         index_path = os.path.join(index_dir, f"{exchange}_{symbol}.csv")
         # A year-filtered run must not erase the rest of an index that is already complete —
         # merge on the filename, keeping whatever this run did not look at.
-        if years and os.path.exists(index_path):
+        #
+        # ⚠️ THE CARRIED ROWS MUST BE RE-TYPED, and the two ways they bite are opposite.
+        # `csv.DictReader` returns every cell as `str`, so the summary below did
+        # `int + str` and RAISED on the first scoped run over an existing index (measured
+        # 2026-08-23) — loud. The quiet one is worse: `"False"` is a non-empty string and
+        # therefore TRUTHY, so `consolidated` and `half_year` would have counted every
+        # carried row. This path had never been exercised: `years` existed for months and
+        # was never passed.
+        if scoped and os.path.exists(index_path):
             with open(index_path, encoding="utf-8-sig") as f:
                 fresh = {r["file"] for r in rows}
-                rows += [r for r in csv.DictReader(f) if r["file"] not in fresh]
+                rows += [self._row_from_index(r)
+                         for r in csv.DictReader(f) if r["file"] not in fresh]
         rows.sort(key=lambda r: (int(r["year"] or 0), int(r["quarter"] or 0), r["name"]))
 
         tmp = index_path + ".tmp"
@@ -343,7 +441,21 @@ class CafeFPdfScraper(BaseScraper):
         self._logger.log_info(
             f"CafeF pdf: {symbol}: {len(rows)} PDFs ({n_cons} consolidated, "
             f"{n_half} half-year), {mb:.0f} MB -> {pdf_dir}"
+            + (f", {len(unfetchable)} UNFETCHABLE" if unfetchable else "")
         )
+        if unfetchable:
+            # Named, not just counted: the title and year are what tell a reader whether
+            # a gap matters (an audited annual) or does not (a duplicate re-upload).
+            sample = "; ".join(
+                f"{d.get('Year')}Q{d.get('Quarter')} {(d.get('Name') or '')[:40]}"
+                for d in unfetchable[:3]
+            )
+            self._logger.log_warning(
+                f"CafeF pdf: {exchange}:{symbol}: {len(unfetchable)} of "
+                f"{len(planned)} listed documents could not be fetched from either host "
+                f"(dead links) — {sample}"
+                + (" …" if len(unfetchable) > 3 else "")
+            )
 
     # ──────────────────────────────────────────────────────────────────────
     # Universe + batch driver
@@ -370,7 +482,10 @@ class CafeFPdfScraper(BaseScraper):
         return sorted(out)
 
     def scrape(self, exchanges: Tuple[str, ...] = None,
-               symbols: List[Tuple[str, str]] = None) -> None:
+               symbols: List[Tuple[str, str]] = None,
+               years: Optional[Tuple[int, ...]] = None,
+               year_min: Optional[int] = None,
+               year_max: Optional[int] = None) -> None:
         """Switch-driven entry point (`web_scraper/cafef/pdfs`).
 
         Defaults to CAFEF_PDF_TICKERS rather than the full ~777-code universe: the
@@ -384,25 +499,30 @@ class CafeFPdfScraper(BaseScraper):
         self.scrape_all_pdfs(
             exchanges=exchanges,
             symbols=symbols if symbols is not None else list(CAFEF_PDF_TICKERS),
+            years=years, year_min=year_min, year_max=year_max,
         )
 
     def scrape_all_pdfs(self, skip_existing: bool = True,
                         exchanges: Tuple[str, ...] = None,
                         symbols: List[Tuple[str, str]] = None,
-                        years: Optional[Tuple[int, ...]] = None) -> None:
+                        years: Optional[Tuple[int, ...]] = None,
+                        year_min: Optional[int] = None,
+                        year_max: Optional[int] = None) -> None:
         """`symbols` overrides the universe, so a run can be scoped to VN30/VN100 rather
-        than all ~777 listed codes; `years` scopes it in time. The archive is ~1.7 GB per
-        ticker, so both matter."""
+        than all ~777 listed codes; `years` / `year_min` / `year_max` scope it in time.
+        The archive is ~1.7 GB per ticker, so both matter."""
         universe = symbols if symbols is not None else self.get_stock_symbols(exchanges)
         self._thread_manager.remove_all_tasks()
         for exchange, symbol in universe:
             self._thread_manager.add_task(
                 Task(f"cafef/pdfs/{exchange}_{symbol}",
-                     self.scrape_pdfs, exchange, symbol, skip_existing, years)
+                     self.scrape_pdfs, exchange, symbol, skip_existing,
+                     years, year_min, year_max)
             )
         self._logger.log_info(
             f"CafeF: executing {self._thread_manager.get_current_number_of_task()} "
-            f"pdf scraping tasks."
+            f"pdf scraping tasks (skip_existing={skip_existing}, years={years}, "
+            f"year_min={year_min}, year_max={year_max})."
         )
         self._thread_manager.execute()
         self._logger.log_info("CafeF: finished scraping all pdfs.")

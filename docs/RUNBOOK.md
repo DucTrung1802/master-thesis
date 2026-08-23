@@ -389,6 +389,62 @@ under **both** `filter` and `unified` in `src/orchestration/config.json`. Then
 `python -m pytest src/orchestration/preprocessor/test_filters.py -q` (30 tests, no
 database) and `dagster definitions validate -f src/orchestration/definitions.py`.
 
+## 3e. ⚠️ SCRAPING THE FILING PDFs — one Dagster run, scoped BY YEAR (2026-08-23)
+
+⚠️ **EVERY SCRAPE RUNS THROUGH DAGSTER. There is no supported script path**, and that is
+a rule about the RUN, not about the code: a scrape outside Dagster leaves no
+materialisation, no metadata and no partition status, so nothing downstream can say what
+was fetched or with what scope.
+
+`raw/cafef_pdfs` is partitioned over **all 784 listed codes** and carries
+`BackfillPolicy.single_run()`, so a partition RANGE is **one run, one process**, and the
+scraper batches the tickers through its own 12-way thread manager. One partition per run
+would instead pay ~19 s of process start-up each (~4 h over the universe) and scrape one
+ticker at a time.
+
+```powershell
+cd D:\GIT\master-thesis
+.\mt_env\Scripts\Activate.ps1
+$env:DAGSTER_HOME = "D:\GIT\master-thesis\.dagster"
+Clear-Content logs\app.log
+
+# one ticker
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "raw/cafef_pdfs" --partition HNX_AMV `
+  --config-json '{"ops":{"raw__cafef_pdfs":{"config":{"year_max":2020}}}}'
+
+# PHASE 1 — every listed code, filings up to and including 2020 (~286 GiB)
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "raw/cafef_pdfs" --partition-range "HNX_ADC...UPCOM_XMC" `
+  --config-json '{"ops":{"raw__cafef_pdfs":{"config":{"year_max":2020}}}}'
+
+# PHASE 2 — only after the OCR program has run on phase 1 (~269 GiB)
+#   --config-json '{"ops":{"raw__cafef_pdfs":{"config":{"year_min":2021}}}}'
+```
+
+⚠️ **THE COST IS THE YEAR WINDOW, NOT THE PARTITION COUNT.** Counted from CafeF on
+2026-08-23 without downloading anything — 784 codes, **84,076 documents ≈ 555 GiB**:
+
+| window | documents | size |
+|---|---|---|
+| none (everything) | 84,076 | **~555 GiB** — does not fit |
+| **`year_max: 2020`** | **50,382** | **~286 GiB** ← phase 1 |
+| `year_min: 2021` | 33,694 | ~269 GiB |
+
+⚠️ **An undated document lands in the `year_max` phase, never the `year_min` one** — CafeF
+files 10 of the 84,076 with a `Year` that is not a year (eight `0`, one `202`, one `203`).
+So the two phases partition the corpus exactly and nothing falls between them.
+
+⚠️ **`skip_existing` defaults to `true` and that is what makes the run resumable** — kill
+it and re-issue the same command; it picks up where it stopped. A year-scoped run MERGES
+its rows into the existing `index/<EX>_<SYM>.csv` rather than replacing it, so phase 2
+does not erase phase 1's index.
+
+⚠️ **`--partition-range` REQUIRES the single-run backfill policy** and fails loudly
+without it. `--partition` (singular) still works for one ticker.
+
+---
+
 ## 4. The two flags that decide whether you destroy something
 
 | flag | on | means |

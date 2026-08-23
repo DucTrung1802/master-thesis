@@ -291,12 +291,13 @@ and the universe — all three measured 2026-08-22, none of them a code problem:
 
 | wall | measured | what it means |
 |---|---|---|
-| **disk** | PDFs on disk for **112 tickers**, 15,215 files, **100 GB** — median **906 MB**/ticker, max 2.1 GB. **144 GB free on `D:`** | 781 tickers ≈ **700 GB**. It does not fit, and it is not close |
+| **disk** | ⚠️ **RE-MEASURED 2026-08-23 FROM CAFEF ITSELF, NOT EXTRAPOLATED**: all **784** codes list **84,076 documents ≈ 555 GiB**. `D:` extended 318 → 636 GiB, **461 GiB free**. *(the 2026-08-22 reading this replaces: 112 tickers / 15,215 files / 100 GB, median 906 MB, 144 GB free → "781 ≈ 700 GB")* | **The whole corpus still does not fit** — but **≤2020 is 286 GiB and does, with ~230 GiB spare.** So disk stopped being a reason to sample TICKERS and became a reason to phase YEARS (`P2`) |
 | **time** | the OCR statement parse is **~2.4 h per ticker** | 781 × 2.4 h ≈ **1,874 h ≈ 78 days** sequential on one 4 GB RTX 3050 |
 | **schema** | `raw_data/cafef/financials/statements/` holds **one** template family: `bank` | **761 of 781 names are NOT banks** — 230 industrials, 117 materials, 93 consumer staples, … Only **20** are GICS 401010. A corporate balance sheet / income statement / cash-flow template **does not exist in this repo** |
 
-⚠️ **THE SCHEMA WALL IS THE REAL ONE.** Disk and time are budget; the missing non-bank
-template means that even with infinite disk and time, the current chain would parse 20 of
+⚠️ **THE SCHEMA WALL IS THE REAL ONE, AND 2026-08-23 MADE THAT SHARPER RATHER THAN
+SOFTER.** Disk stopped binding once the year phase existed; the missing non-bank template
+means that even with infinite disk and time, the current chain would parse 20 of
 781 names. **Nobody has ever written a non-bank statement mapping here**, and the two
 tickers that exist are both banks — so the parser has never once been tested against the
 shape 97 % of the universe files.
@@ -407,7 +408,7 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 |---|---|---|---|---|---|
 | | **⬛ A · SCRAPE — the data has to EXIST and be FRESH before anything else is worth running** | | | | |
 | **P1** ✅ | **DONE 2026-08-23 — PER-TICKER FRESHNESS SHIPPED** — `pipeline.freshness`, three `health_schema` SQL functions, and three new columns in `pipeline.status_data` | ~35 min *actual* | ✅ | *old `P36`* | ⚠️ **AND IT CORRECTED TWO DOCUMENTED CLAIMS ON ITS FIRST RUN.** (1) The 13 post-re-scrape stragglers carry **SEVEN** distinct dates, not thirteen — `FRZ-1`'s own parenthetical list disproved its prose, and the number was the diagnostic separating a delisting from a scrape failure. The conclusion survives, re-verified another way (each of the 13 raw CSVs ends exactly where silver does). (2) **28 single-name unified schemas are stale** (of 30), in four layers that are a fossil record of every scoped re-scrape: 5 at 2026-08-19, 10 banks at 2026-08-07, 9 at 2026-06-26, 4 at 2026-06-25 — now `SCH-1`, rebuilt the same day at a measured 21 s each. ⚠️ **AND IT CREATED ONE DEFECT OF ITS OWN, `DEP-1`, WHICH IS THE MOST REUSABLE THING HERE**: shipping the health objects as VIEWS blocked every `DROP TABLE` in the repo's builders, i.e. **the monitor blocked every repair it recommended**. Fixed by making them `plpgsql` functions, whose bodies carry no dependency. ⚠️ The alarm is a **SHARE**, not a count — an absolute floor of 5 tickers was written first and fired immediately on five genuine delistings; the two measured regimes are 0.6 % and 77 %. ⚠️ And `sessions_behind` is counted against the **price spine's** calendar, never the measured table's own — a frozen table's own dates cannot contain the sessions it is missing, so it would report every ticker 0 behind. **22 tests, no database.** CLAUDE.md §6-2-quinquies; `pipeline/CONTEXT.md` §1a-bis; RUNBOOK.md §8a |
-| **P2** | ⚠️ **SCRAPE FILING PDFs AT SCALE — inside a MEASURED disk budget** (`raw/cafef_pdfs`, currently 100 partitions of which 112 tickers landed) | scrape hours + disk | ✅ | — | ⚠️ **THE INPUT TO THE WHOLE OCR PROGRAM, AND DISK IS THE BINDING CONSTRAINT.** Measured 2026-08-22: **112 tickers = 15,215 PDFs = 100 GB**, median **906 MB**/ticker, max 2.1 GB, against **144 GB free on `D:`**. The universe is ≈ **700 GB** and does not fit. ⚠️ **So this item is "choose N and justify it", not "scrape everything"** — a sector-stratified sample sized to the free disk, decided WITH `P5`, since a name whose template does not exist is a name whose PDFs are dead weight |
+| **P2** | ⚠️ **SCRAPE FILING PDFs FOR ALL 784 TICKERS — PHASE 1 IS `year_max=2020`** (`raw/cafef_pdfs`) | scrape hours + **286 GiB** | ✅ | — | ⚠️ **THE INPUT TO THE WHOLE OCR PROGRAM, AND IT IS PHASED BY YEAR, NOT BY TICKER.** Measured 2026-08-23 over all **784** codes without downloading anything: **84,076 documents ≈ 555 GiB**, of which **≤2020 is 50,382 docs ≈ 286 GiB** and 2021+ is the other ~269 GiB. `D:` was extended and holds **461 GiB free**, so phase 1 fits with ~230 GiB spare and the whole corpus does not. **↓ detail block** |
 | | **⬛ B · OCR → KAGGLE — the time wall is solvable; the SCHEMA wall is not, and they are different problems** | | | | |
 | **P3** | ⚠️ **THE 1-DAY GATE: price a JSON fundamentals source FIRST** — `api.simplize.vn`, `vnstock`. Does either return balance-sheet lines for a **non-bank**? | ~1 day | ✅ | *old `P33`* | ⚠️ **RUNS BEFORE `P4`-`P6` BECAUSE IT CAN CANCEL THEM.** FA coverage is **2 of 781**. The OCR route needs ~700 GB, ~78 days of GPU and a template that does not exist; a JSON endpoint would make all three vanish. One day against weeks is a cheap option to buy. ⚠️ **Record the answer either way** — a negative closes §2d's second-ranked lever, which is itself a result |
 | **P4** | ⚠️ **PUSH THE OCR TO KAGGLE — a `kgpu` job for the statement parse** | ~2-3 days | ⚠️ **quota** | — | **What it fixes:** ~**2.4 h/ticker** on a 4 GB RTX 3050 → 781 tickers ≈ **78 days**. A T4 is 15 GiB and free 30 GPU-h/week. ⚠️ **BUT `kgpu` HAS NEVER SHIPPED A NON-TABLE PAYLOAD.** Every existing job exports `unified_schema` tables to parquet; this one ships **PDFs**, so three things are unmeasured and must be measured before any quota is spent: (a) the **Kaggle dataset size limit** against 100 GB of PDFs — if it binds, the job is per-ticker-batch, not per-universe; (b) whether the **onnx OCR stack** installs on Kaggle's image (`kgpu` §3d already records xgboost 3.2.0 / sklearn 1.6.1 vs `mt_env`, so an image difference is expected, not surprising); (c) the **5.2-min queue floor** (§3d) makes many small jobs the wrong shape — batch. ⚠️ **`rehearse` runs the worker side locally and spends NO quota — do that first, on the two banks that already parse** |
@@ -668,6 +669,74 @@ to cite in another file.**
 file's own rule, never renumbered, never reused. A TODO item may *point at* one (`P15` at
 `STA-1`, `P1` at `FRZ-1`, `P3` at `FNM-1`) and that is the relationship: **the issue is
 what is broken, the `P<n>` is what somebody is going to do about it.**
+
+---
+
+### P2 · ⚠️ THE PDF ARCHIVE, PHASED BY YEAR ⏱ scrape hours + 286 GiB  ·  *(measured 2026-08-23)*
+
+**Phase 1: every one of the 784 listed codes, `year_max=2020`. Then OCR that. Only then
+phase 2 (`year_min=2021`).** The order is the item — running both phases first is what
+does not fit on this machine, and OCR-ing 555 GiB before knowing whether the parser can
+read a non-bank filing at all (`P5`) is 78 days spent to find out.
+
+#### What was measured, and how — no PDF was downloaded to get these numbers
+
+`FileBCTC.ashx` lists a ticker's documents without serving one, so the whole universe can
+be **counted** for the price of 784 small JSON calls: **123 s, 0 errors, every ticker
+returns filings.** Document sizes then come from the **15,217 PDFs already on disk whose
+byte counts the index CSVs record**.
+
+| | |
+|---|---|
+| universe | **784 codes · 84,076 PDF documents** |
+| size model | mean **7.02 MB/doc**, rising **2.75 MB (2008) → 9.32 MB (2025)** |
+| **whole corpus** | **≈ 555 GiB** |
+| **phase 1 — `≤2020`** | **50,382 docs ≈ 286 GiB** (of which ~231 GiB is not yet on disk) |
+| phase 2 — `2021+` | 33,694 docs ≈ 269 GiB |
+| `D:` | extended 318 → 636 GiB; **461 GiB free** |
+| per sàn | HOSE 333 codes / 44,547 docs / 292 GiB · HNX 206 / 21,034 / 141 GiB · UPCOM 245 / 18,495 / 122 GiB |
+
+⚠️ **THE FLAT AND PER-YEAR SIZE MODELS AGREE TO 1 %** (445 vs 450 GiB for the missing
+676 tickers). That agreement is the check; a single model would have been an assertion.
+
+⚠️ **A PRIOR ESTIMATE OF 240 GiB WAS WRONG BY 2× AND THE REASON IS WORTH KEEPING.** It
+extrapolated from the 5 non-HOSE tickers in the existing sample, which average 52 MB —
+but those 5 are **partial scrapes, not small companies**: `HNX_AMV` holds 9 files where
+CafeF lists **160**, `UPCOM_CMT` holds **1 of 112**. Measured properly, HNX averages 102
+docs/ticker and UPCOM 75 against HOSE's 134 — **not one order of magnitude apart**.
+*"The sample is small"* and *"the sample is a different thing"* are different failures,
+and only the second one survives more data.
+
+#### What shipped with it, 2026-08-23
+
+1. **`year_min` / `year_max` on `scrape_pdfs`, `scrape_all_pdfs`, `scrape()` and the
+   Dagster asset** (`CafefPdfConfig`). The pre-existing `years` set still works and the
+   two compose. The window is written into the partition's metadata, because `landed()`
+   counts the folder and not the run (§5 rule 10) — so without it a partition's record
+   cannot say which PHASE produced it.
+2. ⚠️ **A defect the counting found: `link.endswith(".pdf")` was skipping 1,408 of the
+   84,076 documents (1.7 %) SILENTLY** — CafeF appends a cache-buster to some links
+   (`…_31072026105556.pdf?v=1785470157744`), VCB's own Q2-2026 filing among them. Fixed
+   by testing `urlsplit(link).path`.
+3. ⚠️ **And a latent one in the merge path the year filter made reachable.** A scoped run
+   merges the rows it did not look at back in from the index CSV, where every cell is a
+   `str` — `sum(bytes)` raised `int + str` on the first real run. The quiet half is worse
+   and would not have raised at all: **`"False"` is truthy**, so `consolidated` and
+   `half_year` would have counted every carried row. `years` had existed for months and
+   had never once been passed.
+4. **21 tests**, no network and no database (`src/web_scraper/test_cafef_pdf_scraper.py`),
+   pinning both pure decisions — including the property that matters here: **phase 1 and
+   phase 2 partition the corpus exactly**, nothing counted twice and nothing lost.
+
+⚠️ **AN UNDATED DOCUMENT LANDS IN PHASE 1 BY CONSTRUCTION.** CafeF files 10 of the 84,076
+with a `Year` that is not a year — eight carry `0`, one `202`, one `203`. `year_max` keeps
+them and `year_min` does not, so no document can fall between the two phases. Ten
+documents is not the point; a phase boundary that leaks is.
+
+⚠️ **This does NOT touch the schema wall.** 761 of 781 names are not banks and the
+non-bank template still does not exist (`P5`). Phase 1 buys the INPUT for an OCR program
+whose parser has never been run against a corporate filing — which is exactly why `P3`,
+the one-day JSON gate, still runs before `P4`-`P6` and can still cancel them.
 
 ---
 

@@ -48,12 +48,13 @@ nothing. The scrapers still swallow their own errors — Phase 0 fixed the prepr
 not this layer — so without the check a failed download is a green asset.
 """
 
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 from dagster import (
     AssetDep,
     AssetExecutionContext,
     AssetKey,
+    BackfillPolicy,
     Config,
     MaterializeResult,
     MetadataValue,
@@ -582,37 +583,112 @@ FINANCIALS_TICKERS = StaticPartitionsDefinition(
 )
 
 
+class CafefPdfConfig(Config):
+    """Scope one filing archive in TIME. The whole universe is ~555 GiB (measured
+    2026-08-23 over all 784 listed codes, 84,076 documents), so a year window is the
+    difference between a job that fits on this disk and one that does not.
+
+    ⚠️ **THE PROGRAM IS PHASED, AND THE PHASE BOUNDARY IS `year_max`** — TODO `P2`:
+    everything up to 2020 first (**50,382 docs ≈ 286 GiB**), OCR that, and only then
+    take 2021+ (the other ~269 GiB). Running both at once is what does not fit.
+
+    ```yaml
+    ops:
+      raw__cafef_pdfs:
+        config:
+          year_max: 2020             # phase 1
+      # phase 2, after the OCR:
+      #   year_min: 2021
+    ```
+
+    ⚠️ An undated document (CafeF files 10 of the 84,076 with `Year` 0, 202 or 203) is
+    collected by a `year_max` phase, never by a `year_min` one — so no document can fall
+    between two phases. `CafeFPdfScraper._in_year_window`.
+    """
+
+    skip_existing: bool = True
+    year_min: Optional[int] = None
+    year_max: Optional[int] = None
+
+
 @asset(
     name="cafef_pdfs",
     key_prefix=["raw"],
     group_name="cafef_filings",
     compute_kind="requests",
     partitions_def=PDF_TICKERS,
+    # ⚠️ ONE RUN FOR A WHOLE RANGE, AND IT IS NOT A PERFORMANCE TWEAK — IT IS THE ONLY WAY
+    # THE CONCURRENCY EXISTS AT ALL. Without it, 784 partitions are 784 Dagster runs: each
+    # pays process start-up (~19 s of the 21 s measured per schema on 2026-08-23, so ~4 h
+    # of pure overhead), and each scrapes ONE ticker sequentially, throwing away
+    # `scrape_all_pdfs`' 12-way thread manager. `single_run` hands the asset every key at
+    # once, so the scraper batches them exactly as it was built to. This is `P35`'s
+    # "single-run backfill" lesson applied before it cost anything.
+    backfill_policy=BackfillPolicy.single_run(),
     # ⚠️ NO TradingView dep. Unlike every other CafeF scraper this one does not call
-    # `get_stock_symbols()` — its universe is CAFEF_PDF_TICKERS, read from the repo-root
-    # `vn100.csv`, and the partition key names the ticker outright.
+    # `get_stock_symbols()` — its universe is CAFEF_PDF_TICKERS (784 codes since
+    # 2026-08-23: TradingView links ∪ the CafeF price folder) and the partition key names
+    # the ticker outright.
     description=(
-        "One ticker's filing archive → raw_data/cafef/pdfs/{index/<EX>_<SYM>.csv, "
-        "files/<EX>_<SYM>/*.pdf}. ⚠️ ~1.0-1.7 GB PER PARTITION. Replaces "
-        "`web_scraper/cafef/pdfs` + the CAFEF_PDF_TICKERS list."
+        "Filing archives → raw_data/cafef/pdfs/{index/<EX>_<SYM>.csv, "
+        "files/<EX>_<SYM>/*.pdf}, one partition per listed code (784). ⚠️ THE COST IS SET "
+        "BY THE YEAR WINDOW, NOT THE PARTITION COUNT: no window is ~555 GiB over the "
+        "universe, `year_max: 2020` is ~286 GiB. Replaces `web_scraper/cafef/pdfs`."
     ),
 )
 def cafef_pdfs(
-    context: AssetExecutionContext, repo_logger: RepoLogger, switches: SwitchConfig
+    context: AssetExecutionContext,
+    config: CafefPdfConfig,
+    repo_logger: RepoLogger,
+    switches: SwitchConfig,
 ) -> MaterializeResult:
-    exchange, symbol = split_ticker_key(context.partition_key)
+    # One key or 784 — `partition_keys` is the same call for both, so there is no
+    # single-partition branch to keep in step with the range one.
+    pairs = [split_ticker_key(k) for k in context.partition_keys]
     logger = repo_logger.build()
     scraper = CafeFPdfScraper(logger=logger, switch_handler=switches.build(logger))
-    scraper.scrape_pdfs(exchange, symbol)
-
-    folder = f"{CAFEF_RAW_DATA_DIR}/pdfs/files/{exchange}_{symbol}"
-    meta = landed(folder, pattern="*.pdf", count_rows=False)
-    meta["megabytes"] = round(
-        sum(os.path.getsize(os.path.join(folder, f)) for f in os.listdir(folder))
-        / 1e6,
-        1,
+    context.log.info(
+        f"cafef_pdfs: {len(pairs)} ticker(s), year window "
+        f"{config.year_min or '..'}-{config.year_max or '..'}, "
+        f"skip_existing={config.skip_existing}"
     )
-    return MaterializeResult(metadata=meta)
+    # ⚠️ `scrape_all_pdfs`, never a loop over `scrape_pdfs`: the batch method is what
+    # queues the tickers through the thread manager. A loop here would run 784 tickers
+    # one at a time inside a run that thinks it is parallel.
+    scraper.scrape_all_pdfs(
+        skip_existing=config.skip_existing,
+        symbols=pairs,
+        year_min=config.year_min,
+        year_max=config.year_max,
+    )
+
+    root = f"{CAFEF_RAW_DATA_DIR}/pdfs/files"
+    n_files = n_bytes = n_missing = 0
+    for exchange, symbol in pairs:
+        folder = os.path.join(root, f"{exchange}_{symbol}")
+        if not os.path.isdir(folder):
+            n_missing += 1
+            continue
+        for f in os.listdir(folder):
+            if f.endswith(".pdf"):
+                n_files += 1
+                n_bytes += os.path.getsize(os.path.join(folder, f))
+    # ⚠️ These count the FOLDERS, not this run (§5 rule 10) — a re-run with
+    # `skip_existing` fetching nothing reports the same numbers. The window and the
+    # ticker count are reported beside them so the record says what was ASKED FOR.
+    return MaterializeResult(
+        metadata={
+            "tickers": len(pairs),
+            "tickers_with_no_folder": n_missing,
+            "pdf_files": n_files,
+            "gigabytes": round(n_bytes / 1024 ** 3, 2),
+            "year_window": (
+                f"{config.year_min if config.year_min is not None else '..'}"
+                f"-{config.year_max if config.year_max is not None else '..'}"
+            ),
+            "skip_existing": config.skip_existing,
+        }
+    )
 
 
 @asset(

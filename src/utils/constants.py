@@ -2,6 +2,7 @@
 
 import csv
 import os
+import glob
 from datetime import datetime
 
 # ===========================
@@ -216,10 +217,54 @@ def _vn100_symbols() -> list[tuple[str, str]]:
         return [("HOSE", t) for t in UNIFIED_TICKERS]
 
 
-# PDF filing archive (CafeFPdfScraper) — ~1.0-1.7 GB per ticker into raw_data/cafef/pdfs/.
-# VN100 is what is on disk today (108 folders = VN100 + 8 leftovers, ~97 GB) and is the
-# most that is practical; the full universe would be terabyte-scale.
-CAFEF_PDF_TICKERS: list[tuple[str, str]] = _vn100_symbols()
+def _vn_stock_universe() -> list[tuple[str, str]]:
+    """Every listed VN code this repo has data for: the TradingView stock links UNION the
+    CafeF price folder.
+
+    ⚠️ **NEITHER SOURCE ALONE IS THE UNIVERSE.** Measured 2026-08-23: TradingView links
+    hold **780** codes, `raw_data/cafef/price/` holds **784**, and the four in the second
+    and not the first are `HOSE:DSE`, `HOSE:KOS`, `HOSE:SIP`, `HOSE:VPI` — real names that
+    trade, file, and already have PDFs on disk. They are also exactly the four whose PDF
+    folders are named `_DSE` … `_VPI` with no exchange prefix, which is what a scrape
+    driven by a universe that does not contain them looks like from the outside.
+
+    Falls back to whichever source is readable, so an import never fails on a missing
+    folder."""
+    out: dict[tuple[str, str], None] = {}
+    links_dir = os.path.join(TRADING_VIEW_RAW_DATA_DIR, "links", "stocks")
+    for path in glob.glob(os.path.join(links_dir, "**", "*.csv"), recursive=True):
+        try:
+            with open(path, encoding="utf-8", newline="") as f:
+                for row in csv.DictReader(f):
+                    url = row.get("url", "")
+                    sym = url.split("symbol=")[-1] if "symbol=" in url else ""
+                    if ":" in sym:
+                        ex, tk = sym.split(":", 1)
+                        out[(ex.upper(), tk.upper())] = None
+        except OSError:
+            continue
+    try:
+        for f in os.listdir(os.path.join(CAFEF_RAW_DATA_DIR, "price")):
+            if f.endswith(".csv") and "_" in f:
+                ex, tk = f[:-4].split("_", 1)
+                out[(ex.upper(), tk.upper())] = None
+    except OSError:
+        pass
+    return sorted(out) or _vn100_symbols()
+
+
+# PDF filing archive (CafeFPdfScraper) — into raw_data/cafef/pdfs/.
+#
+# ⚠️ **THIS WAS VN100 UNTIL 2026-08-23 AND IS NOW THE WHOLE UNIVERSE (784 codes)**, because
+# what made the universe unaffordable was never the ticker count — it was taking every
+# filing year at once. Counted from CafeF that day without downloading anything: 84,076
+# documents ≈ **555 GiB**, but `year_max=2020` is **50,382 docs ≈ 286 GiB** and fits.
+# The `raw/cafef_pdfs` partition set is built from this list, and a partition is an
+# ADDRESSABLE unit, not a promise to run it — scope a run with `year_min`/`year_max`
+# (`CafefPdfConfig`), never by trimming this list. TODO `P2`.
+#
+# ⚠️ A BARE BACKFILL OF ALL 784 WITH NO YEAR WINDOW IS ~555 GiB. RUNBOOK.md §2a.
+CAFEF_PDF_TICKERS: list[tuple[str, str]] = _vn_stock_universe()
 
 # Statement parse (FinancialsBuilder) — OCRs the archive above into the three statement
 # CSVs. ~2.4 h per ticker, and it needs that ticker's PDFs already on disk, so this is a
