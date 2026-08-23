@@ -73,7 +73,7 @@ one or two.**
 | [../src/model/CONTEXT.md](../src/model/CONTEXT.md) | **12.0k** | training, adding a model type, or quoting a run's numbers. §1a is the RUN STANDARD |
 | [../src/backtest/CONTEXT.md](../src/backtest/CONTEXT.md) | **8.1k** | asking whether a signal is TRADABLE. §3 the cost identity that decides the horizon; §5 the single-stock answer ("no trade") |
 | [../src/final_features/CONTEXT.md](../src/final_features/CONTEXT.md) | 6.8k | building or rebuilding a `__final__` table |
-| [../src/pipeline/CONTEXT.md](../src/pipeline/CONTEXT.md) | 5.8k | the chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage |
+| [../src/pipeline/CONTEXT.md](../src/pipeline/CONTEXT.md) | 7.0k | the chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage |
 | [../src/train_test_creator/CONTEXT.md](../src/train_test_creator/CONTEXT.md) | 4.9k | building a dataset, or the purge/impute/scale/window steps |
 | [../src/result_evaluator/CONTEXT.md](../src/result_evaluator/CONTEXT.md) | 4.1k | scoring, the metric set, panel-vs-series grain. ⚠️ **STALE** — predates `index.py` and `NUL-3` |
 | [../src/sentiment/CONTEXT.md](../src/sentiment/CONTEXT.md) | 3.4k | anything news / text / PhoBERT |

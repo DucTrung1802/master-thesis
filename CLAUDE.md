@@ -1869,9 +1869,20 @@ day before. The cross-section holds **771-783 names on EVERY session** from 2026
 
 ⚠️ **THE 13 STRAGGLERS ARE REAL, AND THEIR SHAPE IS HOW YOU KNOW.** IHK 2026-05-21, DDG
 06-23, VNE 06-26, SSN/STL 07-06, DSE/KOS/SIP/VPI/DZM 07-08, TCD/VE2 07-14, CYC 07-30 —
-**thirteen distinct dates**, which is the signature of individual delistings and
-suspensions. A scrape failure clusters on ONE date; that is exactly what the old
-599-tickers-all-on-2026-06-26 cliff was.
+**SEVEN distinct dates**, the largest group being **5 on 2026-07-08**, which is the
+signature of individual delistings and suspensions. A scrape failure clusters on ONE
+date; that is exactly what the old 599-tickers-all-on-2026-06-26 cliff was.
+
+⚠️ **THAT SENTENCE READ "thirteen distinct dates" UNTIL 2026-08-23, AND ITS OWN LIST
+DISPROVED IT** — `SSN/STL` share a date and `DSE/KOS/SIP/VPI/DZM` share another, so the
+prose was counting tickers while claiming to count dates. Found by `pipeline.freshness`
+(TODO `P1`) on its first run, and `ISSUES.md`'s `FRZ-1` carried the same wrong number.
+✅ **The CONCLUSION survives and was re-verified a second way**: each of the 13 raw CafeF
+price CSVs ends on exactly the date `silver.stocks_basic` holds, so the incremental scrape
+did attempt every one of them and the source returned nothing after. ⚠️ **But the
+diagnostic that separates a delisting from a scrape failure had been stated with a number
+that was wrong by 6, which is the whole argument for measuring the distribution rather
+than describing it.**
 
 #### ⚠️ The scrape could only refetch from 2009, and that is why it had not been done
 
@@ -2018,6 +2029,56 @@ wrong by an order of magnitude.**
 names, the extra ~250k rows and the pre-`OUT-1` flow values. Rule 14 again: gold moving does
 not mark the unified layer stale.
 
+### ✅ 6-2-quinquies. `P1` CLOSED 2026-08-23 — freshness is a DISTRIBUTION now, and it is queryable
+
+`FRZ-1` was fixed by a scrape; **the check that missed it for two months was not**, and
+that was `P1`. `pipeline.freshness` (new, 22 tests) replaces the scalar with a per-ticker
+distribution, in three places: `python -m pipeline.freshness`, the views
+`health_schema.session_calendar` / `health_schema.ticker_freshness`, and three new columns
+in `pipeline.status_data` (`tickers`, `tickers_current`, `tickers_stale`).
+
+```powershell
+python -m pipeline.freshness --install        # (re)create the two views, ~0.1 s
+python -m pipeline.freshness --layer silver   # one layer, 1.0 s
+```
+```sql
+SELECT * FROM health_schema.ticker_freshness WHERE layer='silver' AND NOT is_current;
+```
+
+⚠️ **THE DESIGN DECISION IS WHOSE CALENDAR, AND IT IS NOT OPTIONAL.** `sessions_behind` is
+counted against a reference calendar taken from the price spine, **never** against the
+measured table's own dates — a table's own dates cannot contain the sessions it is
+missing, so a **completely frozen table would report every ticker 0 behind**. That is the
+scalar's lie one level down, wearing a per-ticker shape.
+
+⚠️ **A CLIFF IS A SCRAPE SCOPE; SCATTER IS DELISTING — and the alarm is a SHARE, measured
+from this repo's own two regimes.** 599 of 781 on one date is **77 %**; the post-re-scrape
+stragglers' largest group is **5 of 784 = 0.6 %**. Only a cliff makes the stage
+`not ready`, or 13 permanently-delisted names hold the gate red forever. ⚠️ An absolute
+floor of 5 tickers was written first and **fired immediately on the real corpus**, calling
+five genuine delistings a failure — the regimes are separated by two orders of magnitude
+of share, not by a count.
+
+⚠️ **AND ITS FIRST RUN FOUND 27 SINGLE-NAME UNIFIED SCHEMAS STALE**, in three layers that
+are a fossil record of every scoped re-scrape this repo has run:
+
+| stuck at | sessions behind | schemas |
+|---|---|---|
+| **2026-08-19** | 2 | FPT, HPG, SSI, STB, VIC — the `SSK-1` single-stock track |
+| **2026-08-07** | 10 | BID, CTG, HDB, MBB, SHB, SSB, TCB, TPB, VIB, VPB — the bank re-scrape |
+| **2026-06-25/26** | 40-41 | BCM, BVH, GAS, GVR, MSN, MWG, PLX, POW, SAB, VHM, VJC, VNM, VRE |
+
+`unified_{all,vcb,bank,vn30,acb,price10k,liquid,quality}` are current. **Rule 14 from the
+other side, counted for the first time** — and none of it is visible to `MAX(date)`, which
+reads 2026-08-21 on the fresh schemas and says nothing about the other 27.
+
+⚠️ **FILTER THE VIEW BY `layer`** — it is a `UNION ALL` over 39 layers and `gold.stocks_ta`
+alone costs **26.5 s** (17 GB, 946 columns) against silver's 1.0 s. ✅ `EXPLAIN` verifies
+`WHERE layer='silver'` prunes the other 38 branches on the constant. ⚠️ The first draft of
+the per-ticker query **timed out at 5 minutes** — a correlated count per ticker; ranking
+the calendar once with `ROW_NUMBER()` is **1.4 s** on the same table.
+`pipeline/CONTEXT.md` §1a-bis.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -2141,7 +2202,7 @@ what a session budgets against.
 | **[src/walkforward/CONTEXT.md](src/walkforward/CONTEXT.md)** | **16.0k** | asking whether a result survives more than ONE split, or which MODEL to use. §3 the 10-fold h=20 result (pooled Sharpe **+1.991**, IC positive 9/10 folds, beats the market 10/10); §4 the recorded prediction that was half wrong; §5 the no-mechanical-leak check; **§8 is PRF-8 — three architectures from 205 k params to 1,400 tree nodes, all tied**, and §8c the concurrency trap that voided a whole sweep |
 | **[src/backtest/CONTEXT.md](src/backtest/CONTEXT.md)** | **8.1k** | asking whether a signal is TRADABLE — stage 9, the costed non-overlapping backtest. §3 is the cost identity that decides the horizon (h=5 pays **17.6 %/yr** in fees, above the top-100 benchmark's entire return); §4 the first result here to clear a costed null (top-15, z = **+4.29** test / +6.10 val); **§5 is the single-stock answer and it is "no trade"** |
 | [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | **4.1k** | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
-| [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **5.8k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
+| [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **7.0k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
 | [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | **3.4k** | anything news/text/PhoBERT |
 | [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | **6.4k** | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | **9.2k** | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |

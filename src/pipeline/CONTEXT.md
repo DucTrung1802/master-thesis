@@ -163,6 +163,87 @@ Every stage is `python -m <package>`, dry-run by default, `--apply`/`--save` to 
 That uniformity is most of what "end to end" means here — before this, two stages were
 notebooks with a parameter cell and no headless entry point.
 
+### 1a-bis. ⚠️ AND `MAX(date)` IS A SCALAR — `pipeline.freshness`, 2026-08-23 (TODO `P1`)
+
+**The date above was the right kind of check and the wrong shape of one.** A scalar
+cannot say how many tickers produce it, and `FRZ-1` is what that costs: on 2026-08-22
+`silver_schema.stocks_basic` reported `MAX(date) = 2026-08-19` while **five** tickers
+produced that date and **757 of 781 were stale**. Worse, the number was getting *further*
+from the truth as work went on — every narrowly-scoped re-scrape (20 banks, then five
+single-stock names) advanced the scalar without touching the universe. The freeze hid for
+**two months** in plain sight of a check designed to catch exactly it.
+
+`pipeline.freshness` replaces the scalar with a distribution, and `status_data` now
+reports `tickers` / `tickers_current` / `tickers_stale` beside `rows` and `pools_behind`.
+
+```powershell
+python -m pipeline.freshness                  # every layer's distribution
+python -m pipeline.freshness --layer silver   # one layer
+python -m pipeline.freshness --install        # (re)create the two views
+```
+```sql
+SELECT * FROM health_schema.ticker_freshness WHERE layer='silver' AND NOT is_current;
+```
+
+⚠️ **THE ONE DESIGN DECISION IS WHOSE CALENDAR.** `sessions_behind` is counted against a
+reference calendar taken from the price spine, **never against the measured table's own
+dates** — a table's own dates cannot contain the sessions it is missing, so a completely
+frozen table would report every ticker **0 behind**. That is the scalar's lie one level
+down, wearing a per-ticker shape, and it would have been invisible.
+
+⚠️ **A CLIFF IS A SCRAPE SCOPE; SCATTER IS DELISTING — and the threshold is a SHARE.**
+
+| regime | stale | largest same-date group | share |
+|---|---|---|---|
+| the `FRZ-1` freeze (2026-08-22) | 757 of 781 | **599 on 2026-06-26** | **77 %** |
+| after the re-scrape (2026-08-23) | 13 of 784 | **5 on 2026-07-08** | **0.6 %** |
+
+A scrape fails for everything it was covering, so its tickers pile onto ONE date; names
+that stop trading stop on their own days. Only a cliff makes the stage `not ready` —
+otherwise permanently-delisted names hold the gate red forever. ⚠️ **An absolute floor of
+5 tickers was written first and fired immediately on the real corpus**, calling five
+genuine delistings a failure; the two regimes are separated by two orders of magnitude of
+share, not by a count, and a share also reads correctly on a one-ticker schema where a
+single stale name is 100 %.
+
+⚠️ **AND IT CORRECTED CLAUDE.md §6-2-bis / `FRZ-1` ON FIRST RUN.** Both record the 13
+survivors as carrying *"thirteen distinct dates, the signature of individual delistings"*.
+They carry **seven** — `FRZ-1`'s own parenthetical list says so (`SSN/STL` share a date,
+`DSE/KOS/SIP/VPI/DZM` share another) while the prose counts tickers. The **conclusion**
+survives and was re-verified another way: each of the 13 raw CafeF price CSVs ends on
+exactly the date silver holds, so the incremental scrape did attempt them and the source
+returned nothing after. It is the diagnostic NUMBER that was wrong, which is the argument
+for the view existing.
+
+⚠️ **AND THE FIRST FULL RUN FOUND 27 SINGLE-NAME SCHEMAS STALE**, in three layers that
+are a fossil record of every scoped re-scrape: **2026-08-19** (FPT, HPG, SSI, STB, VIC —
+the single-stock track), **2026-08-07** (BID, CTG, HDB, MBB, SHB, SSB, TCB, TPB, VIB, VPB
+— the bank re-scrape), and **2026-06-25/26** (BCM, BVH, GAS, GVR, MSN, MWG, PLX, POW, SAB,
+VHM, VJC, VNM, VRE — never refreshed since the freeze). `unified_{all,vcb,bank,vn30,acb,
+price10k,liquid,quality}` are current. Rule 14 from the other side, counted for the first
+time.
+
+⚠️ **FILTER THE VIEW BY `layer`.** It is a `UNION ALL` over 39 layers and each branch
+costs what its table costs — measured 2026-08-23: silver **1.0 s**, `gold.stocks` 2.9 s,
+`unified_schema_all.pool__basic` 5.2 s, and **`gold.stocks_ta` 26.5 s** because that table
+is **17 GB** across 946 columns. ✅ Verified by `EXPLAIN`: `WHERE layer='silver'` prunes
+the other 38 branches on the constant, leaving one index-only scan. A whole-view
+`SELECT *` pays for all of them.
+
+⚠️ **The first draft of the per-ticker query TIMED OUT AT 5 MINUTES** — a correlated
+`(SELECT COUNT(*) FROM cal WHERE cal.date > p.last_date)` per ticker. Ranking the calendar
+once with `ROW_NUMBER()` and joining on equality is **1.4 s** on the same table; the
+counting form survives only as a `COALESCE` fallback for a `last_date` the spine does not
+carry, which PostgreSQL short-circuits.
+
+⚠️ **Two things it is NOT.** It is not a Dagster asset: both objects are VIEWS, so there
+is nothing to materialise and nothing that can go stale behind its source — which is the
+failure mode being reported, and it would be absurd for the reporter to have it. And the
+unified layer list is discovered at **install** time and frozen into the view, so a schema
+built later is invisible until `--install` runs again; the installed list is written into
+the view's `COMMENT` so a reader can tell *"this layer is current"* from *"this layer was
+never in the view"*.
+
 ## 2. ⚠️ This module does NOT pass data between stages
 
 It would be the obvious design and it is the wrong one. Each stage already reads its

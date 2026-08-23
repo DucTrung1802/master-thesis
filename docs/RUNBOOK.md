@@ -883,6 +883,41 @@ either costs 781 tickers or fetches nothing. CLAUDE.md §6-2-bis.
 dataset's *test split*, so the chain cannot score today's cross-section even with fresh
 data. TODO **`P7`**. `pipeline.md` §6 has both.
 
+### ✅ CHECKING FRESHNESS AFTERWARDS — `MAX(date)` is a scalar and it lies (2026-08-23)
+
+⚠️ **A refresh is not verified by one date.** `MAX(date)` cannot say how many tickers
+produce it: on 2026-08-22 it read 2026-08-19 from **five** tickers while 757 of 781 were
+frozen, and every narrowly-scoped re-scrape had pushed it further from the truth. Verify a
+refresh with the distribution instead:
+
+```powershell
+python -m pipeline.freshness                  # every layer, ~33 s (39 layers)
+python -m pipeline.freshness --layer silver   # one layer, ~1 s
+python -m pipeline.freshness --install        # (re)create the views after a NEW schema
+```
+```sql
+-- which names are behind, and by how many SESSIONS (not calendar days)
+SELECT ticker, last_date, sessions_behind
+FROM health_schema.ticker_freshness
+WHERE layer = 'silver' AND NOT is_current ORDER BY sessions_behind DESC;
+```
+
+⚠️ **FILTER BY `layer` OR PAY FOR ALL 39.** `gold.stocks_ta` alone costs **26.5 s** (17 GB,
+946 columns) against silver's 1.0 s. `WHERE layer = '<one>'` prunes the other branches on a
+constant — verified by `EXPLAIN`.
+
+**Read the shape, not the count.** A **cliff** — many tickers stopping on ONE date — is a
+scrape scope and the tool warns; **scattered** dates are delistings and it says so. Both
+were measured here: 599 of 781 on 2026-06-26 (77 %, the freeze) against 5 of 784 on
+2026-07-08 (0.6 %, real delistings).
+
+⚠️ **RE-RUN `--install` AFTER BUILDING A NEW SCHEMA.** The unified layers are discovered at
+install time and frozen into the view, so a schema built later is invisible until then —
+the installed list is in the view's `COMMENT` so you can tell *"current"* from *"never in
+the view"*. ⚠️ **And re-run the CARRY-UP for the 27 single-name schemas** the first run
+found stale (CLAUDE.md §6-2-quinquies): rule 14 means a fresh silver does not mark them
+stale, and `MAX(date)` on the schemas that *were* rebuilt says nothing about them.
+
 ---
 
 ## 8b. Reading the output as a PICK LIST — three rules

@@ -195,11 +195,22 @@ def status_data(ticker: str = DEFAULT_TICKER) -> StageState:
     "re-scraped" never implies "re-ingested" (rule 11). Bronze once sat a full day behind
     a completed scrape with nothing raising. A raw file newer than the table is the exact
     signature of that, and it is what makes this stage `ready=False`.
+
+    ⚠️ **AND `MAX(date)` IS ITSELF A SCALAR, WHICH IS HOW `FRZ-1` HID FOR TWO MONTHS**
+    (TODO `P1`). One number cannot say how many tickers produce it: on 2026-08-22 it read
+    2026-08-19 from FIVE tickers while 757 of 781 were frozen, and every narrowly-scoped
+    re-scrape since had pushed it further from the truth. So the freshness reported here
+    is a DISTRIBUTION — `pipeline.freshness`, which also ages each ticker against the
+    price spine's calendar rather than against the measured table's own dates, and which
+    tells a scrape SCOPE (a cliff of tickers on one date) from delistings (scattered).
+    ⚠️ Only a CLIFF makes the stage `not ready`; a trickle of delisted names must not hold
+    the gate red forever, because they will never catch up.
     """
     import csv
     import glob
 
     from feature_selection.unified_reader import UnifiedSchemaReader
+    from pipeline import freshness
     from utils.constants import CAFEF_RAW_DATA_DIR
 
     counts: Dict[str, int] = {}
@@ -240,6 +251,18 @@ def status_data(ticker: str = DEFAULT_TICKER) -> StageState:
                     if other is not None and table_date is not None and other < table_date:
                         stale_pools.append(name)
                 counts["pools_behind"] = len(stale_pools)
+                # ⚠️ The per-ticker distribution behind the scalar above. Measured on
+                # the SAME table, so it answers "is this pool fresh" rather than "is
+                # some other layer fresh" — `freshness` reports the whole ladder.
+                cur.execute(freshness.per_ticker_sql(reader.schema, "pool__basic"))
+                per_ticker = pd.DataFrame(
+                    cur.fetchall(),
+                    columns=["exchange", "ticker", "last_date", "sessions_behind"],
+                )
+                fresh = freshness.summarise(per_ticker)
+                counts["tickers"] = fresh["n_tickers"]
+                counts["tickers_current"] = fresh["n_current"]
+                counts["tickers_stale"] = fresh["n_stale"]
     except Exception as error:  # noqa: BLE001 — a dead database is a stage state
         return StageState("data", False, f"{type(error).__name__}: {error}")
 
@@ -258,11 +281,18 @@ def status_data(ticker: str = DEFAULT_TICKER) -> StageState:
             raw_date = newest if raw_date is None else max(raw_date, newest)
 
     stamp = table_date.isoformat() if table_date else "none"
+    spread = freshness.describe(fresh)
     if raw_date is None:
         return StageState(
             "data",
-            ready=True,
-            detail=f"pool__basic to {stamp}; no raw CSV at {pattern} to check it against",
+            # ⚠️ No raw CSV to compare against does NOT mean nothing can be checked. The
+            # per-ticker spread is measured from the table itself, so a frozen universe
+            # is still caught here — which is the case a single `MAX(date)` let through.
+            ready=not fresh["is_cliff"],
+            detail=(
+                f"pool__basic to {stamp}; no raw CSV at {pattern} to check it against. "
+                f"{spread}"
+            ),
             output=f"unified_schema_{ticker}.pool__basic",
             counts=counts,
         )
@@ -284,13 +314,17 @@ def status_data(ticker: str = DEFAULT_TICKER) -> StageState:
     )
     return StageState(
         "data",
-        ready=not behind,
+        # ⚠️ TWO independent ways to be stale, and they catch different failures. `behind`
+        # is rule 11 — a scrape that ran while its ingest did not. `is_cliff` is rule 10 —
+        # a table whose newest date is produced by a handful of tickers. `FRZ-1` was the
+        # second, and for two months this stage reported `current` throughout it.
+        ready=not behind and not fresh["is_cliff"],
         # ⚠️ ASCII only. This prints to a cp1252 console on Windows (§5 rule 18).
         detail=(
             f"STALE - raw CafeF price reaches {raw_date}, pool__basic stops at {stamp}; "
-            f"the scrape ran and the ingest did not"
+            f"the scrape ran and the ingest did not. {spread}"
             if behind
-            else f"current - pool__basic to {stamp}, matching the raw CSV.{skew}"
+            else f"pool__basic to {stamp}, matching the raw CSV. {spread}{skew}"
         ),
         output=f"unified_schema_{ticker}.pool__basic",
         counts=counts,
