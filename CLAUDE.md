@@ -2254,9 +2254,17 @@ hardware** (§6-2-septies). It read *"PDFs for 112 tickers = 100 GB, median 906 
 `raw_data/cafef/financials/statements/` holds **one** template family, `bank`, while
 **761 of 781 names are not banks** (230 industrials, 117 materials, 93 consumer staples;
 only 20 are GICS 401010). ⚠️ **The schema wall is the real one and is now the ONLY
-structural one**: with infinite disk and time the current parser reaches 20 names. So `P3`
-prices a JSON source (`api.simplize.vn`, `vnstock`) *before* anything else is built — §2d's
-second-ranked lever is a data-acquisition question, not an OCR question.
+structural one**: with infinite disk and time the current parser reaches 20 names.
+
+⚠️ **AND THE ROUTE AROUND IT WAS CLOSED BY DECISION ON 2026-08-23: balance-sheet lines come
+from the CafeF PDFs.** `P3` had been a one-day gate — ask whether `api.simplize.vn` or
+`vnstock` returns balance-sheet lines for a non-bank, since a positive answer cancels the
+whole OCR program. It is archived **UNMEASURED**, so nothing may cite it as evidence that a
+JSON source does not work (§5 rule 2 — an absent measurement is absent, never inferred).
+What the decision changes is the ORDER: nothing gates the OCR program now, **`P6` (OCR the
+≤2020 corpus) is the top item of the whole backlog**, and `P5` — the non-bank template — is
+what decides whether that run reaches **20 names or 784**, rather than a task running
+beside it.
 
 ⚠️ **Three gaps are deliberate and must NOT be filled**: `cafef_news_sentiment` (3 of 781 —
 §2a measured tone making models *worse*), `cafef_prop_trading` (431 of 781 — starts 2023,
@@ -2381,7 +2389,7 @@ still resolves; only the PATH gained a `docs/` prefix.
 |---|---|---|
 | **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
 | **[ISSUES.md](docs/ISSUES.md)** | 16 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
-| **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** Six lettered groups — **A data `P2`, B OCR→Kaggle `P3`-`P6`**, C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ✅ **`P1` DONE 2026-08-23** (§6-2-quinquies). ⚠️ **THE NUMBERS ARE FROZEN AS OF 2026-08-23 AND WILL NOT MOVE AGAIN** — a `P<n>` is a permanent NAME, exactly as an `ISSUES.md` code is, and **PRIORITY IS THE ROW ORDER**, so read the list top-down and cite the number. The list starts at `P2` and the numbers need not stay monotonic; that is the price of a code that means one thing forever. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P11`, `P4-2` is now `P21`, …). ⚠️ **A `P<n>` written BEFORE 2026-08-23 still resolves to a different item** — three renumbers in two days preceded the freeze — so take the DATE of what you are reading, then TODO.md's two crosswalks, which are the last two that will ever be needed | deciding what to do next |
+| **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** Six lettered groups — ⭐ **the TOP ROW is `P6`, OCR the ≤2020 corpus** (promoted 2026-08-23); **A data `P2`, B OCR `P6`/`P5`/`P4`** (⚠️ `P3`, the JSON gate, is CLOSED BY DECISION and archived UNMEASURED), C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ✅ **`P1` DONE 2026-08-23** (§6-2-quinquies). ⚠️ **THE NUMBERS ARE FROZEN AS OF 2026-08-23 AND WILL NOT MOVE AGAIN** — a `P<n>` is a permanent NAME, exactly as an `ISSUES.md` code is, and **PRIORITY IS THE ROW ORDER**, so read the list top-down and cite the number. The list starts at `P2` and the numbers need not stay monotonic; that is the price of a code that means one thing forever. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P11`, `P4-2` is now `P21`, …). ⚠️ **A `P<n>` written BEFORE 2026-08-23 still resolves to a different item** — three renumbers in two days preceded the freeze — so take the DATE of what you are reading, then TODO.md's two crosswalks, which are the last two that will ever be needed | deciding what to do next |
 | **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
 | **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
 | `README.md` | the front door; routes here — ⚠️ **stays at the repo ROOT** | — |

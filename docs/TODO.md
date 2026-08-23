@@ -131,7 +131,7 @@ table survives and is still the best thing in it.
 > | group | items | what it is |
 > |---|---|---|
 > | **A · DATA** | **`P2`** | ✅ **`P1` DONE 2026-08-23** — per-ticker freshness shipped. What is left is the filing PDFs |
-> | **B · OCR → KAGGLE** | **`P3`-`P6`** | ⚠️ `P3` is a **1-day gate that can cancel `P4`-`P6`** |
+> | **B · OCR** | **`P6`, `P5`, `P4`** | ⭐ **`P6` is the top item as of 2026-08-23**, and its input is complete. ⚠️ `P3` (the JSON gate) is CLOSED BY DECISION, not by measurement — the source is CafeF PDFs |
 > | **C · OUTPUT** | `P7`-`P8` | ✅ **`P7` UNBLOCKED 2026-08-23** — the cross-section is 771 names again, not 7 |
 > | **D · MODEL & MONEY** | `P9`-`P17` | a better number, not more data |
 > | **E · HONESTY** | `P18`-`P21` | makes an EXISTING number readable |
@@ -302,12 +302,15 @@ means that even with infinite disk and time, the current chain would parse 20 of
 tickers that exist are both banks — so the parser has never once been tested against the
 shape 97 % of the universe files.
 
-⚠️ **AND THAT IS WHY `P6` IS A ONE-DAY EVALUATION, NOT A BUILD.** Before spending 78 days
-and 700 GB on OCR, price a JSON source: `api.simplize.vn` is already used for prices
-(memory `reference-simplize-price-endpoint`) and its site renders fundamentals; `vnstock`
-is the other candidate. **If either returns balance-sheet lines for non-banks, the entire
-PDF+OCR route is the wrong instrument for this question** and 112 tickers of PDFs become an
-audit sample rather than a start.
+⚠️ **THE ESCAPE ROUTE FROM THIS WAS CLOSED BY DECISION ON 2026-08-23, NOT BY
+MEASUREMENT.** The paragraph that stood here argued for pricing a JSON fundamentals source
+(`api.simplize.vn`, `vnstock`) as a 1-day gate, on the grounds that a JSON endpoint
+returning balance-sheet lines for non-banks would make the whole PDF+OCR route the wrong
+instrument. **The source is now fixed: balance-sheet lines come from the CafeF PDFs.** That
+was never measured either way, so the register must not read as though it was — the JSON
+route is UNTRIED, not disproven, and if the schema wall turns out to be worse than
+`P5` budgets, it is still there to reconsider. What the decision changes is the ORDER:
+nothing gates `P6`/`P5`/`P4` any more, and the schema wall is met head-on.
 
 ### ⚠️ THREE THINGS THAT MUST **NOT** BE BUILT, on measured evidence
 
@@ -325,10 +328,13 @@ the carry-up to gold/filter/unified (old `P2`). What they left behind is today's
 **2026-08-21**, so the gap it forces is **WIDER after the re-scrape, not narrower**.
 CLAUDE.md §6-2-bis / §6-2-ter.
 
-⚠️ **`P6` is the only item that could change what the FEATURE side of this project can ever
-contain**, which is why it sits at the head of group B as a **1-day gate** rather than at the
-head of a backlog. `P7`-`P9` are the OCR program it gates; `P32` (insider scope) is genuine
-backlog.
+⚠️ **THIS PARAGRAPH DESCRIBED THE PRE-2026-08-23 ORDER and is kept because its reasoning
+still applies to what replaced it.** It read: *"`P6` is the only item that could change what
+the FEATURE side of this project can ever contain, which is why it sits at the head of group
+B as a 1-day gate"* — where that `P6` was the JSON evaluation, now closed by decision. The
+head of group B is the **OCR run itself**, and the sentence survives with a different
+subject: the fundamentals are still the only thing that could change what the feature side
+can ever contain, so what sits first is whatever is closest to producing them.
 
 ### ⚠️ AND `plan.md`'s SCREEN IS BUILT — the reference below is now stale
 
@@ -408,12 +414,11 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 |---|---|---|---|---|---|
 | | **⬛ A · SCRAPE — the data has to EXIST and be FRESH before anything else is worth running** | | | | |
 | **P1** ✅ | **DONE 2026-08-23 — PER-TICKER FRESHNESS SHIPPED** — `pipeline.freshness`, three `health_schema` SQL functions, and three new columns in `pipeline.status_data` | ~35 min *actual* | ✅ | *old `P36`* | ⚠️ **AND IT CORRECTED TWO DOCUMENTED CLAIMS ON ITS FIRST RUN.** (1) The 13 post-re-scrape stragglers carry **SEVEN** distinct dates, not thirteen — `FRZ-1`'s own parenthetical list disproved its prose, and the number was the diagnostic separating a delisting from a scrape failure. The conclusion survives, re-verified another way (each of the 13 raw CSVs ends exactly where silver does). (2) **28 single-name unified schemas are stale** (of 30), in four layers that are a fossil record of every scoped re-scrape: 5 at 2026-08-19, 10 banks at 2026-08-07, 9 at 2026-06-26, 4 at 2026-06-25 — now `SCH-1`, rebuilt the same day at a measured 21 s each. ⚠️ **AND IT CREATED ONE DEFECT OF ITS OWN, `DEP-1`, WHICH IS THE MOST REUSABLE THING HERE**: shipping the health objects as VIEWS blocked every `DROP TABLE` in the repo's builders, i.e. **the monitor blocked every repair it recommended**. Fixed by making them `plpgsql` functions, whose bodies carry no dependency. ⚠️ The alarm is a **SHARE**, not a count — an absolute floor of 5 tickers was written first and fired immediately on five genuine delistings; the two measured regimes are 0.6 % and 77 %. ⚠️ And `sessions_behind` is counted against the **price spine's** calendar, never the measured table's own — a frozen table's own dates cannot contain the sessions it is missing, so it would report every ticker 0 behind. **22 tests, no database.** CLAUDE.md §6-2-quinquies; `pipeline/CONTEXT.md` §1a-bis; RUNBOOK.md §8a |
-| **P2** | ⚠️ **SCRAPE FILING PDFs FOR ALL 784 TICKERS — PHASE 1 IS `year_max=2020`** (`raw/cafef_pdfs`) | scrape hours + **286 GiB** | ✅ | — | ⚠️ **THE INPUT TO THE WHOLE OCR PROGRAM, AND IT IS PHASED BY YEAR, NOT BY TICKER.** Measured 2026-08-23 over all **784** codes without downloading anything: **84,076 documents ≈ 555 GiB**, of which **≤2020 is 50,382 docs ≈ 286 GiB** and 2021+ is the other ~269 GiB. `D:` was extended and holds **461 GiB free**, so phase 1 fits with ~230 GiB spare and the whole corpus does not. **↓ detail block** |
-| | **⬛ B · OCR → KAGGLE — the time wall is solvable; the SCHEMA wall is not, and they are different problems** | | | | |
-| **P3** | ⚠️ **THE 1-DAY GATE: price a JSON fundamentals source FIRST** — `api.simplize.vn`, `vnstock`. Does either return balance-sheet lines for a **non-bank**? | ~1 day | ✅ | *old `P33`* | ⚠️ **RUNS BEFORE `P4`-`P6` BECAUSE IT CAN CANCEL THEM.** FA coverage is **2 of 781**. The OCR route needs ~700 GB, ~78 days of GPU and a template that does not exist; a JSON endpoint would make all three vanish. One day against weeks is a cheap option to buy. ⚠️ **Record the answer either way** — a negative closes §2d's second-ranked lever, which is itself a result |
-| **P4** | ⚠️ **PUSH THE OCR TO KAGGLE — a `kgpu` job for the statement parse** | ~2-3 days | ⚠️ **quota** | — | **What it fixes:** ~**2.4 h/ticker** on a 4 GB RTX 3050 → 781 tickers ≈ **78 days**. A T4 is 15 GiB and free 30 GPU-h/week. ⚠️ **BUT `kgpu` HAS NEVER SHIPPED A NON-TABLE PAYLOAD.** Every existing job exports `unified_schema` tables to parquet; this one ships **PDFs**, so three things are unmeasured and must be measured before any quota is spent: (a) the **Kaggle dataset size limit** against 100 GB of PDFs — if it binds, the job is per-ticker-batch, not per-universe; (b) whether the **onnx OCR stack** installs on Kaggle's image (`kgpu` §3d already records xgboost 3.2.0 / sklearn 1.6.1 vs `mt_env`, so an image difference is expected, not surprising); (c) the **5.2-min queue floor** (§3d) makes many small jobs the wrong shape — batch. ⚠️ **`rehearse` runs the worker side locally and spends NO quota — do that first, on the two banks that already parse** |
+| **P2** | **SCRAPE FILING PDFs — ✅ PHASE 1 (`year_max=2020`) DONE 2026-08-23; phase 2 (`year_min=2021`) PARKED behind the OCR** (`raw/cafef_pdfs`) | 74 min *actual* + 267 GiB | ✅ | — | ✅ **50,345 of 50,382 expected documents landed for all 784 codes**, one Dagster run, 0 errors — the 37 absent are CafeF's own dead links (404 on both hosts). Verified per ticker against a pre-run count, not off the green run. ⚠️ **Phase 2 is ~269 GiB against 197 GiB free, so it does not fit today and is not supposed to** — it runs after `P6`. **↓ detail block**; CLAUDE.md §6-2-septies |
+| | **⬛ B · OCR — ⚠️ THE SOURCE IS FIXED: CafeF PDFs, decided 2026-08-23. The time wall is solvable; the SCHEMA wall is what decides how many names this reaches** | | | | |
+| **P6** | ⭐ **OCR THE ≤2020 CORPUS — the highest priority item** (50,345 documents, 784 codes, already on disk) | days of GPU | ⚠️ see below | — | ⚠️ **PROMOTED TO THE TOP 2026-08-23 by decision, and its INPUT is now complete** — `P2` phase 1 landed every ≤2020 filing for every listed code. ⚠️ **BUT RUNNING IT TODAY REACHES 20 OF 784 NAMES**: the parser holds one template family (`bank`), so `P5` is not a parallel task, it is the thing that decides whether this item means 20 tickers or 784. And 2.4 h/ticker locally is ~78 days, which is what `P4` is for. ⚠️ **The parse skips complete YEARS, not quarters** (`orchestration` §2a) — a year is the unit because `_decumulate` needs this run's priors, so a partial skip deletes the very quarter the run exists to fix. ⚠️ **`skip_existing=False` is the AUTHORITATIVE run**: skipping makes every run a subset run and flips the `sane` magnitude guard to failing open |
 | **P5** | ⚠️ **NON-BANK STATEMENT TEMPLATE + parser mapping** | ~1-2 weeks | ✅ | *old `P34`* | ⚠️ **THIS IS THE WALL THAT KAGGLE DOES NOT MOVE.** `raw_data/cafef/financials/statements/` holds exactly **one** family — `bank` — and **761 of 781 names are not banks** (230 industrials, 117 materials, 93 consumer staples; only **20** are GICS 401010). With infinite disk and infinite T4 hours the current parser reaches **20 names**. ⚠️ The parser has **never once been run against a corporate filing**, so budget discovery, not just mapping |
-| **P6** | **THE MASS OCR RUN** — every scraped ticker, on Kaggle, with `skip_existing` doing real work | days of quota | ⚠️ **quota** | — | The payoff of `P2` + `P4` + `P5`, and pointless before all three. ⚠️ **The parse skips complete YEARS, not quarters** (`orchestration` §2a) — a year is the unit because `_decumulate` needs this run's priors, so a partial skip deletes the very quarter the run exists to fix. ⚠️ **`skip_existing=False` is the AUTHORITATIVE run**: skipping makes every run a subset run and flips the `sane` magnitude guard to failing open |
+| **P4** | ⚠️ **PUSH THE OCR TO KAGGLE — a `kgpu` job for the statement parse** | ~2-3 days | ⚠️ **quota** | — | **What it fixes:** ~**2.4 h/ticker** on a 4 GB RTX 3050 → 781 tickers ≈ **78 days**. A T4 is 15 GiB and free 30 GPU-h/week. ⚠️ **BUT `kgpu` HAS NEVER SHIPPED A NON-TABLE PAYLOAD.** Every existing job exports `unified_schema` tables to parquet; this one ships **PDFs**, so three things are unmeasured and must be measured before any quota is spent: (a) the **Kaggle dataset size limit** against 100 GB of PDFs — if it binds, the job is per-ticker-batch, not per-universe; (b) whether the **onnx OCR stack** installs on Kaggle's image (`kgpu` §3d already records xgboost 3.2.0 / sklearn 1.6.1 vs `mt_env`, so an image difference is expected, not surprising); (c) the **5.2-min queue floor** (§3d) makes many small jobs the wrong shape — batch. ⚠️ **`rehearse` runs the worker side locally and spends NO quota — do that first, on the two banks that already parse** |
 | | **⬛ C · THE CHAIN'S OUTPUT — unblocked the moment A lands, and it runs on a DIFFERENT resource from B** | | | | |
 | **P7** | ⚠️ **THE LIVE-SCORING MODULE — it does not exist** | ~½ day *est.* | ✅ | *old `P2`* | Every stage writes predictions for a **dataset's test split**. Nothing loads a trained fold, windows the last 20 sessions for all 150 names on today's date and emits a ranking — so the chain cannot answer *"which ticker, on which date"* for any date not already in a split. ✅ **UNBLOCKED 2026-08-23** — the re-scrape put 771 names back on the last session, so the 7-name cross-section that blocked this is gone. ⚠️ **Not behind B at all** — half a day of local CPU while Kaggle runs. `pipeline.md` §6.2 |
 | **P8** | ⭐ **rank the FEATURES within date, as the selection did** (`FNM-1`) | ~1 h + 20 min *est.* | ✅ | *old `P3`* | **The largest single untried MODELLING lever**, and three independent measurements already on disk point at it. **↓ detail block** |
@@ -2013,6 +2018,31 @@ bands are retired and the list is flat.
 > leave a live cross-reference pointing at nothing. **Before deleting any row above,
 > `grep` the codes across `*.md` and move what is cited.**
 
+
+### P3 · ⚠️ CLOSED 2026-08-23 BY DECISION, NOT BY MEASUREMENT — the JSON fundamentals gate
+
+**What it was:** one day to ask whether `api.simplize.vn` or `vnstock` returns
+balance-sheet lines for a **non-bank**, run BEFORE `P4`-`P6` because a positive answer
+would have cancelled all three — the OCR route needs ~78 days of GPU and a statement
+template that does not exist, and a JSON endpoint would have made both vanish.
+
+**What happened:** the decision was taken that **balance-sheet data comes from the CafeF
+PDFs**, full stop. The gate is therefore closed and `P6`/`P5`/`P4` proceed unblocked.
+
+⚠️ **THIS ROW IS IN THE ARCHIVE UNDER A DIFFERENT HEADING FROM EVERY OTHER ROW IN IT, AND
+THE DIFFERENCE IS THE POINT.** Everything else here closed because something was
+*measured*. This closed because a **source was chosen**. So:
+
+- **The JSON route is UNTRIED, not disproven.** Nothing in this repo has ever asked
+  `api.simplize.vn` or `vnstock` for a non-bank balance sheet, and no entry anywhere may
+  cite this closure as evidence that it does not work (§5 rule 2 — an absent measurement
+  is absent, never inferred).
+- **The one-day cost estimate stands** if it is ever reopened. It would be reopened by
+  `P5` overrunning: the schema wall is now met head-on rather than routed around, and
+  *"761 of 781 names are not banks and the parser has never seen a corporate filing"* is
+  the same fact whichever instrument reads them.
+- **What it bought:** the ORDER. Nothing gates group B any more, so the top item is the
+  OCR run itself and `P5` is what decides whether that run reaches 20 names or 784.
 ### ✅ P4-12 · DONE 2026-08-19 — `mase` on a panel, and **my recorded prediction was wrong**
 
 ⚠️ **THE PREDICTION BELOW IS KEPT BECAUSE IT WAS WRONG.** It reads *"the honest expectation is that it will not beat the naive on MAGNITUDE either"*. Measured: the top-150 h=20 run scores `mase` **0.9937** — it DOES beat "predict no change", by 0.6 %. CLAUDE.md §6-0-b has the full table and cites this block by name.
