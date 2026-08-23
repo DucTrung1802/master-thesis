@@ -808,7 +808,7 @@ the mechanism was wrong: **all 150 names carry a close through 2026-06-25** (98 
 7 from 06-29). What ends on 2026-06-11 is `return_10day`, because it needs a close ten sessions
 later. Last session with ≥100 names LABELLED: **2026-06-18** at h=5, **2026-06-11** at h=10,
 **2026-05-28** at h=20. So the horizon decides where a track ends — and a live-scoring module
-(`P10`) has about ten more sessions of usable FEATURES than the old sentence implied, because
+(`P8`) has about ten more sessions of usable FEATURES than the old sentence implied, because
 **ranking a book and scoring a book fail on different dates**. `pipeline.md` §6.1-bis.
 
 ✅ **The published +74 %/yr is NOT affected.** `long_only_top_k` does
@@ -825,7 +825,7 @@ python -c "import pandas as pd; d=pd.read_csv('../results/walkforward_h10/predic
 
 ### ⚠️ REFRESHING THE PRICE UNIVERSE — use `incremental`, not `skip_existing: false`
 
-Added 2026-08-23 for `P1`/`FRZ-1`. The four CafeF daily tabs can now resume each ticker
+Added 2026-08-23 for `FRZ-1`, and it closed the same day. The four CafeF daily tabs resume each ticker
 from **its own last date** instead of refetching from 2009, which is what made a universe
 refresh affordable at all: **615 s per ticker** for a full 4-tab refetch (~67 h for 781
 tickers at the old 2-worker pool) against **2.9-5.2 s** to resume one.
@@ -867,18 +867,21 @@ minutes; **`prop_trading` is the long pole** because 350 of 781 tickers have no 
 at all and correctly take the full path every time.
 
 ⚠️ **Then carry it up** — a scrape that stops at `raw_data/` changes nothing a model reads.
-`bronze/cafef_*` → `silver/cafef_*` → `silver/stocks_basic` is `P1`; `gold/*` →
-`filter/universe` → `group:unified` is `P2`. §8 rule 11: *"re-scraped" never implies
-"re-ingested"*.
+`bronze/cafef_*` → `silver/cafef_*` → `silver/stocks_basic`, then `gold/*` →
+`filter/universe` → `group:unified`. ✅ **Both ran end to end on 2026-08-23** (CLAUDE.md
+§6-2-bis / §6-2-ter). §8 rule 11 — *"re-scraped" never implies "re-ingested"* — is why
+they are two commands and not one.
 
-**To get back to a usable chain**: re-scrape the 143 frozen tickers (`--rescrape` is
-opt-in and scoped to `--ticker` with `skip_existing=False` — **without both it either costs
-781 tickers or fetches nothing**), rebuild `pool__basic` → `rank_10day__final__d20_h10`,
-then re-run the sweep. TODO **`P1`**.
+✅ **THE CHAIN IS USABLE AGAIN SINCE 2026-08-23.** The universe was re-scraped with the
+`incremental` mode above (1h 05m, 0 errors) and carried up to gold, filter and unified, so
+**771 names carry data to 2026-08-21** where 5 did. What is left is to rebuild
+`rank_10day__final__d20_h10` on the fresh pools and re-run the sweep. ⚠️ **`--rescrape` is
+still opt-in and still scoped to `--ticker` with `skip_existing=False`** — without both it
+either costs 781 tickers or fetches nothing. CLAUDE.md §6-2-bis.
 
 ⚠️ **And there is still no LIVE-SCORING path** — every stage writes predictions for a
 dataset's *test split*, so the chain cannot score today's cross-section even with fresh
-data. TODO **`P10`**. `pipeline.md` §6 has both.
+data. TODO **`P8`**. `pipeline.md` §6 has both.
 
 ---
 
@@ -893,7 +896,7 @@ data. TODO **`P10`**. `pipeline.md` §6 has both.
 2. ⚠️ **THE MODEL OVER-PICKS THE BOARDS YOU CAN LEAST TRADE.** UPCOM is **2.20×** its share
    of scored rows, HNX 1.31×, HOSE **0.76×**. The most-selected names are `DCT` (108 of 236
    books), `DCS` (106), `EFI` (87); `VCB` appears in 30, `HPG` and `VNM` in 12. **With no
-   ADV cap and no slippage modelled (`P14`), this is the biggest open threat to the
+   ADV cap and no slippage modelled (`P12`), this is the biggest open threat to the
    levels.**
 3. **Turnover is 65.1 % per rebalance** (median 65.0 %, range 20-90 %) → **8.2 %/yr** at
    50 bps. ✅ That confirms `backtest/CONTEXT.md` §3's assumed `τ = 0.70` from the data.

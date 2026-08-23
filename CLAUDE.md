@@ -1853,7 +1853,7 @@ outliers. ⚠️ And `pool__ta` carries a **price LEVEL** (`close`, ρ +0.997 wi
 | datasets on disk | 3 | 1 | **1** |
 | model runs | 2 | 0 | **31** — 1 single-split + 10 PRF-1 folds + 20 PRF-8 folds (2 arms × 10) |
 
-### ✅ 6-2-bis. `P1`/`FRZ-1` CLOSED 2026-08-23 — the price universe is FRESH, and the fix was a SCRAPE MODE
+### ✅ 6-2-bis. `FRZ-1` CLOSED 2026-08-23 — the price universe is FRESH, and the fix was a SCRAPE MODE
 
 The audit below (§6-3) is what this answers, and its headline number is inverted:
 **771 of 784 tickers now carry data to 2026-08-21**, against 5 producing the max date the
@@ -1931,10 +1931,12 @@ have no prop-desk history at all and correctly take the full path every time.
 the config; ⚠️ **`incremental: true` needs `skip_existing: false` beside it** or
 `skip_existing` returns first and the run refreshes nothing while going green.
 
-⚠️ **THIS CLOSES `P1`, NOT `P2`** — see §6-3 point 2. Gold was 30/54 sessions behind
-BEFORE this scrape and is further behind after it.
+⚠️ **THIS CLOSED THE SCRAPE AND NOT THE CARRY-UP** — see §6-2-ter, which ran the same
+session. Gold was 30/54 sessions behind BEFORE this scrape and further behind after it.
+⚠️ **Both were `P1` and `P2` when this was written; both left the list the same day**, so
+TODO's codes shifted down by 2 and today's `P1` is `STA-1`.
 
-### ✅ 6-2-ter. `P2` CARRIED IT UP TO GOLD AND UNIFIED — 2026-08-23, same session
+### ✅ 6-2-ter. THE CARRY-UP TO GOLD AND UNIFIED — 2026-08-23, same session
 
 A scrape that stops at `raw_data/` changes nothing a model reads (§5 rule 11). Every layer
 downstream of `silver.stocks_basic` was rebuilt in the same session, and **verified
@@ -1964,7 +1966,7 @@ screen does **not** mark its unified schema stale; the rebuild is a separate com
 was issued explicitly.
 
 ⚠️ **`gold.stocks_ta` WAS DELIBERATELY NOT REBUILT** and is now the widest gap in the repo:
-**2026-06-26 against silver's 2026-08-21**. That is `STA-1`/`P3`, an own decision and never
+**2026-06-26 against silver's 2026-08-21**. That is `STA-1`/`P1`, an own decision and never
 a side effect of `P2` — rebuilding it renames 13 legacy columns and moves ~289k rows, and
 `pool__ta` inherits all of it. **Any `basic + ta` INNER join now truncates ~40 trading
 sessions**, which is the cost of leaving it, stated so the next session does not rediscover it.
@@ -1972,13 +1974,13 @@ sessions**, which is the cost of leaving it, stated so the next session does not
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
-resulting program (`P1`-`P9`, re-prioritised 2026-08-22) is in **[TODO.md](docs/TODO.md)**; three numbers belong
+resulting program is in **[TODO.md](docs/TODO.md)** (⚠️ renumbered again 2026-08-23 when the first two items closed); three numbers belong
 here because they change how any current result is read.
 
 **1. ⚠️ `MAX(date)` SAYS 2026-08-19 AND FIVE TICKERS PRODUCE IT.** Names per session at
 the tail of `silver.stocks_basic`: **779** on 2026-06-25, **627** on 2026-06-26, then
 **28**, then **24**, then **5** from 2026-08-10. **757 of 781 tickers are stale**; 599 stop
-dead on 2026-06-26. `FRZ-1`/`P1` records this as *"143 frozen tickers"* and that
+dead on 2026-06-26. `FRZ-1` recorded this as *"143 frozen tickers"* and that
 understates it — **the whole universe stops in late June** and a 24-name tail was refreshed
 after. §5 rule 10 at full scale: a 24-name cross-section looks like a working pipeline to
 anything reading one number.
@@ -1994,7 +1996,7 @@ none of them a code problem: **disk** (PDFs for 112 tickers = 100 GB, median 906
 **~78 days**), and **schema** — `raw_data/cafef/financials/statements/` holds **one**
 template family, `bank`, while **761 of 781 names are not banks** (230 industrials, 117
 materials, 93 consumer staples; only 20 are GICS 401010). ⚠️ **The schema wall is the real
-one**: with infinite disk and time the current parser reaches 20 names. So `P6` prices a
+one**: with infinite disk and time the current parser reaches 20 names. So `P4` prices a
 JSON source (`api.simplize.vn`, `vnstock`) *before* anything else is built — §2d's
 second-ranked lever is a data-acquisition question, not an OCR question.
 
@@ -2121,7 +2123,7 @@ still resolves; only the PATH gained a `docs/` prefix.
 |---|---|---|
 | **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
 | **[ISSUES.md](docs/ISSUES.md)** | 15 open / 37 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
-| **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **RE-PRIORITISED 2026-08-22 (evening): DATA FIRST.** `P1` … `P39` in six lettered groups — **A scrape `P1`-`P5`, B OCR→Kaggle `P6`-`P9`**, C output `P10`-`P11`, D model `P12`-`P20`, E honesty `P21`-`P24`, F backlog `P25`-`P39`. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P14`, `P4-2` is now `P24`, …). ⚠️ **AND THAT RENUMBERING WAS BARE → BARE**, so a `P<n>` written before 2026-08-22 evening resolves to a DIFFERENT item — `P2` was live scoring and is now `P10`. **TODO.md's 2026-08-22 crosswalk is the bridge**; the live pointers in this file, RUNBOOK.md, pipeline.md and PIPELINE_h10_CAGR74.md were rewritten with it | deciding what to do next |
+| **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** `P1` … `P37` in six lettered groups — **A data `P1`-`P3`, B OCR→Kaggle `P4`-`P7`**, C output `P8`-`P9`, D model `P10`-`P18`, E honesty `P19`-`P22`, F backlog `P23`-`P37`. ⚠️ **RENUMBERED AGAIN 2026-08-23** — the scrape and the gold carry-up closed, so every code moved DOWN BY 2 and today's `P1` is `STA-1`, not the re-scrape. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P12`, `P4-2` is now `P22`, …). ⚠️ **AND THAT RENUMBERING WAS BARE → BARE**, so a `P<n>` written before 2026-08-22 evening resolves to a DIFFERENT item — `P2` was live scoring and is now `P8`. **TODO.md's 2026-08-22 crosswalk is the bridge**; the live pointers in this file, RUNBOOK.md, pipeline.md and PIPELINE_h10_CAGR74.md were rewritten with it | deciding what to do next |
 | **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
 | **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
 | `README.md` | the front door; routes here — ⚠️ **stays at the repo ROOT** | — |
