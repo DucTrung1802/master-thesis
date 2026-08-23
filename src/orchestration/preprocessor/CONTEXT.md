@@ -1023,7 +1023,7 @@ knowledge is per source, the body is not.
 
 | pool | source | VCB result | round-trip vs gold |
 |---|---|---|---|
-| ~~`pool__forex`~~ | ⚠️ **SPLIT 2026-08-14** — see below; it is now 48 `pool__forex_<exchange>` tables and is no longer a single date-spine pool | — | — |
+| `pool__forex` | ⚠️ **SPLIT 2026-08-14** — see below; it is now 48 `pool__forex_<exchange>` tables and is no longer a single date-spine pool | — | — |
 | `pool__funds` | `gold_schema.funds` (390 cols, 21 ETFs) | **4,266 × 392** in 1.01 s | **0 mismatches** / 389 columns |
 | `pool__bonds` | `gold_schema.bonds` (118 cols, 9 tenors) | **4,266 × 120** in 672 ms | **0 mismatches** / 117 columns |
 | `pool__stock_market` | `gold_schema.stock_market` (163 cols, 6 indices) | **4,266 × 165** in 569 ms | **0 mismatches** / 162 columns |

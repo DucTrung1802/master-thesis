@@ -144,23 +144,46 @@ def test_the_calendar_comes_from_the_spine_and_nothing_else():
     assert "ROW_NUMBER() OVER (ORDER BY date DESC)" in sql
 
 
-def test_a_branch_carries_its_layer_as_a_constant():
-    """The constant is what lets PostgreSQL prune the other branches on `WHERE layer=`."""
-    sql = F.layer_branch_sql("silver", "silver_schema", "stocks_basic")
-    assert "'silver'::text AS layer" in sql
-    assert "'silver_schema.stocks_basic'::text AS source" in sql
-    assert f"LEFT JOIN {F.HEALTH_SCHEMA}.{F.CALENDAR_VIEW}" in sql
+# ------------------------------------------------------------------ functions, not views
 
 
-def test_every_branch_ages_against_the_shared_calendar():
-    sql = F.freshness_sql(F.CORE_LAYERS)
-    assert sql.count(f"{F.HEALTH_SCHEMA}.{F.CALENDAR_VIEW}") == 2 * len(F.CORE_LAYERS)
-    assert sql.count("UNION ALL") == len(F.CORE_LAYERS) - 1
+@pytest.mark.parametrize(
+    "builder",
+    [F.layers_function_sql, F.calendar_function_sql, F.freshness_function_sql],
+)
+def test_nothing_installed_is_a_view(builder):
+    """⚠️ The defect that cost a rebuild: a view records a dependency on its tables, so
+    `DROP TABLE` — which every builder here opens with — fails while it exists."""
+    sql = builder()
+    assert "CREATE OR REPLACE FUNCTION" in sql
+    assert "CREATE VIEW" not in sql and "CREATE OR REPLACE VIEW" not in sql
 
 
-def test_no_layers_raises_rather_than_building_an_empty_view():
-    with pytest.raises(ValueError):
-        F.freshness_sql([])
+def test_the_layer_registry_is_a_query_not_a_frozen_list():
+    """A schema built after install must appear on its own — no re-install."""
+    sql = F.layers_function_sql()
+    assert "information_schema.tables" in sql
+    assert "unified" in sql
+    for layer, schema, table in F.CORE_LAYERS:
+        assert f"'{layer}'::text" in sql and f"'{schema}'::text" in sql
+
+
+def test_the_freshness_function_takes_the_layer_as_an_argument():
+    """Filtering by argument touches ONE table; a UNION ALL view relied on the planner."""
+    sql = F.freshness_function_sql()
+    assert "layer_filter text DEFAULT NULL" in sql
+    assert "WHERE layer_filter IS NULL OR f.layer = layer_filter" in sql
+
+
+def test_a_missing_table_is_skipped_rather_than_raised_on():
+    """A rebuild drops its table before writing one, and that is when this gets read."""
+    assert "CONTINUE WHEN to_regclass(" in F.freshness_function_sql()
+
+
+def test_the_function_inlines_the_calendar_instead_of_calling_it_per_ticker():
+    sql = F.freshness_function_sql()
+    assert "WITH cal AS (" in sql
+    assert "LEFT JOIN cal c ON c.date = p.last_date" in sql
 
 
 @pytest.mark.parametrize(
@@ -172,7 +195,7 @@ def test_identifiers_are_validated_because_they_cannot_be_bound(bad):
     with pytest.raises(ValueError):
         F.per_ticker_sql(bad, "pool__basic")
     with pytest.raises(ValueError):
-        F.layer_branch_sql("silver", "silver_schema", bad)
+        F.per_ticker_sql("silver_schema", bad)
 
 
 def test_per_ticker_sql_groups_by_the_ticker_not_the_table():
@@ -180,4 +203,4 @@ def test_per_ticker_sql_groups_by_the_ticker_not_the_table():
     assert "GROUP BY 1, 2" in sql
     assert "MAX(date) AS last_date" in sql
     # ⚠️ standalone on purpose: `status_data` must not need the views installed.
-    assert f"{F.HEALTH_SCHEMA}.{F.CALENDAR_VIEW}" not in sql
+    assert f"{F.HEALTH_SCHEMA}.{F.CALENDAR_FUNCTION}" not in sql

@@ -287,7 +287,7 @@ strategy is tradable at any size. TODO **`P11`**.
 
 | # | step | ⏱ | TODO |
 |---|---|---|---|
-| 1 | ~~re-scrape the frozen tickers, verify **per-ticker** max date~~ | ✅ **DONE 2026-08-23**, 1h 05m | — |
+| 1 | re-scrape the frozen tickers, verify **per-ticker** max date | ✅ **DONE 2026-08-23**, 1h 05m | — |
 | 2 | rebuild `pool__basic` → `rank_10day__final__d20_h10` | ~12 min | — |
 | 3 | write the live-scoring module (load fold, window 20 sessions × 150 names, rank) | ~½ day | **`P7`** |
 | 4 | ADV cap + sell-side floor screen **before** trusting any level | ~1 day | **`P11`** |

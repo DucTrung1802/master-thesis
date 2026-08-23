@@ -976,7 +976,12 @@ and 10 draws sample the tail half as well.
 18. **Windows/cp1252**: open `metadata.json` and friends with `encoding="utf-8"` (the
     provenance comments carry `⚠️`); PowerShell 5.1's `Out-File -Encoding utf8` writes a
     BOM; and **never put `⚠️` in matplotlib chart text** — Segoe UI has no glyph and it
-    renders as a box.
+    renders as a box. ⚠️ **AND A ONE-OFF EDIT SCRIPT THAT `print`s THE TEXT IT IS EDITING
+    DIES ON THE PRINT, HALFWAY THROUGH** — measured three times in one session on
+    2026-08-23, each time after some replacements had been made and before the file was
+    written, so the edit was silently partial. Start such a script with
+    **`sys.stdout.reconfigure(encoding="utf-8")`**, or print counts rather than content.
+    The write is the work; the print is the thing that kills it.
 19. **Ephemeral scripts must load `.env` by explicit path** — they live in the scratchpad
     outside the repo, so `find_dotenv()` misses it and `PostgreSQLConnectionDto` raises
     "Password cannot be empty". Use `load_dotenv(os.path.abspath(".env"), override=True)`
@@ -2061,17 +2066,33 @@ floor of 5 tickers was written first and **fired immediately on the real corpus*
 five genuine delistings a failure — the regimes are separated by two orders of magnitude
 of share, not by a count.
 
-⚠️ **AND ITS FIRST RUN FOUND 27 SINGLE-NAME UNIFIED SCHEMAS STALE**, in three layers that
+⚠️ **AND ITS FIRST RUN FOUND 28 SINGLE-NAME UNIFIED SCHEMAS STALE — 28 OF THE 30 THAT EXIST**, in three layers that
 are a fossil record of every scoped re-scrape this repo has run:
 
 | stuck at | sessions behind | schemas |
 |---|---|---|
 | **2026-08-19** | 2 | FPT, HPG, SSI, STB, VIC — the `SSK-1` single-stock track |
 | **2026-08-07** | 10 | BID, CTG, HDB, MBB, SHB, SSB, TCB, TPB, VIB, VPB — the bank re-scrape |
-| **2026-06-25/26** | 40-41 | BCM, BVH, GAS, GVR, MSN, MWG, PLX, POW, SAB, VHM, VJC, VNM, VRE |
+| **2026-06-25** | 41 | BCM, BVH, GAS, GVR |
+| **2026-06-26** | 40 | MSN, MWG, PLX, POW, SAB, VHM, VJC, VNM, VRE |
 
-`unified_{all,vcb,bank,vn30,acb,price10k,liquid,quality}` are current. **Rule 14 from the
-other side, counted for the first time** — and none of it is visible to `MAX(date)`, which
+Only `unified_vcb` and `unified_acb` were current among the single names; the six
+multi-name schemas (`all`, `bank`, `vn30`, `price10k`, `liquid`, `quality`) all were.
+
+✅ **ALL 28 REBUILT THE SAME DAY (`SCH-1`) — `pool__basic` + `pool__targets`, 28 of 28,
+0 errors, and the tool that found them now reports `STALE: 0`.** Measured **21 s per
+schema** end to end, of which the two Dagster steps are **1.7 s**; the rest is process
+start-up, so the whole job was ~10 minutes. ⚠️ **Nothing downstream had been wrong**: all
+28 hold pools only — **0 non-pool tables** — so no `__final__` table or dataset was ever
+built from one. ⚠️ **The other 23 pools per schema were deliberately NOT rebuilt**
+(`pool__bonds`, the 19 `pool__economy_*`): they stay on the old calendar, which
+`status_data` already reports as `pools_behind`, and a wide join over one of these schemas
+would INNER-join back down to theirs.
+
+**Rule 14 from the other side, counted for the first time** — ⚠️ **and the first count was
+WRONG BY ONE**: this section said *"27"* for an hour on 2026-08-23 while its own table
+listed 28 names, because the prose was counted by eye and the table was not. Re-counted
+by query, which is the only reason it is right now — and none of it is visible to `MAX(date)`, which
 reads 2026-08-21 on the fresh schemas and says nothing about the other 27.
 
 ⚠️ **FILTER THE VIEW BY `layer`** — it is a `UNION ALL` over 39 layers and `gold.stocks_ta`
@@ -2080,6 +2101,46 @@ alone costs **26.5 s** (17 GB, 946 columns) against silver's 1.0 s. ✅ `EXPLAIN
 the per-ticker query **timed out at 5 minutes** — a correlated count per ticker; ranking
 the calendar once with `ROW_NUMBER()` is **1.4 s** on the same table.
 `pipeline/CONTEXT.md` §1a-bis.
+
+### ⚠️ 6-2-sexies. `DEP-1` — THE MONITOR BLOCKED THE REPAIR, and it was live for one hour
+
+Opened and closed 2026-08-23, an hour after §6-2-quinquies shipped. It is the most
+reusable thing this session produced, because the failure is structural rather than a
+typo.
+
+`pipeline.freshness` first installed `health_schema.ticker_freshness` as a **VIEW**. The
+next rebuild died:
+
+> `psycopg2.errors.DependentObjectsStillExist: cannot drop table`
+> `unified_schema_vnm.pool__basic because other objects depend on it`
+> `DETAIL: view health_schema.ticker_freshness depends on table ...`
+
+⚠️ **PostgreSQL records a view's dependency on the tables beneath it, and EVERY BUILDER IN
+THIS REPO OPENS WITH `DROP TABLE IF EXISTS`** — `_ingest_unified_pool_basic` at
+`preprocessor.py:7994`, and the silver and gold builders identically. So the view did not
+break one asset; **it blocked the entire write path**, including the `gold.stocks_ta`
+rebuild that had finished hours earlier and every future carry-up. **A monitor that has to
+be uninstalled before the system can be repaired is worse than no monitor**, and it fails
+in the worst possible direction: the more there is to fix, the harder it is to fix it.
+
+✅ **Fixed by making all three health objects `plpgsql` FUNCTIONS.** A function body is not
+parsed for dependencies, so `DROP TABLE` is unaffected — verified directly by creating and
+dropping a table with the functions installed. Two things fell out for free:
+
+1. **The layer list is discovered at CALL time**, so a schema built later appears on its
+   own. The view had to freeze its list at install time and say so in a `COMMENT`.
+2. **The layer filter is an ARGUMENT**, so one layer means one table. The view relied on
+   the planner pruning `UNION ALL` branches on a constant.
+
+⚠️ **The cost, and it is real: `ticker_freshness(NULL)` walks EVERY layer.** A
+`WHERE layer = 'silver'` written AFTER the call cannot push into the function — 32.9 s
+against **0.25 s** for `ticker_freshness('silver')`. **Pass the layer; do not filter the
+result.**
+
+⚠️ **The general lesson is not about views.** Anything that observes a table takes a lock
+or a dependency on it, and the observer is written by someone who is not thinking about
+the writer. Ask of any new monitor: *what does this stop the repair path from doing?*
+`pipeline/CONTEXT.md` §1a-bis; `ISSUES.md` `DEP-1`.
 
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
@@ -2168,7 +2229,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**14 open**, 38 resolved, codes permanent — ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file, and four fixed rows (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`) deliberately sit struck-through in the Open table rather than moving.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**16 open**, 38 resolved, codes permanent — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -2204,7 +2265,7 @@ what a session budgets against.
 | **[src/walkforward/CONTEXT.md](src/walkforward/CONTEXT.md)** | **16.0k** | asking whether a result survives more than ONE split, or which MODEL to use. §3 the 10-fold h=20 result (pooled Sharpe **+1.991**, IC positive 9/10 folds, beats the market 10/10); §4 the recorded prediction that was half wrong; §5 the no-mechanical-leak check; **§8 is PRF-8 — three architectures from 205 k params to 1,400 tree nodes, all tied**, and §8c the concurrency trap that voided a whole sweep |
 | **[src/backtest/CONTEXT.md](src/backtest/CONTEXT.md)** | **8.1k** | asking whether a signal is TRADABLE — stage 9, the costed non-overlapping backtest. §3 is the cost identity that decides the horizon (h=5 pays **17.6 %/yr** in fees, above the top-100 benchmark's entire return); §4 the first result here to clear a costed null (top-15, z = **+4.29** test / +6.10 val); **§5 is the single-stock answer and it is "no trade"** |
 | [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | **4.1k** | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
-| [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **7.0k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
+| [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **7.6k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
 | [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | **3.4k** | anything news/text/PhoBERT |
 | [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | **6.4k** | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | **9.2k** | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
@@ -2232,7 +2293,7 @@ still resolves; only the PATH gained a `docs/` prefix.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](docs/ISSUES.md)** | 14 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](docs/ISSUES.md)** | 16 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** Six lettered groups — **A data `P2`, B OCR→Kaggle `P3`-`P6`**, C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ✅ **`P1` DONE 2026-08-23** (§6-2-quinquies). ⚠️ **THE NUMBERS ARE FROZEN AS OF 2026-08-23 AND WILL NOT MOVE AGAIN** — a `P<n>` is a permanent NAME, exactly as an `ISSUES.md` code is, and **PRIORITY IS THE ROW ORDER**, so read the list top-down and cite the number. The list starts at `P2` and the numbers need not stay monotonic; that is the price of a code that means one thing forever. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P11`, `P4-2` is now `P21`, …). ⚠️ **A `P<n>` written BEFORE 2026-08-23 still resolves to a different item** — three renumbers in two days preceded the freeze — so take the DATE of what you are reading, then TODO.md's two crosswalks, which are the last two that will ever be needed | deciding what to do next |
 | **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
 | **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
@@ -2266,6 +2327,18 @@ workflow, log truncation) live in the auto-loaded memory index and are not dupli
   running it is the discipline. `RUNBOOK.md` §8c is the procedure.
 - **`⚠️` marks a claim that cost something to learn.** Do not strip them; add them when you
   measure a new one.
+- ⚠️ **NO STRIKETHROUGH, ANYWHERE — 108 markers were removed on 2026-08-23.** A closed
+  item is marked with words (`✅ FIXED <date>`, `DONE`, `SUPERSEDED`, `RETIRED`) and its
+  text stays in ordinary type. Struck-out text renders as damaged and reads as *"ignore
+  this"*, which is the opposite of what a closed row is for here: **the measurement it
+  leaves behind is the point**, and `ISSUES.md` rows are cited BY CODE from this file and
+  from the `CONTEXT.md` files. Nothing was lost in the removal — every struck row already
+  carried its status in words beside the markup.
+- ⚠️ **A `TODO.md` number is a permanent NAME and priority is the ROW ORDER** (frozen
+  2026-08-23). Codes are never renumbered or reused, exactly as in `ISSUES.md`; the list
+  therefore starts at `P2` and need not stay monotonic. **Read the order, cite the
+  number.** Three renumbers in two days preceded the freeze, and each one silently
+  repointed every `P<n>` written before it.
 - **Dates on findings, always.** A number without a date cannot be told from a stale one.
 - **Record what was measured, not what was concluded** — the tables in these files are
   reproducible checks, which is why they are still trusted months later.

@@ -893,30 +893,47 @@ refresh with the distribution instead:
 ```powershell
 python -m pipeline.freshness                  # every layer, ~33 s (39 layers)
 python -m pipeline.freshness --layer silver   # one layer, ~1 s
-python -m pipeline.freshness --install        # (re)create the views after a NEW schema
+python -m pipeline.freshness --install        # (re)create the three SQL functions
 ```
 ```sql
 -- which names are behind, and by how many SESSIONS (not calendar days)
 SELECT ticker, last_date, sessions_behind
-FROM health_schema.ticker_freshness
-WHERE layer = 'silver' AND NOT is_current ORDER BY sessions_behind DESC;
+FROM health_schema.ticker_freshness('silver')
+WHERE NOT is_current ORDER BY sessions_behind DESC;
 ```
 
-⚠️ **FILTER BY `layer` OR PAY FOR ALL 39.** `gold.stocks_ta` alone costs **26.5 s** (17 GB,
-946 columns) against silver's 1.0 s. `WHERE layer = '<one>'` prunes the other branches on a
-constant — verified by `EXPLAIN`.
+⚠️ **PASS THE LAYER AS THE ARGUMENT; DO NOT FILTER THE RESULT.** A `WHERE layer='silver'`
+written after the call cannot push into the function — **32.9 s** against **0.25 s**.
+`gold.stocks_ta` alone costs **26.5 s** (17 GB, 946 columns) against silver's 1.0 s.
+
+⚠️ **THEY ARE FUNCTIONS, NOT VIEWS, AND THE REASON MATTERS IF YOU EVER ADD A MONITOR HERE**
+(`DEP-1`). A PostgreSQL view records a dependency on its tables, and every builder in this
+repo opens with `DROP TABLE IF EXISTS` — so the first version blocked the whole write path
+until it was uninstalled. Ask of any new monitor: *what does this stop the repair path from
+doing?*
 
 **Read the shape, not the count.** A **cliff** — many tickers stopping on ONE date — is a
 scrape scope and the tool warns; **scattered** dates are delistings and it says so. Both
 were measured here: 599 of 781 on 2026-06-26 (77 %, the freeze) against 5 of 784 on
 2026-07-08 (0.6 %, real delistings).
 
-⚠️ **RE-RUN `--install` AFTER BUILDING A NEW SCHEMA.** The unified layers are discovered at
-install time and frozen into the view, so a schema built later is invisible until then —
-the installed list is in the view's `COMMENT` so you can tell *"current"* from *"never in
-the view"*. ⚠️ **And re-run the CARRY-UP for the 27 single-name schemas** the first run
-found stale (CLAUDE.md §6-2-quinquies): rule 14 means a fresh silver does not mark them
-stale, and `MAX(date)` on the schemas that *were* rebuilt says nothing about them.
+✅ **NO RE-INSTALL AFTER BUILDING A NEW SCHEMA** — the layer list is a query against
+`information_schema`, evaluated when you call the function, so a schema built later appears
+on its own. `--install` is only needed once, or after upgrading this module.
+
+⚠️ **AND RE-RUN THE CARRY-UP FOR ANY SINGLE-NAME SCHEMA** — rule 14 means a fresh silver
+does not mark them stale, and `MAX(date)` on the schemas that *were* rebuilt says nothing
+about the others. ✅ **All 28 that were stale were rebuilt 2026-08-23** (`SCH-1`), at a
+measured **21 s per schema**:
+
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "unified/pool__basic,unified/pool__targets" --partition VNM
+```
+
+⚠️ **That rebuilds the two pools the price data feeds, and NOT the other 23** — `pool__bonds`
+and the 19 `pool__economy_*` stay on the old calendar, which `status_data` reports as
+`pools_behind`. A wide join over such a schema INNER-joins back down to theirs.
 
 ---
 
@@ -1017,7 +1034,7 @@ Honest list, so you do not go looking for a switch that is not there:
   dropped 2026-08-16. The guard over-predicts by **4–13×** — it predicted 393 min for a
   run that took **29m 44s** — so `budget_minutes` now raises on runs you can afford.
   Until it is re-fitted, treat the raise as advisory and read §3's measured column.
-- ~~**`hit_rate` is not withdrawn on level targets.**~~ ✅ **Fixed 2026-08-17** (TODO
+- **`hit_rate` is not withdrawn on level targets.** ✅ **Fixed 2026-08-17** (TODO
   P0-2). `selector.py` calls `evaluation.sign_hit_rate`, which returns NaN when every
   non-zero label shares a sign, and `report.py`'s formatter now tests `v != v` so the
   README prints **`—`** rather than a bare `nan`. Verified end to end on a fresh

@@ -58,15 +58,42 @@ diagnostic NUMBER that was wrong, which is the argument for this view existing a
 
     python -m pipeline.freshness                  # every layer's distribution
     python -m pipeline.freshness --layer silver   # one layer
-    python -m pipeline.freshness --install        # (re)create the two views
+    python -m pipeline.freshness --install        # (re)create the SQL functions
 
-    SELECT * FROM health_schema.ticker_freshness WHERE layer = 'silver' AND NOT is_current;
+    SELECT * FROM health_schema.ticker_freshness('silver') WHERE NOT is_current;
 
-⚠️ **FILTER THE VIEW BY `layer`.** It is a `UNION ALL` and each branch costs what its
-table costs — measured 2026-08-23: silver **1.0 s**, `gold.stocks` **2.9 s**,
+⚠️ **PASS A LAYER OR PAY FOR ALL OF THEM.** Each layer costs what its table costs —
+measured 2026-08-23: silver **1.0 s**, `gold.stocks` **2.9 s**,
 `unified_schema_all.pool__basic` **5.2 s**, and `gold.stocks_ta` **26.5 s** because that
-table is **17 GB** across 946 columns. `WHERE layer = '<one>'` prunes the other branches
-on a constant; an unfiltered `SELECT *` pays for all of them.
+table is **17 GB** across 946 columns. `ticker_freshness(NULL)` walks every layer.
+
+## ⚠️ IT IS A FUNCTION AND NOT A VIEW, AND THAT COST ONE FAILED REBUILD TO LEARN
+
+The first version shipped `health_schema.ticker_freshness` as a `UNION ALL` **view** over
+every layer. PostgreSQL records a view's dependency on the tables under it, so the very
+next rebuild died:
+
+    psycopg2.errors.DependentObjectsStillExist: cannot drop table
+    unified_schema_vnm.pool__basic because other objects depend on it
+    DETAIL: view health_schema.ticker_freshness depends on table ...
+
+**Every builder in this repo drops and recreates its table** — `_ingest_unified_pool_basic`
+opens with `DROP TABLE IF EXISTS`, and so do the silver and gold builders. So a view over
+those tables **blocks every repair it exists to recommend**, including the `gold.stocks_ta`
+rebuild that had run hours earlier. A monitor that has to be uninstalled before the system
+can be fixed is worse than no monitor.
+
+A `plpgsql` function body is not parsed for dependencies, so `DROP TABLE` is unaffected —
+and two things fall out for free:
+
+1. **Layers are discovered at CALL time**, not frozen at install time, so a schema built
+   later appears on its own with no `--install` re-run.
+2. **The layer filter is an ARGUMENT**, so only the requested layer is ever touched — no
+   `UNION ALL`, and no reliance on the planner pruning branches on a constant.
+
+⚠️ It also skips a layer whose table is missing (`to_regclass IS NULL`) rather than
+raising, so the tool still answers **while a rebuild is mid-flight** — which is exactly
+when somebody is watching it.
 """
 
 from __future__ import annotations
@@ -80,8 +107,9 @@ import pandas as pd
 # own — both objects are VIEWS, so nothing here can go stale behind its own source, which
 # is the failure mode this module exists to report.
 HEALTH_SCHEMA = "health_schema"
-CALENDAR_VIEW = "session_calendar"
-FRESHNESS_VIEW = "ticker_freshness"
+CALENDAR_FUNCTION = "session_calendar"
+FRESHNESS_FUNCTION = "ticker_freshness"
+LAYERS_FUNCTION = "freshness_layers"
 
 # ⚠️ The reference calendar. Every layer is aged against THIS table's sessions, for the
 # reason in the module docstring. `silver_schema.stocks_basic` is the price spine — CafeF
@@ -168,37 +196,97 @@ def calendar_sql() -> str:
     )
 
 
-def layer_branch_sql(layer: str, schema: str, table: str) -> str:
-    """One `UNION ALL` branch: the per-ticker max date of one table, aged.
+def layers_function_sql() -> str:
+    """`health_schema.freshness_layers()` — the registry, discovered at CALL time.
 
-    ⚠️ The join to the calendar is an equality LEFT JOIN, with the counting form only as a
-    COALESCE fallback. PostgreSQL short-circuits COALESCE, so the expensive branch runs
-    only for a `last_date` the spine does not carry — a bronze table fresher than silver,
-    say — instead of once per ticker.
+    ⚠️ The core rows are literals and the unified rows come from `information_schema`, so a
+    schema built after this was installed appears on its own. The first version froze the
+    list into a view at install time and had to say so in the view's `COMMENT`; nothing
+    has to say so now.
     """
-    _ident(layer, "layer")
-    schema, table = _ident(schema, "schema"), _ident(table, "table")
-    cal = f"{HEALTH_SCHEMA}.{CALENDAR_VIEW}"
-    return f"""SELECT
-    '{layer}'::text AS layer,
-    '{schema}.{table}'::text AS source,
-    f.exchange,
-    f.ticker,
-    f.last_date,
-    COALESCE(c.sessions_behind,
-             (SELECT COUNT(*)::int FROM {cal} c2 WHERE c2.date > f.last_date))
-        AS sessions_behind,
-    COALESCE(c.sessions_behind, -1) = 0 AS is_current
-FROM (SELECT exchange, ticker, MAX(date) AS last_date
-      FROM {schema}.{table} GROUP BY 1, 2) f
-LEFT JOIN {cal} c ON c.date = f.last_date"""
+    core = "\n    UNION ALL ".join(
+        f"SELECT '{lay}'::text, '{sch}'::text, '{tbl}'::text" for lay, sch, tbl in CORE_LAYERS
+    )
+    return f"""
+CREATE OR REPLACE FUNCTION {HEALTH_SCHEMA}.{LAYERS_FUNCTION}()
+RETURNS TABLE (layer text, schema_name text, table_name text)
+LANGUAGE sql STABLE AS $fn$
+    {core}
+    UNION ALL
+    SELECT replace(table_schema, 'unified_schema_', 'unified_')::text,
+           table_schema::text, 'pool__basic'::text
+    FROM information_schema.tables
+    WHERE table_name = 'pool__basic' AND table_schema LIKE 'unified\\_schema\\_%'
+    ORDER BY 1
+$fn$;
+"""
 
 
-def freshness_sql(layers: Sequence[Tuple[str, str, str]]) -> str:
-    """The whole `ticker_freshness` view body: one branch per layer, `UNION ALL`."""
-    if not layers:
-        raise ValueError("no layers to build a freshness view from")
-    return "\nUNION ALL\n".join(layer_branch_sql(*layer) for layer in layers)
+def calendar_function_sql() -> str:
+    """`health_schema.session_calendar()` — the reference calendar as a function.
+
+    ⚠️ A FUNCTION and not a view, for the reason in the module docstring: the spine is
+    dropped and recreated by its own builder, and a view over it would block that.
+    """
+    return f"""
+CREATE OR REPLACE FUNCTION {HEALTH_SCHEMA}.{CALENDAR_FUNCTION}()
+RETURNS TABLE (session_date date, sessions_behind int)
+LANGUAGE plpgsql STABLE AS $fn$
+BEGIN
+    RETURN QUERY EXECUTE format(
+        'SELECT date, (ROW_NUMBER() OVER (ORDER BY date DESC) - 1)::int
+         FROM (SELECT DISTINCT date FROM %I.%I) d',
+        {_ident(SPINE_SCHEMA, 'schema')!r}, {_ident(SPINE_TABLE, 'table')!r});
+END;
+$fn$;
+"""
+
+
+def freshness_function_sql() -> str:
+    """`health_schema.ticker_freshness(layer)` — one row per (layer, exchange, ticker).
+
+    ⚠️ The calendar is inlined as a CTE per layer rather than called, so one layer is one
+    statement. ⚠️ The join to it is an equality LEFT JOIN with the counting form only as a
+    COALESCE fallback — PostgreSQL short-circuits COALESCE, so the expensive form runs only
+    for a `last_date` the spine does not carry (a bronze table fresher than silver, say)
+    instead of once per ticker.
+
+    ⚠️ A layer whose table has gone missing is SKIPPED, not raised on. A rebuild drops its
+    table before it writes one, and that is precisely when someone is watching this.
+    """
+    return f"""
+CREATE OR REPLACE FUNCTION {HEALTH_SCHEMA}.{FRESHNESS_FUNCTION}(layer_filter text DEFAULT NULL)
+RETURNS TABLE (layer text, source text, exchange text, ticker text,
+               last_date date, sessions_behind int, is_current boolean)
+LANGUAGE plpgsql STABLE AS $fn$
+DECLARE
+    lay record;
+BEGIN
+    FOR lay IN
+        SELECT * FROM {HEALTH_SCHEMA}.{LAYERS_FUNCTION}() f
+        WHERE layer_filter IS NULL OR f.layer = layer_filter
+    LOOP
+        CONTINUE WHEN to_regclass(lay.schema_name || '.' || lay.table_name) IS NULL;
+        RETURN QUERY EXECUTE format($q$
+            WITH cal AS (
+                SELECT date, (ROW_NUMBER() OVER (ORDER BY date DESC) - 1)::int AS sessions_behind
+                FROM (SELECT DISTINCT date FROM %I.%I) d
+            ), per AS (
+                SELECT exchange::text AS exchange, ticker::text AS ticker, MAX(date) AS last_date
+                FROM %I.%I GROUP BY 1, 2
+            )
+            SELECT %L::text, %L::text, p.exchange, p.ticker, p.last_date,
+                   COALESCE(c.sessions_behind,
+                            (SELECT COUNT(*)::int FROM cal c2 WHERE c2.date > p.last_date)),
+                   COALESCE(c.sessions_behind, -1) = 0
+            FROM per p LEFT JOIN cal c ON c.date = p.last_date
+        $q$, {_ident(SPINE_SCHEMA, 'schema')!r}, {_ident(SPINE_TABLE, 'table')!r},
+             lay.schema_name, lay.table_name,
+             lay.layer, lay.schema_name || '.' || lay.table_name);
+    END LOOP;
+END;
+$fn$;
+"""
 
 
 def per_ticker_sql(schema: str, table: str) -> str:
@@ -302,40 +390,32 @@ def describe(summary: Dict) -> str:
 # ------------------------------------------------------------------------------- DDL
 
 
-def install_views(
-    driver,
-    layers: Optional[Sequence[Tuple[str, str, str]]] = None,
-    database: Optional[str] = None,
-) -> List[Tuple[str, str, str]]:
-    """Create `health_schema` and its two views. Returns the layers installed."""
-    layers = list(layers) if layers is not None else discover_layers(driver, database)
-    installed = "; ".join(f"{name}={schema}.{table}" for name, schema, table in layers)
+def install_functions(driver, database: Optional[str] = None) -> List[str]:
+    """Create `health_schema` and its three functions. Returns the function names.
+
+    ⚠️ **Functions, never views** — see the module docstring. A view here blocks every
+    `DROP TABLE` in the repo's builders, which is every repair this tool recommends. There
+    is also nothing to re-install when a schema is added: the layer list is a query.
+    """
     with driver._cursor_ctx(database) as cur:
         cur.execute(f"CREATE SCHEMA IF NOT EXISTS {HEALTH_SCHEMA}")
-        # ⚠️ DROP, not CREATE OR REPLACE: replacing a view whose column list changed
-        # raises, and the layer list is exactly what changes between two installs.
-        cur.execute(f"DROP VIEW IF EXISTS {HEALTH_SCHEMA}.{FRESHNESS_VIEW}")
-        cur.execute(f"DROP VIEW IF EXISTS {HEALTH_SCHEMA}.{CALENDAR_VIEW}")
-        cur.execute(f"CREATE VIEW {HEALTH_SCHEMA}.{CALENDAR_VIEW} AS {calendar_sql()}")
+        # ⚠️ Drop any view left by the first version, or `CREATE FUNCTION` succeeds while
+        # a same-named view goes on blocking rebuilds with nothing pointing at it.
+        cur.execute(f"DROP VIEW IF EXISTS {HEALTH_SCHEMA}.{FRESHNESS_FUNCTION}")
+        cur.execute(f"DROP VIEW IF EXISTS {HEALTH_SCHEMA}.{CALENDAR_FUNCTION}")
+        cur.execute(layers_function_sql())
+        cur.execute(calendar_function_sql())
+        cur.execute(freshness_function_sql())
         cur.execute(
-            f"COMMENT ON VIEW {HEALTH_SCHEMA}.{CALENDAR_VIEW} IS "
-            f"'The reference session calendar, from {SPINE_SCHEMA}.{SPINE_TABLE}. "
-            f"sessions_behind=0 is the newest session. Every layer is aged against THIS "
-            f"and never against its own dates - a frozen table cannot see the sessions "
-            f"it is missing. TODO P1 / FRZ-1.'"
-        )
-        cur.execute(
-            f"CREATE VIEW {HEALTH_SCHEMA}.{FRESHNESS_VIEW} AS {freshness_sql(layers)}"
-        )
-        cur.execute(
-            f"COMMENT ON VIEW {HEALTH_SCHEMA}.{FRESHNESS_VIEW} IS "
-            f"'Per-ticker freshness, one row per (layer, exchange, ticker). FILTER BY "
-            f"layer - this is a UNION ALL and gold_ta alone costs ~27s (17 GB). A cliff "
-            f"of tickers sharing one stale date is a scrape scope; scattered dates are "
-            f"delistings. Layers installed: {installed}'"
+            f"COMMENT ON FUNCTION {HEALTH_SCHEMA}.{FRESHNESS_FUNCTION}(text) IS "
+            f"'Per-ticker freshness, one row per (layer, exchange, ticker). Pass a layer "
+            f"or pay for all of them - gold_ta alone costs ~27s (17 GB). A cliff of "
+            f"tickers sharing one stale date is a scrape SCOPE; scattered dates are "
+            f"delistings. A FUNCTION and not a view, because a view blocks the DROP TABLE "
+            f"every builder here opens with. TODO P1 / FRZ-1.'"
         )
         cur.connection.commit()
-    return layers
+    return [LAYERS_FUNCTION, CALENDAR_FUNCTION, FRESHNESS_FUNCTION]
 
 
 # ------------------------------------------------------------------------------- CLI
@@ -373,10 +453,15 @@ def main(argv=None) -> int:
         )
         try:
             if "--install" in argv:
-                installed = install_views(driver)
-                print(f"installed {HEALTH_SCHEMA}.{CALENDAR_VIEW} and .{FRESHNESS_VIEW}")
-                for name, schema, table in installed:
-                    print(f"  layer {name:<20} {schema}.{table}")
+                for name in install_functions(driver):
+                    print(f"installed function {HEALTH_SCHEMA}.{name}")
+                print()
+                print("  SELECT * FROM health_schema.ticker_freshness('silver')")
+                print("  WHERE NOT is_current ORDER BY sessions_behind DESC;")
+                print()
+                print("layers it will walk (discovered at CALL time, not frozen here):")
+                for name, schema, table in discover_layers(driver):
+                    print(f"  {name:<20} {schema}.{table}")
                 return 0
 
             wanted = argv[argv.index("--layer") + 1] if "--layer" in argv else None

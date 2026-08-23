@@ -1673,7 +1673,7 @@ point of the housekeeping.
 | table | shape | built by | state |
 |---|---|---|---|
 | `economy_<country>` ×19 | 6,939 × (89…1,439) | **asset** | current — wide, as-of filled, 3,784 series (2026-08-06) |
-| ~~`economy`~~ | ~~6,935 × 1,035~~ | — | **SUPERSEDED + DROPPED 2026-08-06** — the 5-country panel; every series of it is in the nineteen |
+| `economy` | 6,935 × 1,035 | — | **SUPERSEDED + DROPPED 2026-08-06** — the 5-country panel; every series of it is in the nineteen |
 | `stock_market` | 6,339 × 163 | **asset** only | current (wide, unfilled) |
 | `stocks` | 2,388,368 × 42 | **asset** + leaf | current — the price panel, no features (2026-08-03) |
 | `stocks_ta` | 2,678,167 × 935 | **asset** only | ⚠️ the RENAME of the old `stocks`; the builder is current, the TABLE is not |
@@ -1681,9 +1681,9 @@ point of the housekeeping.
 | `news_weekly_panel` | 429,052 × 28 | **asset** only | current |
 | `news_daily_panel` | 2,058,604 × 26 | **asset** only | current |
 | `bonds` | 4,642 × 118 | **asset** + leaf | current (wide, unfilled) |
-| ~~`forex`~~ → `forex_<exchange>` | **48 panels, 3,129 series** | **asset** + leaf | current — SPLIT per exchange 2026-08-14 (`WID-1`); widest `forex_fx_idc` 648 cols. The un-suffixed table is DROPPED |
+| `forex` → `forex_<exchange>` | **48 panels, 3,129 series** | **asset** + leaf | current — SPLIT per exchange 2026-08-14 (`WID-1`); widest `forex_fx_idc` 648 cols. The un-suffixed table is DROPPED |
 | `funds` | **2,894 × 352** | **asset** + leaf | current — WIDE, 1 row per trading day (2026-08-05) |
-| ~~`indices`~~ | ~~24,095 × 22~~ | — | **RETIRED + DROPPED 2026-08-01** |
+| `indices` | 24,095 × 22 | — | **RETIRED + DROPPED 2026-08-01** |
 
 ⚠️ **`gold.indices` is retired because it was a duplicate.** It was `silver.indices`
 (the TradingView index series) through the generic single-series feature build —

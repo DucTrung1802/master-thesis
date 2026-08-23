@@ -179,10 +179,10 @@ reports `tickers` / `tickers_current` / `tickers_stale` beside `rows` and `pools
 ```powershell
 python -m pipeline.freshness                  # every layer's distribution
 python -m pipeline.freshness --layer silver   # one layer
-python -m pipeline.freshness --install        # (re)create the two views
+python -m pipeline.freshness --install        # (re)create the three SQL functions
 ```
 ```sql
-SELECT * FROM health_schema.ticker_freshness WHERE layer='silver' AND NOT is_current;
+SELECT * FROM health_schema.ticker_freshness('silver') WHERE NOT is_current;
 ```
 
 ⚠️ **THE ONE DESIGN DECISION IS WHOSE CALENDAR.** `sessions_behind` is counted against a
@@ -215,20 +215,44 @@ exactly the date silver holds, so the incremental scrape did attempt them and th
 returned nothing after. It is the diagnostic NUMBER that was wrong, which is the argument
 for the view existing.
 
-⚠️ **AND THE FIRST FULL RUN FOUND 27 SINGLE-NAME SCHEMAS STALE**, in three layers that
+⚠️ **AND THE FIRST FULL RUN FOUND 28 SINGLE-NAME SCHEMAS STALE, OF THE 30 THAT EXIST**, in three layers that
 are a fossil record of every scoped re-scrape: **2026-08-19** (FPT, HPG, SSI, STB, VIC —
 the single-stock track), **2026-08-07** (BID, CTG, HDB, MBB, SHB, SSB, TCB, TPB, VIB, VPB
 — the bank re-scrape), and **2026-06-25/26** (BCM, BVH, GAS, GVR, MSN, MWG, PLX, POW, SAB,
-VHM, VJC, VNM, VRE — never refreshed since the freeze). `unified_{all,vcb,bank,vn30,acb,
-price10k,liquid,quality}` are current. Rule 14 from the other side, counted for the first
-time.
+VHM, VJC, VNM, VRE — never refreshed since the freeze). Only `unified_vcb` and `unified_acb` are current among the single names; all six
+multi-name schemas are. Rule 14 from the other side, counted for the first time — ⚠️ and
+the first count was **wrong by one** (*"27"*, counted by eye against a table that listed
+28), which is a small lesson about writing a number down twice.
 
-⚠️ **FILTER THE VIEW BY `layer`.** It is a `UNION ALL` over 39 layers and each branch
-costs what its table costs — measured 2026-08-23: silver **1.0 s**, `gold.stocks` 2.9 s,
-`unified_schema_all.pool__basic` 5.2 s, and **`gold.stocks_ta` 26.5 s** because that table
-is **17 GB** across 946 columns. ✅ Verified by `EXPLAIN`: `WHERE layer='silver'` prunes
-the other 38 branches on the constant, leaving one index-only scan. A whole-view
-`SELECT *` pays for all of them.
+### ⚠️ `DEP-1` — IT IS A FUNCTION AND NOT A VIEW, AND THAT COST ONE FAILED REBUILD
+
+The first version was a `UNION ALL` **view**. The next rebuild died:
+
+> `DependentObjectsStillExist: cannot drop table unified_schema_vnm.pool__basic because`
+> `other objects depend on it / DETAIL: view health_schema.ticker_freshness depends on it`
+
+⚠️ **PostgreSQL records a view's dependency on its tables, and EVERY BUILDER HERE OPENS
+WITH `DROP TABLE IF EXISTS`** (`preprocessor.py:7994`, and silver/gold the same). The view
+therefore blocked **the whole write path**, not one asset — including the `gold.stocks_ta`
+rebuild that had run hours earlier. **A monitor that must be uninstalled before the system
+can be repaired is worse than no monitor**, and it fails in the worst direction: the more
+there is to fix, the harder it is to fix.
+
+✅ All three objects are `plpgsql` FUNCTIONS now — a function body is not parsed for
+dependencies, verified by creating and dropping a table with them installed. Free
+consequences: **layers are discovered at CALL time** (a schema built later needs no
+re-install, where the view froze its list into a `COMMENT`), and **the filter is an
+ARGUMENT** rather than a predicate the planner must prune.
+
+⚠️ **PASS THE LAYER; DO NOT FILTER THE RESULT.** A `WHERE layer='silver'` written after the
+call cannot push into the function: **32.9 s** against **0.25 s** for
+`ticker_freshness('silver')`. Per-layer cost is what the table costs — measured
+2026-08-23: silver **1.0 s**, `gold.stocks` 2.9 s, `unified_schema_all.pool__basic` 5.2 s,
+**`gold.stocks_ta` 26.5 s** at 17 GB across 946 columns.
+
+⚠️ **The general lesson is not about views.** Anything that observes a table takes a
+dependency or a lock on it, and the observer is written by someone not thinking about the
+writer. Ask of any new monitor: *what does this stop the repair path from doing?*
 
 ⚠️ **The first draft of the per-ticker query TIMED OUT AT 5 MINUTES** — a correlated
 `(SELECT COUNT(*) FROM cal WHERE cal.date > p.last_date)` per ticker. Ranking the calendar
@@ -236,13 +260,9 @@ once with `ROW_NUMBER()` and joining on equality is **1.4 s** on the same table;
 counting form survives only as a `COALESCE` fallback for a `last_date` the spine does not
 carry, which PostgreSQL short-circuits.
 
-⚠️ **Two things it is NOT.** It is not a Dagster asset: both objects are VIEWS, so there
-is nothing to materialise and nothing that can go stale behind its source — which is the
-failure mode being reported, and it would be absurd for the reporter to have it. And the
-unified layer list is discovered at **install** time and frozen into the view, so a schema
-built later is invisible until `--install` runs again; the installed list is written into
-the view's `COMMENT` so a reader can tell *"this layer is current"* from *"this layer was
-never in the view"*.
+⚠️ **It is NOT a Dagster asset.** All three objects are functions over live tables, so
+there is nothing to materialise and nothing that can go stale behind its source — which is
+the failure mode being reported, and it would be absurd for the reporter to have it.
 
 ## 2. ⚠️ This module does NOT pass data between stages
 

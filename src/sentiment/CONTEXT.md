@@ -203,7 +203,7 @@ price technicals.
 
 ## 7. If continuing — the honest next moves
 
-1. ~~Text + price/TA together (does sentiment add on top of price?)~~ **DONE — see §6a:**
+1. Text + price/TA together (does sentiment add on top of price?) **DONE — see §6a:**
    it does not; adding sentiment makes it worse, and the only faint signal is price/TA.
 2. **Cross-sectional relative return**, not absolute price — the thesis's documented tradeable
    target (`project-cross-sectional-strategy`); needs many more tickers than 3.
