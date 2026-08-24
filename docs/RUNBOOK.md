@@ -477,6 +477,30 @@ SELECT ticker, source, COUNT(*) FROM bronze_schema.cafef_financial_reports
 GROUP BY 1, 2 ORDER BY 1, 3 DESC;      -- expect only 'pdf' and 'missing'
 ```
 
+⚠️ **A row that produced NO statement must carry NO parse provenance.** `_decumulate` drops a
+cumulative Q4 income statement when the run lacks its Q1..Q3 priors but does not clear
+`meta`, so before 2026-08-24 such a row reported `source='missing'` beside a `document`, an
+OCR layer and a `consolidated` — a fact asserted about a quarter nothing was written for.
+`_write` is fixed; the second check is:
+
+```sql
+SELECT COUNT(*) FROM bronze_schema.cafef_financial_reports
+WHERE source <> 'pdf'
+  AND (COALESCE(method,'') <> '' OR consolidated IS NOT NULL
+       OR COALESCE(document,'') <> '' OR unit IS NOT NULL OR n_columns IS NOT NULL);
+-- expect 0
+```
+
+⚠️ **`publish_date`, `assurance` and the share counts are NOT provenance** — they are facts
+about the DOCUMENT and are kept whether or not any statement of it reconciled. Do not blank
+them.
+
+**If that count is ever non-zero, REPLAY the rule instead of re-parsing.** Blanking those six
+fields wherever `source <> 'pdf'` is the same predicate `_write` applies, so it is
+reproducible and idempotent — a 5.5 h re-parse to change 2 of 429 cells would recompute the
+other 427 with the code that already produced them. Dry-run it, apply, re-run to confirm 0,
+then re-ingest.
+
 ### ⚠️ 3e-ter. `--config-json '{...}'` IS BROKEN IN POWERSHELL 5.1 — measured 2026-08-24
 
 **Every `--config-json` command in this file is written in the form

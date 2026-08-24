@@ -2484,8 +2484,25 @@ clear `meta`, so the row reports `source='missing'` while still carrying the `do
 OCR layer and the **entity** of a parse that was thrown away: ACB Q4-2009 IS
 (`consolidated='false'`) and VCB Q4-2008 IS (`consolidated='true'`). That is a fact asserted
 about a quarter nothing was written for, which is exactly what the blank exists to prevent.
-`_write` now takes provenance only from a period that produced a row — **and correcting the
-two cells on disk needs a 5.5 h re-parse that has not been run.**
+`_write` now takes provenance only from a period that produced a row.
+
+✅ **AND THE TWO CELLS WERE CORRECTED WITHOUT RE-PARSING — the rule was REPLAYED over the
+files already on disk**, which is worth recording as a technique rather than as a fix. A
+5.5 h re-parse would have recomputed 429 cells to change 2, and the 427 others would have
+been recomputed with the same code that produced them. Instead the six fields `_write` now
+sources from `prov` were blanked wherever `source <> 'pdf'` — the identical predicate, applied
+to the output instead of during it. ⚠️ **`publish_date`, `assurance` and the share counts were
+NOT touched**: they are facts about the DOCUMENT, which `_write` keeps whether or not any
+statement of it reconciled. **Dry run first, 2 rows; applied; re-run 0 rows (idempotent); git
+diff 2 lines in 2 files; all six CSVs verified non-ragged**; re-ingested in 2 minutes.
+Afterwards `bronze.cafef_financial_reports` holds **0 rows carrying provenance without having
+produced one**, and `consolidated` reads ACB 195 true / 4 false / 20 null and VCB 206 true /
+4 null — matching the CSVs exactly.
+
+⚠️ **This is only legitimate because the repair is the CODE'S OWN RULE, not a judgement about
+the data.** Replaying a deterministic post-condition over an artefact is not the same as
+editing a figure by hand, and the difference is that this one is reproducible: running it
+again changes nothing.
 
 ### ⚠️ 6-2-undecies. `SAN-1` — THE MAGNITUDE GUARD ADOPTED THE CORRUPTION AS ITS BASELINE
 
