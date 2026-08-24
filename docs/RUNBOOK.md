@@ -443,6 +443,40 @@ does not erase phase 1's index.
 ⚠️ **`--partition-range` REQUIRES the single-run backfill policy** and fails loudly
 without it. `--partition` (singular) still works for one ticker.
 
+### ⚠️ 3e-quater. THE FINANCIALS CARRY-UP — parsing is not ingesting
+
+A rebuilt statement CSV changes nothing a model reads until it is carried up (§5 rule 11).
+Four assets, in this order, ~4 minutes for two tickers:
+
+```powershell
+foreach ($a in @("bronze/cafef_financials",
+                 "silver/cafef_financials_bank",
+                 "silver/stocks_basic_financials_bank",
+                 "silver/stocks_basic_financials_bank_fa",
+                 "gold/stocks_financials_bank_fa")) {
+  dagster asset materialize -f src/orchestration/definitions.py --select $a
+}
+```
+
+⚠️ **`BRZ-1`: DROP THE BRONZE TABLES FIRST IF ANY PERIOD WAS REMOVED UPSTREAM.** The ingest
+UPSERTS, so it can add and update but never delete — after `period_min` cut 8 VCB quarters,
+bronze still held **152 periods against the CSVs' 143**, and nothing reported it: the row
+count goes UP and `MAX(date)` stays correct. Drop
+`bronze_schema.cafef_financials_bank_{balance_sheet,income_statement,cash_flow}` and
+`bronze_schema.cafef_financial_reports`, then re-run.
+
+⚠️ **A NEW COLUMN MUST BE ADDED IN TWO PLACES.** `FinancialsBuilder.DATA_COLS` writes it and
+`DataPreprocessor.CAFEF_FINANCIAL_META_COLS` reads it; a column in the first and not the
+second falls through to the line items and is coerced to numeric
+(`ValueError: Unable to parse string "False"`). Nothing enforces the match.
+
+✅ **Verify with the query that can see the whole point**, never off the green run:
+
+```sql
+SELECT ticker, source, COUNT(*) FROM bronze_schema.cafef_financial_reports
+GROUP BY 1, 2 ORDER BY 1, 3 DESC;      -- expect only 'pdf' and 'missing'
+```
+
 ### ⚠️ 3e-ter. `--config-json '{...}'` IS BROKEN IN POWERSHELL 5.1 — measured 2026-08-24
 
 **Every `--config-json` command in this file is written in the form

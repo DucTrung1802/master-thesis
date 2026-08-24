@@ -2445,6 +2445,48 @@ merely successful, and it is how `SAN-1` was confirmed fully repaired.
 ⚠️ **COVERAGE FELL, AND THAT IS THE POINT.** 27 transcribed cells became 20 honest `missing`
 ones plus 4 real parses. §5 rule 24: a quarter no readable PDF can produce is `missing`.
 
+### ✅ 6-2-terdecies. THE CARRY-UP — `FIN-1` CLOSED, and three defects stood in the way
+
+Run 2026-08-24 straight after the two rebuilds. **`bronze/cafef_financials` →
+`silver/cafef_financials_bank` → `silver/stocks_basic_financials_bank(_fa)` →
+`gold/stocks_financials_bank_fa`**, all green, ~4 minutes end to end.
+
+| | |
+|---|---|
+| **the rule-24 test** | `bronze.cafef_financial_reports`: **405 `pdf` / 24 `missing` / 0 anything else** ✅ |
+| bronze statement tables | **143 periods** × 3, Q1-2008 .. Q4-2025 — equal to the CSVs, 0 stale |
+| `gold.stocks_financials_bank_fa` | **8,669 rows** (was 8,265), to **2026-08-21** (was 2026-06-25) |
+
+⚠️ **THREE DEFECTS BLOCKED IT, AND ONLY ONE WAS THE SESSION'S OWN:**
+
+1. **`GLB-1` — `glob` was the MODULE, not the function, and all 11 call sites in
+   `preprocessor.py` were broken.** `from glob import glob` at line 6 is overwritten by
+   `from utils.enums import *` / `from utils.utils import *` at lines 35 and 37, because
+   **neither declares `__all__`** and so `import *` carries their own `import glob` along.
+   Pre-existing — the file was last touched at `82fea06` and is not in this session's diff.
+   Fixed with a re-bind after the star imports; **the root cause survives** and a future star
+   import re-breaks it. ⚠️ *`import *` from a module without `__all__` exports that module's
+   IMPORTS, not only its definitions.*
+2. **The new `consolidated` column was absent from `CAFEF_FINANCIAL_META_COLS`**, so it fell
+   through to `line_cols`, was coerced to numeric, and raised `ValueError: Unable to parse
+   string "False"`. ⚠️ **`DATA_COLS` (the writer) and `CAFEF_FINANCIAL_META_COLS` (the
+   reader) are two halves of one contract with NOTHING enforcing the match.**
+3. **`BRZ-1` — a row deleted at the source is never deleted from bronze.** The ingest
+   UPSERTS, so after `period_min` removed 8 VCB quarters and ACB lost Q2-2026, bronze still
+   held **152 periods against 143**. ⚠️ **§5 rule 11 in a sharper form**: that rule is about
+   staleness, this is a **deletion that cannot propagate**, and no freshness check can see
+   it — the row count goes UP and `MAX(date)` stays right. Worked around with `DROP TABLE`;
+   **every `_ingest_bronze_*` in the repo has the same property.**
+
+⚠️ **AND ONE DEFECT IS FIXED IN CODE BUT NOT IN THE DATA — 2 of 429 cells.** `_decumulate`
+drops a cumulative Q4 income statement when the run lacks its Q1..Q3 priors, but it does not
+clear `meta`, so the row reports `source='missing'` while still carrying the `document`, the
+OCR layer and the **entity** of a parse that was thrown away: ACB Q4-2009 IS
+(`consolidated='false'`) and VCB Q4-2008 IS (`consolidated='true'`). That is a fact asserted
+about a quarter nothing was written for, which is exactly what the blank exists to prevent.
+`_write` now takes provenance only from a period that produced a row — **and correcting the
+two cells on disk needs a 5.5 h re-parse that has not been run.**
+
 ### ⚠️ 6-2-undecies. `SAN-1` — THE MAGNITUDE GUARD ADOPTED THE CORRUPTION AS ITS BASELINE
 
 Created and fixed 2026-08-24 within the hour, by the `allow_parent` change two sections up.
@@ -2600,7 +2642,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**18 open**, 38 resolved, codes permanent — ⚠️ **`SAN-1` opened-and-closed 2026-08-24 and is the one to read**: the magnitude guard `sane` learns its baseline from the quarters accepted in its own run, so one 2-line statement became the whole reference population and silently rejected every correct quarter after it (§6-2-undecies) — ⚠️ **`FIN-1` OPENED 2026-08-24 and it is the one to read if you touch fundamentals**: 34 financial report-rows on disk were transcribed from CafeF's HTML tabs rather than parsed from the filing PDF — the fallback fires on any absent period without checking whether a PDF exists. ⚠️ **Only 4 can be retried, all VCB**: `documents()` keeps `consolidated == "True"` only and ACB filed no consolidated statement before 2010. §5 rule 24 now forbids the source outright; the code still defaults `use_api=True` (§6-2-octies) — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**20 open**, 38 resolved, codes permanent — ⚠️ **`FIN-1` CLOSED 2026-08-24** — no financials row anywhere reads `source='cafef'`; ⚠️ **`GLB-1` and `BRZ-1` opened the same day**, both found by the carry-up: `GLB-1` is a star import rebinding `glob` from the function to the MODULE, breaking all 11 call sites in `preprocessor.py`; **`BRZ-1` is the sharper one — a row deleted at the SOURCE is never deleted from bronze**, because every `_ingest_bronze_*` upserts, and no freshness check can see it (§6-2-terdecies) — ⚠️ **`SAN-1` opened-and-closed 2026-08-24 and is the one to read**: the magnitude guard `sane` learns its baseline from the quarters accepted in its own run, so one 2-line statement became the whole reference population and silently rejected every correct quarter after it (§6-2-undecies) — ⚠️ **`FIN-1` OPENED 2026-08-24 and it is the one to read if you touch fundamentals**: 34 financial report-rows on disk were transcribed from CafeF's HTML tabs rather than parsed from the filing PDF — the fallback fires on any absent period without checking whether a PDF exists. ⚠️ **Only 4 can be retried, all VCB**: `documents()` keeps `consolidated == "True"` only and ACB filed no consolidated statement before 2010. §5 rule 24 now forbids the source outright; the code still defaults `use_api=True` (§6-2-octies) — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -2664,7 +2706,7 @@ still resolves; only the PATH gained a `docs/` prefix.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](docs/ISSUES.md)** | 18 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](docs/ISSUES.md)** | 20 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** Six lettered groups — ⭐ **the TOP ROW is `P6`, OCR the ≤2020 corpus** (promoted 2026-08-23); **A data `P2`, B OCR `P6`/`P5`/`P4`** (⚠️ `P3`, the JSON gate, is CLOSED BY DECISION and archived UNMEASURED), C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ✅ **`P1` DONE 2026-08-23** (§6-2-quinquies). ⚠️ **THE NUMBERS ARE FROZEN AS OF 2026-08-23 AND WILL NOT MOVE AGAIN** — a `P<n>` is a permanent NAME, exactly as an `ISSUES.md` code is, and **PRIORITY IS THE ROW ORDER**, so read the list top-down and cite the number. The list starts at `P2` and the numbers need not stay monotonic; that is the price of a code that means one thing forever. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P11`, `P4-2` is now `P21`, …). ⚠️ **A `P<n>` written BEFORE 2026-08-23 still resolves to a different item** — three renumbers in two days preceded the freeze — so take the DATE of what you are reading, then TODO.md's two crosswalks, which are the last two that will ever be needed | deciding what to do next |
 | **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
 | **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |

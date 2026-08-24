@@ -2175,14 +2175,28 @@ class FinancialsBuilder:
             while (y, q) <= (y1, q1):
                 period = f"Q{q}-{y}"
                 m = meta[report].get(period, {})
+                # ⚠️ **A PARSE THAT DID NOT SURVIVE LEAVES ITS METADATA BEHIND.**
+                # `_decumulate` drops a cumulative Q4 income statement from `rows` when
+                # this run lacks its Q1..Q3 priors, but it does not clear `meta` — so the
+                # row reports `source='missing'` while still carrying the document, the OCR
+                # layer and the ENTITY of a parse that was thrown away. Measured 2026-08-24:
+                # ACB Q4-2009 IS came out `missing` with `consolidated='false'`, and VCB
+                # Q4-2008 IS `missing` with `consolidated='true'` — a fact asserted about a
+                # quarter nothing was written for, which is precisely what the blank exists
+                # to avoid. Provenance is taken ONLY from a period that produced a row.
+                # ⚠️ `publish_date` and `assurance` are deliberately NOT in this set: they
+                # are facts about the DOCUMENT and are kept whether or not any statement of
+                # it reconciled (see where they are assigned, above).
+                produced = period in rows
+                prov = m if produced else {}
                 row = {"symbol": symbol, "exchange": exchange, "template": template,
                        "period": period, "year": y, "quarter": q,
                        # the cascade layer that produced this statement; empty unless
                        # `source == "pdf"`, since nothing else came off a filing
-                       "method": m.get("ocr_config", ""),
+                       "method": prov.get("ocr_config", ""),
                        # `pdf` = read off the filing; `cafef` = taken from CafeF's tabs
                        # because the filing could not be read
-                       "source": (m.get("source", "pdf") if period in rows else "missing"),
+                       "source": (m.get("source", "pdf") if produced else "missing"),
                        # From the QUARTER, not the statement: one filing produced all three, so
                        # they share a publish date — even a row that had to come from CafeF's
                        # tabs because its statement would not parse. Join on THIS, not the
@@ -2193,11 +2207,11 @@ class FinancialsBuilder:
                        # blank for a `missing` row: no filing was read, so no entity was
                        # chosen. Never defaulted to "True" — that would assert a fact about
                        # a quarter nothing was parsed for.
-                       "consolidated": m.get("consolidated", ""),
-                       "cash_flow_method": m.get("cash_flow_method", ""),
-                       "unit": m.get("unit", ""),
-                       "n_columns": m.get("n_columns", ""),
-                       "document": m.get("document", ""),
+                       "consolidated": prov.get("consolidated", ""),
+                       "cash_flow_method": prov.get("cash_flow_method", ""),
+                       "unit": prov.get("unit", ""),
+                       "n_columns": prov.get("n_columns", ""),
+                       "document": prov.get("document", ""),
                        # from the QUARTER's filing, shared across its three statements — blank
                        # for a cafef/missing quarter (the tabs have no share field)
                        "shares_authorized": _blank(shares.get(period, {}).get(

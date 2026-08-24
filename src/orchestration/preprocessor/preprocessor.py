@@ -42,6 +42,20 @@ from utils.switch_handler import SwitchHandler
 # about what they mean. Adding a filter must never require editing a 9,000-line module.
 from orchestration.preprocessor import filters as filter_registry
 
+# ⚠️ **RE-BOUND HERE ON PURPOSE, AFTER THE STAR IMPORTS ABOVE — do not move it back up.**
+# Line 6 says `from glob import glob`, which binds the FUNCTION; `from utils.enums import *`
+# and `from utils.utils import *` then re-export their own `import glob` and rebind the name
+# to the MODULE, silently. Every one of this file's 11 `glob(...)` call sites then raises
+# `TypeError: 'module' object is not callable` — measured 2026-08-24, when
+# `_ingest_bronze_cafef_financial_schema` failed on it and took the whole
+# `bronze/cafef_financials` materialisation with it.
+#
+# ⚠️ The star imports are what make this possible at all: `utils.utils` and `utils.enums`
+# declare no `__all__`, so `import *` carries their imported MODULES into this namespace
+# alongside their own functions. A one-line re-bind is the minimal repair; the real fix is an
+# `__all__` in those two modules, which is `GLB-1`.
+from glob import glob  # noqa: E402  — must come AFTER the star imports; see above
+
 load_dotenv()
 
 
@@ -1534,6 +1548,15 @@ class DataPreprocessor:
         "source",
         "publish_date",
         "assurance",
+        # ⚠️ WHICH ENTITY THE ROW DESCRIBES — "True" consolidated (hợp nhất), "False"
+        # standalone (công ty mẹ), blank for a `missing` row. Added 2026-08-24 with
+        # `FinancialsBuilder.documents(allow_parent=…)`, and it MUST be listed here: this
+        # tuple is what separates document metadata from LINE ITEMS, and a column missing
+        # from it falls through to `line_cols` and is coerced to numeric —
+        # `ValueError: Unable to parse string "False"`, which is how it was found. The
+        # writer's `DATA_COLS` and this reader's list are two halves of one contract with
+        # nothing enforcing the match; adding a column to one means adding it to the other.
+        "consolidated",
         "cash_flow_method",
         "unit",
         "n_columns",
