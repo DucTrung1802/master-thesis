@@ -240,6 +240,23 @@ DTO helpers come from
     on it), so a re-scrape that fills in a body which was previously a `type=error`
     stub UPDATES the row instead of writing a second copy of the same article.
     `content` reaches ~19 KB → `TEXT` is required, not `VARCHAR`.
+> ### ⚠️ FINANCIALS COME FROM THE FILING PDF AND FROM NOTHING ELSE (2026-08-24)
+>
+> **CLAUDE.md §5 rule 24, a standing DECISION.** Every balance-sheet, income-statement and
+> cash-flow value must be OCR-parsed out of the company's own filed PDF under
+> `raw_data/cafef/pdfs/`. **An HTML tab, a JSON endpoint, a web table or any other
+> transcription is FORBIDDEN as a source** — not as a fallback, not "for the quarters OCR
+> cannot read", not to close a gap. **A quarter no readable PDF can produce is `missing`,
+> and `missing` is the correct answer.**
+>
+> ⚠️ **The builder still defaults `use_api=True` and 34 report-rows on disk came from
+> CafeF's web tabs** — ACB 27, VCB 7. ⚠️ **Only FOUR of them can be retried from a document
+> on disk, and all four are VCB**: `documents()` keeps `consolidated == "True"` only, and
+> **ACB filed no consolidated statement before 2010** (2007-09 are parent-company-only), so
+> ACB's 27 are unreachable without a policy change. That is `FIN-1`. **Read `bronze.cafef_financial_reports.source` before
+> quoting any fundamental**; anything other than `pdf` or `missing` is a defect.
+
+
 - **CafeF financials — 15 tables at full coverage** (`_ingest_bronze_cafef_financials`),
   from `raw_data/cafef/financials/`, which is built OFFLINE by the PDF-reading
   pipeline in `src/web_scraper` (not by a network scraper). **The template is a

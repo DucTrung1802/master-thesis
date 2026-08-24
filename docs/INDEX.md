@@ -12,6 +12,17 @@
 
 ---
 
+> ### ⚠️ ONE STANDING RULE IS REPEATED HERE BECAUSE THIS FILE IS AUTO-LOADED (2026-08-24)
+>
+> **A financial statement value comes from the filing PDF and from nothing else.** No HTML
+> tab, no JSON endpoint, no web table, no transcription — not as a fallback, not "for the
+> quarters OCR cannot read", not to close a gap. **A quarter no readable PDF can produce is
+> `missing`, and `missing` is the correct answer.** CLAUDE.md §5 rule 24 · `ISSUES.md`
+> `FIN-1` · TODO `P37`.
+>
+> ⚠️ This is the one exception to rule 4 below ("this index is routing, never content"),
+> and it is deliberate: the rule has to be in context before a session opens anything.
+
 ## Tier 0 — already in your context, free
 
 | file | ~tokens | what it answers |
@@ -31,7 +42,7 @@ its row and is struck through; a done TODO item leaves its measurement in `CLAUD
 | file | ~tokens | open it when |
 |---|---|---|
 | [RUNBOOK.md](RUNBOOK.md) | **16.5k** | *how do I RUN it?* 8 stages with measured runtimes, stage order, the two flags that destroy things, §8 rule 1 (the gate on quoting any number), **§8c the before-you-commit state check** |
-| [ISSUES.md](ISSUES.md) | **19.0k** | *what is BROKEN?* 14 open / 38 resolved, codes permanent, never renumbered or reused. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`) |
+| [ISSUES.md](ISSUES.md) | **19.0k** | *what is BROKEN?* 18 open / 38 resolved, codes permanent, never renumbered or reused. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`) |
 | [TODO.md](TODO.md) | **47.9k** ⚠️ | *what is NEXT?* ⚠️ **THE NUMBERS ARE FROZEN AS OF 2026-08-23** — a `P<n>` is a permanent NAME and **PRIORITY IS THE ROW ORDER**, so read top-down and cite the number. **35 open tasks** in six lettered groups — ⭐ **top row `P6`** (OCR the ≤2020 corpus); **A data `P2`, B OCR `P6`/`P5`/`P4`** (`P3` closed by DECISION, archived unmeasured), C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`; `P1` closed 2026-08-23. ⚠️ A HYPHENATED code is RETIRED, and a bare `P<n>` written BEFORE 2026-08-23 still means a different item — the two crosswalks resolve it and are the last two needed. **The largest file here: read the top, not the whole thing** |
 | [pipeline.md](pipeline.md) | **5.5k** | *which ticker, on which date?* What the chain OUTPUTS — `(date, ticker, weight)`, 4,720 picks across 236 books. §6 is why there is no book for today |
 | [PIPELINE_h10_CAGR74.md](PIPELINE_h10_CAGR74.md) | **7.3k** | *how does ONE number get made, end to end?* The h=10 chain returning CAGR +74.0 %/yr. **§12 is the caveat section and is why the file exists** |

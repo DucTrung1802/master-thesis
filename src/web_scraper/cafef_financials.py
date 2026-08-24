@@ -70,6 +70,33 @@ class ParseLayer:
     loose_form_code: bool = False
     crop_pad: Optional[float] = None
 
+# ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
+# Filings before Q1-2008 are blocked at the INPUT, so no pre-2008 document is ever opened and
+# no pre-2008 row is ever written. Three measured reasons, none of them "old data is bad":
+#
+#   1. **A pre-2008 Q4 income statement cannot be de-cumulated and never could.** CafeF holds
+#      an ANNUAL report for VCB 2006 and 2007 and no quarterly filing at all, so `_decumulate`
+#      has no Q1..Q3 to subtract and correctly drops the row every single time. The work is
+#      guaranteed waste, and it was measured being wasted on 2026-08-24.
+#   2. **The cheapest thing in the cascade is a document never opened.** VCB's Q4-2006 annual
+#      cost **29.7 minutes** — its cash flow is absent, and `_parse_cascaded` only breaks when
+#      all three statements are accepted, so the two that WERE read at layer 1 paid for the
+#      whole 21-layer escalation. That single blocked document is 65 % of that run's wall clock.
+#   3. **The price panel starts later anyway.** Nothing downstream joins a 2006 fundamental.
+#
+# ⚠️ It is a FLOOR ON THE PERIOD, not on the file date: a 2009 annual report covering FY-2008
+# is kept, because the period it contributes is Q4-2008. ⚠️ And it DELETES: VCB carries 3 `pdf`
+# rows before Q1-2008 (Q4-2006 BS, Q4-2007 BS, Q4-2007 CF) which an authoritative run will drop
+# with the rest of that grid. That is the intended trade and it is stated rather than hidden.
+FINANCIALS_PERIOD_MIN = "Q1-2008"
+
+
+def _period_key(period: str) -> Tuple[int, int]:
+    """`"Q3-2014"` -> `(2014, 3)`, the order every period comparison here uses."""
+    q, y = period.split("-")
+    return (int(y), int(q[1]))
+
+
 PDFS_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "pdfs")
 FIN_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "financials")
 
@@ -117,7 +144,17 @@ DATA_COLS = ["symbol", "exchange", "template", "period", "year", "quarter",
              # accounting choice (direct/indirect), nothing to do with OCR.
              "method",
              "source",
-             "publish_date", "assurance", "cash_flow_method", "unit", "n_columns",
+             "publish_date", "assurance",
+             # ⚠️ WHICH ENTITY THIS ROW DESCRIBES — "True" for a CONSOLIDATED filing
+             # (hợp nhất, parent + subsidiaries), "False" for the STANDALONE one (công ty
+             # mẹ / riêng lẻ). It became a column the day `documents()` gained
+             # `allow_parent`: before that every row was consolidated by construction, so
+             # the fact was implicit and safe to omit. It is neither once both can appear
+             # in one file — two entities in one column, with nothing saying which is
+             # which, is the same defect as sourcing a figure from a web tab. ⚠️ **Read
+             # it before comparing two quarters of the same ticker.**
+             "consolidated",
+             "cash_flow_method", "unit", "n_columns",
              "document",
              # Share capital read from the filing's "Vốn cổ phần" note — a per-DOCUMENT fact
              # (one filing, one note), so all three statements of a quarter carry the same
@@ -245,6 +282,20 @@ class FinancialsBuilder:
     # more than this.
     SIMILARITY = 0.92
 
+    # ⚠️ **HOW MANY MAPPED LINES A STATEMENT NEEDS BEFORE IT MAY BECOME A REFERENCE for
+    # `sane`.** Not a gate on ACCEPTING a statement — a thin one that reconciles is still
+    # written — but on letting its probe into `history`, which is a different job: `history`
+    # is the population every LATER quarter is judged against, so one bad entry rejects
+    # everything after it.
+    #
+    # ⚠️ Measured 2026-08-24, and it cost a run: ACB's Q3-2009 standalone filing produced an
+    # income statement with **2 mapped items**, it reconciled, its probe became the ONLY entry
+    # in `history[income_statement]` — and `sane`'s median-based +/-20x band is therefore that
+    # single figure, so **Q1-2010's income statement, which had read cleanly at `onnx@200` for
+    # as long as the file has existed, was rejected as a magnitude outlier.** The guard that
+    # exists to catch bad data had been poisoned by bad data.
+    MIN_ITEMS_FOR_HISTORY = 8
+
     # The PARSE LAYERS tried per filing, in order, until each statement reconciles. A statement
     # that fails one layer (over-included pages, a misread digit, a note column pulled into the
     # value zone, a total-label variant) is retried by the next before the CafeF-tab fallback.
@@ -330,6 +381,38 @@ class FinancialsBuilder:
         ParseLayer("onnx@200+loose", "onnx", 200, loose_form_code=True),
         ParseLayer("onnx@200+loose+relax", "onnx", 200,
                    relax_totals=True, loose_form_code=True),
+        # ── THE COMBINATIONS THE CASCADE NEVER HAD, added 2026-08-24 ──────────────────
+        # Every classification knob above appears ALONE and at 200 dpi only: there was no
+        # `title_over_form` + `loose_form_code` layer, and no `loose_form_code` above 200.
+        # Probed against the three statements that defeat every existing layer (VCB Q1-2009
+        # and Q2-2009 balance sheets), **`onnx@400+loose` gets strictly further than anything
+        # else** — Q1-2009 moves from "no total assets" to "assets != liabilities + equity",
+        # i.e. the grand total is finally read; 200 and 300 dpi cannot find it at all.
+        #
+        # ⚠️ **NONE OF THE THREE ACCEPTS A STATEMENT TODAY, AND THEY ARE HERE ANYWAY —
+        # deliberately, and this is the one place that argument is made.** The file's rule is
+        # that a layer recovering zero quarters is pure cost, which is why these sit LAST, past
+        # every cheaper layer: only a statement that has already defeated all 21 predecessors
+        # can reach them, so no passing quarter changes and the cost falls solely on documents
+        # that were paying the full cascade regardless. What buys them their place is that the
+        # failure they leave behind is a DIFFERENT one — an arithmetic gap, not a missing
+        # total — which is the failure the schema mapping can act on.
+        #
+        # ⚠️ **AND THEY ARE NOT A FIX FOR THOSE TWO QUARTERS.** Their gap is `A - (L+E)` at a
+        # stable **4.3-4.5 % of assets** across 200/300/400 dpi and every crop padding, so the
+        # digits are being read correctly and no OCR setting can close it. That is a schema
+        # mapping problem in the 2009-era consolidated VAS bank presentation. CLAUDE.md
+        # §6-2-decies.
+        ParseLayer("onnx@400+loose", "onnx", 400, loose_form_code=True),
+        ParseLayer("onnx@400+loose+relax", "onnx", 400,
+                   relax_totals=True, loose_form_code=True),
+        ParseLayer("onnx@300+loose", "onnx", 300, loose_form_code=True),
+        ParseLayer("onnx@300+loose+relax", "onnx", 300,
+                   relax_totals=True, loose_form_code=True),
+        ParseLayer("onnx@200+title+loose", "onnx", 200,
+                   title_over_form=True, loose_form_code=True),
+        ParseLayer("onnx@200+title+loose+relax", "onnx", 200,
+                   relax_totals=True, title_over_form=True, loose_form_code=True),
     ]
 
     def __init__(self, logger=None):
@@ -482,7 +565,7 @@ class FinancialsBuilder:
     @classmethod
     def build_all(cls, logger=None, switch_handler=None,
                   symbols: Optional[List[Tuple[str, str]]] = None,
-                  use_api: bool = True,
+                  use_api: bool = False,
                   skip_existing: bool = True) -> Dict[str, Dict[str, int]]:
         """Switch-driven batch entry point (`web_scraper/cafef/financials`) — main.py's
         way in, mirroring the scrapers' `scrape()` even though nothing here is scraped:
@@ -582,8 +665,30 @@ class FinancialsBuilder:
     # Choosing the documents
     # ──────────────────────────────────────────────────────────────────────
 
-    def documents(self, exchange: str, symbol: str) -> List[dict]:
-        """The one consolidated filing to read per quarter, oldest first.
+    def documents(self, exchange: str, symbol: str,
+                  allow_parent: bool = False,
+                  period_min: Optional[str] = FINANCIALS_PERIOD_MIN) -> List[dict]:
+        """The one filing to read per quarter, oldest first — consolidated by preference.
+
+        ⚠️ **`allow_parent` FALLS BACK TO THE STANDALONE FILING FOR A PERIOD THAT HAS NO
+        CONSOLIDATED ONE, AND IT IS NOT A LOOSENING — measured 2026-08-24.** With the
+        consolidated-only rule this method opens **13,912 of the 55,998 documents on disk
+        (24.8 %)**, and **273 of 784 tickers yield NOTHING AT ALL**: a company with no
+        subsidiaries files no `hợp nhất` statement, so its standalone report is not a lesser
+        version of a consolidated one — it is the only statement that exists, and it IS the
+        company. `HNX_ADC` files 51 documents, every one of them standalone. With the
+        fallback the method opens **26,280 documents (x1.89)** and the tickers that yield
+        nothing drop to **22**.
+
+        It also reaches ACB's early years: ACB filed no consolidated statement before 2010,
+        so its 2008-09 quarters were unreachable and had been silently filled from CafeF's
+        web tabs instead (`ISSUES.md` FIN-1). ACB goes 65 -> 73 documents, VCB 72 -> 75.
+
+        ⚠️ **CONSOLIDATED STILL WINS WHENEVER BOTH EXIST** — the preference is the first key
+        of the sort, ahead of assurance, so no quarter that reads consolidated today can
+        change entity. ⚠️ **AND THE CHOICE IS RECORDED**: every row carries a `consolidated`
+        column, because two entities in one column with nothing saying which is which is the
+        same defect as sourcing a figure from a web tab.
 
         Q4 is taken from the AUDITED ANNUAL report (CafeF files it under quarter 5) whenever
         one exists. It is the same period — the balance sheet at 31 December IS the Q4 balance
@@ -599,7 +704,16 @@ class FinancialsBuilder:
             raise FileNotFoundError(
                 f"no PDF index at {index} — run CafeFPdfScraper for {symbol} first")
         with open(index, encoding="utf-8-sig") as f:
-            rows = [r for r in csv.DictReader(f) if r["consolidated"] == "True"]
+            rows = list(csv.DictReader(f))
+        if not allow_parent:
+            rows = [r for r in rows if r["consolidated"] == "True"]
+
+        # ⚠️ CONSOLIDATED FIRST, ASSURANCE SECOND. Ordering the tuple the other way would let
+        # an AUDITED standalone report displace an UNAUDITED consolidated one — a change of
+        # entity bought for a change of assurance, which is not a trade this method may make.
+        def _pref(r: dict) -> tuple:
+            return (0 if r["consolidated"] == "True" else 1,
+                    self.ASSURANCE_RANK.get(r["assurance"], 9))
 
         best: Dict[str, dict] = {}
         annual: Dict[str, dict] = {}
@@ -610,21 +724,35 @@ class FinancialsBuilder:
             q = int(q)
             if q == 5:                        # the audited annual -> stands in for Q4
                 p = f"Q4-{r['year']}"
-                rank = self.ASSURANCE_RANK.get(r["assurance"], 9)
-                if p not in annual or rank < self.ASSURANCE_RANK.get(
-                        annual[p]["assurance"], 9):
+                if p not in annual or _pref(r) < _pref(annual[p]):
                     annual[p] = {**r, "period": p, "quarter": "4", "annual": "True"}
                 continue
             if q not in (1, 2, 3, 4):
                 continue
             p = r["period"]
-            rank = self.ASSURANCE_RANK.get(r["assurance"], 9)
-            if p not in best or rank < self.ASSURANCE_RANK.get(best[p]["assurance"], 9):
+            if p not in best or _pref(r) < _pref(best[p]):
                 best[p] = {**r, "annual": "False"}
 
-        best.update(annual)                   # the annual report wins Q4
-        return sorted(best.values(),
-                      key=lambda r: (int(r["year"]), int(r["quarter"])))
+        # The annual report wins Q4 — but ⚠️ **NEVER ACROSS ENTITIES**. This was a bare
+        # `best.update(annual)` and was safe only while both dicts were consolidated-only:
+        # with `allow_parent` a STANDALONE annual would silently displace a CONSOLIDATED
+        # Q4 quarterly, changing which entity that row describes to buy a better-produced
+        # document. Measured before the guard: **86 of 13,912 consolidated periods moved**.
+        # Compare the entity rank only — within one entity the annual still wins on the
+        # original grounds (same period, audited, better typeset).
+        for p_, a in annual.items():
+            if p_ not in best or _pref(a)[0] <= _pref(best[p_])[0]:
+                best[p_] = a
+        # ⚠️ THE FLOOR IS APPLIED TO THE PERIOD THE DOCUMENT CONTRIBUTES, AFTER the annual
+        # has been folded onto its Q4 — so a 2009-dated FY-2008 report is judged as Q4-2008
+        # and kept, while a 2007 annual is dropped as Q4-2007. Filtering the raw index rows
+        # instead would have used the FILING year and thrown away the report that carries the
+        # first quarter we want. See FINANCIALS_PERIOD_MIN for why the floor exists.
+        out = best.values()
+        if period_min:
+            floor = _period_key(period_min)
+            out = [r for r in out if _period_key(r["period"]) >= floor]
+        return sorted(out, key=lambda r: (int(r["year"]), int(r["quarter"])))
 
     # ──────────────────────────────────────────────────────────────────────
     # Gates
@@ -1626,8 +1754,10 @@ class FinancialsBuilder:
 
     def build(self, exchange: str, symbol: str,
               periods: Optional[List[str]] = None,
-              use_api: bool = True,
+              use_api: bool = False,
               merge: Optional[bool] = None,
+              allow_parent: bool = False,
+              period_min: Optional[str] = FINANCIALS_PERIOD_MIN,
               skip_existing: bool = True) -> Dict[str, int]:
         """Parse the archive into the three statement CSVs.
 
@@ -1645,6 +1775,15 @@ class FinancialsBuilder:
         Two things are weaker in a subset run and are compensated where possible: `sane` has no
         neighbouring quarters to judge magnitude against (it fails open), and `open_ref` is read
         back from the file on disk rather than from this run's own Q4.
+
+        ⚠️ **AND `sane` CAN FAIL CLOSED IN A SUBSET RUN, WHICH THIS DOCSTRING USED TO DENY —
+        measured 2026-08-24.** It judges magnitude against the quarters accumulated in THIS
+        run, so a subset spanning odd period types gives it a misleading neighbourhood rather
+        than an empty one: VCB's Q2-2009 cash flow reconciles cleanly on its own (`reconcile`
+        and `sane` both `None` at `onnx@200`, with and without `open_ref`) and a five-quarter
+        run holding three Q4 annuals plus two 2009 quarters rejected it. **Use `periods` to
+        PROBE, never to PRODUCE** — an authoritative grid needs `skip_existing=False` and no
+        `periods`. CLAUDE.md §6-2-decies.
 
         `skip_existing=True` (the default, matching every other scraper here) drops any YEAR
         whose quarters already read `source == 'pdf'` in all three statements — there is
@@ -1668,7 +1807,8 @@ class FinancialsBuilder:
         # surfaced as "all 65 filings failed to reconcile". See `preflight`.
         template = self.preflight(exchange, symbol)
 
-        docs = self.documents(exchange, symbol)
+        docs = self.documents(exchange, symbol, allow_parent=allow_parent,
+                              period_min=period_min)
         if periods:
             docs = [d for d in docs if d["period"] in set(periods)]
 
@@ -1711,7 +1851,14 @@ class FinancialsBuilder:
         data: Dict[str, Dict[str, dict]] = {r: {} for r in REPORTS}
         items: Dict[str, List[str]] = {r: [] for r in REPORTS}
         meta: Dict[str, Dict[str, dict]] = {r: {} for r in REPORTS}
-        history: Dict[str, List[int]] = {r: [] for r in REPORTS}
+        # ⚠️ **PER REPORT *AND* PER ENTITY.** `sane` judges a statement's magnitude against
+        # the quarters already accepted, and a STANDALONE company is not the same company as
+        # the CONSOLIDATED group — its profit and its balance sheet are legitimately smaller.
+        # Pooling them makes the band meaningless in both directions. This mattered the moment
+        # `allow_parent` existed, because a ticker can now file standalone for its early years
+        # and consolidated later — which is exactly ACB (standalone 2008-09, consolidated 2010+).
+        history: Dict[str, Dict[str, List[int]]] = {
+            r: {"True": [], "False": []} for r in REPORTS}
         half_year: Dict[str, bool] = {}
         # The publish date belongs to the QUARTER'S DOCUMENT, not to one statement: one filing
         # produced all three, so they were all published on the same day. Keeping it per
@@ -1753,8 +1900,10 @@ class FinancialsBuilder:
                         if on_disk.get(c):
                             open_ref = int(on_disk[c])
                             break
+            entity = d.get("consolidated", "True")
             accepted, facts = self._parse_cascaded(
-                path, self._period_end(period), template, history, open_ref)
+                path, self._period_end(period), template,
+                {r: history[r][entity] for r in REPORTS}, open_ref)
 
             # the document's own date, kept whether or not any of its statements reconcile
             assurance[period] = d["assurance"]
@@ -1774,7 +1923,10 @@ class FinancialsBuilder:
 
                 data[report][period] = row
                 meta[report][period] = {
-                    "assurance": d["assurance"], "unit": st.unit,
+                    "assurance": d["assurance"],
+                    # which ENTITY this statement describes; see DATA_COLS."consolidated"
+                    "consolidated": d.get("consolidated", ""),
+                    "unit": st.unit,
                     "n_columns": st.n_columns, "document": d["file"],
                     # read from THIS filing: a company chooses the method and may switch it
                     "cash_flow_method": st.cash_flow_method or "",
@@ -1788,9 +1940,16 @@ class FinancialsBuilder:
                 # earned 1,345,661). The document itself is the authority, not the index.
                 if report == INCOME_STATEMENT and st.quarter_column:
                     half_year[period] = False
+                # ⚠️ A THIN STATEMENT IS WRITTEN BUT NEVER BECOMES A REFERENCE — see
+                # MIN_ITEMS_FOR_HISTORY. Accepting it and trusting it are separate decisions.
                 v = self._probe(report, row, st)
-                if v is not None:
-                    history[report].append(v)
+                if v is not None and len(row) >= self.MIN_ITEMS_FOR_HISTORY:
+                    history[report][entity].append(v)
+                elif v is not None:
+                    self._warn(
+                        f"    {period} {report}: only {len(row)} mapped items — accepted, "
+                        f"but withheld from the magnitude history (needs "
+                        f"{self.MIN_ITEMS_FOR_HISTORY})")
                 notes.append(f"{report}={len(row)} items [{cfg}]")
             self._log(f"  {period:<8} {'; '.join(notes)}")
 
@@ -1860,12 +2019,24 @@ class FinancialsBuilder:
         """{report: {period: {canonical column: value}}} from the three tabs of
         cafef.vn/du-lieu/<exchange>/<sym>-tai-chinh.chn.
 
-        This is not a lesser source — for the quarters OCR cannot read it is a BETTER one. The
-        tabs are keyed by the same item CODES the schema was built from, so a value lands on
-        its canonical column exactly: no OCR, no fuzzy matching, no chance of a line being
-        mistaken for its neighbour. What it is not is the filing itself — CafeF transcribes,
-        and it has gaps (it omits Q2-2024 market-wide) and it rounds — so the PDF is still
-        read first and this fills only what the PDF could not.
+        ⚠️ **FORBIDDEN AS A SOURCE SINCE 2026-08-24 — `use_api` DEFAULTS TO FALSE AND MUST STAY
+        THERE.** CLAUDE.md §5 rule 24: a financial statement value comes from the filing PDF and
+        from nothing else. **A quarter no readable PDF can produce is `missing`, and `missing`
+        is the correct answer.** The method is kept, not deleted, because the reconciliation
+        cross-checks below still read these tabs to CHALLENGE a parsed figure — comparing against
+        a transcription is legitimate; sourcing from one is not.
+
+        ⚠️ *This docstring used to open: "This is not a lesser source — for the quarters OCR
+        cannot read it is a BETTER one. The tabs are keyed by the same item CODES the schema was
+        built from, so a value lands on its canonical column exactly: no OCR, no fuzzy matching,
+        no chance of a line being mistaken for its neighbour."* That argument is **right about
+        the mechanism** and is kept for exactly that reason — it is overruled on a different
+        ground: **a transcription is somebody else's parse of the document**, and once it is in
+        the table nothing downstream can tell it from the filing. The evidence for the overrule
+        is already in this file: CafeF's Q4 figures disagree with its own annual tab for VCB
+        2011-13/2015/2020, eight of its values are confirmed WRONG against the filings, and
+        `NOT_REPORTED` below is a literal `-1` that lands as −1 dong in a column of billions and
+        takes part in no subtotal, so no reconciliation catches it. `ISSUES.md` `FIN-1`.
         """
         from web_scraper.cafef_schema import TABS, _get
 
@@ -2019,6 +2190,10 @@ class FinancialsBuilder:
                        # Q4-2024 figures were not public until 2025-03-28.
                        "publish_date": published.get(period, ""),
                        "assurance": m.get("assurance") or assurance.get(period, ""),
+                       # blank for a `missing` row: no filing was read, so no entity was
+                       # chosen. Never defaulted to "True" — that would assert a fact about
+                       # a quarter nothing was parsed for.
+                       "consolidated": m.get("consolidated", ""),
                        "cash_flow_method": m.get("cash_flow_method", ""),
                        "unit": m.get("unit", ""),
                        "n_columns": m.get("n_columns", ""),

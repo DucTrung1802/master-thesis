@@ -276,6 +276,22 @@ actually opens:
    would leave a one-row file naming only the ticker that ran last — which is how VCB
    lost its row when ACB was parsed alone.
 
+> ### ⚠️ FINANCIALS COME FROM THE FILING PDF AND FROM NOTHING ELSE (2026-08-24)
+>
+> **CLAUDE.md §5 rule 24, a standing DECISION.** Every balance-sheet, income-statement and
+> cash-flow value must be OCR-parsed out of the company's own filed PDF under
+> `raw_data/cafef/pdfs/`. **An HTML tab, a JSON endpoint, a web table or any other
+> transcription is FORBIDDEN as a source** — not as a fallback, not "for the quarters OCR
+> cannot read", not to close a gap. **A quarter no readable PDF can produce is `missing`,
+> and `missing` is the correct answer.**
+>
+> ⚠️ **`raw/cafef_financials` still runs the builder with `use_api=True`**, so it fills any
+> period the PDF pass missed from CafeF's web tabs — 34 report-rows on disk came from there
+> (ACB 27, VCB 7). ⚠️ **Only FOUR can be retried from a document on disk, all of them VCB**:
+> `documents()` keeps `consolidated == "True"` only and **ACB filed no consolidated statement
+> before 2010**. That is `FIN-1`, and the asset exposes no knob to turn it off. **Read
+> `bronze.cafef_financial_reports.source` before quoting any fundamental.**
+
 ### Full landing-layer audit (every asset traced to the file it opens)
 
 | asset | opens | upstream |

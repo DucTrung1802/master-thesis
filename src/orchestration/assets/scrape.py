@@ -79,7 +79,7 @@ from utils.constants import (
     SIMPLIZE_RAW_DATA_DIR,
     TRADING_VIEW_RAW_DATA_DIR,
 )
-from web_scraper.cafef_financials import FinancialsBuilder
+from web_scraper.cafef_financials import FINANCIALS_PERIOD_MIN, FinancialsBuilder
 from web_scraper.cafef_index_scraper import CafeFIndexScraper
 from web_scraper.cafef_news_scraper import CafeFNewsScraper
 from web_scraper.cafef_pdf_scraper import CafeFPdfScraper
@@ -106,9 +106,49 @@ class FinancialsConfig(Config):
     compares a figure against neighbouring quarters — to failing open. That guard is what
     caught ACB's Q1-2024 carrying Q1-2023's PBT. Default True for "fill the gaps"; set
     False whenever the PARSER itself has changed.
+
+    ⚠️ **THERE IS NO `use_api` KNOB AND THERE MUST NOT BE ONE.** CLAUDE.md §5 rule 24: a
+    financial statement value comes from the filing PDF and from nothing else, so a quarter
+    no readable PDF can produce is `missing`. `FinancialsBuilder.build` defaults
+    `use_api=False` and this asset does not override it. `ISSUES.md` `FIN-1`.
+
+    `periods` restricts which quarters are PARSED — `["Q4-2006", "Q1-2009"]`. It is the knob
+    that makes a targeted repair affordable: the full parse is ~2.4 h per ticker because it
+    re-OCRs every filing, while a handful of named quarters is minutes. ⚠️ **A subset run
+    always MERGES** (`build` sets `merge = bool(periods)`), so it upserts only the quarters
+    it produced and cannot destroy the rest — but for the same reason **it cannot delete a
+    stale row either**: a quarter it fails to parse keeps whatever it already had. Use it to
+    ATTEMPT a repair; use `skip_existing=False` with no `periods` to make the grid
+    authoritative.
+
+    ⚠️ **`allow_parent` FALLS BACK TO THE STANDALONE FILING for a period that has no
+    consolidated one.** Measured 2026-08-24 across all 784 index files: consolidated-only
+    opens **13,912 of 55,998 documents (24.8 %)** and leaves **273 tickers yielding nothing
+    at all** — a company with no subsidiaries files no `hợp nhất` report, so its standalone
+    statement is the only one that exists. With the fallback: **26,280 documents (x1.89)**
+    and **22** empty tickers. Consolidated still wins wherever both exist, and every row
+    records which it was in the new `consolidated` column. ⚠️ **It roughly DOUBLES the OCR
+    bill**, which is why it is opt-in rather than the default.
+
+    ⚠️ **`period_min` BLOCKS FILINGS AT THE INPUT and defaults to `Q1-2008`** — a project
+    decision, not a tuning knob (`FINANCIALS_PERIOD_MIN`). Nothing before that quarter is
+    opened or written. Pass `null` only to reproduce a pre-2026-08-24 grid. ⚠️ **It is a floor
+    on the PERIOD, not the file date**, so a 2009-dated FY-2008 report is kept. ⚠️ **An
+    authoritative run DELETES what falls below it** — VCB carries 3 `pdf` rows before Q1-2008.
+
+    ```yaml
+    ops:
+      raw__cafef_financials:
+        config:
+          skip_existing: false     # authoritative: rebuilds the grid, restores `sane`
+          allow_parent: true       # read the standalone filing where no consolidated exists
+    ```
     """
 
     skip_existing: bool = True
+    periods: Optional[List[str]] = None
+    allow_parent: bool = False
+    period_min: Optional[str] = FINANCIALS_PERIOD_MIN
 
 
 class TradingViewLinksConfig(Config):
@@ -767,12 +807,39 @@ def cafef_financials(
     # actually parsed, and a cross-partition-set edge would either demand all 100 PDF
     # partitions or misrepresent the 2-ticker set as 100.
     template = builder.preflight(exchange, symbol)
-    context.log.info(f"{exchange}:{symbol} preflight OK -> template '{template}'")
+    n_cons = len(builder.documents(exchange, symbol, period_min=config.period_min))
+    n_all = len(builder.documents(exchange, symbol, allow_parent=True,
+                                  period_min=config.period_min))
+    context.log.info(
+        f"{exchange}:{symbol} preflight OK -> template '{template}'; "
+        f"documents: {n_cons} consolidated, {n_all} with the parent fallback "
+        f"(allow_parent={config.allow_parent}, period_min={config.period_min})"
+    )
+    if n_cons == 0 and not config.allow_parent:
+        context.log.warning(
+            f"{exchange}:{symbol} files NO consolidated statement — this run will parse "
+            f"NOTHING. 273 of 784 tickers are in this position (a company with no "
+            f"subsidiaries files no `hợp nhất` report). Set `allow_parent: true` to read "
+            f"its standalone filings instead."
+        )
 
     # `build`, not `build_all` — one ticker, and an exception propagates so THIS
     # partition goes red on its own. `build_all` catches per ticker by design (see
     # cafef_financials.py) because it is main.py's batch path.
-    counts = builder.build(exchange, symbol, skip_existing=config.skip_existing)
+    # ⚠️ `use_api` is NOT passed and must never be: `build` defaults it to False, which is
+    # CLAUDE.md §5 rule 24 — the filing PDF is the only permitted source for a financial
+    # statement, and a quarter no readable PDF can produce is `missing`. `ISSUES.md` FIN-1.
+    counts = builder.build(exchange, symbol,
+                           periods=config.periods,
+                           allow_parent=config.allow_parent,
+                           period_min=config.period_min,
+                           skip_existing=config.skip_existing)
+    if config.periods:
+        context.log.info(
+            f"{exchange}:{symbol} SUBSET run over {len(config.periods)} period(s) "
+            f"{config.periods} — merging, so quarters this run did not produce keep "
+            f"whatever they already had"
+        )
 
     meta = landed(
         f"{CAFEF_RAW_DATA_DIR}/financials/statements", pattern=f"*_{exchange}_{symbol}.csv"

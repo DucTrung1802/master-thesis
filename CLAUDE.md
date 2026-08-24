@@ -1015,6 +1015,26 @@ measured on one `pool__forex` selection — `feature_selection/CONTEXT.md` §17)
     `n_dead_train`/`n_dead_test` per fold now. ⚠️ A rising `ic_trend_per_fold` on a ragged
     pool measures **data arrival**, not a strengthening signal.
 
+**⚠️ WHERE A NUMBER IS ALLOWED TO COME FROM** (added 2026-08-24, a standing DECISION,
+not a measurement)
+
+24. ⚠️ **FINANCIALS COME FROM THE FILING PDF AND FROM NOTHING ELSE. EVER.** Every
+    balance-sheet, income-statement and cash-flow value must be OCR-parsed out of the
+    company's own filed PDF in `raw_data/cafef/pdfs/`. **An HTML tab, a JSON endpoint, a
+    web table or any other transcription is FORBIDDEN as a source** — not as a fallback,
+    not "for the quarters OCR cannot read", not to fill a gap. **A quarter with no
+    readable PDF is recorded as `missing`, and `missing` is the correct answer.** A
+    transcription is somebody else's parse of the document, with their rounding, their
+    omissions and their sentinels (CafeF's "not reported" is a literal `-1`, which reads
+    as −1 dong in a column of billions), and once it is in the table nothing downstream
+    can tell it from the filing. ⚠️ **THE CODE STILL DISAGREES WITH THIS RULE**:
+    `CafefFinancialsBuilder` takes `use_api: bool = True` (`cafef_financials.py:485`,
+    `:1629`) and its `from_api` docstring argues the opposite in as many words — *"This is
+    not a lesser source … it is a BETTER one"*. That default is why **34 report-rows on
+    disk today carry `source='cafef'`** rather than `pdf` (`FIN-1`). ⚠️ The `source`
+    column of `bronze.cafef_financial_reports` is what makes this auditable at all —
+    **keep it, and read it before quoting any fundamental.**
+
 ### 5a. ⚠️ RETIRED — do not go looking for these, and do not follow old advice about them
 
 Phase 5 (2026-08-05/06) removed the second way to run things. **All four are gone from
@@ -1132,7 +1152,7 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-23)
+## 6. State today (2026-08-24)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section
 is the bug.** It was 7 days stale once already.
@@ -2226,6 +2246,251 @@ question returns exactly when it is supposed to. And **none of this touches the 
 wall**: 761 of 781 names are not banks and the non-bank template still does not exist, so
 these PDFs feed a parser that has never once been run against a corporate filing (`P5`).
 
+### ⚠️ 6-2-octies. WHAT HAS ACTUALLY BEEN PARSED — 2 TICKERS, and 34 rows came from HTML
+
+Measured 2026-08-24, three independent ways that agree: `statements/` on disk holds one
+family (`bank`) with two files per report; `bronze.cafef_financials_bank_*` holds **152
+rows / 2 tickers**; `gold.stocks_financials_bank_fa` holds **2 tickers**. **The parsed
+universe is `HOSE_ACB` and `HOSE_VCB` and nothing else** — 782 of 784 tickers have PDFs on
+disk (55,996 files) and **zero** parse output.
+
+⚠️ **BUT "PARSED" IS NOT THE SAME AS "PARSED FROM A PDF", AND `bronze.cafef_financial_reports.source`
+IS THE ONLY PLACE THAT CAN TELL YOU.** Per §5 rule 24 the PDF is now the only permitted
+source, which makes this a bill rather than a footnote:
+
+| ticker | quarters | report-rows | from **PDF** | from **HTML** (`cafef`) | `missing` |
+|---|---|---|---|---|---|
+| ACB | 74 (Q1-2008 → Q2-2026) | 222 | **195** | **27** | 0 |
+| VCB | 78 (Q4-2006 → Q1-2026) | 234 | **209** | **7** | **18** |
+
+⚠️ **THE FALLBACK FIRES ON ANY ABSENT PERIOD WITHOUT CHECKING WHETHER A PDF EXISTS**, so a
+document the OCR merely failed on is filled from the web instead of being retried or
+recorded as `missing`. That is the defect. ⚠️ **But only FOUR of the 34 rows can actually
+be retried, and all four are VCB** — a correction to a claim made earlier the same day
+from the PDF index alone.
+
+⚠️ **`documents()` KEEPS `consolidated == "True"` AND NOTHING ELSE, AND ACB FILED NO
+CONSOLIDATED STATEMENT BEFORE 2010.** Counted from `raw_data/cafef/pdfs/index/`: ACB
+2003/2004/2007/2008/2009 are **parent-company-only** (`cons=0`), consolidated filings start
+in 2010 with 5. So `FinancialsBuilder.documents("HOSE","ACB")` returns **65 documents
+covering 2010-2026**, and every one of ACB's 27 HTML rows sits in a year the parser cannot
+see. VCB is different — it has a consolidated filing from **2006** (1/yr for 2006-08, 5 in
+2009), so `documents()` returns **72 covering 2006-2026**.
+
+| | ACB | VCB |
+|---|---|---|
+| years with a document the parser will open | 17 (2010-2026) | 21 (2006-2026) |
+| skipped by `skip_existing=True` (all `pdf`) | **17 — all of them** | 17 |
+| **re-opened** | **0** | **4 — 2006, 2007, 2008, 2009** (7 documents) |
+| HTML rows that get a real retry | **0 of 27** | **4 of 7** |
+
+**The 4 retryable rows: VCB 2008Q4 IS, 2009Q1 BS, 2009Q2 BS, 2009Q2 CF.** Three `missing`
+rows are retried alongside them (2006Q4 IS + CF, 2007Q4 IS). The remaining 30 rows have no
+document the parser will open — ACB's 27, and VCB's 2008Q3 (all three, no Q3-2008 filing
+exists at all). ⚠️ **Reaching ACB's 27 means deciding to accept a PARENT-ONLY statement
+when no consolidated one exists — a change of which ENTITY the numbers describe, not a
+parser fix.** `FIN-1`.
+
+### ⚠️ 6-2-nonies. A THIRD WALL IN FRONT OF THE OCR PROGRAM — 273 TICKERS FILE NO CONSOLIDATED STATEMENT
+
+Measured 2026-08-24 over all 784 PDF index files, no OCR and no network. `P5`'s framing —
+*"the non-bank template decides whether `P6` reaches 20 names or 784"* — is **incomplete**,
+and this is the missing term.
+
+`FinancialsBuilder.documents()` keeps `consolidated == "True"` and nothing else. Counted
+across the whole archive:
+
+| | consolidated only (the rule until today) | with a parent fallback |
+|---|---|---|
+| documents the parser OPENS | **13,912 of 55,998 on disk — 24.8 %** | **26,280 — ×1.89** |
+| **tickers that yield NOTHING AT ALL** | **273 of 784 (34.8 %)** | **22** |
+| ACB | 65 | **73** |
+| VCB | 72 | **75** |
+
+⚠️ **THIS IS NOT A COMPANY FILING BADLY — IT IS A COMPANY WITH NO SUBSIDIARIES.** A
+single-entity issuer files no `hợp nhất` report at all, so its standalone statement is not
+a lesser version of a consolidated one, **it is the only statement that exists and it IS
+the company**. `HNX_ADC` files 51 documents, every one standalone; `HNX_BAX` 30, likewise.
+Reading them is a correction, not a loosening.
+
+✅ **`allow_parent` SHIPPED THE SAME DAY, OFF BY DEFAULT**, on
+`FinancialsBuilder.documents/build` and on the Dagster asset's `FinancialsConfig`.
+**Consolidated still wins wherever both exist** — the entity is the FIRST sort key, ahead
+of assurance, so no quarter may change entity to buy a better-assured document. ✅ Verified
+across all 784 tickers: **0 of 13,912 consolidated periods move.**
+
+⚠️ **AND THE VERIFICATION CAUGHT A REAL DEFECT ON ITS FIRST RUN — `best.update(annual)`
+MOVED 86 OF 13,912.** The line implementing *"the audited annual stands in for Q4"* was a
+bare `dict.update`, correct while both sides were consolidated-only and **silently
+entity-changing** once they were not: a STANDALONE annual displaced a CONSOLIDATED Q4
+quarterly, buying a better-produced document with a change of which company the row
+describes. The merge now compares the entity rank first. **10 tests** pin both invariants
+without a network (`test_cafef_financials_documents.py`).
+
+⚠️ **EVERY ROW NOW CARRIES A `consolidated` COLUMN**, and that is the load-bearing half:
+two entities in one column with nothing saying which is which is the same defect as
+sourcing a figure from a web tab (§5 rule 24). It is **blank for a `missing` row** — no
+filing was read, so no entity was chosen, and defaulting it to `True` would assert a fact
+about a quarter nothing was parsed for.
+
+⚠️ **IT ROUGHLY DOUBLES THE OCR BILL** (13,912 → 26,280 documents), which is why it is
+opt-in. ⚠️ **And it does NOT touch `P5`**: these are still 761 non-bank names against one
+`bank` template. The two walls are independent and both must fall for `P6` to reach the
+universe.
+
+### ⚠️ 6-2-decies. THE VCB REPAIR RAN, AND IT RECOVERED NOTHING — the quarters do not fail on OCR
+
+Run 2026-08-24 through `raw/cafef_financials` with the new `periods` knob: VCB Q4-2006,
+Q4-2007, Q4-2008, Q1-2009, Q2-2009. **45.5 min, 0 errors, and 0 of 234 cells changed.**
+
+| document | winning layers | wall |
+|---|---|---|
+| Q4-2006 | BS + IS `onnx@200`, **CF absent** | **29.7 min** |
+| Q4-2007 | all three `onnx@200` | 2.9 min |
+| Q4-2008 | all three `onnx@200` | 2.7 min |
+| Q1-2009 | IS **`onnx@200+loose`**, CF `onnx@200`, **BS absent** | 9.4 min |
+| Q2-2009 | IS `onnx@200`, **BS + CF absent** | 0.8 min |
+
+⚠️ **THE COST OF A DOCUMENT IS BIMODAL AND THE RATIO IS 10×, measured on two consecutive
+filings of one ticker.** `_parse_cascaded` breaks only when **all three** statements are
+accepted (`cafef_financials.py:378`), so one unresolvable statement makes the other two pay
+the whole 21-layer cascade: Q4-2006 took **29.7 min** with both its readable statements won
+at layer 1, against Q4-2007's **2.9 min**. The driver is `document size × number of
+distinct OCR passes` (the cascade caches per engine/dpi/crop/join/title/loose, so 21 layers
+collapse to ~10 passes) — which is why Q2-2009 cost 47 s with TWO statements absent: it is a
+small filing.
+
+⚠️ **THIS DOMINATES THE `P6` ESTIMATE.** Over 26,280 documents the failure RATE, not OCR
+speed, is the whole number — 10 % of documents carrying one unreadable statement is
+~1,300 h on its own. And the rate for a non-bank filing has never been measured (`P5`).
+
+#### ⚠️ FIVE NEW PARSE CONFIGS WERE TRIED AND **NONE IS KEPT** — the failure is arithmetic
+
+`LAYERS` has no combination of `title_over_form` with `loose_form_code`, and no
+`loose_form_code` above 200 dpi, so five genuinely untried configs were probed against the
+three unresolved statements:
+
+| new config | Q1-2009 BS | Q2-2009 BS |
+|---|---|---|
+| `onnx@200+title+loose` | no total assets | assets != liabilities + equity |
+| `onnx@300+loose` | no total to balance against | assets != liabilities + equity |
+| **`onnx@400+loose`** | **assets != liabilities + equity** — the furthest any config gets | assets != liabilities + equity |
+| `onnx@{200,300,400}+loose+pad6` | unchanged | unchanged |
+| `onnx@400+loose+pad3` | unchanged | unchanged |
+
+**Not one accepts, so not one is added.** The file's own design rule is that a layer
+recovering zero quarters is pure cost, and these are the most expensive layers there are.
+
+⚠️ **AND THE REASON THEY CANNOT WORK IS THE POINT: THE DIGITS ARE BEING READ CORRECTLY.**
+The totals are stable across 200/300/400 dpi and every crop setting, and the gap is an
+accounting one:
+
+| | Q1-2009 | Q2-2009 |
+|---|---|---|
+| TOTAL ASSETS | 220,493,455,515,290 | 215,651,790,234,750 |
+| **A − (L + E)** | **9,887,489,311,808 — 4.48 % of A** | **9,333,624,197,467 — 4.33 % of A** |
+
+A stable ~4.4 % shortfall in both quarters, at every resolution. ⚠️ Q1-2009 also shows
+`TOTAL RESOURCES` mapped to the **equity** figure — the exact fuzzy-match hazard the
+`SCHEMA_MATCH = 0.80` comment documents (*"TỔNG VỐN CHỦ SỞ HỮU scores 0.75 against TỔNG NỢ
+PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU"*). **The lever is the SCHEMA MAPPING for the 2009-era
+consolidated VAS bank presentation, not a `ParseLayer`** — which puts it beside `P5`, not
+inside `P6`.
+
+#### ⚠️ AND `periods` HAS A HAZARD THE DOCSTRING DID NOT PREDICT: A SUBSET RUN CAN FAIL A QUARTER A FULL RUN WOULD ACCEPT
+
+VCB **Q2-2009 cash flow** reconciles CLEANLY on its own — `reconcile` and `sane` both return
+`None` at `onnx@200`, with and without the previous quarter's closing balance as `open_ref`
+— and the run still logged it `absent`. By elimination the difference is `history`:
+`sane` judges magnitude against the quarters accumulated **in this run**, and a run holding
+only 2006-2009 Q4 annuals plus two 2009 quarters gives it a misleading neighbourhood.
+
+⚠️ **So the known weakness is worse than recorded.** `build`'s docstring says a subset run
+makes `sane` *"fail open"*; measured here, a subset run can also make it **fail CLOSED** —
+rejecting a statement the document supports. **Use `periods` to probe, never to produce.**
+An authoritative grid still needs `skip_existing=false` with no `periods`.
+
+⚠️ **A merging run also cannot DELETE a stale row** — it upserts only what it produced, so
+all 7 VCB `cafef` rows survived a run that re-attempted their exact quarters and failed.
+That confirms `FIN-1`'s note rather than contradicting it.
+
+### ✅ 6-2-duodecies. ACB REBUILT PDF-ONLY — 27 HTML rows gone, 4 NEW pdf rows, 0 lost
+
+Run 2026-08-24, `raw/cafef_financials` partition `HOSE_ACB`, `skip_existing=false`
+`allow_parent=true` `period_min=Q1-2008`. **3 h 36 m, RUN_SUCCESS**, 69 documents.
+
+| | before | after |
+|---|---|---|
+| `pdf` | 195 | **199** |
+| `cafef` (HTML transcription) | **27** | **0** ✅ |
+| `missing` | 0 | 20 |
+| cells | 222 | 219 (Q2-2026 has no document at CafeF) |
+
+⚠️ **THE FOUR NEW ROWS ALL CAME FROM `allow_parent`, AND NONE FROM A NEW OCR LAYER** —
+Q2-2009 BS `onnx@200+relax`, Q3-2009 IS `onnx@200`, Q4-2009 BS and CF `onnx@200`, every one
+`consolidated=False`. They are the first PDF-sourced rows this repo has gained in the whole
+`FIN-1` effort, and what unlocked them was **a filter, not a parser**: ACB filed no
+consolidated statement before 2010, so `documents()` had never opened those filings.
+
+⚠️ **THE SIX NEW PARSE LAYERS WON NOTHING — 0 of 219 cells.** `onnx@400+loose`,
+`onnx@300+loose`, `onnx@200+title+loose` and their `+relax` variants were added the same day
+to fill real gaps in the cascade and not one of them accepted a statement. They stay because
+they sit last and only a statement that defeated all 20 predecessors can reach them, **but
+the honest line is that they have returned nothing so far.**
+
+✅ **0 cells LOST and 0 cells changed LAYER** — all 195 pre-existing `pdf` rows reproduced on
+the same layer they had before, which is what makes this build reproducible rather than
+merely successful, and it is how `SAN-1` was confirmed fully repaired.
+
+⚠️ **COVERAGE FELL, AND THAT IS THE POINT.** 27 transcribed cells became 20 honest `missing`
+ones plus 4 real parses. §5 rule 24: a quarter no readable PDF can produce is `missing`.
+
+### ⚠️ 6-2-undecies. `SAN-1` — THE MAGNITUDE GUARD ADOPTED THE CORRUPTION AS ITS BASELINE
+
+Created and fixed 2026-08-24 within the hour, by the `allow_parent` change two sections up.
+It is the most reusable thing that happened that day and it is `DEP-1`'s lesson from the
+other side.
+
+`sane` is the guard that catches what reconciliation cannot — a units error, a cumulative
+column — by comparing a statement's probe against `history[report]`, the probes of quarters
+already accepted **in the same run**, using the **median** with a ±20× band. Turning on
+`allow_parent` let ACB's **Q3-2009 STANDALONE** filing into the run. Its income statement
+mapped **2 line items**, reconciled, and its probe became the **only** entry in
+`history[income_statement]`.
+
+**The median of one value is that value.** The band became `that/20 … that×20`, and
+**ACB's Q1-2010 income statement — `pdf` at `onnx@200` for as long as the file has
+existed — was rejected as a magnitude outlier.**
+
+⚠️ **NOTHING RAISED.** The symptom is the word `absent` in a log line, which is exactly
+what a genuinely unreadable document prints. It was caught only by diffing the run against
+a **pre-run backup**, and the diff was run because a 12.5-minute quarter looked wrong, not
+because anything reported a problem.
+
+⚠️ **AND THE RUN WRITES NON-MERGING PROGRESS SNAPSHOTS**, so killing it left ACB's three
+CSVs at **9 rows against 74**. Restored byte-identical from the backup, **0 rows lost** —
+but *"take a backup before an authoritative run"* is now a rule, not a courtesy.
+
+✅ **Fixed two ways, both structural rather than a threshold nudge:**
+
+1. **`history` is keyed by ENTITY as well as report.** A standalone company is not the
+   consolidated group; its profit and its balance sheet are legitimately smaller, so pooling
+   them makes the band meaningless in both directions. This became reachable the moment
+   `allow_parent` existed, because a ticker can now file standalone early and consolidated
+   later — **exactly ACB** (standalone 2008-09, consolidated 2010+).
+2. **`MIN_ITEMS_FOR_HISTORY = 8`.** A thin statement is still WRITTEN but may not become a
+   REFERENCE, and a WARNING names its item count. **Accepting a statement and trusting it
+   are different decisions**, and they had been the same decision.
+
+**5 tests**, including one that reproduces the poisoning itself so the fix cannot be quietly
+undone.
+
+⚠️ **THE GENERAL LESSON, and it generalises past this repo:** `DEP-1` was a monitor that
+blocked the repair path; this is a **validator that learns its baseline from its own input**
+and therefore adopts the first corruption it sees as normal. **Ask of any guard that learns
+from what it is guarding: what happens when the first thing it learns is wrong?** Here the
+answer was *"it rejects everything correct that follows, silently"*.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -2265,6 +2530,17 @@ What the decision changes is the ORDER: nothing gates the OCR program now, **`P6
 ≤2020 corpus) is the top item of the whole backlog**, and `P5` — the non-bank template — is
 what decides whether that run reaches **20 names or 784**, rather than a task running
 beside it.
+
+⚠️ **AND THE DECISION WAS WIDENED ON 2026-08-24 INTO A STANDING RULE — §5 rule 24.** It
+is not only the JSON route that is closed: **the PDF is the ONLY permitted source for a
+financial statement, and every HTML/web transcription is forbidden, including CafeF's own
+tabs.** A quarter no PDF can produce is `missing`, and `missing` is the correct answer.
+⚠️ **This is retroactive and there is a bill**: 34 of the 456 report-rows on disk carry
+`source='cafef'` — 27 ACB, 7 VCB — because the fallback runs whenever a period is absent
+from the parse, without checking whether a PDF exists. ⚠️ **Only 4 of the 34 can be retried
+from a document on disk, all of them VCB**: `documents()` keeps `consolidated == "True"`
+only, and ACB filed no consolidated statement before 2010. That is `FIN-1`; §6-2-octies has
+the quarter-by-quarter table.
 
 ⚠️ **Three gaps are deliberate and must NOT be filled**: `cafef_news_sentiment` (3 of 781 —
 §2a measured tone making models *worse*), `cafef_prop_trading` (431 of 781 — starts 2023,
@@ -2324,7 +2600,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**16 open**, 38 resolved, codes permanent — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**18 open**, 38 resolved, codes permanent — ⚠️ **`SAN-1` opened-and-closed 2026-08-24 and is the one to read**: the magnitude guard `sane` learns its baseline from the quarters accepted in its own run, so one 2-line statement became the whole reference population and silently rejected every correct quarter after it (§6-2-undecies) — ⚠️ **`FIN-1` OPENED 2026-08-24 and it is the one to read if you touch fundamentals**: 34 financial report-rows on disk were transcribed from CafeF's HTML tabs rather than parsed from the filing PDF — the fallback fires on any absent period without checking whether a PDF exists. ⚠️ **Only 4 can be retried, all VCB**: `documents()` keeps `consolidated == "True"` only and ACB filed no consolidated statement before 2010. §5 rule 24 now forbids the source outright; the code still defaults `use_api=True` (§6-2-octies) — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -2388,7 +2664,7 @@ still resolves; only the PATH gained a `docs/` prefix.
 | file | what it is | read it when |
 |---|---|---|
 | **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](docs/ISSUES.md)** | 16 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[ISSUES.md](docs/ISSUES.md)** | 18 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
 | **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** Six lettered groups — ⭐ **the TOP ROW is `P6`, OCR the ≤2020 corpus** (promoted 2026-08-23); **A data `P2`, B OCR `P6`/`P5`/`P4`** (⚠️ `P3`, the JSON gate, is CLOSED BY DECISION and archived UNMEASURED), C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ✅ **`P1` DONE 2026-08-23** (§6-2-quinquies). ⚠️ **THE NUMBERS ARE FROZEN AS OF 2026-08-23 AND WILL NOT MOVE AGAIN** — a `P<n>` is a permanent NAME, exactly as an `ISSUES.md` code is, and **PRIORITY IS THE ROW ORDER**, so read the list top-down and cite the number. The list starts at `P2` and the numbers need not stay monotonic; that is the price of a code that means one thing forever. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P11`, `P4-2` is now `P21`, …). ⚠️ **A `P<n>` written BEFORE 2026-08-23 still resolves to a different item** — three renumbers in two days preceded the freeze — so take the DATE of what you are reading, then TODO.md's two crosswalks, which are the last two that will ever be needed | deciding what to do next |
 | **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
 | **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |

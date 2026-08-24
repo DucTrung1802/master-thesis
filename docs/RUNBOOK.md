@@ -443,6 +443,74 @@ does not erase phase 1's index.
 ⚠️ **`--partition-range` REQUIRES the single-run backfill policy** and fails loudly
 without it. `--partition` (singular) still works for one ticker.
 
+### ⚠️ 3e-ter. `--config-json '{...}'` IS BROKEN IN POWERSHELL 5.1 — measured 2026-08-24
+
+**Every `--config-json` command in this file is written in the form
+`--config-json '{"ops":{...}}'`, and PowerShell 5.1 STRIPS THE DOUBLE QUOTES** when it
+hands a single-quoted string to a native executable. Dagster then receives
+`{ops:{raw__cafef_pdfs:{config:{year_max:2020}}}}` and dies with
+`json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes`.
+
+Reproduced without Dagster, so it is the shell and not the CLI:
+
+```powershell
+& .\mt_env\Scripts\python.exe -c "import sys; print(sys.argv[1])" '{"ops":{"x":1}}'
+# ARG: {ops:{x:1}}          <-- quotes gone
+```
+
+**Three fixes, and the first is the one to use.** `--%` does NOT work here — the
+stop-parsing token passes the argument verbatim to CreateProcess, but the quotes are
+already gone by then:
+
+| | |
+|---|---|
+| ✅ **`--config <file.yaml>`** | a run-config FILE. Readable, diffable, and the only form that survives copy-paste into any shell |
+| ✅ `'{\"ops\":…}'` | backslash-escaped quotes inline — correct but unreadable, and one missed backslash is a silent shape change |
+| ❌ `--%` | **measured: still `{ops:{x:1}}`** |
+
+```yaml
+# repair.yaml
+ops:
+  raw__cafef_financials:
+    config:
+      skip_existing: false
+      periods: ["Q4-2006", "Q1-2009"]
+```
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "raw/cafef_financials" --partition "HOSE_VCB" --config repair.yaml
+```
+
+⚠️ **This does not mean the phase-1 PDF scrape did not run** — §6-2-septies records 784
+partitions and 0 errors, so it was issued some other way (a different shell, or escaped).
+What it means is that **the command as WRITTEN in this file does not work in this repo's
+primary shell**, which is worth more than knowing which shell was used on the day.
+
+### ⚠️ 3e-bis. AND THE PDF IS THE ONLY SOURCE A FINANCIAL STATEMENT MAY COME FROM
+
+**Standing rule as of 2026-08-24 — CLAUDE.md §5 rule 24.** Every balance-sheet,
+income-statement and cash-flow value must be OCR-parsed out of the company's own filed PDF
+under `raw_data/cafef/pdfs/`. **An HTML tab, a JSON endpoint, a web table or any other
+transcription is FORBIDDEN** — not as a fallback, not "for the quarters OCR cannot read",
+not to close a gap. **A quarter no readable PDF can produce is `missing`, and `missing` is
+the correct answer.**
+
+⚠️ **THE BUILDER STILL DEFAULTS THE OTHER WAY, SO CHECK BEFORE YOU QUOTE.**
+`CafefFinancialsBuilder` takes `use_api: bool = True` (`cafef_financials.py:485`, `:1629`)
+and fills any period the PDF pass missed from CafeF's three web tabs. **34 report-rows on
+disk came from there today** (`FIN-1`). The audit is one query and it is the only way to
+tell:
+
+```sql
+SELECT ticker, source, COUNT(*)
+FROM bronze_schema.cafef_financial_reports
+GROUP BY 1, 2 ORDER BY 1, 3 DESC;      -- expect source='pdf' ONLY
+```
+
+⚠️ **Any `source` other than `pdf` or `missing` is a defect, not a data point** — and
+`-1` is CafeF's "not reported" sentinel, so a transcribed row can carry −1 dong in a
+column of billions and take part in no subtotal, which means no reconciliation catches it.
+
 ---
 
 ## 4. The two flags that decide whether you destroy something

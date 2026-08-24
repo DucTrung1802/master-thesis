@@ -131,7 +131,7 @@ table survives and is still the best thing in it.
 > | group | items | what it is |
 > |---|---|---|
 > | **A · DATA** | **`P2`** | ✅ **`P1` DONE 2026-08-23** — per-ticker freshness shipped. What is left is the filing PDFs |
-> | **B · OCR** | **`P6`, `P5`, `P4`** | ⭐ **`P6` is the top item as of 2026-08-23**, and its input is complete. ⚠️ `P3` (the JSON gate) is CLOSED BY DECISION, not by measurement — the source is CafeF PDFs |
+> | **B · OCR** | **`P37`, `P38`, `P6`, `P5`, `P4`** | ⚠️ **`P37` was inserted 2026-08-24 and sits ABOVE `P6`**: the builder still defaults to CafeF's HTML tabs, so running the OCR program first would import transcribed rows at 784× scale (`FIN-1`). Then `P6`, whose input is complete. ⚠️ `P3` (the JSON gate) is CLOSED BY DECISION, not by measurement — the source is CafeF PDFs |
 > | **C · OUTPUT** | `P7`-`P8` | ✅ **`P7` UNBLOCKED 2026-08-23** — the cross-section is 771 names again, not 7 |
 > | **D · MODEL & MONEY** | `P9`-`P17` | a better number, not more data |
 > | **E · HONESTY** | `P18`-`P21` | makes an EXISTING number readable |
@@ -306,7 +306,11 @@ shape 97 % of the universe files.
 MEASUREMENT.** The paragraph that stood here argued for pricing a JSON fundamentals source
 (`api.simplize.vn`, `vnstock`) as a 1-day gate, on the grounds that a JSON endpoint
 returning balance-sheet lines for non-banks would make the whole PDF+OCR route the wrong
-instrument. **The source is now fixed: balance-sheet lines come from the CafeF PDFs.** That
+instrument. **The source is now fixed: balance-sheet lines come from the CafeF PDFs.** ⚠️ **AND
+ON 2026-08-24 THAT WAS WIDENED INTO A STANDING RULE — CLAUDE.md §5 rule 24: the filing PDF is
+the ONLY permitted source for a financial statement, and every HTML/web transcription is
+forbidden, CafeF's own tabs included. A quarter no readable PDF can produce is `missing`.**
+That
 was never measured either way, so the register must not read as though it was — the JSON
 route is UNTRIED, not disproven, and if the schema wall turns out to be worse than
 `P5` budgets, it is still there to reconsider. What the decision changes is the ORDER:
@@ -416,8 +420,10 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 | **P1** ✅ | **DONE 2026-08-23 — PER-TICKER FRESHNESS SHIPPED** — `pipeline.freshness`, three `health_schema` SQL functions, and three new columns in `pipeline.status_data` | ~35 min *actual* | ✅ | *old `P36`* | ⚠️ **AND IT CORRECTED TWO DOCUMENTED CLAIMS ON ITS FIRST RUN.** (1) The 13 post-re-scrape stragglers carry **SEVEN** distinct dates, not thirteen — `FRZ-1`'s own parenthetical list disproved its prose, and the number was the diagnostic separating a delisting from a scrape failure. The conclusion survives, re-verified another way (each of the 13 raw CSVs ends exactly where silver does). (2) **28 single-name unified schemas are stale** (of 30), in four layers that are a fossil record of every scoped re-scrape: 5 at 2026-08-19, 10 banks at 2026-08-07, 9 at 2026-06-26, 4 at 2026-06-25 — now `SCH-1`, rebuilt the same day at a measured 21 s each. ⚠️ **AND IT CREATED ONE DEFECT OF ITS OWN, `DEP-1`, WHICH IS THE MOST REUSABLE THING HERE**: shipping the health objects as VIEWS blocked every `DROP TABLE` in the repo's builders, i.e. **the monitor blocked every repair it recommended**. Fixed by making them `plpgsql` functions, whose bodies carry no dependency. ⚠️ The alarm is a **SHARE**, not a count — an absolute floor of 5 tickers was written first and fired immediately on five genuine delistings; the two measured regimes are 0.6 % and 77 %. ⚠️ And `sessions_behind` is counted against the **price spine's** calendar, never the measured table's own — a frozen table's own dates cannot contain the sessions it is missing, so it would report every ticker 0 behind. **22 tests, no database.** CLAUDE.md §6-2-quinquies; `pipeline/CONTEXT.md` §1a-bis; RUNBOOK.md §8a |
 | **P2** | **SCRAPE FILING PDFs — ✅ PHASE 1 (`year_max=2020`) DONE 2026-08-23; phase 2 (`year_min=2021`) PARKED behind the OCR** (`raw/cafef_pdfs`) | 74 min *actual* + 267 GiB | ✅ | — | ✅ **50,345 of 50,382 expected documents landed for all 784 codes**, one Dagster run, 0 errors — the 37 absent are CafeF's own dead links (404 on both hosts). Verified per ticker against a pre-run count, not off the green run. ⚠️ **Phase 2 is ~269 GiB against 197 GiB free, so it does not fit today and is not supposed to** — it runs after `P6`. **↓ detail block**; CLAUDE.md §6-2-septies |
 | | **⬛ B · OCR — ⚠️ THE SOURCE IS FIXED: CafeF PDFs, decided 2026-08-23. The time wall is solvable; the SCHEMA wall is what decides how many names this reaches** | | | | |
-| **P6** | ⭐ **OCR THE ≤2020 CORPUS — the highest priority item** (50,345 documents, 784 codes, already on disk) | days of GPU | ⚠️ see below | — | ⚠️ **PROMOTED TO THE TOP 2026-08-23 by decision, and its INPUT is now complete** — `P2` phase 1 landed every ≤2020 filing for every listed code. ⚠️ **BUT RUNNING IT TODAY REACHES 20 OF 784 NAMES**: the parser holds one template family (`bank`), so `P5` is not a parallel task, it is the thing that decides whether this item means 20 tickers or 784. And 2.4 h/ticker locally is ~78 days, which is what `P4` is for. ⚠️ **The parse skips complete YEARS, not quarters** (`orchestration` §2a) — a year is the unit because `_decumulate` needs this run's priors, so a partial skip deletes the very quarter the run exists to fix. ⚠️ **`skip_existing=False` is the AUTHORITATIVE run**: skipping makes every run a subset run and flips the `sane` magnitude guard to failing open |
-| **P5** | ⚠️ **NON-BANK STATEMENT TEMPLATE + parser mapping** | ~1-2 weeks | ✅ | *old `P34`* | ⚠️ **THIS IS THE WALL THAT KAGGLE DOES NOT MOVE.** `raw_data/cafef/financials/statements/` holds exactly **one** family — `bank` — and **761 of 781 names are not banks** (230 industrials, 117 materials, 93 consumer staples; only **20** are GICS 401010). With infinite disk and infinite T4 hours the current parser reaches **20 names**. ⚠️ The parser has **never once been run against a corporate filing**, so budget discovery, not just mapping |
+| **P38** | ⭐ **PARSE THE VN30 BASKET — 28 tickers left, ONE AT A TIME** ⚠️ **NOT STARTED** | ~63 h GPU *est.* | ⚠️ Kaggle? | — | ⚠️ **NOT IMPLEMENTED — this row is a decision recorded, not work done.** The next priority after `P37`: every ticker in `vn30.csv`, run **per ticker** (the asset is partitioned that way and `resource: gpu` caps it to one step anyway). ✅ ACB and VCB are done (2026-08-24). ⚠️ **ONLY 11 OF THE 28 CAN RUN TODAY**: the parser holds one template family (`bank`), and VN30 is **13 banks / 17 non-banks** — `BCM BVH FPT GAS GVR HPG MSN MWG PLX POW SAB SSI VHM VIC VJC VNM VRE` need `P5` first. **↓ detail block** |
+| **P37** | ⚠️ **TURN OFF THE HTML FALLBACK, THEN RE-PARSE ACB AND VCB AUTHORITATIVELY** (`FIN-1`) | ~5 h GPU | ✅ | — | ⚠️ **THIS HAS TO LAND BEFORE `P6`, AND THAT IS THE WHOLE ARGUMENT FOR ITS POSITION.** `CafefFinancialsBuilder` defaults `use_api=True` and fills any period the PDF pass missed from CafeF's web tabs — **run `P6` as it stands and the OCR program imports HTML-transcribed rows at 784× scale**, invisibly, because nothing downstream reads the `source` column. Today it is 34 rows (ACB 27, VCB 7). **↓ detail block** — CLAUDE.md §6-2-octies; `ISSUES.md` `FIN-1` |
+| **P6** | ⭐ **OCR THE ≤2020 CORPUS — the highest priority item** (50,345 documents, 784 codes, already on disk) | days of GPU | ⚠️ see below | — | ⚠️ **PROMOTED TO THE TOP 2026-08-23 by decision, and its INPUT is now complete** — `P2` phase 1 landed every ≤2020 filing for every listed code. ⚠️ **BUT RUNNING IT TODAY REACHES 20 OF 784 NAMES**: the parser holds one template family (`bank`), so `P5` is not a parallel task, it is the thing that decides whether this item means 20 tickers or 784. ⚠️ **AND A THIRD WALL WAS MEASURED 2026-08-24 — `documents()` OPENS ONLY 24.8 % OF THE ARCHIVE**: it keeps `consolidated == "True"` and nothing else, so **273 of 784 tickers yield NOTHING AT ALL** (a company with no subsidiaries files no `hợp nhất` report). ✅ `allow_parent` shipped the same day, off by default — it takes the archive from **13,912 to 26,280 documents** and the empty tickers from 273 to **22**, and **doubles the OCR bill**. CLAUDE.md §6-2-nonies And 2.4 h/ticker locally is ~78 days, which is what `P4` is for. ⚠️ **The parse skips complete YEARS, not quarters** (`orchestration` §2a) — a year is the unit because `_decumulate` needs this run's priors, so a partial skip deletes the very quarter the run exists to fix. ⚠️ **`skip_existing=False` is the AUTHORITATIVE run**: skipping makes every run a subset run and flips the `sane` magnitude guard to failing open |
+| **P5** | ⚠️ **NON-BANK STATEMENT TEMPLATE + parser mapping** | ~1-2 weeks | ✅ | *old `P34`* | ⚠️ **THIS IS THE WALL THAT KAGGLE DOES NOT MOVE.** `raw_data/cafef/financials/statements/` holds exactly **one** family — `bank` — and **761 of 781 names are not banks** (230 industrials, 117 materials, 93 consumer staples; only **20** are GICS 401010). With infinite disk and infinite T4 hours the current parser reaches **20 names**. ⚠️ The parser has **never once been run against a corporate filing**, so budget discovery, not just mapping. ⚠️ **AND THE TEMPLATE IS NOT THE ONLY WALL** — 273 tickers file no consolidated statement at all and were invisible to the parser regardless of template (CLAUDE.md §6-2-nonies, fixed by `allow_parent`). The two are independent; both must fall |
 | **P4** | ⚠️ **PUSH THE OCR TO KAGGLE — a `kgpu` job for the statement parse** | ~2-3 days | ⚠️ **quota** | — | **What it fixes:** ~**2.4 h/ticker** on a 4 GB RTX 3050 → 781 tickers ≈ **78 days**. A T4 is 15 GiB and free 30 GPU-h/week. ⚠️ **BUT `kgpu` HAS NEVER SHIPPED A NON-TABLE PAYLOAD.** Every existing job exports `unified_schema` tables to parquet; this one ships **PDFs**, so three things are unmeasured and must be measured before any quota is spent: (a) the **Kaggle dataset size limit** against 100 GB of PDFs — if it binds, the job is per-ticker-batch, not per-universe; (b) whether the **onnx OCR stack** installs on Kaggle's image (`kgpu` §3d already records xgboost 3.2.0 / sklearn 1.6.1 vs `mt_env`, so an image difference is expected, not surprising); (c) the **5.2-min queue floor** (§3d) makes many small jobs the wrong shape — batch. ⚠️ **`rehearse` runs the worker side locally and spends NO quota — do that first, on the two banks that already parse** |
 | | **⬛ C · THE CHAIN'S OUTPUT — unblocked the moment A lands, and it runs on a DIFFERENT resource from B** | | | | |
 | **P7** | ⚠️ **THE LIVE-SCORING MODULE — it does not exist** | ~½ day *est.* | ✅ | *old `P2`* | Every stage writes predictions for a **dataset's test split**. Nothing loads a trained fold, windows the last 20 sessions for all 150 names on today's date and emits a ranking — so the chain cannot answer *"which ticker, on which date"* for any date not already in a split. ✅ **UNBLOCKED 2026-08-23** — the re-scrape put 771 names back on the last session, so the 7-name cross-section that blocked this is gone. ⚠️ **Not behind B at all** — half a day of local CPU while Kaggle runs. `pipeline.md` §6.2 |
@@ -468,8 +474,10 @@ starts 2023 and §6-1 says **EXCLUDE** `prop_*` at this timescale, not extend it
 ~10 h of Selenium for a source nothing reads for prices. Re-scrape it only when the
 UNIVERSE itself needs refreshing.
 
-⚠️ **EVERYTHING EXCEPT `P7`, `P9` AND `P18` IS LOCAL OR CPU** — nothing else touches the 30 GPU-h/week
-Kaggle quota.
+⚠️ **EVERYTHING EXCEPT `P4`, `P6` AND `P15` IS LOCAL OR CPU** — nothing else touches the 30 GPU-h/week
+Kaggle quota. ⚠️ **This line read `P7`, `P9`, `P18` until 2026-08-24** — the pre-2026-08-23
+numbering, never rewritten with the rest, so it was naming three items that ARE local as the
+exceptions. Translated through the `new = old − 3` crosswalk.
 
 ⚠️ **What is deliberately NOT on this list**, on measured evidence: **another architecture**
 (224× of capacity was tried at h=10, 101× at h=20), **another slice of `pool__ta`** (tied at
@@ -740,8 +748,185 @@ documents is not the point; a phase boundary that leaks is.
 
 ⚠️ **This does NOT touch the schema wall.** 761 of 781 names are not banks and the
 non-bank template still does not exist (`P5`). Phase 1 buys the INPUT for an OCR program
-whose parser has never been run against a corporate filing — which is exactly why `P3`,
-the one-day JSON gate, still runs before `P4`-`P6` and can still cancel them.
+whose parser has never been run against a corporate filing. ⚠️ **THE SENTENCE THAT USED TO
+END THIS PARAGRAPH IS STALE AND IS CORRECTED HERE**: it read *"which is exactly why `P3`, the
+one-day JSON gate, still runs before `P4`-`P6` and can still cancel them"*. `P3` was **CLOSED
+BY DECISION on 2026-08-23** and archived UNMEASURED — nothing gates the OCR program now — and
+its `P4`-`P6` were the pre-2026-08-23 numbering. Under §5 rule 24 the JSON route is not merely
+deprioritised, it is **forbidden as a source**.
+
+---
+
+### P38 · ⭐ THE VN30 BASKET ⏱ ~63 h GPU *est.*  ·  ⚠️ **NOT STARTED** — *(sized 2026-08-24)*
+
+**Nothing here has been run.** The two tickers that exist (ACB, VCB) were done under `P37`;
+this is the decision to extend that to the rest of `vn30.csv`, recorded before any of it
+happens so a later session does not have to re-derive the shape.
+
+#### The job, counted from the PDF indexes on disk — no OCR, no network
+
+| | |
+|---|---|
+| tickers | **30**, of which **2 done** (ACB, VCB) -> **28 left** |
+| documents `documents()` opens, consolidated only | 1,646 total · **1,511 remaining** |
+| with `allow_parent=true` | 1,737 total · **1,598 remaining** |
+| **measured rate** | **2.37 min/document** — ACB 69 docs / 216 min, VCB 70 docs / 114 min |
+| **ESTIMATE** | **~60 h** consolidated · **~63 h** with the parent fallback |
+
+⚠️ **RUN IT ONE TICKER AT A TIME.** `raw/cafef_financials` is partitioned per ticker and
+carries `op_tags={"resource": "gpu"}`, which caps it to ONE running step — onnxruntime-gpu on
+a 4 GB RTX 3050, and two partitions is VRAM exhaustion. A partition range would not go faster;
+it would fail.
+
+#### ⚠️ THE BINDING CONSTRAINT IS `P5`, NOT TIME — only 11 of the 28 can run today
+
+`raw_data/cafef/financials/statements/` holds one template family, `bank`. VN30 splits
+**13 banks / 17 non-banks**:
+
+| | tickers |
+|---|---|
+| **banks — runnable now** (11 left) | `BID CTG HDB MBB SHB SSB STB TCB TPB VIB VPB` *(+ ACB, VCB done)* |
+| **non-bank — blocked on `P5`** (17) | `BCM BVH FPT GAS GVR HPG MSN MWG PLX POW SAB SSI VHM VIC VJC VNM VRE` |
+
+⚠️ **The CHART OF ACCOUNTS for `corp`, `securities` and `insurance` DOES exist**
+(`financials/schema/`, 12 files, 871 rows — `corp_balance_sheet.csv` alone is 140 lines), so
+`P5` is not "write the mapping from nothing". What has never happened is **running the parser
+against a non-bank filing even once**, so budget discovery. Three of the 17 are not `corp`
+either: **BVH is insurance, SSI is securities**, and each needs its own template proven.
+
+⚠️ **`TPB` IS THE `allow_parent` CASE IN ITS PUREST FORM — 9 consolidated documents against
+55 with the fallback, a 6.1x difference.** Run it consolidated-only and 46 of its quarters
+are simply invisible. It is the strongest single argument for `allow_parent: true` being the
+default for this batch.
+
+#### Kaggle — ⚠️ open, and it must be MEASURED before quota is spent
+
+63 h is 8 nights of local GPU, so this is the first job in the repo where pushing the OCR out
+(`P4`) might actually pay. Three things are still unmeasured and `P4` names them: `kgpu` has
+**never shipped a non-table payload** (`DataConfig` knows `tables` and `panel`, both
+DB->parquet; PDFs are a third mode that does not exist); the **Kaggle dataset size limit**
+against ~0.5 GiB/ticker; and whether the **onnx OCR stack installs on Kaggle's image**.
+⚠️ And the measured local profile argues the gain is smaller than it looks: the run holds
+**~1 CPU core and 2.4 GiB VRAM at 31-47 % GPU utilisation**, so a T4 session (4 CPU cores)
+fits ~4 partitions, not 6-8. **`kgpu rehearse` costs no quota — do that first.**
+
+#### The command, per ticker
+
+```powershell
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "raw/cafef_financials" --partition "HOSE_BID" --config full_parse.yaml
+```
+```yaml
+ops:
+  raw__cafef_financials:
+    config:
+      skip_existing: false     # authoritative: non-merging, restores `sane`'s full history
+      allow_parent:  true      # TPB alone goes 9 -> 55 documents
+```
+
+⚠️ **BACK THE THREE CSVs UP FIRST.** An authoritative run writes NON-MERGING progress
+snapshots, so an interrupted one leaves a TRUNCATED file — measured on 2026-08-24, ACB's
+three statements stood at 9 rows against 74 when a run was killed. ⚠️ **`--config <file>`, not
+`--config-json`** (RUNBOOK §3e-ter). ⚠️ **Diff every result against the backup cell by cell** —
+`SAN-1` was found that way and by nothing else.
+
+---
+
+### P37 · ⚠️ THE PDF-ONLY REPAIR — the parse PLAN for ACB and VCB ⏱ ~5 h GPU  ·  *(measured 2026-08-24)*
+
+**Three parts, in this order. Part 1 is the rule; parts 2-3 are the only two tickers that
+exist to repair.**
+
+#### 1 · Default `use_api=False`, and expose no knob that turns it on
+
+`cafef_financials.py:485` and `:1629`. CLAUDE.md §5 rule 24: the filing PDF is the only
+permitted source, and a quarter no readable PDF can produce is `missing`. ⚠️ **The
+`from_api` docstring argues the opposite in as many words** — *"This is not a lesser source
+— for the quarters OCR cannot read it is a BETTER one"* — so this is a DECISION to reverse,
+not a bug to patch. Rewrite the docstring rather than deleting the method: its evidence
+(the Q4 weakness, the eight confirmed-wrong values, the literal `-1` sentinel) is why the
+rule exists.
+
+#### 2 · ⚠️ `use_api=False` ALONE DELETES NOTHING — the run must be AUTHORITATIVE
+
+`skip_existing=True` forces `merge=True`, and a merging write only rewrites the quarters the
+run produced. **A failed retry therefore leaves the existing `cafef` row exactly where it
+is.** Only `skip_existing=False` writes non-merging, rebuilding the grid from what the run
+holds, so an unproduced quarter becomes `missing`. That is also the run that restores the
+`sane` magnitude guard — the one that caught ACB's Q1-2024 carrying Q1-2023's PBT.
+
+```powershell
+$env:DAGSTER_HOME = "D:\GIT\master-thesis\.dagster"
+Clear-Content logs\app.log
+dagster asset materialize -f src/orchestration/definitions.py `
+  --select "raw/cafef_financials" --partition "HOSE_ACB" `
+  --config-json '{"ops":{"raw__cafef_financials":{"config":{"skip_existing":false}}}}'
+# then the same for HOSE_VCB
+```
+
+⚠️ **One partition at a time — `op_tags={"resource": "gpu"}` caps it to one running step**
+(onnxruntime-gpu on a 4 GB RTX 3050; two partitions is VRAM exhaustion). ~2.4 h each.
+
+#### 3 · ⚠️ WHAT THE RUN CAN AND CANNOT REACH — measured, not assumed
+
+`documents()` keeps `consolidated == "True"` and nothing else, and **ACB filed no
+consolidated statement before 2010** (2003/2004/2007/2008/2009 are parent-company-only;
+consolidated starts 2010 with 5). Counted from `raw_data/cafef/pdfs/index/`:
+
+| | ACB | VCB |
+|---|---|---|
+| documents `documents()` returns | **65**, covering **2010-2026** | **72**, covering **2006-2026** |
+| years re-opened at `skip_existing=True` | **0 of 17** | **4 of 21** — 2006, 2007, 2008, 2009 |
+| HTML rows the parser can retry | **0 of 27** | **4 of 7** |
+
+**The retryable rows — all VCB:** `2008Q4 IS`, `2009Q1 BS`, `2009Q2 BS`, `2009Q2 CF`. Three
+`missing` rows are retried alongside them: `2006Q4 IS`, `2006Q4 CF`, `2007Q4 IS`.
+
+⚠️ **THEY WERE RETRIED ON 2026-08-24 AND RECOVERED NOTHING — 45.5 min, 0 of 234 cells
+changed.** Five genuinely new parse configs were probed as well (`onnx@200+title+loose`,
+`onnx@300+loose`, `onnx@400+loose`, and `+pad6`/`+pad3` variants — `LAYERS` has no
+`title`+`loose` combination and no `loose` above 200 dpi). **None accepts, so none is
+kept**: the totals are stable across 200/300/400 dpi and every crop setting, and the gap is
+an accounting one — `A − (L+E)` is **4.48 %** of assets in Q1-2009 and **4.33 %** in
+Q2-2009. **These documents do not fail on OCR**, so the lever is the schema mapping for the
+2009-era consolidated VAS bank presentation, which belongs beside `P5`. Three of the seven
+were also dropped correctly by `_decumulate` (a Q4 income statement with no Q1-Q3 priors in
+the run). CLAUDE.md §6-2-decies.
+
+⚠️ **AND `periods` MUST NOT BE USED TO PRODUCE.** VCB Q2-2009's cash flow reconciles cleanly
+on its own and the run still rejected it: `sane` judges magnitude against the quarters
+accumulated **in that run**, so a five-quarter subset gives it a misleading neighbourhood.
+`build`'s docstring predicted `sane` would *fail open* in a subset run; measured, it can
+also **fail closed**. Probe with `periods`; produce with `skip_existing=false` and no
+`periods`.
+
+**Everything else becomes `missing`, and that is the correct outcome:**
+
+| rows | why no retry |
+|---|---|
+| **ACB 27** — 2008Q1-Q4, 2009Q1-Q4 (24) + 2026Q2 (3) | 2008/2009 are parent-only filings the parser will not open; **CafeF lists no Q2-2026 document at all** |
+| **VCB 3** — 2008Q3 BS/IS/CF | no Q3-2008 filing exists at CafeF in any form |
+
+⚠️ **COVERAGE WILL FALL AND THAT IS THE POINT.** `missing` is an honest absence where a
+transcription was a silent substitution. Expect ACB to go from **0 missing to ~27** and VCB
+from 18 to 18-21 depending on how the four retries land.
+
+⚠️ **REACHING ACB'S 27 IS A SEPARATE DECISION, NOT A PARSER FIX.** It means accepting a
+PARENT-COMPANY statement where no consolidated one exists — a change of which ENTITY the
+numbers describe. Put it to the user; do not fold it into this item.
+
+⚠️ **CHECK ACB Q2-2026 AND VCB Q2-2026 AGAINST A RE-LISTED INDEX FIRST.** The
+`link.endswith(".pdf")` cache-buster bug was fixed on 2026-08-23, but these two tickers'
+2021+ index rows come from the OLD scrape — CLAUDE.md §6-2-septies names **VCB's own Q2-2026
+filing** as one of the 1,408 documents that bug skipped. Re-list both through
+`raw/cafef_pdfs` before concluding the document does not exist.
+
+✅ **Verify afterwards with the one query that can see this at all:**
+
+```sql
+SELECT ticker, source, COUNT(*) FROM bronze_schema.cafef_financial_reports
+GROUP BY 1, 2 ORDER BY 1, 3 DESC;      -- expect only 'pdf' and 'missing'
+```
 
 ---
 

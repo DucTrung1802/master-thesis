@@ -152,11 +152,27 @@ Two things got it from 81% to complete, and both are structural rather than tuni
   flow (cumulative either way) — but the P&L covers the WHOLE YEAR, so Q4 = FY − (Q1+Q2+Q3),
   and the document is tagged `annual` so `_decumulate` does that. Without it every Q4 income
   statement would be a full-year figure in a quarterly row.
-- **CafeF's tabs are the fallback** (`from_api`). For a quarter whose scan is unreadable this is
-  the BETTER source, not the lesser one: the tabs are keyed by the same item CODES the schema
-  was built from, so a value lands on its canonical column *exactly* — no OCR, no fuzzy match.
-  The PDF is still read first (CafeF transcribes, has gaps, rounds), and every row records which
-  it was in `source`: `pdf` (164 quarters, 77%) or `cafef` (49, 23%).
+- ⚠️ **CafeF's tabs WERE the fallback (`from_api`) — FORBIDDEN AS A SOURCE SINCE 2026-08-24.**
+  **CLAUDE.md §5 rule 24: a financial statement value may come from the filing PDF and from
+  nothing else. A quarter no readable PDF can produce is `missing`, and `missing` is the
+  correct answer.** ⚠️ *This bullet used to read: "For a quarter whose scan is unreadable this
+  is the BETTER source, not the lesser one: the tabs are keyed by the same item CODES the
+  schema was built from, so a value lands on its canonical column exactly — no OCR, no fuzzy
+  match."* That argument is kept because it is the reason the fallback was built and it is
+  **not wrong about the mechanism** — it is overruled on a different ground: **a transcription
+  is somebody else's parse of the document**, and once it is in the table nothing downstream
+  can tell it from the filing. The two paragraphs below this one are the evidence for the
+  overrule — eight CafeF values are now confirmed WRONG against the filings, and its
+  "not reported" sentinel is a literal `-1`.
+- ⚠️ **THE CODE HAS NOT CAUGHT UP AND THE DEFAULT IS STILL ON**: `use_api: bool = True`
+  (`cafef_financials.py:485`, `:1629`), and the fallback fires on any absent period **without
+  checking whether a PDF exists**. Measured 2026-08-24 from `bronze.cafef_financial_reports`:
+  **ACB 195 `pdf` / 27 `cafef` / 0 `missing`; VCB 209 / 7 / 18**. ⚠️ **Only FOUR of the 34
+  can be retried from a document on disk, and all four are VCB** — `documents()` above keeps
+  `consolidated == "True"` only, and **ACB filed no consolidated statement before 2010**
+  (2007-09 are parent-only), so its 27 rows are unreachable without changing that rule. That
+  is `FIN-1`. **Read the `source` column
+  before quoting any fundamental.**
 
 **⚠️ BUT CAFEF'S QUARTERLY TABS ARE NOT UNIFORMLY RIGHT, AND Q4 IS THE WEAK ONE.** For VCB
 2011-13, 2015 and 2020 the four quarterly figures **do not sum to CafeF's own ANNUAL tab**, and
@@ -994,6 +1010,18 @@ where neither could hold anything.
     the embedded quotes in legacy headlines.
 
 ## 3a. Reading the PDFs — `cafef_schema.py` / `cafef_pdf_parser.py` / `cafef_financials.py`
+
+> ### ⚠️ THE ONE RULE THAT GOVERNS THIS WHOLE SECTION (2026-08-24)
+>
+> **A financial statement value comes from the filing PDF and from nothing else.** No HTML
+> tab, no JSON endpoint, no web table, no transcription — not as a fallback, not "for the
+> quarters OCR cannot read", not to close a gap. **A quarter no readable PDF can produce is
+> `missing`, and `missing` is the correct answer.** CLAUDE.md §5 rule 24.
+>
+> ⚠️ **The code still defaults `use_api=True` and 34 rows on disk came from the web tabs
+> (`FIN-1`).** Everything below about `from_api` — the Q4 weakness, the eight confirmed wrong
+> values, the literal `-1` sentinel, the hollow cash flows — is now the EVIDENCE for the rule
+> rather than the tuning notes for a fallback. Keep it; it explains why the rule exists.
 
 Not scrapers. They read the archive `cafef_pdf_scraper.py` has already downloaded and build
 quarterly financial statements from it:
