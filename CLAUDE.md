@@ -2744,15 +2744,26 @@ that matters.
 #### ⚠️ AND PROBING ALL 13 FOUND ONE BOTTLENECK — `FXM-1`, with a fix that is WRITTEN and UNMEASURED
 
 Each of BID's 13 genuinely failed statements was put through the full 26-layer cascade and the
-refusal reasons read off the log the change above added. **11 completed; they do not spread
-out, they converge:**
+refusal reasons read off the log the change above added. **All 13 completed — 3 h 56 m — and
+they do not spread out, they converge:**
 
 | the LAST reason the cascade gave | periods |
 |---|---|
 | **`cash flow unverifiable — fx not mapped`** | **8** — 6 on that alone, 2 with `opening` beside it |
 | `no closing cash balance` | 1 — Q1-2012 |
 | **`cash flow does not close`** | 1 — Q4-2010 |
+| `sane: magnitude 5.45e+08 vs typical 1.19e+14` | 1 — Q1-2026, **five orders out** |
 | `no total assets` (a balance sheet) | 1 — Q1-2021 |
+| `no total to balance against` (a balance sheet) | 1 — Q3-2025 |
+
+⚠️ **THE THREE BALANCE-SHEET FAILURES AND Q1-2026 ARE A SEPARATE PROBLEM** and no FX change
+touches them: two cannot find a total to balance against and one is out by five orders of
+magnitude. **The FX bottleneck is 8 of 13, not 11 of 13.**
+
+⚠️ **AND THE PROBE PRICED A FAILED DOCUMENT: 18.2 min against 4.2 for a clean one, 4.3x.**
+13 documents took 236 minutes here; BID's whole run was 443 minutes over 62 documents, so the
+49 that succeeded averaged 4.2. That is §6-2-decies' bimodal cost measured directly rather than
+inferred from a failure share, and it is the number `P6` should be budgeted on.
 
 ⚠️ **THESE QUARTERS ARE NOT LOST TO UNREADABLE PIXELS.** In the 8, the relaxed layers **already
 recover the opening and closing balances** positionally and are then refused for want of a
