@@ -789,6 +789,55 @@ class FinancialsBuilder:
             out = [r for r in out if _period_key(r["period"]) >= floor]
         return sorted(out, key=lambda r: (int(r["year"]), int(r["quarter"])))
 
+    def alternates(self, exchange: str, symbol: str, chosen: dict) -> List[dict]:
+        """Other filings of the SAME period and the SAME ENTITY as `chosen`, best first.
+
+        ⚠️ **A PERIOD CAN HAVE MORE THAN ONE FILING AND ONLY ONE WAS EVER TRIED.**
+        `documents` returns the single best document per quarter, ranked entity-then-assurance,
+        and until 2026-08-25 a quarter whose every layer refused that document was simply
+        recorded `missing` — while a second consolidated filing of the same quarter sat unread
+        on disk. Measured on BID: of its 13 genuinely failed statements, **4 have an unread
+        CONSOLIDATED alternate** (Q4-2015, Q4-2016, Q2-2017, Q4-2017), each the unaudited
+        quarterly beside the audited annual `documents` preferred.
+
+        ⚠️ **THE ENTITY IS FIXED, NOT PREFERRED.** Only filings whose `consolidated` equals
+        `chosen`'s are returned, so a fallback can never quietly change which company a row
+        describes — the same rule `documents` applies to the annual-report merge, and the one
+        `allow_parent` exists to make explicit. A standalone report is reachable only by
+        setting that flag, never by a quarter happening to fail.
+
+        Assurance may drop, and that is the whole point: an unaudited filing of the quarter is
+        a WORSE-PRODUCED document of the SAME period and entity, which is a trade worth making
+        when the alternative is `missing`. It is still gated by reconcile + `sane` like any
+        other parse — nothing is accepted here that would not have been accepted first time.
+        """
+        index = os.path.join(PDFS_DIR, "index", f"{exchange}_{symbol}.csv")
+        if not os.path.exists(index):
+            return []
+        with open(index, encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+
+        period, entity = chosen["period"], chosen.get("consolidated", "True")
+        year, quarter = chosen["year"], str(chosen["quarter"])
+
+        def serves(r: dict) -> bool:
+            q = str(r["quarter"])
+            if not q.isdigit():
+                return False
+            # quarter 5 is the annual, and it stands in for that year's Q4 — the same
+            # widening `documents` applies, so an alternate for Q4 may be either shape.
+            p = f"Q4-{r['year']}" if int(q) == 5 else r["period"]
+            return p == period
+
+        out = [r for r in rows
+               if serves(r)
+               and r.get("consolidated", "True") == entity
+               and r["path"] != chosen["path"]]
+        out.sort(key=lambda r: self.ASSURANCE_RANK.get(r["assurance"], 9))
+        return [{**r, "period": period, "year": year, "quarter": quarter,
+                 "annual": "True" if str(r["quarter"]) == "5" else "False"}
+                for r in out]
+
     # ──────────────────────────────────────────────────────────────────────
     # Gates
     # ──────────────────────────────────────────────────────────────────────
@@ -1321,6 +1370,35 @@ class FinancialsBuilder:
                     v = st._first_value(st.rows[first_i - 1].values)
                     if v is not None:
                         self._claim(out, src, iv, first_i - 1, v)
+
+                # ⚠️ VI, THE FX ADJUSTMENT, IS PRINTED BETWEEN THE TWO BALANCES — and its
+                # absence, not the balances', is what refuses these statements. Measured on BID
+                # 2026-08-25: probing all 13 of its genuinely failed statements through the full
+                # 26-layer cascade, **every one of the eight completed so far ends at
+                # `[onnx@200+relax] cash flow unverifiable — fx not mapped`**. The relaxed layer
+                # recovers the opening and closing balances by position and then cannot prove
+                # them, because `_cash_flow_identity` needs all four terms and the FX line's
+                # label ("VI. Điều chỉnh ảnh hưởng của thay đổi tỷ giá") does not reach
+                # SCHEMA_MATCH on these scans.
+                #
+                # The chart of accounts prints HDTC_48 opening, HDTC_49 FX, HDTC_50 closing —
+                # adjacent, in that order — so when the recovered pair sits exactly two rows
+                # apart the row between them is the FX line. This is the SAME guess the IV
+                # recovery above makes, with the same safety: `_cash_flow_identity` tests
+                # opening + IV + fx == closing to the đồng immediately afterwards, so a wrong
+                # row is REJECTED, not written. It cannot loosen a gate — it can only let a gate
+                # that was skipping for want of a term actually run.
+                #
+                # ⚠️ Two rows apart EXACTLY, never "somewhere between": a wider search would
+                # start choosing among flow lines, and a plausible wrong FX that happens to make
+                # the identity close is the one failure this must not manufacture.
+                fx = self.C_CASH_FX[0]
+                close_i = src.get(self.CASH_BALANCES[1])
+                if (fx not in out and close_i is not None
+                        and close_i - first_i == 2):
+                    v = st._first_value(st.rows[first_i + 1].values)
+                    if v is not None:
+                        self._claim(out, src, fx, first_i + 1, v)
             return
         if st.report != BALANCE_SHEET:
             return
@@ -1940,6 +2018,53 @@ class FinancialsBuilder:
                 path, self._period_end(period), template,
                 {r: history[r][entity] for r in REPORTS}, open_ref)
 
+            # WHICH FILING EACH STATEMENT CAME FROM. Normally `d` for all three, but a
+            # statement recovered below comes from a different document and its provenance
+            # must say so — CLAUDE.md §6-2-terdecies is what happens when it does not.
+            origin = {r: d for r in REPORTS}
+
+            # ⚠️ A REFUSED QUARTER MAY HAVE A SECOND FILING NOBODY READ. `documents` returns
+            # one document per period; until 2026-08-25 a quarter whose every layer refused it
+            # was recorded `missing` while another CONSOLIDATED filing of the same quarter sat
+            # on disk. Measured on BID: 4 of its 13 failed statements have exactly that.
+            # Costs nothing on the success path — it runs only where something is still absent.
+            if len(accepted) < len(REPORTS):
+                for alt in self.alternates(exchange, symbol, d):
+                    alt_path = os.path.join(PDFS_DIR, alt["path"].replace("/", os.sep))
+                    if not os.path.exists(alt_path):
+                        continue
+                    self._log(f"  {period}: {len(REPORTS) - len(accepted)} statement(s) absent"
+                              f" — retrying on the {alt['assurance']} filing of the same"
+                              f" period ({alt['file']})")
+                    more, alt_facts = self._parse_cascaded(
+                        alt_path, self._period_end(period), template,
+                        {r: history[r][entity] for r in REPORTS}, open_ref)
+                    # ⚠️ THE CUMULATIVE SHAPE MUST MATCH FOR THE INCOME STATEMENT. `half_year`
+                    # is a property of the DOCUMENT, and `_decumulate` subtracts Q1..Q(q-1)
+                    # from a cumulative P&L. An annual chosen document and a quarterly
+                    # alternate disagree about that, so taking the alternate's IS under the
+                    # chosen document's flag would subtract the earlier quarters from a figure
+                    # that never contained them. The balance sheet is a point in time and the
+                    # cash flow is cumulative either way, so only the P&L is at risk.
+                    alt_cumulative = (alt["half_year"] == "True"
+                                      or alt.get("annual") == "True")
+                    for report, got in more.items():
+                        if report in accepted:
+                            continue
+                        if (report == INCOME_STATEMENT
+                                and alt_cumulative != half_year[period]):
+                            self._warn(f"    {period}: {report} from the alternate REFUSED —"
+                                       f" cumulative shape differs from the chosen filing")
+                            continue
+                        accepted[report] = got
+                        origin[report] = alt
+                        self._log(f"    {period}: {report} recovered from"
+                                  f" {alt['assurance']} {alt['file']}")
+                    if not facts["publish_date"] and alt_facts["publish_date"]:
+                        facts = alt_facts
+                    if len(accepted) == len(REPORTS):
+                        break
+
             # the document's own date, kept whether or not any of its statements reconcile
             assurance[period] = d["assurance"]
             published[period] = facts["publish_date"] or d.get("file_date", "")
@@ -1957,12 +2082,17 @@ class FinancialsBuilder:
                         items[report].append(col)
 
                 data[report][period] = row
+                # ⚠️ `origin[report]`, NOT `d` — a statement recovered from an alternate filing
+                # must carry THAT filing's assurance and file name, or the row asserts a
+                # document it did not come from. The entity is identical by construction
+                # (`alternates` fixes it), so only these two can differ.
+                src = origin[report]
                 meta[report][period] = {
-                    "assurance": d["assurance"],
+                    "assurance": src["assurance"],
                     # which ENTITY this statement describes; see DATA_COLS."consolidated"
-                    "consolidated": d.get("consolidated", ""),
+                    "consolidated": src.get("consolidated", ""),
                     "unit": st.unit,
-                    "n_columns": st.n_columns, "document": d["file"],
+                    "n_columns": st.n_columns, "document": src["file"],
                     # read from THIS filing: a company chooses the method and may switch it
                     "cash_flow_method": st.cash_flow_method or "",
                     "ocr_config": cfg,          # which cascade config produced this statement
