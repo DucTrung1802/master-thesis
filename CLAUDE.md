@@ -2741,6 +2741,57 @@ so no OCR pass, no gate, no threshold and no accept ordering changes. Verified o
 because 26 layers usually fail the same two or three ways and printing all 26 buries the one
 that matters.
 
+#### BID's COVERAGE MAP — 70 quarters x 3 statements, and only 13 cells are a FAILURE
+
+`B` balance sheet · `I` income statement · `C` cash flow · `·` missing · `—` no such quarter
+
+| year | Q1 | Q2 | Q3 | Q4 | | year | Q1 | Q2 | Q3 | Q4 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2008 | — | — | — | `B·C` | | 2018 | `BIC` | `BIC` | `BI·` | `BIC` |
+| 2009 | `···` | `···` | `···` | `B·C` | | 2019 | `BIC` | `BIC` | `BIC` | `BIC` |
+| 2010 | `···` | `···` | `···` | `B··` | | 2020 | `BIC` | `BIC` | `BIC` | `BIC` |
+| 2011 | `···` | `···` | `B·C` | `B·C` | | 2021 | `·IC` | `BIC` | `BIC` | `BIC` |
+| 2012 | `BI·` | `BIC` | `BIC` | `BIC` | | 2022 | `BIC` | `BIC` | `BIC` | `BIC` |
+| 2013 | `BIC` | `BIC` | `BIC` | `BIC` | | 2023 | `BIC` | `BIC` | `BIC` | `BIC` |
+| 2014 | `BIC` | `BIC` | `BIC` | `BIC` | | 2024 | `BIC` | `BIC` | `BIC` | `BIC` |
+| 2015 | `BIC` | `BIC` | `BI·` | `BI·` | | 2025 | `BIC` | `BIC` | `·IC` | `BIC` |
+| 2016 | `BIC` | `BIC` | `BI·` | `BI·` | | 2026 | `BI·` | — | — | — |
+| 2017 | `BIC` | `BI·` | `BI·` | `BI·` | | | | | | |
+
+| | parsed | absent | rate |
+|---|---|---|---|
+| balance sheet | 60 | 10 | 85.7 % |
+| income statement | 57 | 13 | 81.4 % |
+| **cash flow** | **51** | **19** | **72.9 %** |
+| total | 168 | 42 | 80.0 % |
+
+⚠️ **THE 42 ABSENT CELLS ARE THREE DIFFERENT THINGS AND ONLY ONE IS A DEFECT:**
+
+| | cells | what it is |
+|---|---|---|
+| **A · no document exists** | **24** (8 quarters x 3) | Q1-Q3 2009, Q1-Q3 2010, Q1-Q2 2011. BID filed only an ANNUAL report for 2008-2010; its first quarterly is Q3-2011 and 12 documents a year start in 2012. `missing` is the correct answer |
+| **B · `_decumulate` has no priors** | **5** | the Q3/Q4 income statements of 2008-2011. An interim IS is CUMULATIVE and the quarter is what is left after subtracting Q1..Q(q-1) — quarters that do not exist here. **The PDF read fine**: the same documents yielded their BS and CF |
+| **C · the PDF genuinely failed** | **13** | 11 cash flows + 2 balance sheets — the only cells a better parser could win |
+
+**Excluding class A the ticker is 168 / 186 = 90.3 %, level with ACB.**
+
+⚠️ **CASH FLOW IS THE EXPENSIVE STATEMENT EVEN WHEN IT SUCCEEDS.** Of the 51 that parsed,
+**15 needed a layer past `onnx@200`** — nine distinct configurations including
+`onnx@200+pad6+relax+components` — against 8 of 60 for the balance sheet and 4 of 57 for the
+income statement. That is where BID's 7 h 23 m went.
+
+⚠️ **AND CASH FLOW IS THE ONLY THING BREAKING CONTINUITY.** Longest unbroken runs:
+
+| | with all three | **BS + IS only** |
+|---|---|---|
+| longest | Q2-2021 .. Q2-2025 (**17 quarters**) | **Q1-2012 .. Q4-2020 (36 quarters)** |
+| next | Q2-2012 .. Q2-2015 (13) | Q2-2021 .. Q2-2025 (17) |
+| next | Q4-2018 .. Q4-2020 (9) | — |
+
+**A model that does not need the cash-flow statement gets 36 consecutive quarters from this
+ticker, not 17** — so 80.0 % understates what is usable by a wide margin, and which statements
+a feature actually needs is worth deciding before more OCR is bought.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
