@@ -2682,6 +2682,65 @@ three non-bank templates cannot even reconcile a cash flow, which would put thei
 100 % and the cascade cost at its ceiling. **`P5` is therefore a COST item as well as a
 correctness one.**
 
+#### ⚠️ WHY BID'S 13 STATEMENTS FAILED — probed 2026-08-25, and the guards were RIGHT
+
+11 of the 13 are CASH FLOW and 2 are balance sheets; no income statement fails on OCR at all.
+Separately, **8 quarters lost all three because BID filed no quarterly report before 2012** —
+absent documents, not failures. Probing the two cheapest cash flows found two different causes
+and **no defect**:
+
+| quarter | what the cascade did | verdict |
+|---|---|---|
+| **Q3-2016** | read closing = **55,968,854,000,000** — equal **to the đồng** to Q1-2016's already-accepted closing | ✅ `sane` refused it: *"probe exactly equals an already-accepted quarter (comparative column read as the current one?)"* |
+| **Q1-2012** | OCR merged the labels (`nop_trong_ky_luu_chuyen_tien_thuan_...`); no row matches the closing balance at all | ✅ `reconcile`: *"no closing cash balance"* |
+
+⚠️ **THIS IS THE FIRST FIELD EVIDENCE THAT `sane`'s EQUALITY GATE CATCHES A REAL ERROR.** Until
+now its only witness was ACB's Q4-2022 in a docstring. Two quarters agreeing on a 14-digit
+figure to the last unit is not something a going concern does, and here it was a whole
+statement taken from the wrong column.
+
+⚠️ **AND NO LAYER READS Q3-2016 CORRECTLY** — all 26 were tried: `onnx@400` gives 100 bn,
+`tesseract@200` gives 0, and the two `+relax` layers give **53,361 bn and 53,261 bn**, which
+disagree with EACH OTHER by 100 bn and are refused for an unmapped FX line. The true figure is
+~55,261 bn (Q2-2016 is 59,066, Q1-2017 is 65,522). **`missing` is the correct answer**, and it
+is rule 24 working rather than failing.
+
+⚠️ **A PROBE THAT OMITS ONE LAYER PARAMETER INVERTS ITS OWN CONCLUSION — measured the hard
+way.** A first probe set `crop_pad=0` where `ParseLayer("onnx@200", "onnx", 200)` leaves it
+`None`, read a closing of 13,161 bn, saw `reconcile` and `sane` both pass, and concluded that
+`sane`'s ±20x band was too wide to catch a 4.5x error. **All of that came from a layer that
+does not exist**: at the real setting the same document reads 55,969 bn and is refused. The
+cascade already keys its parse cache on `(engine, dpi, crop_pad, join_digits, title_over_form,
+loose_form_code)` precisely because *"two layers that share an engine and DPI but crop
+differently produce different text"* — a probe claiming to describe real behaviour must rebuild
+**every** one of those, not the two obvious ones.
+
+#### ✅ AND THE LOG NOW SAYS WHY, WHICH IS THE ONLY CHANGE SHIPPED
+
+Recovering the reason above took **four probe runs**, because `_parse_cascaded` computed a
+refusal reason at every layer and threw all of them away — the sole trace was the word `absent`
+in the period line, which is exactly what a filing with no such page prints. That is
+§6-2-undecies' complaint restated, and it is how `SAN-1` came to be found by diffing against a
+backup rather than by reading a log.
+
+`_parse_cascaded` now keeps each refusal and prints the DISTINCT reasons, each attributed to the
+first layer that gave it:
+
+```
+    cash_flow absent after 26 layer(s):
+      [onnx@200]        sane: probe 5.6e+13 exactly equals an already-accepted quarter ...
+      [onnx@400]        sane: magnitude 1e+11 vs typical 4.16e+13 ...
+      [tesseract@200]   sane: magnitude 5.51e+07 vs typical 4.16e+13 ...
+      [onnx@200+relax]  reconcile: cash flow unverifiable — fx not mapped
+      [onnx@300+relax]  reconcile: cash flow unverifiable — opening, fx not mapped
+```
+
+⚠️ **THE SHORT-CIRCUIT IS PRESERVED EXACTLY** — `sane` still runs only where `reconcile` passed,
+so no OCR pass, no gate, no threshold and no accept ordering changes. Verified on Q3-2016:
+`accepted` is `[balance_sheet, income_statement]` before and after. **Distinct reasons only**,
+because 26 layers usually fail the same two or three ways and printing all 26 buries the one
+that matters.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

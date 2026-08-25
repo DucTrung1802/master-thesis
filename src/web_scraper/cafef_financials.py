@@ -440,6 +440,9 @@ class FinancialsBuilder:
         CafeF-tab fallback in `build`.
         """
         accepted: Dict[str, tuple] = {}
+        # {report: [(layer name, why it was refused)]} — kept so an absent statement can say
+        # WHY. Populated even for reports that later succeed; only the absent ones are printed.
+        refused: Dict[str, List[Tuple[str, str]]] = {}
         facts = {"publish_date": "", "shares": {"shares_authorized": None,
                                                 "shares_issued": None,
                                                 "shares_outstanding": None}}
@@ -488,14 +491,46 @@ class FinancialsBuilder:
                     continue
                 st = statements.get(report)
                 if st is None:
+                    refused.setdefault(report, []).append(
+                        (layer.name, "no such statement on any page of this filing"))
                     continue
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals,
                                          relax_split_tail=layer.relax_split_tail)
-                if (self.reconcile(st, row, verify_cash=layer.relax_totals,
-                                   open_ref=open_ref,
-                                   relax_components=layer.relax_components) is None
-                        and self.sane(st, history[report], row) is None):
+                # ⚠️ THE SHORT-CIRCUIT IS LOAD-BEARING AND IS PRESERVED EXACTLY: `sane` runs
+                # only when `reconcile` passed, as it always has. What is new is that the
+                # refusal is KEPT rather than discarded — see the report below the loop.
+                why = self.reconcile(st, row, verify_cash=layer.relax_totals,
+                                     open_ref=open_ref,
+                                     relax_components=layer.relax_components)
+                if why is not None:
+                    why = f"reconcile: {why}"
+                else:
+                    bad = self.sane(st, history[report], row)
+                    why = f"sane: {bad}" if bad is not None else None
+                if why is None:
                     accepted[report] = (row, st, layer.name)
+                else:
+                    refused.setdefault(report, []).append((layer.name, why))
+
+        # ⚠️ WHY A STATEMENT IS ABSENT, NOT MERELY THAT IT IS. Until 2026-08-25 the only trace
+        # a refused statement left was the word `absent` in the period line — which is exactly
+        # what a filing with no such page prints, and exactly what a statement rejected by the
+        # magnitude guard prints. `SAN-1` was found by diffing against a backup rather than by
+        # reading a log, and diagnosing ONE refused BID cash flow afterwards took four probe
+        # runs to recover a reason the parser already knew and threw away.
+        #
+        # Distinct reasons only, each attributed to the FIRST layer that gave it: 21 layers
+        # usually fail the same two or three ways, and printing all 21 buries the one that
+        # matters. This is pure reporting — no gate, no threshold and no ordering changes.
+        for report in REPORTS:
+            if report in accepted or report not in refused:
+                continue
+            first_seen: Dict[str, str] = {}
+            for name, why in refused[report]:
+                first_seen.setdefault(why, name)
+            self._warn(f"    {report} absent after {len(refused[report])} layer(s):")
+            for why, name in first_seen.items():
+                self._warn(f"      [{name}] {why}")
         return accepted, facts
 
     # ──────────────────────────────────────────────────────────────────────
