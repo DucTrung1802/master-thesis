@@ -275,6 +275,7 @@ CAFEF_PDF_TICKERS: list[tuple[str, str]] = _vn_stock_universe()
 CAFEF_FINANCIALS_TICKERS: list[tuple[str, str]] = [
     ("HOSE", "VCB"),
     ("HOSE", "ACB"),
+    ("HOSE", "BID"),
 ]
 
 # ── GICS classification crosswalk ──────────────────────────────────────────────

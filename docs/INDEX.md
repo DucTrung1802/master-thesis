@@ -3,7 +3,7 @@
 > **AUTO-LOADED.** `CLAUDE.md` imports this file with `@docs/INDEX.md`, so every session
 > starts holding this map. Nothing else here is loaded until you ask for it.
 >
-> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 126 `.md` files, **~509k tokens** — about 2.5× a
+> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 127 `.md` files, **~518k tokens** — about 2.5× a
 > full context window. The routing below is the whole point: **open ONE file, when you
 > touch that thing.** Every row carries its measured cost so you can budget before you read.
 >
@@ -27,7 +27,7 @@
 
 | file | ~tokens | what it answers |
 |---|---|---|
-| [../CLAUDE.md](../CLAUDE.md) | **41.6k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state |
+| [../CLAUDE.md](../CLAUDE.md) | **50.3k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state |
 | **docs/INDEX.md** *(this file)* | ~2k | *where is everything else, and what does it cost to open?* |
 
 ---
@@ -42,7 +42,7 @@ its row and is struck through; a done TODO item leaves its measurement in `CLAUD
 | file | ~tokens | open it when |
 |---|---|---|
 | [RUNBOOK.md](RUNBOOK.md) | **16.5k** | *how do I RUN it?* 8 stages with measured runtimes, stage order, the two flags that destroy things, §8 rule 1 (the gate on quoting any number), **§8c the before-you-commit state check** |
-| [ISSUES.md](ISSUES.md) | **19.0k** | *what is BROKEN?* 20 open / 38 resolved, codes permanent, never renumbered or reused. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`) |
+| [ISSUES.md](ISSUES.md) | **19.0k** | *what is BROKEN?* 21 open / 38 resolved, codes permanent, never renumbered or reused. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`), and `TPL-1` before any non-bank financials parse |
 | [TODO.md](TODO.md) | **47.9k** ⚠️ | *what is NEXT?* ⚠️ **THE NUMBERS ARE FROZEN AS OF 2026-08-23** — a `P<n>` is a permanent NAME and **PRIORITY IS THE ROW ORDER**, so read top-down and cite the number. **35 open tasks** in six lettered groups — ⭐ **top row `P6`** (OCR the ≤2020 corpus); **A data `P2`, B OCR `P6`/`P5`/`P4`** (`P3` closed by DECISION, archived unmeasured), C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`; `P1` closed 2026-08-23. ⚠️ A HYPHENATED code is RETIRED, and a bare `P<n>` written BEFORE 2026-08-23 still means a different item — the two crosswalks resolve it and are the last two needed. **The largest file here: read the top, not the whole thing** |
 | [pipeline.md](pipeline.md) | **5.5k** | *which ticker, on which date?* What the chain OUTPUTS — `(date, ticker, weight)`, 4,720 picks across 236 books. §6 is why there is no book for today |
 | [PIPELINE_h10_CAGR74.md](PIPELINE_h10_CAGR74.md) | **7.3k** | *how does ONE number get made, end to end?* The h=10 chain returning CAGR +74.0 %/yr. **§12 is the caveat section and is why the file exists** |

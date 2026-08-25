@@ -293,7 +293,7 @@ and the universe — all three measured 2026-08-22, none of them a code problem:
 |---|---|---|
 | **disk** | ⚠️ **RE-MEASURED 2026-08-23 FROM CAFEF ITSELF, NOT EXTRAPOLATED**: all **784** codes list **84,076 documents ≈ 555 GiB**. `D:` extended 318 → 636 GiB, **461 GiB free**. *(the 2026-08-22 reading this replaces: 112 tickers / 15,215 files / 100 GB, median 906 MB, 144 GB free → "781 ≈ 700 GB")* | **The whole corpus still does not fit** — but **≤2020 is 286 GiB and does, with ~230 GiB spare.** So disk stopped being a reason to sample TICKERS and became a reason to phase YEARS (`P2`) |
 | **time** | the OCR statement parse is **~2.4 h per ticker** | 781 × 2.4 h ≈ **1,874 h ≈ 78 days** sequential on one 4 GB RTX 3050 |
-| **schema** | `raw_data/cafef/financials/statements/` holds **one** template family: `bank` | **761 of 781 names are NOT banks** — 230 industrials, 117 materials, 93 consumer staples, … Only **20** are GICS 401010. A corporate balance sheet / income statement / cash-flow template **does not exist in this repo** |
+| **schema** | ⚠️ **RE-MEASURED 2026-08-25 AND THE DIAGNOSIS CHANGED** (`TPL-1`): all **four** charts of accounts exist in `financials/schema/` and the parser is template-generic; what is bank-only is the set of **reconcile anchors**. *(the 2026-08-22 reading this replaces: `financials/statements/` holds one template family, `bank`)* | **761 of 781 names are NOT banks** — 230 industrials, 117 materials, 93 consumer staples, … Only **20** are GICS 401010. A corporate balance sheet / income statement / cash-flow template **does not exist in this repo** |
 
 ⚠️ **THE SCHEMA WALL IS THE REAL ONE, AND 2026-08-23 MADE THAT SHARPER RATHER THAN
 SOFTER.** Disk stopped binding once the year phase existed; the missing non-bank template
@@ -420,10 +420,10 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 | **P1** ✅ | **DONE 2026-08-23 — PER-TICKER FRESHNESS SHIPPED** — `pipeline.freshness`, three `health_schema` SQL functions, and three new columns in `pipeline.status_data` | ~35 min *actual* | ✅ | *old `P36`* | ⚠️ **AND IT CORRECTED TWO DOCUMENTED CLAIMS ON ITS FIRST RUN.** (1) The 13 post-re-scrape stragglers carry **SEVEN** distinct dates, not thirteen — `FRZ-1`'s own parenthetical list disproved its prose, and the number was the diagnostic separating a delisting from a scrape failure. The conclusion survives, re-verified another way (each of the 13 raw CSVs ends exactly where silver does). (2) **28 single-name unified schemas are stale** (of 30), in four layers that are a fossil record of every scoped re-scrape: 5 at 2026-08-19, 10 banks at 2026-08-07, 9 at 2026-06-26, 4 at 2026-06-25 — now `SCH-1`, rebuilt the same day at a measured 21 s each. ⚠️ **AND IT CREATED ONE DEFECT OF ITS OWN, `DEP-1`, WHICH IS THE MOST REUSABLE THING HERE**: shipping the health objects as VIEWS blocked every `DROP TABLE` in the repo's builders, i.e. **the monitor blocked every repair it recommended**. Fixed by making them `plpgsql` functions, whose bodies carry no dependency. ⚠️ The alarm is a **SHARE**, not a count — an absolute floor of 5 tickers was written first and fired immediately on five genuine delistings; the two measured regimes are 0.6 % and 77 %. ⚠️ And `sessions_behind` is counted against the **price spine's** calendar, never the measured table's own — a frozen table's own dates cannot contain the sessions it is missing, so it would report every ticker 0 behind. **22 tests, no database.** CLAUDE.md §6-2-quinquies; `pipeline/CONTEXT.md` §1a-bis; RUNBOOK.md §8a |
 | **P2** | **SCRAPE FILING PDFs — ✅ PHASE 1 (`year_max=2020`) DONE 2026-08-23; phase 2 (`year_min=2021`) PARKED behind the OCR** (`raw/cafef_pdfs`) | 74 min *actual* + 267 GiB | ✅ | — | ✅ **50,345 of 50,382 expected documents landed for all 784 codes**, one Dagster run, 0 errors — the 37 absent are CafeF's own dead links (404 on both hosts). Verified per ticker against a pre-run count, not off the green run. ⚠️ **Phase 2 is ~269 GiB against 197 GiB free, so it does not fit today and is not supposed to** — it runs after `P6`. **↓ detail block**; CLAUDE.md §6-2-septies |
 | | **⬛ B · OCR — ⚠️ THE SOURCE IS FIXED: CafeF PDFs, decided 2026-08-23. The time wall is solvable; the SCHEMA wall is what decides how many names this reaches** | | | | |
-| **P38** | ⭐ **PARSE THE VN30 BASKET — 28 tickers left, ONE AT A TIME** ⚠️ **NOT STARTED** | ~63 h GPU *est.* | ⚠️ Kaggle? | — | ⚠️ **NOT IMPLEMENTED — this row is a decision recorded, not work done.** The next priority after `P37`: every ticker in `vn30.csv`, run **per ticker** (the asset is partitioned that way and `resource: gpu` caps it to one step anyway). ✅ ACB and VCB are done (2026-08-24). ⚠️ **ONLY 11 OF THE 28 CAN RUN TODAY**: the parser holds one template family (`bank`), and VN30 is **13 banks / 17 non-banks** — `BCM BVH FPT GAS GVR HPG MSN MWG PLX POW SAB SSI VHM VIC VJC VNM VRE` need `P5` first. **↓ detail block** |
+| **P38** | ⭐ **PARSE THE VN30 BASKET — 27 tickers left, ONE AT A TIME** ⚠️ **STARTED 2026-08-25** | ⚠️ **~190 h GPU *est.*, re-budgeted** | ⚠️ Kaggle? | — | Every ticker in `vn30.csv`, run **per ticker** (the asset is partitioned that way and `resource: gpu` caps it to one step anyway). ✅ ACB and VCB done 2026-08-24; ✅ **BID done 2026-08-25 — 7 h 23 m, 62 documents, 168/210 cells `pdf`, 0 HTML rows, ACB/VCB verified byte-identical against a pre-run backup**. ⚠️ **AND IT TRIPLED THE COST ESTIMATE**: BID ran at **7.15 min/document** against the 2.37 this row was budgeted on, because `_parse_cascaded` breaks only when all three statements are accepted and **36 %** of BID's quarters need the full 21-layer cascade (VCB 4 %, ACB 11 %). **min/doc ≈ 0.94 + 0.173 x %failing** over three points. CLAUDE.md §6-2-quindecies. ⚠️ **ONLY 11 OF THE 28 CAN RUN TODAY**: the parser holds one template family (`bank`), and VN30 is **13 banks / 17 non-banks** — `BCM BVH FPT GAS GVR HPG MSN MWG PLX POW SAB SSI VHM VIC VJC VNM VRE` need `P5` first. **↓ detail block** |
 | **P37** | ⚠️ **TURN OFF THE HTML FALLBACK, THEN RE-PARSE ACB AND VCB AUTHORITATIVELY** (`FIN-1`) | ~5 h GPU | ✅ | — | ⚠️ **THIS HAS TO LAND BEFORE `P6`, AND THAT IS THE WHOLE ARGUMENT FOR ITS POSITION.** `CafefFinancialsBuilder` defaults `use_api=True` and fills any period the PDF pass missed from CafeF's web tabs — **run `P6` as it stands and the OCR program imports HTML-transcribed rows at 784× scale**, invisibly, because nothing downstream reads the `source` column. Today it is 34 rows (ACB 27, VCB 7). **↓ detail block** — CLAUDE.md §6-2-octies; `ISSUES.md` `FIN-1` |
 | **P6** | ⭐ **OCR THE ≤2020 CORPUS — the highest priority item** (50,345 documents, 784 codes, already on disk) | days of GPU | ⚠️ see below | — | ⚠️ **PROMOTED TO THE TOP 2026-08-23 by decision, and its INPUT is now complete** — `P2` phase 1 landed every ≤2020 filing for every listed code. ⚠️ **BUT RUNNING IT TODAY REACHES 20 OF 784 NAMES**: the parser holds one template family (`bank`), so `P5` is not a parallel task, it is the thing that decides whether this item means 20 tickers or 784. ⚠️ **AND A THIRD WALL WAS MEASURED 2026-08-24 — `documents()` OPENS ONLY 24.8 % OF THE ARCHIVE**: it keeps `consolidated == "True"` and nothing else, so **273 of 784 tickers yield NOTHING AT ALL** (a company with no subsidiaries files no `hợp nhất` report). ✅ `allow_parent` shipped the same day, off by default — it takes the archive from **13,912 to 26,280 documents** and the empty tickers from 273 to **22**, and **doubles the OCR bill**. CLAUDE.md §6-2-nonies And 2.4 h/ticker locally is ~78 days, which is what `P4` is for. ⚠️ **The parse skips complete YEARS, not quarters** (`orchestration` §2a) — a year is the unit because `_decumulate` needs this run's priors, so a partial skip deletes the very quarter the run exists to fix. ⚠️ **`skip_existing=False` is the AUTHORITATIVE run**: skipping makes every run a subset run and flips the `sane` magnitude guard to failing open |
-| **P5** | ⚠️ **NON-BANK STATEMENT TEMPLATE + parser mapping** | ~1-2 weeks | ✅ | *old `P34`* | ⚠️ **THIS IS THE WALL THAT KAGGLE DOES NOT MOVE.** `raw_data/cafef/financials/statements/` holds exactly **one** family — `bank` — and **761 of 781 names are not banks** (230 industrials, 117 materials, 93 consumer staples; only **20** are GICS 401010). With infinite disk and infinite T4 hours the current parser reaches **20 names**. ⚠️ The parser has **never once been run against a corporate filing**, so budget discovery, not just mapping. ⚠️ **AND THE TEMPLATE IS NOT THE ONLY WALL** — 273 tickers file no consolidated statement at all and were invisible to the parser regardless of template (CLAUDE.md §6-2-nonies, fixed by `allow_parent`). The two are independent; both must fall |
+| **P5** | ⚠️ **NON-BANK RECONCILE ANCHORS — the templates already exist** (`TPL-1`) | ~2-4 days | ✅ | *old `P34`* | ⚠️ **THIS IS THE WALL THAT KAGGLE DOES NOT MOVE, AND ON 2026-08-25 IT WAS MEASURED AND TURNED OUT TO BE SOMETHING ELSE.** It read *"the non-bank template does not exist"* for as long as this item has — ⚠️ **that was wrong**: `schema/` holds **all four** charts of accounts (12 files, 871 rows) and the parser is template-generic. What is bank-shaped is `FinancialsBuilder`'s seven hardcoded **reconcile anchors**. `statements/` holds one family because one family has been RUN. **761 of 781 names are not banks** (230 industrials, 117 materials, 93 consumer staples; only **20** are GICS 401010). With infinite disk and infinite T4 hours the current parser reaches **20 names**. ⚠️ The parser has **never once been run against a corporate filing**, so budget discovery, not just mapping. ⚠️ **AND THE ANCHORS ARE NOT THE ONLY WALL** — 273 tickers file no consolidated statement at all and were invisible to the parser regardless of template (CLAUDE.md §6-2-nonies, fixed by `allow_parent`). The two are independent; both must fall. **↓ detail block** |
 | **P4** | ⚠️ **PUSH THE OCR TO KAGGLE — a `kgpu` job for the statement parse** | ~2-3 days | ⚠️ **quota** | — | **What it fixes:** ~**2.4 h/ticker** on a 4 GB RTX 3050 → 781 tickers ≈ **78 days**. A T4 is 15 GiB and free 30 GPU-h/week. ⚠️ **BUT `kgpu` HAS NEVER SHIPPED A NON-TABLE PAYLOAD.** Every existing job exports `unified_schema` tables to parquet; this one ships **PDFs**, so three things are unmeasured and must be measured before any quota is spent: (a) the **Kaggle dataset size limit** against 100 GB of PDFs — if it binds, the job is per-ticker-batch, not per-universe; (b) whether the **onnx OCR stack** installs on Kaggle's image (`kgpu` §3d already records xgboost 3.2.0 / sklearn 1.6.1 vs `mt_env`, so an image difference is expected, not surprising); (c) the **5.2-min queue floor** (§3d) makes many small jobs the wrong shape — batch. ⚠️ **`rehearse` runs the worker side locally and spends NO quota — do that first, on the two banks that already parse** |
 | | **⬛ C · THE CHAIN'S OUTPUT — unblocked the moment A lands, and it runs on a DIFFERENT resource from B** | | | | |
 | **P7** | ⚠️ **THE LIVE-SCORING MODULE — it does not exist** | ~½ day *est.* | ✅ | *old `P2`* | Every stage writes predictions for a **dataset's test split**. Nothing loads a trained fold, windows the last 20 sessions for all 150 names on today's date and emits a ranking — so the chain cannot answer *"which ticker, on which date"* for any date not already in a split. ✅ **UNBLOCKED 2026-08-23** — the re-scrape put 771 names back on the last session, so the 7-name cross-section that blocked this is gone. ⚠️ **Not behind B at all** — half a day of local CPU while Kaggle runs. `pipeline.md` §6.2 |
@@ -746,9 +746,7 @@ with a `Year` that is not a year — eight carry `0`, one `202`, one `203`. `yea
 them and `year_min` does not, so no document can fall between the two phases. Ten
 documents is not the point; a phase boundary that leaks is.
 
-⚠️ **This does NOT touch the schema wall.** 761 of 781 names are not banks and the
-non-bank template still does not exist (`P5`). Phase 1 buys the INPUT for an OCR program
-whose parser has never been run against a corporate filing. ⚠️ **THE SENTENCE THAT USED TO
+⚠️ **This does NOT touch the schema wall** — ⚠️ **and on 2026-08-25 that wall was re-diagnosed as `TPL-1`, which is NOT what this paragraph used to say.** It read *"the non-bank template still does not exist"*; all four charts of accounts do exist, and what blocks a non-bank run is seven hardcoded reconcile anchors (`P5`). 761 of 781 names are not banks, and phase 1 buys the INPUT for an OCR program whose parser has never been run against a corporate filing. ⚠️ **THE SENTENCE THAT USED TO
 END THIS PARAGRAPH IS STALE AND IS CORRECTED HERE**: it read *"which is exactly why `P3`, the
 one-day JSON gate, still runs before `P4`-`P6` and can still cancel them"*. `P3` was **CLOSED
 BY DECISION on 2026-08-23** and archived UNMEASURED — nothing gates the OCR program now — and
@@ -759,19 +757,20 @@ deprioritised, it is **forbidden as a source**.
 
 ### P38 · ⭐ THE VN30 BASKET ⏱ ~63 h GPU *est.*  ·  ⚠️ **NOT STARTED** — *(sized 2026-08-24)*
 
-**Nothing here has been run.** The two tickers that exist (ACB, VCB) were done under `P37`;
-this is the decision to extend that to the rest of `vn30.csv`, recorded before any of it
-happens so a later session does not have to re-derive the shape.
+⚠️ **STARTED 2026-08-25 — BID is the first ticker taken under this item**, after ACB and
+VCB under `P37`. The shape below was recorded before any of it ran; the ESTIMATE in it has
+since been measured wrong by 3x and is corrected in place.
 
 #### The job, counted from the PDF indexes on disk — no OCR, no network
 
 | | |
 |---|---|
-| tickers | **30**, of which **2 done** (ACB, VCB) -> **28 left** |
+| tickers | **30**, of which **3 done** (ACB, VCB, **BID** 2026-08-25) -> **27 left** |
 | documents `documents()` opens, consolidated only | 1,646 total · **1,511 remaining** |
 | with `allow_parent=true` | 1,737 total · **1,598 remaining** |
-| **measured rate** | **2.37 min/document** — ACB 69 docs / 216 min, VCB 70 docs / 114 min |
-| **ESTIMATE** | **~60 h** consolidated · **~63 h** with the parent fallback |
+| **measured rate** | ⚠️ **NOT A CONSTANT — 1.63 / 3.13 / 7.15 min/document** (VCB 70 docs / 114 min, ACB 69 / 216, **BID 62 / 443**). The driver is the share of quarters needing the full 21-layer cascade: **4 % / 11 % / 36 %**, giving **min/doc ≈ 0.94 + 0.173 x %failing** over three points |
+| **ESTIMATE** | ⚠️ **~190 h** at BID's rate · **~103 h** at the three-ticker mean failure rate · *(the **~60-63 h** this row carried until 2026-08-25 assumed a flat 2.37 min/doc and is wrong)* |
+| ⚠️ **and for a NON-BANK** | unmeasured, and `TPL-1` implies it is the WORST case: two of the three non-bank templates cannot reconcile a cash flow at all, so their failure rate is near 100 % and the cascade cost at its ceiling. **`P5` is a COST item, not only a correctness one** |
 
 ⚠️ **RUN IT ONE TICKER AT A TIME.** `raw/cafef_financials` is partitioned per ticker and
 carries `op_tags={"resource": "gpu"}`, which caps it to ONE running step — onnxruntime-gpu on
@@ -780,8 +779,10 @@ it would fail.
 
 #### ⚠️ THE BINDING CONSTRAINT IS `P5`, NOT TIME — only 11 of the 28 can run today
 
-`raw_data/cafef/financials/statements/` holds one template family, `bank`. VN30 splits
-**13 banks / 17 non-banks**:
+⚠️ **NOT because the template is missing — all four charts of accounts exist.** The
+blocker measured 2026-08-25 is `TPL-1`: `FinancialsBuilder`'s reconcile anchors are
+bank-shaped, so a `corp` cash flow is handed the OPENING balance as the closing one and a
+`securities` cash flow is refused outright. VN30 splits **13 banks / 17 non-banks**:
 
 | | tickers |
 |---|---|
@@ -790,12 +791,17 @@ it would fail.
 
 ⚠️ **The CHART OF ACCOUNTS for `corp`, `securities` and `insurance` DOES exist**
 (`financials/schema/`, 12 files, 871 rows — `corp_balance_sheet.csv` alone is 140 lines), so
-`P5` is not "write the mapping from nothing". What has never happened is **running the parser
-against a non-bank filing even once**, so budget discovery. Three of the 17 are not `corp`
-either: **BVH is insurance, SSI is securities**, and each needs its own template proven.
+`P5` is not "write the mapping from nothing" — and on 2026-08-25 that was measured all the
+way down: what blocks a non-bank run is `TPL-1`, seven hardcoded reconcile anchors, not a
+missing chart. What has never happened is **running the parser against a non-bank filing
+even once**, so budget discovery. ⚠️ **TWO of the 17 are not `corp` either: BVH is
+insurance, SSI is securities**, and each needs its own template proven — *(this line read
+"Three of the 17" until 2026-08-25 while naming two, and the split is 15 corp + 1 + 1)*.
 
 ⚠️ **`TPB` IS THE `allow_parent` CASE IN ITS PUREST FORM — 9 consolidated documents against
-55 with the fallback, a 6.1x difference.** Run it consolidated-only and 46 of its quarters
+55 with the fallback, a 6.1x difference** — ⚠️ **and BID measured 2026-08-25 is the OPPOSITE
+POLE: 62 documents either way, no change at all.** The flag's value is a property of the
+ISSUER and cannot be budgeted from an average. Run it consolidated-only and 46 of its quarters
 are simply invisible. It is the strongest single argument for `allow_parent: true` being the
 default for this batch.
 
@@ -927,6 +933,83 @@ filing** as one of the 1,408 documents that bug skipped. Re-list both through
 SELECT ticker, source, COUNT(*) FROM bronze_schema.cafef_financial_reports
 GROUP BY 1, 2 ORDER BY 1, 3 DESC;      -- expect only 'pdf' and 'missing'
 ```
+
+---
+
+### P5 · ⚠️ THE NON-BANK WALL IS SEVEN RECONCILE ANCHORS, NOT A MISSING TEMPLATE ⏱ ~2-4 days  ·  *(measured 2026-08-25, `TPL-1`)*
+
+⚠️ **THIS ITEM DESCRIBED THE WRONG WALL FOR AS LONG AS IT EXISTED.** It read *"a corporate
+balance sheet / income statement / cash-flow template DOES NOT EXIST in this repo"*, and
+`CLAUDE.md` §6-3 said the same. **It is not true, and it was never measured** — it was
+inferred from `raw_data/cafef/financials/statements/` holding one folder, `bank`. That
+folder is the parser's **OUTPUT**, so it holds one family because one family has been RUN.
+
+#### What actually exists — verified on disk and in code, no OCR and no network
+
+| | |
+|---|---|
+| charts of accounts | **12 files, 871 rows** in `financials/schema/` — 4 families x 3 statements |
+| `bank` / `corp` / `securities` / `insurance` | BS 91 / 141 / 133 / 96 · CF 50 / 45 / 80 / 45 · IS 27 / 25 / 83 / 55 |
+| `cafef_schema.TEMPLATES` | all four, with reference tickers `VCB` / `FPT` / `SSI` / `BVH` |
+| `detect_template()` | **fingerprints the filing's own chart of accounts** (6 section counts), never GICS — *"HVA sits in the securities industry group and files on the CORPORATE template"* |
+| `schema_of` / `map_to_schema` | take `template` as an argument; load any of the 12 |
+| the bronze ingest | writes *"one wide table per (template, report) that has been parsed"* — the `_bank` suffix on today's tables is a consequence, not a scope |
+
+#### ⚠️ What is bank-shaped: seven hardcoded anchor tuples, and they fail three different ways
+
+`FinancialsBuilder.C_ASSETS … C_CASH_CLOSE` (`cafef_financials.py:217-225`) are **exact
+dict-key lookups**; on a miss `reconcile` and `_probe` fall through to `Statement.find`, a
+substring-then-fuzzy search over the OCR text at `NAME_MATCH = 0.85`. Measured by replaying
+that exact algorithm over each chart's own `as_printed` labels — **clean labels, so this is
+the OPTIMISTIC case, before any OCR damage**:
+
+| anchor | bank | corp | securities | insurance |
+|---|---|---|---|---|
+| `C_ASSETS` | ✅ canonical | ✅ canonical | ✅ canonical | ✅ canonical |
+| `C_RESOURCES` | ✅ canonical | ✅ canonical | ⚠️ text, fuzzy **0.962** | ✅ canonical |
+| `C_LIABILITIES` | ✅ canonical | ❌ both | ⚠️ text — **matches the GRAND TOTAL** | ❌ both |
+| `C_EQUITY` | ✅ canonical | ✅ canonical | ✅ canonical | ✅ canonical |
+| `C_PBT` | ✅ canonical | ⚠️ text (substring) | ⚠️ text (substring) | ⚠️ text (substring) |
+| `C_NET_CF` | ✅ canonical | ⚠️ text (substring) | ❌ both | ⚠️ text (substring) |
+| `C_CASH_CLOSE` | ✅ canonical | ⚠️ **WRONG ROW** | ❌ both | ⚠️ **WRONG ROW** |
+
+⚠️ **THE CASH FLOW IS THE ONE THAT MATTERS, AND IT DOES NOT MISS — IT LIES.** `CASH_CLOSE`'s
+needle fuzzy-matches the **OPENING** balance at **0.885 (corp)** and **0.902 (insurance)**,
+above the 0.85 threshold, and `find` scans in statement order where `đầu kỳ` is printed
+BEFORE `cuối kỳ` — first hit wins. So `reconcile` gates the statement on, and `sane` probes
+its magnitude with, **the opening balance labelled as the closing one**. A wrong figure, not
+a refusal, and nothing raises.
+
+⚠️ **`bank` is protected only by an accident of ordering**: its own opening line scores
+**0.930** on the same needle, but its canonical column is present so the fallback is never
+reached. The defect has been latent in the bank path the whole time.
+
+⚠️ **`securities` fails the opposite way and is therefore SAFE**: opening 0.789, closing
+0.831, both below 0.85, so every securities cash flow is refused with `no closing cash
+balance`. **A refusal is the correct failure; corp and insurance get the dangerous one.**
+
+⚠️ **AND CafeF's INSURANCE CASH-FLOW CHART HAS NO CLOSING-BALANCE LINE AT ALL** — it ends at
+`HDTC_39 tiền và tương đương tiền đầu kỳ` and `HDTC_40` (FX effect). So even with the anchor
+fixed there is **nowhere to store the figure**, and that one is a schema repair, not a
+tuple edit.
+
+⚠️ **Two more bank-only sets, both silent:** `_cash_flow_identity`'s `C_CASH_OPEN` /
+`C_CASH_FX` / `C_FLOW_SECTIONS` are **0 of 3 present on every non-bank chart**, so the
+relaxed-layer verification cannot run outside `bank`; and `TOTAL_ALIASES`' two recovery
+columns (`tong_tai_san`, `tong_no_phai_tra_va_von_chu_so_huu`) exist in **no** non-bank
+chart, so the `_anchor` recovery has nowhere to write.
+
+#### The work, in order
+
+1. **Widen the seven tuples** to the non-bank column names — `15_/ix_/25_tong_loi_nhuan_ke_toan_truoc_thue`, `c_no_phai_tra`, `tong_cong_no_phai_tra_va_von_chu_so_huu`, `hdtc_luu_chuyen_tien_thuan_trong_ky_50_20_30_40`, `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, `hdtc_vi_tien_va_cac_khoan_tuong_duong_tien_cuoi_ky`. ⚠️ **Order them so the CANONICAL hit always beats the text fallback** — that is what protects `bank` today and what must protect the rest.
+2. ⚠️ **Fix `find`'s open/close confusion at the source, not by threshold.** Raising `NAME_MATCH` breaks the OCR tolerance the whole parser rests on. `_anchor` already solves this problem by LENGTH (*"…taingay31thang3 spans 0.95 against …taingay's 0.77"*); the needle set needs the same treatment, or an explicit `đầu kỳ` exclusion.
+3. **Decide the insurance cash flow** — the chart has no closing line. Either extend the schema by hand or record insurance CF as structurally `missing`.
+4. **Rebuild `templates.csv`** — it holds **one row** (`HOSE,ACB,bank`) and `build_templates_index` refills it with a **network fingerprint call per ticker**.
+5. **Run ONE `corp` discovery parse** (`FPT` is `detect_template`'s own reference) before budgeting anything. Everything above is read off the charts of accounts; nothing has met a real corporate filing.
+6. ⚠️ **silver and gold are still bank-only** (`_ingest_silver_cafef_financials_bank`), so a non-bank parse stops at bronze until that is generalised. Out of scope here; **name it before `P38` is quoted as reaching 28 tickers**.
+
+⚠️ **NOTHING ON DISK IS WRONG TODAY.** Only ACB, VCB and BID have been parsed and all three are banks.
+This is a wall in front of `P38`/`P6`, not a defect in any number this repo has published.
 
 ---
 

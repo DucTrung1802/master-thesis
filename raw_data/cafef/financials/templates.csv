@@ -1,2 +1,4 @@
 ﻿exchange,symbol,template,cash_flow_method,sector,industry_group_code,industry_group_slug
 HOSE,ACB,bank,direct,Tài chính,551010,tai-chinh-ngan-hang
+HOSE,BID,bank,direct,Tài chính,551010,tai-chinh-ngan-hang
+HOSE,VCB,bank,direct,Tài chính,551010,tai-chinh-ngan-hang
