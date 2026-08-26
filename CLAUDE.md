@@ -1152,7 +1152,7 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-26)
+## 6. State today (2026-08-27)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section
 is the bug.** It was 7 days stale once already.
@@ -3074,6 +3074,89 @@ write something no probe ever judged**. That is the sentence to carry forward.
 only an annual report for 2008, 2009 and 2010, and its first quarterly is Q3-2011.
 `documents()` returns **nothing** for all eight. `missing` is the correct answer and no code
 change can alter it.
+
+### ✅ 6-2-noviesdecies. BID Q1-2012 — THE TAIL PAGE WAS TWO NUMBERS SHORT, AND THE LABEL WRAPPED
+
+Recovered 2026-08-27. Two independent defects, and the second is the one worth carrying
+forward: **it produced a wrong figure that passed every gate.**
+
+#### Defect 1 · the statement's LAST page was thrown away
+
+The cash flow runs **pages 5-7**. `_fill_continuations` gives an unidentifiable page to the
+statement running through it only when the page holds `MIN_TABLE_WORDS = 15` figures — the rule
+that keeps a signature page out. **Page 7 holds 13**, and it carries codes 53/54/55: opening
+**48,919,272,456,242**, closing **43,180,157,643,381**, every digit read correctly at
+`onnx@200`. The page was dropped and the quarter recorded `missing` for `no closing cash
+balance`.
+
+⚠️ **A STATEMENT'S FINAL PAGE IS SPARSE FOR THE SAME REASON THE THRESHOLD EXISTS** — a few
+closing rows and then the signature block. For a cash flow that is the one page that must not
+be lost. **The threshold is NOT lowered**: `tail_continuation` admits a page on POSITIVE
+evidence, by carrying the statement's own closing line (`PdfParser.TAIL`), and the run ENDS at
+the page it admits.
+
+#### Defect 2 · the label wrapped AROUND its figures — and the wrong figures RECONCILED
+
+The filing prints the label's first half, then the item code on its own baseline, then the
+second half beside the figures. `table_rows` builds a label only from the lines ABOVE, so the
+code line cleared the pending label and the row came out keyed `thoi_diem_dau_ky` — and the
+suffix `đầu kỳ`/`cuối kỳ` is **the only thing that tells the opening balance from the closing
+one**.
+
+⚠️ **WITH PAGE 7 RECOVERED BUT THE LABELS STILL TORN, THE MEASURED RESULT WAS:**
+`close = 48,919,272,456,242` (the OPENING figure), `fx = 43,180,157,643,381` (the CLOSING
+figure), **`reconcile` PASS and `sane` PASS**. Both cash figures on the wrong account, written
+as `pdf`. That is `SLD-1`'s shape again and it is why the fix was not stopped at defect 1: a
+test asserting only *"the quarter is no longer `missing`"* goes green on it.
+
+⚠️ **AND THE ITEM CODE IS THE ONLY THING ON THE PAGE THAT SAYS WHERE AN ITEM BEGINS.** Keeping
+the carry across a code line is not enough on its own — the FX adjustment (code 54) prints NO
+figure, so its label is still pending when 55's figures arrive, and it would prefix the closing
+label and push the discriminating suffix past `slug`'s 60-character cap. **That failure was
+measured, not foreseen**: it is where the first attempt at this fix landed. Text after the code
+is preferred; the carry is the fallback.
+
+#### What shipped, and what it is verified against
+
+Two `ParseLayer` flags, off by default, in four layers at the END of the cascade
+(`onnx@200+tail`, `+relax`, `onnx@300+tail`, `+relax+components`).
+
+| | |
+|---|---|
+| the run | `raw/cafef_financials` partition `HOSE_BID`, `periods=[Q4-2010, Q3-2011, Q4-2011, Q1-2012]`, **1h45m, RUN_SUCCESS** |
+| the result | `Q1-2012 cash_flow=20 items [onnx@200+tail]` — `missing` → `pdf`, 9 filled cells → 35. Cash flow **51 → 52 parsed** |
+| the anchors | opening **48,919,272,456,242**, closing **43,180,157,643,381**, FX blank (the filing prints none) — the right accounts, not swapped |
+| an independent figure | `thu nhập lãi và các khoản thu nhập tương tự nhận được` = **12,225,174,001,132**, matching the figure read off the filing by hand |
+| ⚠️ **the diff** | **exactly ONE period changed across all 9 CSVs.** ACB and VCB untouched; BID's balance sheet and income statement untouched; the three re-parsed neighbouring quarters reproduce byte-identically — verified by diff against a pre-run backup, not assumed |
+| the default path | **24 statements** across 5 filings of ACB/VCB/BID, both `realign` settings, reproduce **row for row** against HEAD |
+| tests | **13**, no PDF, no network — including one that reproduces the swapped-balances failure so the fix cannot be quietly undone |
+
+⚠️ **The cash-flow IDENTITY is not verified for this row**, because `verify_cash` is tied to
+`relax_totals` and this statement was accepted at a strict layer — the same as every other
+strictly-accepted statement in the repo. **20 of 34 line items mapped.**
+
+#### ⚠️ THE COST MODEL HAS NO TERM FOR DOCUMENT SIZE, AND IT IS WORTH 3.6x
+
+Predicted 58-64 min from `P39`'s *"a failed document costs 18.2 min"*; the run took **105 min**.
+Measured per quarter:
+
+| quarter | document | size | wall clock |
+|---|---|---|---|
+| Q4-2010 | FY-2010 annual | 6.9 MB | **73 min** — 9.1 min/MB |
+| Q3-2011 | Q3-2011 quarterly | 4.0 MB | 18 min — 2.5 min/MB |
+| Q4-2011 | FY-2011 annual | 6.6 MB | **1.5 min** — accepted at layer 1 |
+| Q1-2012 | Q1-2012 quarterly | 1.5 MB | 13 min — recovered at layer 37 of 40 |
+
+**3.6x between two documents that both ran the full cascade.** §6-2-decies named the driver
+(*"document size × number of distinct OCR passes"*) and `P38`'s `min/doc ≈ 0.94 + 0.173 x
+%failing` has no term for it. ⚠️ **Re-budget `P38` and `P6` on SIZE, not only on failure rate** —
+an annual report is the expensive document, and it is one quarter in four.
+
+⚠️ **AND A LONG RUN REPORTS NO PROGRESS UNTIL A QUARTER COMPLETES.** `logs/app.log` sat at 3
+lines for **73 minutes** while Dagster's compute log and the task output stayed at **0 bytes**
+(stdout is fully buffered in the subprocess — §5 rule 20). The only live progress signal was
+the **`LastAccessTime` of the filing PDFs**, which shows which document is open. That works and
+is worth reusing; a 7-hour `P38` ticker will be just as blind without it.
 
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 

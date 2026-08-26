@@ -232,6 +232,34 @@ class PdfParser:
     TITLE_MATCH = 0.80      # how close an OCR'd title must be to count as that statement
     MIN_TABLE_WORDS = 15    # a page with fewer figures than this is not a statement page
 
+    # ⚠️ A STATEMENT'S FINAL PAGE IS LEGITIMATELY SPARSE, AND `MIN_TABLE_WORDS` REFUSES IT.
+    # The last page holds the closing rows and then the signature block, so it carries a
+    # fraction of a full page's figures — and for the CASH FLOW that is the one page that must
+    # not be lost: it prints the opening balance, the FX adjustment and the CLOSING balance,
+    # which is the anchor `reconcile` refuses the whole statement without.
+    #
+    # BID's Q1-2012 consolidated cash flow runs pages 5-7. Page 7 holds codes 53/54/55 —
+    # opening 48,919,272,456,242 and closing 43,180,157,643,381, every digit read correctly —
+    # in **13 numeric words against a threshold of 15**. `_fill_continuations` dropped it, and
+    # the quarter was recorded `missing` for "no closing cash balance" while the balance sat
+    # on a page that had been thrown away for being two numbers short.
+    #
+    # Lowering `MIN_TABLE_WORDS` is not the fix: it is what keeps a signature page or a
+    # narrative page out of a statement, and a tail page IS mostly signature. So the page is
+    # admitted on POSITIVE evidence instead — it must carry the statement's own closing line.
+    # Reached only through `tail_continuation`, so no statement that parses today is re-judged.
+    TAIL = {
+        # "Tiền và các khoản tương đương tiền tại thời điểm cuối kỳ". Accents stripped and
+        # spaces removed like every other header test, and cut before "tại" so the phrase
+        # matches whether the filing DATES the line ("tại ngày 31 tháng 3") or names the
+        # period — the same split `FinancialsBuilder.CASH_TAIL` makes for the same reason.
+        CASH_FLOW: ("tienvacackhoantuongduongtien",),
+    }
+    # A tail page still has to be a TABLE, just a small one: the three cash-balance rows carry
+    # two period columns each. Set at 4 so a page holding a single stray figure — a page
+    # number, a date — can never qualify.
+    MIN_TAIL_WORDS = 4
+
     NUM_RE = re.compile(r"^\(?-?[\d][\d.,]*\)?$|^[-–—]$")
     # The filing's own row numbering, in the left margin.
     NUMBER_RE = re.compile(r"^[IVXLC]+$|^\d{1,2}$|^[a-z]$|^[A-Z]$", re.I)
@@ -281,6 +309,10 @@ class PdfParser:
         self.realign_rows = False
         # set per PARSE LAYER; see _drop_after_notes
         self.notes_boundary = False
+        # set per PARSE LAYER; see TAIL / _is_tail_page
+        self.tail_continuation = False
+        # set per PARSE LAYER; see table_rows' carry
+        self.label_wrap = False
         self.ocr_ready = self._init_ocr()
 
     def set_dpi(self, dpi: int) -> None:
@@ -325,6 +357,25 @@ class PdfParser:
         `_drop_after_notes` for what this puts in its place and why it is a layer.
         """
         self.notes_boundary = bool(on)
+
+    def set_tail_continuation(self, on: bool) -> None:
+        """Admit a statement's sparse FINAL page, which `MIN_TABLE_WORDS` refuses.
+
+        See `TAIL`. The page must carry the statement's own closing line, so this widens what
+        counts as a continuation by EVIDENCE rather than by lowering a threshold.
+        """
+        self.tail_continuation = bool(on)
+
+    def set_label_wrap(self, on: bool) -> None:
+        """Reassemble a label that WRAPPED AROUND its own value line.
+
+        `table_rows` builds a row's label from the lines ABOVE the figures. That is right when
+        the label wraps upward, and wrong when the figures sit BETWEEN the label's two halves —
+        the second half is then either discarded (it becomes the next row's carry) or, worse,
+        the first half is discarded before it and the row is keyed on the fragment. Both halves
+        of that failure are repaired here; see `table_rows`.
+        """
+        self.label_wrap = bool(on)
 
     def set_crop_pad(self, pad: Optional[float]) -> None:
         """How far outside a detected box to crop before RECOGNISING it (onnx only; points).
@@ -955,11 +1006,50 @@ class PdfParser:
             if run and self._is_table(pages[i]):
                 pages[i]["kind"] = run
                 pages[i]["from_form"] = False
+            elif run and self._is_tail_page(pages[i], run):
+                pages[i]["kind"] = run
+                pages[i]["from_form"] = False
+                # ⚠️ AND THE RUN ENDS HERE, DELIBERATELY. A tail page is by definition the LAST
+                # page of its statement — it was admitted for carrying the closing line — so
+                # letting the run continue would hand the next page a licence this one earned.
+                run = None
             else:
                 run = None                      # a gap ends the run
 
     def _is_table(self, page: dict) -> bool:
         return len(self._numbers(page["words"])) >= self.MIN_TABLE_WORDS
+
+    def _only_item_code(self, line_words: list, lo: float) -> bool:
+        """Does this line hold nothing but the filing's own row numbering, in the left margin?
+
+        The left column carries the statement's item codes (`53`, `VII`, `a`) and nothing else;
+        a line holding only those is a continuation of whatever label is pending, never a gap.
+        Deliberately strict — one word of real text, or one figure in the value zone, and the
+        line is an ordinary one again.
+        """
+        if not line_words:
+            return False
+        return all(w[2] < lo and self.NUMBER_RE.match(w[4]) for w in line_words)
+
+    def _is_tail_page(self, page: dict, run: str) -> bool:
+        """Is this the sparse LAST page of the statement running through it?
+
+        Not a looser `_is_table`: a page qualifies only by carrying the statement's own closing
+        line (`TAIL`), so a signature page, a narrative page or a note that merely follows the
+        statement can never be swept in however many stray figures it holds. See `TAIL` for the
+        BID Q1-2012 cash flow this was measured on.
+        """
+        if not self.tail_continuation:
+            return False
+        needles = self.TAIL.get(run)
+        if not needles:
+            return False
+        if len(self._numbers(page["words"])) < self.MIN_TAIL_WORDS:
+            return False
+        # The WHOLE page, not the header block: a closing balance is printed at the BOTTOM of
+        # the statement, which is the opposite end from a title.
+        ns = self.norm(page["text"]).replace(" ", "")
+        return any(n in ns for n in needles)
 
     # ──────────────────────────────────────────────────────────────────────
     # The table
@@ -1122,10 +1212,32 @@ class PdfParser:
                 parsed.append((y, label, vals))
 
             carry: List[str] = []               # a label that wrapped onto its own line
+            # ⚠️ THE FILING'S ITEM CODE MARKS WHERE A NEW ITEM BEGINS, and on this page it is
+            # the only thing that says so. The code column can sit on its OWN baseline,
+            # vertically centred on a two-line label, so neither "the label above" nor "the
+            # label below" is right on its own. Text printed AFTER the code belongs to that
+            # item; text before it is used only when the item printed nothing after its code.
+            # `None` = no code line seen since the last row was emitted. `label_wrap` only.
+            since_code: Optional[List[str]] = None
             for i, (y, label, vals) in enumerate(parsed):
                 if any(v is not None for v in vals):
-                    words_ = carry + label
-                    if not words_ and i + 1 < len(parsed):
+                    # An EMPTY `since_code` means the code was the last thing before these
+                    # figures, so the label is above it — BID Q1-2012's opening balance.
+                    base = since_code if (self.label_wrap and since_code) else carry
+                    words_ = base + label
+                    # ⚠️ `not label`, NOT `not words_`, UNDER `label_wrap`. The original test
+                    # fires only when the value line has neither a label nor a carry; a label
+                    # that wrapped AROUND its figures leaves a carry, so the branch was skipped
+                    # and the half BELOW the figures — the only half that says which account
+                    # this is — went to the next row as its carry. BID's Q1-2012 cash flow
+                    # keeps "thời điểm cuối kỳ" on the line under its figures, so the closing
+                    # balance was keyed on the opening line's wording, and the ordered walk
+                    # then handed BOTH cash figures to the wrong accounts while `reconcile` and
+                    # `sane` both passed. The proximity guard below is what separates a wrapped
+                    # tail from the NEXT item's label: here the gap is 5.8pt against ordinary
+                    # row spacing of 13-18pt on the same page.
+                    take_below = (not label) if self.label_wrap else (not words_)
+                    if take_below and i + 1 < len(parsed):
                         # A label sits BELOW its own figures when its box is the taller of the
                         # two — diacritics and descenders push its top down past Y_TOL, leaving
                         # one line with values and no label and the next with the label alone.
@@ -1138,7 +1250,7 @@ class PdfParser:
                         ny, nlabel, nvals = parsed[i + 1]
                         if (nlabel and not any(v is not None for v in nvals)
                                 and ny - y <= self.Y_TOL * 2):
-                            words_ = nlabel
+                            words_ = words_ + nlabel
                             parsed[i + 1] = (ny, [], nvals)     # consumed, not a carry
                     number = words_[0] if words_ and self.NUMBER_RE.match(words_[0]) else ""
                     text = " ".join(words_)
@@ -1146,10 +1258,35 @@ class PdfParser:
                     if key:
                         out.append(Row(label=text, key=key, number=number, values=vals))
                     carry = []
+                    since_code = None
                 elif label:
                     carry = (carry + label)[-12:]
+                    if since_code is not None:
+                        since_code = (since_code + label)[-12:]
+                elif self.label_wrap and self._only_item_code(lines[y], lo):
+                    # ⚠️ A LINE HOLDING ONLY THE FILING'S OWN ITEM CODE IS NOT A GAP, and
+                    # clearing the carry on it TEARS A WRAPPED LABEL IN HALF. The code column
+                    # can sit on its own baseline, between the two halves of a label whose
+                    # figures are on the second: BID's Q1-2012 cash flow prints
+                    #
+                    #     Tiền và các khoản tương đương tiền tại      <- carry
+                    #     53                                          <- code alone, cleared it
+                    #     thời điểm đầu kỳ   48,919,272,456,242 …     <- values
+                    #
+                    # so the row came out keyed `thoi_diem_dau_ky`, which names no account —
+                    # and the suffix it was severed from is the ONLY thing telling the opening
+                    # balance from the closing one. Left alone, the carry rejoins its own tail.
+                    #
+                    # ⚠️ AND IT OPENS A NEW ITEM. Keeping the carry alone is not enough: the
+                    # line above may belong to the PREVIOUS item, which printed no figure of
+                    # its own — BID Q1-2012's FX adjustment (code 54) is exactly that, and its
+                    # label would otherwise bleed into the closing balance below it and push
+                    # the discriminating suffix past `slug`'s 60-character cap. So text after
+                    # the code is preferred, and the carry is the fallback.
+                    since_code = []
                 else:
                     carry = []
+                    since_code = None
         return out
 
     def unit_of(self, pages: Dict[int, dict], on: List[int]) -> int:

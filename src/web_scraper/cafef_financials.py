@@ -61,6 +61,27 @@ class ParseLayer:
         label and a figure, and is left at zero unless it beats the unshifted page by half again
         (`PdfParser._value_row_offset`). Off for every other layer: this re-reads a page that
         already parses, so it must never judge a statement that reconciles today.
+      * `tail_continuation` — admit a statement's sparse FINAL page. `_fill_continuations`
+        absorbs an unidentifiable page into the statement running through it only if the page
+        holds `MIN_TABLE_WORDS` figures, and a statement's LAST page is legitimately below that:
+        it prints the closing rows and then the signature block. For the cash flow that is the
+        page carrying the CLOSING BALANCE, so losing it fails the statement outright — BID's
+        Q1-2012 consolidated cash flow puts codes 53/54/55 on page 7 with **13 figures against a
+        threshold of 15**, every digit correct, and the quarter was refused for "no closing cash
+        balance". The threshold is NOT lowered — it is what keeps a narrative page out, and a
+        tail page is mostly signature; instead the page is admitted on POSITIVE evidence, by
+        carrying the statement's own closing line (`PdfParser.TAIL`), and the run ends there.
+      * `label_wrap` — reassemble a label that WRAPPED AROUND its own value line. `table_rows`
+        builds a label from the lines ABOVE the figures, which is wrong when the figures sit
+        BETWEEN its two halves, and BID's Q1-2012 cash flow does that twice. Two repairs, both
+        needed: a line holding only the filing's item code (`53`) no longer counts as a gap that
+        clears the pending label, and a value line with no label OF ITS OWN takes the label-only
+        line just beneath it — widening a branch that previously required the carry to be empty
+        too. ⚠️ **The second is the one that matters for correctness**: without it the closing
+        balance is keyed on the opening line's wording, the ordered walk hands BOTH cash figures
+        to the wrong accounts, and `reconcile` and `sane` BOTH PASS — a wrong figure written as
+        `pdf`, which is the one failure mode this parser must not have. Rides with
+        `tail_continuation`: the same filing needs both, and neither is any use alone.
       * `crop_pad` — how far outside a detected box to crop before RECOGNISING it (onnx only,
         in points; `None` = the engine default of 2). The detector sometimes starts its box
         INSIDE a number and the leading digit is simply not in the crop, so the recogniser
@@ -80,6 +101,8 @@ class ParseLayer:
     realign_rows: bool = False
     notes_boundary: bool = False
     relax_merged_seam: bool = False
+    tail_continuation: bool = False
+    label_wrap: bool = False
     crop_pad: Optional[float] = None
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
@@ -484,6 +507,28 @@ class FinancialsBuilder:
                    notes_boundary=True, relax_merged_seam=True, realign_rows=True),
         # …and the page fix WITHOUT the seam guess, last of all, for a filing the split hurts.
         ParseLayer("onnx@200+notes", "onnx", 200, notes_boundary=True),
+        # ── THE STATEMENT'S LAST PAGE WAS TOO SPARSE TO BE ABSORBED (`tail_continuation`) ──
+        # `_fill_continuations` requires `MIN_TABLE_WORDS = 15` figures before it will hand an
+        # unidentifiable page to the statement running through it — the rule that keeps a
+        # signature page out. A statement's FINAL page fails it for the same reason it exists:
+        # a few closing rows and then the signatures. BID's Q1-2012 consolidated cash flow runs
+        # pages 5-7 and page 7 holds codes 53/54/55 — opening 48,919,272,456,242, closing
+        # 43,180,157,643,381, every digit read correctly at `onnx@200` — in **13 numeric words**.
+        # The page was dropped and the quarter recorded `missing` for "no closing cash balance".
+        #
+        # ⚠️ THE THRESHOLD IS NOT LOWERED. A tail page is admitted on POSITIVE evidence — it must
+        # carry the statement's own closing line (`PdfParser.TAIL`) — so a narrative or note page
+        # can never qualify however many stray figures it holds, and the run ENDS at the page it
+        # admits. What it recovers still faces reconcile, the cash-flow identity and `sane`.
+        ParseLayer("onnx@200+tail", "onnx", 200,
+                   tail_continuation=True, label_wrap=True),
+        ParseLayer("onnx@200+tail+relax", "onnx", 200,
+                   tail_continuation=True, label_wrap=True, relax_totals=True),
+        ParseLayer("onnx@300+tail", "onnx", 300,
+                   tail_continuation=True, label_wrap=True),
+        ParseLayer("onnx@200+tail+relax+components", "onnx", 200,
+                   tail_continuation=True, label_wrap=True,
+                   relax_totals=True, relax_components=True),
     ]
 
     def __init__(self, logger=None):
@@ -535,7 +580,7 @@ class FinancialsBuilder:
             # parse, so two layers differing only in it share one OCR pass.
             key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
                    layer.title_over_form, layer.loose_form_code, layer.realign_rows,
-                   layer.notes_boundary)
+                   layer.notes_boundary, layer.tail_continuation, layer.label_wrap)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)
@@ -544,6 +589,8 @@ class FinancialsBuilder:
                 parser.set_loose_form_code(layer.loose_form_code)
                 parser.set_realign_rows(layer.realign_rows)
                 parser.set_notes_boundary(layer.notes_boundary)
+                parser.set_tail_continuation(layer.tail_continuation)
+                parser.set_label_wrap(layer.label_wrap)
                 try:
                     parsed[key] = parser.parse(path, period_end)
                 except Exception as e:
