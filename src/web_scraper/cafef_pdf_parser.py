@@ -279,6 +279,8 @@ class PdfParser:
         self.loose_form_code = False
         # set per PARSE LAYER; see _value_row_offset
         self.realign_rows = False
+        # set per PARSE LAYER; see _drop_after_notes
+        self.notes_boundary = False
         self.ocr_ready = self._init_ocr()
 
     def set_dpi(self, dpi: int) -> None:
@@ -314,6 +316,15 @@ class PdfParser:
         this is a layer rather than a wider `Y_TOL`.
         """
         self.realign_rows = bool(on)
+
+    def set_notes_boundary(self, on: bool) -> None:
+        """Stop a fuzzy TITLE match from re-opening a statement after the notes have begun.
+
+        `_drop_islands` prunes a stray title page by its distance from a FORM-CODED one, so a
+        filing whose every form code is unreadable cannot be pruned at all. See
+        `_drop_after_notes` for what this puts in its place and why it is a layer.
+        """
+        self.notes_boundary = bool(on)
 
     def set_crop_pad(self, pad: Optional[float]) -> None:
         """How far outside a detected box to crop before RECOGNISING it (onnx only; points).
@@ -826,6 +837,8 @@ class PdfParser:
                 break            # the statements are behind us; the rest is notes
 
         self._drop_islands(pages)
+        if self.notes_boundary:
+            self._drop_after_notes(pages)
         self._enforce_order(pages)
         self._fill_continuations(pages)
         return pages
@@ -850,6 +863,42 @@ class PdfParser:
             for i in owned:
                 if i < lo - 1 or i > hi + 1:      # not touching the form-coded run
                     pages[i]["kind"] = None
+
+    @staticmethod
+    def _drop_after_notes(pages: Dict[int, dict]) -> None:
+        """A filing prints its statements, then its notes. Once the notes have begun, a page
+        identified only by a fuzzy TITLE is a note ABOUT a statement, not the statement.
+
+        ⚠️ **THIS EXISTS BECAUSE `_drop_islands` IS DISABLED WHEN NO FORM CODE SURVIVES OCR.**
+        That pruner measures a stray page's distance from a FORM-CODED one and returns early
+        with no anchor to measure from — `if not anchors: continue`. BID's Q3-2025 filing reads
+        `from_form = False` on all 37 pages, so nothing was pruned: pages 12-13 and 18-34 are
+        notes whose headers score against the balance-sheet title, and `_fill_continuations`
+        then swept every numbered table after them into the statement. **22 pages, 316 rows**,
+        and the grand-total anchors were taken from a NOTE table — 115,110 for a bank whose
+        real total is 3,071,970,196. ⚠️ `reconcile` PASSES on that, because assets and resources
+        are the same piece of garbage; only `sane` refused it.
+
+        Two conditions keep this off a sound filing, and both are needed:
+
+          * the page must carry **no form code** — a code is definitive and always wins, so a
+            statement genuinely printed after a note page is untouched;
+          * the report must already have had a run **before** the notes began. A filing that
+            opens with a CONTENTS page naming every statement classifies that page as notes
+            before any statement is seen, and without this second condition the whole filing
+            would then be pruned away.
+
+        A layer, not a default: it re-reads pages that parse today. See `set_notes_boundary`.
+        """
+        notes_at = next((i for i in sorted(pages) if pages[i]["kind"] == NOTES), None)
+        if notes_at is None:
+            return
+        established = {pages[i]["kind"] for i in sorted(pages)
+                       if i < notes_at and pages[i]["kind"] in REPORTS}
+        for i in sorted(pages):
+            if (i > notes_at and pages[i]["kind"] in established
+                    and not pages[i]["from_form"]):
+                pages[i]["kind"] = None
 
     @staticmethod
     def _enforce_order(pages: Dict[int, dict]) -> None:

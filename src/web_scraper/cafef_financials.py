@@ -78,6 +78,8 @@ class ParseLayer:
     title_over_form: bool = False
     loose_form_code: bool = False
     realign_rows: bool = False
+    notes_boundary: bool = False
+    relax_merged_seam: bool = False
     crop_pad: Optional[float] = None
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
@@ -450,6 +452,38 @@ class FinancialsBuilder:
                    realign_rows=True, relax_totals=True),
         ParseLayer("onnx@200+realign+relax+components", "onnx", 200,
                    realign_rows=True, relax_totals=True, relax_components=True),
+        # ── THE FORM CODES ALL DIED AND THE NOTES WERE SWEPT IN (`notes_boundary`) ────
+        # `_drop_islands` prunes a stray title page by its distance from a FORM-CODED one, so a
+        # filing whose every code is unreadable cannot be pruned at all. BID's Q3-2025 reads
+        # `from_form = False` on all 37 pages: pages 12-13 and 18-34 are notes whose headers
+        # score against the balance-sheet title, `_fill_continuations` swept every numbered
+        # table after them into the statement, and the result was **22 pages / 316 rows** whose
+        # grand-total anchors came from a NOTE table — 115,110 against a real 3,071,970,196.
+        # ⚠️ `reconcile` PASSES on that (assets and resources are the same garbage); `sane` is
+        # the only gate that refused it, which is why the quarter read `missing` rather than
+        # wrong. With the boundary applied the statement is **3 pages / 73 rows** and both
+        # totals are the printed ones.
+        #
+        # `relax_merged_seam` rides with it because the same filing needs both: the balance
+        # sheet merges "B. NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU" with "I. Các khoản nợ Chính phủ và
+        # NHNN", and without the split the EQUITY anchor answers with the government-debt
+        # figure — a wrong number that reconciles. Ordered narrow-first so a filing needing only
+        # the page fix is never re-judged on its labels.
+        # ⚠️ SEAM FIRST, AND THE ORDER IS LOAD-BEARING — measured 2026-08-26. `+notes` alone
+        # ACCEPTS BID's Q3-2025 balance sheet, because both grand totals are then correct and
+        # that is all `reconcile` and `sane` look at — while the EQUITY anchor still holds the
+        # merged row's government-debt figure. A layer that passes the gates ends the cascade,
+        # so the narrower layer must not run first: it would write a wrong number and stop.
+        ParseLayer("onnx@200+notes+seam", "onnx", 200,
+                   notes_boundary=True, relax_merged_seam=True),
+        ParseLayer("onnx@200+notes+seam+relax", "onnx", 200,
+                   notes_boundary=True, relax_merged_seam=True, relax_totals=True),
+        ParseLayer("onnx@300+notes+seam", "onnx", 300,
+                   notes_boundary=True, relax_merged_seam=True),
+        ParseLayer("onnx@200+notes+seam+realign", "onnx", 200,
+                   notes_boundary=True, relax_merged_seam=True, realign_rows=True),
+        # …and the page fix WITHOUT the seam guess, last of all, for a filing the split hurts.
+        ParseLayer("onnx@200+notes", "onnx", 200, notes_boundary=True),
     ]
 
     def __init__(self, logger=None):
@@ -497,8 +531,11 @@ class FinancialsBuilder:
             # engine and DPI but crop differently produce different text, and keying on
             # (engine, dpi) alone would hand the wider-crop layer the narrow crop's cached parse
             # — the one that already failed.
+            # `relax_merged_seam` is deliberately ABSENT: it changes the MAPPING, not the
+            # parse, so two layers differing only in it share one OCR pass.
             key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
-                   layer.title_over_form, layer.loose_form_code, layer.realign_rows)
+                   layer.title_over_form, layer.loose_form_code, layer.realign_rows,
+                   layer.notes_boundary)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)
@@ -506,6 +543,7 @@ class FinancialsBuilder:
                 parser.set_title_over_form(layer.title_over_form)
                 parser.set_loose_form_code(layer.loose_form_code)
                 parser.set_realign_rows(layer.realign_rows)
+                parser.set_notes_boundary(layer.notes_boundary)
                 try:
                     parsed[key] = parser.parse(path, period_end)
                 except Exception as e:
@@ -533,7 +571,8 @@ class FinancialsBuilder:
                         (layer.name, "no such statement on any page of this filing"))
                     continue
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals,
-                                         relax_split_tail=layer.relax_split_tail)
+                                         relax_split_tail=layer.relax_split_tail,
+                                         relax_merged_seam=layer.relax_merged_seam)
                 # ⚠️ THE SHORT-CIRCUIT IS LOAD-BEARING AND IS PRESERVED EXACTLY: `sane` runs
                 # only when `reconcile` passed, as it always has. What is new is that the
                 # refusal is KEPT rather than discarded — see the report below the loop.
@@ -1053,7 +1092,8 @@ class FinancialsBuilder:
 
     def map_to_schema(self, st: Statement, template: str,
                      relax_totals: bool = False,
-                     relax_split_tail: bool = False) -> Dict[str, int]:
+                     relax_split_tail: bool = False,
+                     relax_merged_seam: bool = False) -> Dict[str, int]:
         """Parsed rows -> canonical columns.
 
         This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
@@ -1085,7 +1125,8 @@ class FinancialsBuilder:
             val = st._first_value(row.values)
             if val is None:
                 continue
-            key = self._split_merged(row.key, row.label).replace("_", "")
+            key = self._split_merged(row.key, row.label,
+                                     relax_merged_seam).replace("_", "")
             if key:
                 rows.append((i, val, key))
 
@@ -1095,7 +1136,7 @@ class FinancialsBuilder:
         for j, ri in self._align([k for _, _, k in rows], accounts, relax_totals).items():
             self._claim(out, src, schema[j][0], rows[ri][0], rows[ri][1])
 
-        self._anchor(out, schema, st, relax_totals, src)
+        self._anchor(out, schema, st, relax_totals, src, relax_merged_seam)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
         return out
@@ -1118,6 +1159,21 @@ class FinancialsBuilder:
     MERGED_SEAM_RE = re.compile(
         r"^(.{12,}?)_(?:\d{2}|xviii|xvii|xvi|xiv|xiii|xii|xix|xi|xv|viii|vii|vi|iv|ix|ii)_(.{5,})$")
 
+    # ⚠️ THE SAME SEAM, PLUS A SINGLE-LETTER NUMERAL — reached only from `relax_merged_seam`.
+    # Section I is the one a bank balance sheet merges most often, because "B. NỢ PHẢI TRẢ VÀ
+    # VỐN CHỦ SỞ HỮU" and "I. Các khoản nợ Chính phủ và NHNN" are printed adjacent: BID's
+    # Q3-2025 reads them as one row carrying 215,823,611, and "vốn chủ sở hữu" then sits inside
+    # that label, so the row answers the EQUITY anchor with the government-debt figure — 7.0 %
+    # of assets against BID's usual 5.2-5.4 %.
+    #
+    # The strict pattern excludes single letters deliberately, because "…_v_1" and "…_v_6" are
+    # note references at the END of ordinary labels. That exclusion is broader than it needs to
+    # be: `(.{5,})$` already requires five characters after the marker, which no such reference
+    # has. It stays behind a layer regardless — a seam is a guess about what OCR merged, and a
+    # wrong guess moves a figure to the wrong account rather than refusing it.
+    MERGED_SEAM_RE_LOOSE = re.compile(
+        r"^(.{12,}?)_(?:\d{2}|xviii|xvii|xvi|xiv|xiii|xii|xix|xi|xv|viii|vii|vi|iv|ix|ii|i)_(.{5,})$")
+
     # How far to re-slug a label when hunting for the seam. `PdfParser.slug` caps a row key at
     # 60 characters, which is ample for a real line and far too short for a merged one — and a
     # merged row is long BY DEFINITION, so the marker that reveals the seam is exactly what the
@@ -1127,7 +1183,8 @@ class FinancialsBuilder:
     # figure is gone and nothing can place it.
     SEAM_SLUG_LEN = 400
 
-    def _split_merged(self, key: str, label: str = "") -> str:
+    def _split_merged(self, key: str, label: str = "",
+                      relax_merged_seam: bool = False) -> str:
         """The part of a merged row's label that owns its figure — the text after the last
         section marker OCR swept in, or the key unchanged when there is no seam.
 
@@ -1141,8 +1198,10 @@ class FinancialsBuilder:
         candidates = [key]
         if label:
             candidates.insert(0, PdfParser.slug(label, maxlen=self.SEAM_SLUG_LEN))
+        seam = (self.MERGED_SEAM_RE_LOOSE if relax_merged_seam
+                else self.MERGED_SEAM_RE)
         for cand in candidates:
-            m = self.MERGED_SEAM_RE.match(cand)
+            m = seam.match(cand)
             if m:
                 return m.group(2)
         return key
@@ -1469,7 +1528,8 @@ class FinancialsBuilder:
 
     def _anchor(self, out: Dict[str, int], schema: List[Tuple[str, str]],
                 st: Statement, relax: bool = False,
-                src: Optional[Dict[str, int]] = None) -> None:
+                src: Optional[Dict[str, int]] = None,
+                relax_merged_seam: bool = False) -> None:
         """Re-match the subtotals without regard to position.
 
         The ordered walk drifts. Once it has advanced past a column, a row that belongs there
@@ -1500,7 +1560,17 @@ class FinancialsBuilder:
                 val = st._first_value(row.values)
                 if val is None:
                     continue
-                k = row.key.replace("_", "")
+                # ⚠️ THE SPLIT KEY, NOT THE RAW ONE — but only when asked. The ordered walk
+                # in `map_to_schema` has always scored `_split_merged(...)`; this did not, so a
+                # row OCR built by merging a section HEADER with the line beneath it could still
+                # answer an anchor with the wrong figure here. BID's Q3-2025 merges "B. NỢ PHẢI
+                # TRẢ VÀ VỐN CHỦ SỞ HỮU" with "I. Các khoản nợ Chính phủ và NHNN", so "vốn chủ
+                # sở hữu" sits inside the label and the EQUITY anchor took 215,823,611 — the
+                # government-debt line. Split, that row answers `i_cac_khoan_no_chinh_phu_va_nhnn`
+                # and equity is left ABSENT, which is the correct answer for a figure the
+                # statement never printed on its own line (CLAUDE.md §5 rule 2).
+                k = self._split_merged(row.key, row.label,
+                                       relax_merged_seam).replace("_", "")
                 r = self._label_score(a, k, relax)
                 # Length ratio: how much of the target the OCR'd label actually spans (min/max
                 # so a too-long label is penalised too). It also ranks the ties containment
