@@ -52,6 +52,15 @@ class ParseLayer:
         set would re-judge all 65 quarters at once, and a component wrongly swept in makes the
         sum OVERSHOOT, turning a passing quarter into a rejected one. Here only a statement that
         has already failed every existing layer is ever judged this way.
+      * `realign_rows` — re-pair labels with figures when the scan puts every numeric box a
+        CONSTANT distance above the text box of its own printed line. Past `Y_TOL` the two never
+        group, and `table_rows` then hands each figure to the label line ABOVE it, sliding the
+        whole statement by one row with every digit read correctly — BID's Q1-2021 balance sheet
+        reported total assets of 10,770,158 (the cash line) against a printed 1,558,887,407.
+        The offset is MEASURED per statement, by maximising the number of lines that hold both a
+        label and a figure, and is left at zero unless it beats the unshifted page by half again
+        (`PdfParser._value_row_offset`). Off for every other layer: this re-reads a page that
+        already parses, so it must never judge a statement that reconciles today.
       * `crop_pad` — how far outside a detected box to crop before RECOGNISING it (onnx only,
         in points; `None` = the engine default of 2). The detector sometimes starts its box
         INSIDE a number and the leading digit is simply not in the crop, so the recogniser
@@ -68,6 +77,7 @@ class ParseLayer:
     join_digits: bool = False
     title_over_form: bool = False
     loose_form_code: bool = False
+    realign_rows: bool = False
     crop_pad: Optional[float] = None
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
@@ -413,6 +423,33 @@ class FinancialsBuilder:
                    title_over_form=True, loose_form_code=True),
         ParseLayer("onnx@200+title+loose+relax", "onnx", 200,
                    relax_totals=True, title_over_form=True, loose_form_code=True),
+        # ── THE FIGURES AND THEIR LABELS NEVER SHARED A LINE (`realign_rows`) ─────────
+        # LAST OF ALL, and it is the one knob here that re-reads a page rather than a figure.
+        # On some scans the detector puts every numeric box a constant ~7pt above the text box
+        # of the same printed line — past `Y_TOL`, so the two never group, and each figure is
+        # then handed to the label line ABOVE it. The statement slides by exactly one row while
+        # every digit is read correctly, which is why no engine, DPI or crop setting touches it:
+        # BID's Q1-2021 balance sheet reported total assets of 10,770,158 — its own cash line —
+        # against the 1,558,887,407 printed on page 2, and was refused 26 times for
+        # "assets != liabilities + equity".
+        #
+        # ⚠️ **A WRONG OFFSET WOULD WRITE A WHOLE STATEMENT OF WRONG NUMBERS, which is worse
+        # than `missing`**, so the offset is measured rather than assumed and two things bound
+        # it: it is chosen by maximising CO-LOCATION (lines holding both a label and a figure),
+        # a criterion that never looks at what the figures ARE and so cannot be pulled toward a
+        # total that happens to reconcile; and it is discarded unless it beats the unshifted
+        # page by half again. On BID Q1-2021 the offset is 7pt and co-location goes 55 -> 174;
+        # on ACB Q1-2021 and BID Q2-2021, both of which parse correctly today, the best shift
+        # scores 1.09x and 1.03x and is refused. What it recovers still faces reconcile, `sane`
+        # and the cash gates like anything else.
+        ParseLayer("onnx@200+realign", "onnx", 200, realign_rows=True),
+        ParseLayer("onnx@200+realign+relax", "onnx", 200,
+                   realign_rows=True, relax_totals=True),
+        ParseLayer("onnx@300+realign", "onnx", 300, realign_rows=True),
+        ParseLayer("onnx@300+realign+relax", "onnx", 300,
+                   realign_rows=True, relax_totals=True),
+        ParseLayer("onnx@200+realign+relax+components", "onnx", 200,
+                   realign_rows=True, relax_totals=True, relax_components=True),
     ]
 
     def __init__(self, logger=None):
@@ -461,13 +498,14 @@ class FinancialsBuilder:
             # (engine, dpi) alone would hand the wider-crop layer the narrow crop's cached parse
             # — the one that already failed.
             key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
-                   layer.title_over_form, layer.loose_form_code)
+                   layer.title_over_form, layer.loose_form_code, layer.realign_rows)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)
                 parser.set_join_split(layer.join_digits)
                 parser.set_title_over_form(layer.title_over_form)
                 parser.set_loose_form_code(layer.loose_form_code)
+                parser.set_realign_rows(layer.realign_rows)
                 try:
                     parsed[key] = parser.parse(path, period_end)
                 except Exception as e:

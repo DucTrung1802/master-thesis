@@ -1152,7 +1152,7 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-25)
+## 6. State today (2026-08-26)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section
 is the bug.** It was 7 days stale once already.
@@ -2852,6 +2852,123 @@ income statement. That is where BID's 7 h 23 m went.
 ticker, not 17** — so 80.0 % understates what is usable by a wide margin, and which statements
 a feature actually needs is worth deciding before more OCR is bought.
 
+### ⚠️ 6-2-sexdecies. `SLD-1` — A STATEMENT CAN BE PARSED ONE ROW OUT AND PASS EVERY GATE
+
+Found 2026-08-26 while making BID Q1-2021's balance sheet parse, and it is the more important
+half of that day's work — the recovery is the smaller one.
+
+**The mechanism.** On some scans the OCR emits each numeric box a constant distance ABOVE the
+text box of its own printed line: BID Q1-2021 by **7pt**, against `Y_TOL = 4.0`. The two never
+group. `table_rows` emits a row only when it holds a figure and turns a label-only line into
+`carry` — so a SECTION HEADING (`A. TÀI SẢN`, which the filing prints with no figure) leaves a
+label waiting, and every figure is handed to the label ABOVE it. The whole statement slides by
+one row **with every digit read correctly**. ⚠️ The existing recovery for exactly this shape
+(the ACB Q1-2024 branch, *"a label sits BELOW its own figures"*) is disabled precisely when it
+is needed, because its condition is `not words_` and a heading guarantees `carry` is not empty.
+
+⚠️ **AND BOTH GRAND TOTALS CAN STILL LAND CORRECTLY, SO `reconcile` PASSES.** That is what
+makes this a correctness issue rather than a coverage one: the row is written as `pdf`, the
+totals are right, and every line item between them is its neighbour's.
+
+**Verified against the filing's own text**, which is the only reason it is stated as fact: VCB
+Q1-2021 page 4 prints `Tiền mặt, vàng bạc, đá quý` **12,277,634** and `Tiền gửi tại NHNN`
+**24,008,360**. The row on disk holds **24,008,360** and **203,604,117** — each label carrying
+the next line's figure.
+
+#### The audit — 201 filings re-OCR'd, 69.9 min
+
+| | |
+|---|---|
+| statement-rows measured | **596** across ACB + VCB + BID (571 `pdf`, 25 `missing`) |
+| non-zero offset | **20** (3.4 %), of which **18 stored as `pdf`** |
+| **benign** | **0** — re-pairing changes **2 to 22 line items in every single one** |
+| convicted | **5** |
+
+Judging the six flagged BALANCE SHEETS against the prior Q4 already accepted on disk — every
+interim balance sheet prints 31/12 of the prior year beside the current column, so that column
+must reproduce it:
+
+| | stored | realigned | |
+|---|---|---|---|
+| BID Q2-2019 | 15/45 = **33 %** | 46/46 = **100 %** | ❌ |
+| BID Q1-2022 | 26/44 = 59 % | 45/46 = 98 % | ❌ |
+| VCB Q1-2021 | 31/47 = 66 % | 45/46 = 98 % | ❌ |
+| BID Q2-2014 | 24/36 = 67 % | 47/52 = 90 % | ❌ |
+| VCB Q1-2026 | 42/48 = 88 % | 56/56 = **100 %** | ❌ |
+| VCB Q3-2023 | 47/51 = **92 %** | 52/61 = 85 % | ⚠️ inconclusive, probably sound |
+
+⚠️ **FIVE IS A LOWER BOUND, NOT A TOTAL.** The other 12 are income statements and cash flows
+whose comparative column is the prior YEAR's period — not a stored quarter — so this method
+cannot judge them, and **3 of them sit in a filing whose balance sheet is already convicted**
+(BID Q1-2021 changes 9 items, BID Q2-2019 13, VCB Q1-2026 5). Worst unjudged: **BID Q4-2024
+income statement, offset 11.5, 22 items**.
+
+⚠️ **OFFSET SIZE DOES NOT PREDICT DAMAGE**, and I assumed it did before measuring: BID
+Q2-2019's income statement carries the SMALLEST offset in the whole list (2.0) and changes 13
+items, inside a filing already proven broken.
+
+⚠️ **TWO DISK-ONLY DETECTORS WERE TRIED FIRST AND BOTH FAILED**, which is why the audit costs
+70 minutes of OCR: quarter-on-quarter continuity is blind to a slide that persists across
+adjacent quarters (they are continuous with each other), and *sum of level-1 items vs the grand
+total* is defeated by coverage — only 8-10 of 12 items are ever present, so VCB Q1-2021 (slid)
+scored **−0.96 %** against Q4-2020 (sound) at **−20.2 %**, the wrong way round.
+
+#### What shipped, and what it does NOT do
+
+`realign_rows` is a `ParseLayer` flag (`PdfParser._value_row_offset`). The offset is chosen by
+maximising CO-LOCATION — the number of lines holding both a label and a figure — a criterion
+that never looks at what the figures ARE, so it cannot be pulled toward a total that happens to
+reconcile; and it is discarded unless it beats the unshifted page by half again.
+⚠️ **It returns the CENTRE of the maximal band, not its first point**: `Y_TOL` is a tolerance,
+so a true 7pt offset reads as a flat maximum over 3..11, and taking the first scored 3.0 and
+left every figure on the edge of the tolerance. That bug survived the real-data check (BID's
+maximum is a single point at 7) and was caught only by a synthetic fixture.
+
+✅ **BID Q1-2021 recovered** — `missing` → `pdf` at `onnx@200+realign`, total assets
+**1,558,887,407 mn**, the figure printed on page 2. Written through Dagster, 12m36s, and diffed
+against a backup: **only that period changed** in the balance sheet, **zero rows** changed in
+the other two statements.
+
+⚠️ **IT REPAIRS NONE OF THE 5.** The five layers sit LAST, so only a statement that defeated
+all 26 earlier layers reaches them — and every convicted row reconciles at layer 1, which stops
+the cascade. It can reach exactly **2 of the 25 `missing` statement-rows** (BID Q1-2021, done;
+VCB Q1-2009, untried); the other 23 measure offset 0. Repairing the five needs a decision to
+re-judge accepted statements, which is a different change with a much larger blast radius.
+
+✅ **The default path is unchanged, and that is proven rather than asserted**: against HEAD on
+the same OCR output with the flag off, **12 statements / 643 rows of ACB, VCB and BID filings
+reproduce row for row**. Adding the recovered quarter to `history` changes no later verdict —
+0 of BID's 19 subsequent quarters move. 7 tests, no PDF or network needed.
+
+### ⚠️ 6-2-septdecies. AND `periods` WROTE GARBAGE THE SAME DAY — the warning is not decorative
+
+BID Q3-2025's balance sheet was diagnosed first, at `onnx@200`: **22 pages classified as the
+balance sheet, 316 rows**, and the anchors taken from a NOTE table — `tong_tai_san` =
+**115,110 mn** for a bank whose real total is **3,071,970,196 mn**. ⚠️ **`reconcile` PASSES on
+that**, because assets and resources are the same piece of garbage; **`sane` is the only gate
+that refuses it.**
+
+It was then run through Dagster with `periods: ["Q3-2025"]` anyway — the one mode that makes
+`sane` fail open. **RUN_SUCCESS in 48.3 s, and 115,110 mn was written to disk as `pdf`**, along
+with an overwrite of the Q3-2025 cash flow that was already `pdf`. Nothing warned. Restored
+byte-identical from a backup taken beforehand.
+
+⚠️ **This is §6-2-decies' rule firing exactly as written — *"use `periods` to PROBE, never to
+PRODUCE"* — and the diagnosis that predicted it was sitting in the run's own config file.** The
+same knob was safe for Q1-2021 only because that statement had first been checked against the
+FULL 41-quarter history in a read-only probe, where `sane` returned `None`. **A `periods` run
+may only write what a full-history probe has already cleared.**
+
+⚠️ **Q3-2025 REMAINS UNPARSED and `realign` cannot help it** (measured offset **0.0**). It is
+page OVER-INCLUSION — `_drop_islands` failing to prune 22 pages to 3 — a separate defect from
+`SLD-1`. ⚠️ **And the reason recorded in §6-2-quindecies (`no total to balance against`) is the
+LAST layer's**; `onnx@200` gets further and is stopped by `sane` instead.
+
+⚠️ **THE EIGHT OTHER `missing` BALANCE SHEETS CANNOT BE PARSED BY ANY CHANGE**: Q1-Q3 2009,
+Q1-Q3 2010 and Q1-Q2 2011 have **no filing at all** — BID filed only an annual report for 2008,
+2009 and 2010, and its first quarterly is Q3-2011. `documents()` returns nothing for all eight.
+`missing` is the correct answer, and §6-2-quindecies' class A already said so.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -2970,7 +3087,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**22 open**, 38 resolved, codes permanent — ⚠️ **`FXM-1` OPENED 2026-08-25 with a fix that is WRITTEN AND UNMEASURED**: the FX adjustment line cannot be mapped, and it is the single bottleneck behind **8 of the 11 probed BID cash-flow refusals** — the balances are already recovered and then discarded for want of a fourth term. TODO `P39` is the measurement and it is not optional (§6-2-quindecies) — ⚠️ **`TPL-1` OPENED 2026-08-25 and it is the one to read before any non-bank parse**: the non-bank wall is NOT a missing template — all four charts of accounts exist — it is seven hardcoded reconcile anchors, and on `corp` and `insurance` the cash-flow one **fuzzy-matches the OPENING balance and returns it as the closing one** (0.885 / 0.902 against a 0.85 threshold, first hit wins in statement order). A wrong figure, not a refusal; `securities` fails safely instead, below the threshold at both ends (§6-2-quaterdecies) — ⚠️ **`FIN-1` CLOSED 2026-08-24** — no financials row anywhere reads `source='cafef'`; ⚠️ **`GLB-1` and `BRZ-1` opened the same day**, both found by the carry-up: `GLB-1` is a star import rebinding `glob` from the function to the MODULE, breaking all 11 call sites in `preprocessor.py`; **`BRZ-1` is the sharper one — a row deleted at the SOURCE is never deleted from bronze**, because every `_ingest_bronze_*` upserts, and no freshness check can see it (§6-2-terdecies) — ⚠️ **`SAN-1` opened-and-closed 2026-08-24 and is the one to read**: the magnitude guard `sane` learns its baseline from the quarters accepted in its own run, so one 2-line statement became the whole reference population and silently rejected every correct quarter after it (§6-2-undecies) — ⚠️ **`FIN-1` OPENED 2026-08-24 and it is the one to read if you touch fundamentals**: 34 financial report-rows on disk were transcribed from CafeF's HTML tabs rather than parsed from the filing PDF — the fallback fires on any absent period without checking whether a PDF exists. ⚠️ **Only 4 can be retried, all VCB**: `documents()` keeps `consolidated == "True"` only and ACB filed no consolidated statement before 2010. §5 rule 24 now forbids the source outright; the code still defaults `use_api=True` (§6-2-octies) — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**23 open**, 38 resolved, codes permanent — ⚠️ **`FXM-1` OPENED 2026-08-25 with a fix that is WRITTEN AND UNMEASURED**: the FX adjustment line cannot be mapped, and it is the single bottleneck behind **8 of the 11 probed BID cash-flow refusals** — the balances are already recovered and then discarded for want of a fourth term. TODO `P39` is the measurement and it is not optional (§6-2-quindecies) — ⚠️ **`TPL-1` OPENED 2026-08-25 and it is the one to read before any non-bank parse**: the non-bank wall is NOT a missing template — all four charts of accounts exist — it is seven hardcoded reconcile anchors, and on `corp` and `insurance` the cash-flow one **fuzzy-matches the OPENING balance and returns it as the closing one** (0.885 / 0.902 against a 0.85 threshold, first hit wins in statement order). A wrong figure, not a refusal; `securities` fails safely instead, below the threshold at both ends (§6-2-quaterdecies) — ⚠️ **`FIN-1` CLOSED 2026-08-24** — no financials row anywhere reads `source='cafef'`; ⚠️ **`GLB-1` and `BRZ-1` opened the same day**, both found by the carry-up: `GLB-1` is a star import rebinding `glob` from the function to the MODULE, breaking all 11 call sites in `preprocessor.py`; **`BRZ-1` is the sharper one — a row deleted at the SOURCE is never deleted from bronze**, because every `_ingest_bronze_*` upserts, and no freshness check can see it (§6-2-terdecies) — ⚠️ **`SAN-1` opened-and-closed 2026-08-24 and is the one to read**: the magnitude guard `sane` learns its baseline from the quarters accepted in its own run, so one 2-line statement became the whole reference population and silently rejected every correct quarter after it (§6-2-undecies) — ⚠️ **`FIN-1` OPENED 2026-08-24 and it is the one to read if you touch fundamentals**: 34 financial report-rows on disk were transcribed from CafeF's HTML tabs rather than parsed from the filing PDF — the fallback fires on any absent period without checking whether a PDF exists. ⚠️ **Only 4 can be retried, all VCB**: `documents()` keeps `consolidated == "True"` only and ACB filed no consolidated statement before 2010. §5 rule 24 now forbids the source outright; the code still defaults `use_api=True` (§6-2-octies) — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -3012,7 +3129,7 @@ what a session budgets against.
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | **9.2k** | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | **44.0k** | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
-⚠️ **[ISSUES.md](docs/ISSUES.md) (~19k) is the second file to open, not an afterthought.**
+⚠️ **[ISSUES.md](docs/ISSUES.md) (~23k) is the second file to open, not an afterthought.**
 **22** open issues — ⚠️ *(this line read "(~4k)" and "Sixteen" until 2026-08-25; both were
 stale, and a stale cost is what a session budgets against)*. **SHP-1** is the one to read
 first — a `value`-only filter silently discarded 71% of the forex folder for as long as that

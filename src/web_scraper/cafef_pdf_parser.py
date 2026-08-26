@@ -277,6 +277,8 @@ class PdfParser:
         self.title_over_form = False
         # set per PARSE LAYER; see FORM_RE_LOOSE
         self.loose_form_code = False
+        # set per PARSE LAYER; see _value_row_offset
+        self.realign_rows = False
         self.ocr_ready = self._init_ocr()
 
     def set_dpi(self, dpi: int) -> None:
@@ -300,6 +302,18 @@ class PdfParser:
         """Let a VERBATIM statement title overrule a form code that names a different
         statement — for a filing that mis-stamps its own pages (see `_page_kind`)."""
         self.title_over_form = bool(on)
+
+    def set_realign_rows(self, on: bool) -> None:
+        """Re-pair labels with figures when the OCR emits the two at a CONSTANT vertical offset.
+
+        A printed line is one label and its figures, but the detector boxes them separately, and
+        on some scans every numeric box lands a fixed distance above the text box of the same
+        line. Past `Y_TOL` the two never group, and `table_rows` then hands each figure to the
+        label line ABOVE it via `carry` — so the whole statement slides by one row while every
+        digit is read correctly. See `_value_row_offset` for how the offset is measured and why
+        this is a layer rather than a wider `Y_TOL`.
+        """
+        self.realign_rows = bool(on)
 
     def set_crop_pad(self, pad: Optional[float]) -> None:
         """How far outside a detected box to crop before RECOGNISING it (onnx only; points).
@@ -959,6 +973,65 @@ class PdfParser:
     # median digit-count of a column's numbers separates them with room to spare.
     NOTE_MAX_DIGITS = 2
 
+    # How far a numeric box may be searched for its label, and how much better the shifted
+    # pairing must be before it is believed. Both measured 2026-08-25 on four bank filings:
+    #
+    #   BID Q1-2021 (broken)  offset* = 7   co-location  55 -> 174   x3.16
+    #   VCB Q1-2021 (sound)   offset* = 4               23 ->  64   x2.78
+    #   ACB Q1-2021 (sound)   offset* = 2               57 ->  62   x1.09
+    #   BID Q2-2021 (sound)   offset* = 2               63 ->  65   x1.03
+    #
+    # The search stops at 12 because rows are set 13-18pt apart, so a larger shift would pair a
+    # figure with the NEXT item's label rather than its own. The 1.5x gain floor keeps the
+    # correction off a document that is already paired correctly — the two sound filings that
+    # peak near zero score ~1.05 and are left exactly as they were.
+    #
+    # NOTE VCB scores 2.78 and is sound: there the shift merely MERGES a pair `carry` was
+    # already joining correctly, so it changes the mechanism and not the result. That is why the
+    # gain is a floor for applying a correction and never, on its own, a diagnosis of breakage —
+    # and why this whole path is reached only from a parse layer that runs after every other.
+    REALIGN_MAX = 12
+    REALIGN_MIN_GAIN = 1.5
+
+    def _value_row_offset(self, words_by_page: Dict[int, list], lo: float) -> float:
+        """The constant vertical gap between a numeric box and the label box of its own line.
+
+        Chosen as the shift that maximises CO-LOCATION — the number of lines holding both a
+        label and a figure. That criterion never looks at what the figures are, only at whether
+        the page reassembles into whole rows, so it cannot be tuned toward a total that
+        reconciles; a wrong offset scatters labels and figures apart and scores worse.
+
+        -> 0.0 when no shift beats leaving the page alone by `REALIGN_MIN_GAIN`.
+        """
+        def colocated(delta: float) -> int:
+            hits = 0
+            for words in words_by_page.values():
+                lines: Dict[float, list] = {}
+                for w in words:
+                    num = (self.NUM_RE.match(w[4]) is not None
+                           and self.parse_num(w[4]) is not None and w[2] >= lo)
+                    y = w[1] + (delta if num else 0.0)
+                    k = next((k for k in lines if abs(k - y) <= self.Y_TOL), y)
+                    lines.setdefault(k, []).append(num)
+                hits += sum(1 for kinds in lines.values() if any(kinds) and not all(kinds))
+            return hits
+
+        scores = {float(d): colocated(float(d)) for d in range(0, self.REALIGN_MAX + 1)}
+        best_score = max(scores.values())
+        # ⚠️ THE CENTRE OF THE PLATEAU, NOT ITS FIRST POINT. `Y_TOL` is a tolerance, so every
+        # shift that brings a figure within it of its label scores the same — a true offset of
+        # 7pt reads as a flat maximum over 3..11, and taking the first of those would sit a
+        # figure right on the edge of the tolerance, where a page with tighter line spacing
+        # would pair it with the NEXT label instead. The midpoint is the offset itself, and on a
+        # real scan whose maximum is a single point it changes nothing (BID Q1-2021 peaks at 7
+        # alone: 6 -> 170, 7 -> 174, 8 -> 167).
+        top = sorted(d for d, sc in scores.items() if sc == best_score)
+        best = top[len(top) // 2] if len(top) % 2 else (top[len(top) // 2 - 1]
+                                                        + top[len(top) // 2]) / 2.0
+        if best and best_score >= max(scores[0.0], 1) * self.REALIGN_MIN_GAIN:
+            return best
+        return 0.0
+
     def table_rows(self, words_by_page: Dict[int, list], columns: List[float]) -> List[Row]:
         """Rows rebuilt from word coordinates.
 
@@ -969,12 +1042,20 @@ class PdfParser:
         if not columns:
             return []
         lo = columns[0] - self.LABEL_GAP        # labels live to the left of column 1
+        # ⚠️ SET PER PARSE LAYER, off by default — see `set_realign_rows`. Measured once per
+        # STATEMENT, from the pages this call was handed, because the offset is a property of
+        # how those pages were scanned and a filing may mix clean pages with scanned ones.
+        offset = (self._value_row_offset(words_by_page, lo)
+                  if self.realign_rows else 0.0)
 
         out: List[Row] = []
         for page in sorted(words_by_page):
             lines: Dict[float, list] = {}
             for w in words_by_page[page]:
-                k = next((k for k in lines if abs(k - w[1]) <= self.Y_TOL), w[1])
+                y = w[1] + (offset if (offset and w[2] >= lo
+                                       and self.NUM_RE.match(w[4]) is not None
+                                       and self.parse_num(w[4]) is not None) else 0.0)
+                k = next((k for k in lines if abs(k - y) <= self.Y_TOL), y)
                 lines.setdefault(k, []).append(w)
 
             parsed: List[tuple] = []
