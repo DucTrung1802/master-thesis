@@ -2835,6 +2835,47 @@ measurement, and it carries a mandatory ACB + VCB regression):
 
 **Excluding class A the ticker is 168 / 186 = 90.3 %, level with ACB.**
 
+### ⚠️ RE-SCOPED 2026-08-26 — MEASURE BID FROM 2012, AND EVERY FAILURE LEFT IS A CASH FLOW
+
+**BID files 12 documents a year only from 2012.** Before that it filed an ANNUAL report and
+nothing else — 1 document each for 2008, 2009 and 2010, first quarterly Q3-2011 — so the table
+above was measuring the FILING CALENDAR as much as the parser. ⚠️ **Re-enumerated live from
+CafeF on 2026-08-26 and the absence is CafeF's, not our snapshot's**: 2011 lists exactly two
+documents, and **Q1-2011 / Q2-2011 do not exist at all**. On the 2012 denominator:
+
+| from Q1-2012 · 57 quarters | `pdf` | absent |
+|---|---|---|
+| balance sheet | **57 / 57** ✅ | 0 |
+| income statement | **57 / 57** ✅ | 0 |
+| **cash flow** | **47 / 57** | **10** |
+| total | **161 / 171 = 94.2 %** | 10 |
+
+⚠️ **THAT IS THE FINDING: with the filing calendar out of the denominator, BID's balance sheet
+and income statement are COMPLETE, and every remaining failure in the ticker is a CASH FLOW.**
+Eight of the ten end at `fx not mapped`, so `FXM-1`'s written-but-unmeasured fix targets
+**169 / 171 = 98.8 %** on its own. TODO `P40`.
+
+⚠️ **THE FLOOR IS A DENOMINATOR, NOT A `period_min`.** Measured: **9 real parsed `pdf` cells sit
+before it** — five balance sheets and four cash flows, all from audited annual reports — and a
+`period_min: Q1-2012` run DELETES them from the CSVs while `BRZ-1` leaves them stranded in
+bronze. Quote the 2012 figure; keep the default floor.
+
+⚠️ **AND THE B/C SPLIT ABOVE IS WRONG IN BOTH TERMS, INDEPENDENTLY OF THE RE-SCOPE.**
+**Q3-2011's income statement is NOT a `_decumulate` drop**: its filing carries `half_year=False`
+and `annual=False`, so `_decumulate`'s `if q == 1 or not half_year.get(period): continue` skips
+it outright — it was refused by a gate. Class B is the four ANNUAL reports alone. Class C fell
+13 → 11 as `SLD-1` and `PGB-1` recovered the two balance sheets. ⚠️ **The miscount stood because
+*"the Q3/Q4 income statements of 2008-2011"* reads as one family and was never checked against
+the code path** — an inference recorded in the same typeface as a measurement, §6-2-quaterdecies'
+lesson again.
+
+⚠️ **AND CafeF PUBLISHED Q2-2026 AFTER THE PARSE RUN.** Re-enumerating BID's index through
+`raw/cafef_pdfs` on 2026-08-26 (3.7 s, RUN_SUCCESS) added **4 documents** — the parent and
+consolidated Q2-2026 filings, each unaudited and reviewed, filed 2026-08-01 and 2026-08-20. The
+index goes 176 → 180 rows and `documents()` **62 → 63**, picking the consolidated reviewed one.
+⚠️ **A ticker's archive is not static once parsed**, and nothing in the pipeline notices: the
+statement CSVs still end at Q1-2026 and no freshness check reads a filing index.
+
 ⚠️ **CASH FLOW IS THE EXPENSIVE STATEMENT EVEN WHEN IT SUCCEEDS.** Of the 51 that parsed,
 **15 needed a layer past `onnx@200`** — nine distinct configurations including
 `onnx@200+pad6+relax+components` — against 8 of 60 for the balance sheet and 4 of 57 for the

@@ -420,6 +420,7 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 | **P1** ✅ | **DONE 2026-08-23 — PER-TICKER FRESHNESS SHIPPED** — `pipeline.freshness`, three `health_schema` SQL functions, and three new columns in `pipeline.status_data` | ~35 min *actual* | ✅ | *old `P36`* | ⚠️ **AND IT CORRECTED TWO DOCUMENTED CLAIMS ON ITS FIRST RUN.** (1) The 13 post-re-scrape stragglers carry **SEVEN** distinct dates, not thirteen — `FRZ-1`'s own parenthetical list disproved its prose, and the number was the diagnostic separating a delisting from a scrape failure. The conclusion survives, re-verified another way (each of the 13 raw CSVs ends exactly where silver does). (2) **28 single-name unified schemas are stale** (of 30), in four layers that are a fossil record of every scoped re-scrape: 5 at 2026-08-19, 10 banks at 2026-08-07, 9 at 2026-06-26, 4 at 2026-06-25 — now `SCH-1`, rebuilt the same day at a measured 21 s each. ⚠️ **AND IT CREATED ONE DEFECT OF ITS OWN, `DEP-1`, WHICH IS THE MOST REUSABLE THING HERE**: shipping the health objects as VIEWS blocked every `DROP TABLE` in the repo's builders, i.e. **the monitor blocked every repair it recommended**. Fixed by making them `plpgsql` functions, whose bodies carry no dependency. ⚠️ The alarm is a **SHARE**, not a count — an absolute floor of 5 tickers was written first and fired immediately on five genuine delistings; the two measured regimes are 0.6 % and 77 %. ⚠️ And `sessions_behind` is counted against the **price spine's** calendar, never the measured table's own — a frozen table's own dates cannot contain the sessions it is missing, so it would report every ticker 0 behind. **22 tests, no database.** CLAUDE.md §6-2-quinquies; `pipeline/CONTEXT.md` §1a-bis; RUNBOOK.md §8a |
 | **P2** | **SCRAPE FILING PDFs — ✅ PHASE 1 (`year_max=2020`) DONE 2026-08-23; phase 2 (`year_min=2021`) PARKED behind the OCR** (`raw/cafef_pdfs`) | 74 min *actual* + 267 GiB | ✅ | — | ✅ **50,345 of 50,382 expected documents landed for all 784 codes**, one Dagster run, 0 errors — the 37 absent are CafeF's own dead links (404 on both hosts). Verified per ticker against a pre-run count, not off the green run. ⚠️ **Phase 2 is ~269 GiB against 197 GiB free, so it does not fit today and is not supposed to** — it runs after `P6`. **↓ detail block**; CLAUDE.md §6-2-septies |
 | | **⬛ B · OCR — ⚠️ THE SOURCE IS FIXED: CafeF PDFs, decided 2026-08-23. The time wall is solvable; the SCHEMA wall is what decides how many names this reaches** | | | | |
+| **P40** | ⭐ **PARSE EVERY BID CASH FLOW FROM 2012 — 10 cells left, and every one of them is the CASH FLOW** | ~1 day GPU *est.* | ✅ | — | ⚠️ **THE NEXT PRIORITY, set 2026-08-26 — and the scope is FROM 2012 BY DECISION.** BID files 12 documents a year only from 2012; before that it filed an ANNUAL report and nothing else, so pre-2012 coverage is ragged for a reason no parser can fix. **On that denominator BID is 161 / 171 = 94.2 % `pdf`**, and the shape is the finding: **balance sheet 57/57, income statement 57/57, cash flow 47/57.** ⚠️ **EVERY REMAINING FAILURE IN THE TICKER IS A CASH FLOW.** ⭐ **`P39` is the whole first move and it is already written** — 8 of the 10 end at `cash flow unverifiable — fx not mapped`, so that one fix alone targets **169 / 171 = 98.8 %**. ⚠️ **DO NOT PASS `period_min: Q1-2012` TO THE RUN** — the floor is a DENOMINATOR, not a scope; as a run parameter it deletes **9 real parsed cells** and strands them in bronze (`BRZ-1`). ⚠️ **AND CafeF PUBLISHED Q2-2026 SINCE THE 2026-08-25 RUN** — 4 new documents, `documents()` **62 → 63**. **↓ detail block**; CLAUDE.md §6-2-quindecies, §6-2-sexdecies, §6-2-octodecies |
 | **P39** | ⚠️ **MEASURE THE TWO CASH-FLOW RECOVERIES — code written 2026-08-25, effect UNKNOWN** (`FXM-1`) | ~4 h GPU | ✅ | — | ⚠️ **NOTHING HERE HAS BEEN RUN, AND THE CODE IS ON `main_v3`.** Probing BID's 13 failed statements through the full 26-layer cascade found ONE bottleneck: **8 of the 13 end at `cash flow unverifiable — fx not mapped`**. Two fixes are written — an FX-line positional recovery and an alternate-document fallback — and **neither has touched real data**. ⚠️ **A regression over ACB + VCB + BID is part of this item, not a follow-up**: the file's own rule is that a change recovering six quarters and quietly breaking a sixtieth is a net loss. **↓ detail block**; `ISSUES.md` `FXM-1`; CLAUDE.md §6-2-quindecies |
 | **P38** | ⭐ **PARSE THE VN30 BASKET — 27 tickers left, ONE AT A TIME** ⚠️ **STARTED 2026-08-25** | ⚠️ **~190 h GPU *est.*, re-budgeted** | ⚠️ Kaggle? | — | Every ticker in `vn30.csv`, run **per ticker** (the asset is partitioned that way and `resource: gpu` caps it to one step anyway). ✅ ACB and VCB done 2026-08-24; ✅ **BID done 2026-08-25 — 7 h 23 m, 62 documents, 168/210 cells `pdf`, 0 HTML rows, ACB/VCB verified byte-identical against a pre-run backup**. ⚠️ **AND IT TRIPLED THE COST ESTIMATE**: BID ran at **7.15 min/document** against the 2.37 this row was budgeted on, because `_parse_cascaded` breaks only when all three statements are accepted and **36 %** of BID's quarters need the full 21-layer cascade (VCB 4 %, ACB 11 %). **min/doc ≈ 0.94 + 0.173 x %failing** over three points. CLAUDE.md §6-2-quindecies. ⚠️ **ONLY 11 OF THE 28 CAN RUN TODAY**: the parser holds one template family (`bank`), and VN30 is **13 banks / 17 non-banks** — `BCM BVH FPT GAS GVR HPG MSN MWG PLX POW SAB SSI VHM VIC VJC VNM VRE` need `P5` first. **↓ detail block** |
 | **P37** | ⚠️ **TURN OFF THE HTML FALLBACK, THEN RE-PARSE ACB AND VCB AUTHORITATIVELY** (`FIN-1`) | ~5 h GPU | ✅ | — | ⚠️ **THIS HAS TO LAND BEFORE `P6`, AND THAT IS THE WHOLE ARGUMENT FOR ITS POSITION.** `CafefFinancialsBuilder` defaults `use_api=True` and fills any period the PDF pass missed from CafeF's web tabs — **run `P6` as it stands and the OCR program imports HTML-transcribed rows at 784× scale**, invisibly, because nothing downstream reads the `source` column. Today it is 34 rows (ACB 27, VCB 7). **↓ detail block** — CLAUDE.md §6-2-octies; `ISSUES.md` `FIN-1` |
@@ -753,6 +754,89 @@ one-day JSON gate, still runs before `P4`-`P6` and can still cancel them"*. `P3`
 BY DECISION on 2026-08-23** and archived UNMEASURED — nothing gates the OCR program now — and
 its `P4`-`P6` were the pre-2026-08-23 numbering. Under §5 rule 24 the JSON route is not merely
 deprioritised, it is **forbidden as a source**.
+
+---
+
+### P40 · ⭐ PARSE EVERY BID CASH FLOW FROM 2012 ⏱ ~1 day GPU *est.*  ·  *(measured 2026-08-26)*
+
+⚠️ **BID IS THE TEST BED, NOT THE PRIZE.** It is one ticker of 784 and its numbers feed nothing
+downstream today. What makes it the next item is that **every one of its remaining failures has
+already been diagnosed individually** (`P39`'s 3 h 56 m probe), so it is the only place where a
+parser change can be scored against a known answer instead of against a coverage percentage.
+⚠️ **The point is the 10 cells, not the ticker** — each one is a class of document defect the
+other 783 will hit at 784x scale.
+
+#### ⚠️ THE SCOPE IS FROM Q1-2012, BY DECISION 2026-08-26 — and it is a DENOMINATOR, not a filter
+
+BID files **12 documents a year only from 2012**. Before that it filed an ANNUAL report and
+nothing else: 1 document for 2008, 1 for 2009, 1 for 2010, and its first quarterly is Q3-2011.
+⚠️ **Re-enumerated live from CafeF on 2026-08-26 and the absence is CafeF's, not our snapshot's**
+— 2011 lists exactly two documents, Q3-2011 and FY-2011, and **Q1-2011 / Q2-2011 do not exist at
+all**. So pre-2012 coverage is ragged for a reason no parser can fix, and measuring against it
+was measuring the filing calendar rather than the parser.
+
+⚠️ **DO NOT PASS `period_min: Q1-2012` TO THE RUN.** Measured: **9 real parsed `pdf` cells sit
+before the floor** — the balance sheets of Q4-2008/Q4-2009/Q4-2010/Q3-2011/Q4-2011 and the cash
+flows of Q4-2008/Q4-2009/Q3-2011/Q4-2011, all from audited annual reports. A `period_min` run
+**deletes them from the CSVs** and, per `BRZ-1`, leaves them stranded in bronze where no
+freshness check can see them. **Quote the 2012 denominator; keep the default floor so the nine
+survive.** The pre-2012 `missing` rows stay too — `missing` is the correct answer there and
+deleting the record loses it.
+
+#### The state on disk from Q1-2012, re-measured 2026-08-26 — 57 quarters, 171 cells
+
+| statement | `pdf` | absent | |
+|---|---|---|---|
+| balance sheet | **57 / 57** | 0 | ✅ **100 %** — `SLD-1`'s `realign` took Q1-2021, `PGB-1`'s `notes`+`seam` took Q3-2025 |
+| income statement | **57 / 57** | 0 | ✅ **100 %** |
+| **cash flow** | **47 / 57** | **10** | ⚠️ **the entire remaining problem, in one statement** |
+| total | **161 / 171 = 94.2 %** | 10 | |
+
+⚠️ **THAT IS THE FINDING, AND IT IS SHARPER THAN ANY COUNT OF CELLS**: with the filing calendar
+taken out of the denominator, **BID's balance sheet and income statement are COMPLETE**, and
+every failure the ticker still has is a cash flow. §6-2-quindecies already measured why — of the
+51 cash flows that did parse, **15 needed a layer past `onnx@200`** against 8 of 60 for the
+balance sheet and 4 of 57 for the income statement.
+
+#### The 10, and what each is waiting on
+
+| | periods | waiting on |
+|---|---|---|
+| **`fx not mapped`** | **8** | ⭐ **`P39` fix 1, already written** — the balances are recovered positionally and then discarded for want of a fourth term. **This one fix targets 169 / 171 = 98.8 %** |
+| `no closing cash balance` | Q1-2012 | OCR merged the labels; no row matches the closing balance at all |
+| `sane: magnitude 5.45e+08 vs typical 1.19e+14` | Q1-2026 | five orders out; no FX change touches it |
+
+#### What the 2012 floor takes OFF this list, and why that is right
+
+| | was | now |
+|---|---|---|
+| **A · no filing exists** | 24 cells | **out of scope** — Q1-Q3 2009, Q1-Q3 2010, Q1-Q2 2011 |
+| **B · `_decumulate` has no priors** | 4 cells | **out of scope** — the annual-report income statements of Q4-2008/09/10/11, whose Q1..Q3 were never filed |
+| **C · Q4-2010 cash flow** | `cash flow does not close` | **out of scope** — ⚠️ **and it is the warning case**: it reached the identity with all four terms and still failed, which is what a genuinely mis-read statement looks like. Several of the 8 may be that too |
+| **C · Q3-2011 income statement** | cause unknown | **out of scope** — ⚠️ CLAUDE.md §6-2-quindecies files it as a `_decumulate` drop and **it is not one** (`half_year=False`, `annual=False`, so `_decumulate` skips it). Corrected there; it never needed a probe once the floor moved |
+
+#### The order
+
+1. ⭐ **Run `P39`** — written, unmeasured, claims 8 of the 10. Its ACB + VCB regression is part of
+   that item, not this one.
+2. **Parse Q2-2026** — new since the 2026-08-25 run, and free of every defect above. ⚠️ **NOT with
+   a bare `periods` run**: `PGB-1` measured a `periods` run writing garbage TWICE, because a short
+   history flips `sane` to failing open and the cascade then **stops at an earlier layer than any
+   probe reached**. The rule that holds is *the run's history must match the probe's* — put the
+   preceding quarters in `periods` too.
+3. **Decide Q1-2012 and Q1-2026 on evidence.** ⚠️ **A cell that should be `missing` is not a
+   failure**, and BID Q3-2016 is the proof: no layer of 26 reads it correctly, and `sane`
+   refusing it is rule 24 working.
+
+⚠️ **DO NOT CHASE 100 %.** Two of the ten may be documents that deserve to stay `missing`, and a
+change that "recovers" them is more likely to be writing a wrong figure than reading a hard one.
+⚠️ **And 36 % of BID's quarters need the full 21-layer cascade** (VCB 4 %, ACB 11 %), so this
+ticker is the expensive end of the distribution and its cost must not be read as typical —
+`P38`'s **min/doc ≈ 0.94 + 0.173 x %failing**.
+
+⚠️ **WHAT THIS DOES NOT BUY.** It is one bank. `TPL-1` says two of the four templates hand a
+non-bank cash flow the OPENING balance as its closing one, so nothing learned here transfers to
+the 761 non-bank names until `P5` lands. **Finishing BID does not move `P6` closer to 784.**
 
 ---
 
