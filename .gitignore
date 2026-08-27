@@ -196,6 +196,15 @@ experiment/experiment_10/_cache/
 !reports/feature_selection_wide_h10/
 !reports/feature_selection_wide_h10/**
 #
+# ⚠️ A SIXTH ROOT, 2026-08-28, and the shape was paid a FIFTH time before anyone noticed:
+# `reports/pdf_ocr/` was committed WITHOUT its pair, so every run folder went in holding
+# `metadata.json` and its per-document JSON and **no `summary.csv`** — the blanket `*.csv`
+# above ate it, silently, exactly as the comments above predict. It is not a selection root
+# and `final_features` never reads it; it holds `web_scraper.pdf_ocr_job` runs, whose
+# `summary.csv` is the one file a reader opens first.
+!reports/pdf_ocr/
+!reports/pdf_ocr/**
+#
 # ⚠️ ONE ROOT, and only one, since 2026-08-10. `reports/feature_selection_basic/`,
 # `_economy/` and `_superseded/` were three MORE paths these two rules did not match,
 # each needing its own negation pair or its CSVs fell straight back into the blanket
