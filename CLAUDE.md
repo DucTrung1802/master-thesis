@@ -3232,6 +3232,81 @@ it is repairing.** Q1-2015 was restored from the pre-run backup and the final di
 period changed across all nine CSVs**. ⚠️ Taking that backup is what made this visible at all;
 the log said `RUN_SUCCESS` and named `onnx@200` without a word about the downgrade.
 
+### ✅ 6-2-unvicies. BID Q1-2026 — THE STATEMENT NAMED NO UNIT, AND `unit_of` CANNOT SAY SO
+
+Recovered 2026-08-27 at a new layer, `onnx@200+unit+tail`. Three defects, and the third is an
+ordering trap this repo has now hit twice.
+
+#### ⚠️ Defect 1 · "printed in đồng" and "did not say" were ONE answer
+
+`unit_of` returns `1` both for a statement that names đồng and for one that names nothing.
+BID's Q1-2026 cash flow prints **"Triệu VNĐ" on NEITHER of its two pages** while the balance
+sheet of the same filing does, so every figure was read as đồng — a uniform 10⁶ error which,
+as `unit_of`'s own docstring says, **reconciles perfectly against itself**. `sane` was the only
+gate that saw it (`magnitude 5.45e+08 vs typical 1.19e+14`), and refusing the quarter was
+CORRECT behaviour, not a failure.
+
+`declared_unit()` now returns `None` for silence, and `document_unit()` supplies the unit the
+rest of the filing declares — consulted only when the statement itself is silent, and only when
+the filing does not contradict itself. ⚠️ **Notes pages do not vote**: a note is printed in
+whatever unit the note wants.
+
+#### Defect 2 · the label wrapped around its figures, in a THIRD shape
+
+| | |
+|---|---|
+| `y=405.4` | `Tiền và các khoản tương đương tiền tại t` **+ 530,277,690** ← opening |
+| `y=412.9` | `V điểm đầu kỳ` — the half that names the account, **7.5pt** below |
+| `y=426.6` | `VI Tiền và các khoản tương đương tiền tạ` ← closing's first half |
+| `y=432.7` | `BẮT TR` at **x=594** — the round company stamp |
+| `y=437.8` | `điểm cuối kỳ` **+ 544,528,992** ← closing |
+
+Two things `label_wrap` could not yet reach: the value line **carries half its own label** (so
+`not label` was still too strict), and **the stamp** sits between the closing label's halves.
+Widened on both — the forward branch now always runs under the flag, with **distance** as the
+separator (a wrapped half is inside 8pt where ordinary rows on this page are 15-32pt apart);
+and a line that contributed **neither a label nor a figure** no longer ends a pending label,
+bounded by `CARRY_GAP = 24pt`. ⚠️ `_only_item_code` was the narrow version of this and is
+**deleted** — the generalisation subsumes it.
+
+**opening 530,277,690 + net 14,251,302 = closing 544,528,992** (Triệu VNĐ), residual **0**.
+
+#### ⚠️ Defect 3 · I ORDERED THE NEW LAYERS WRONG, AND THE GATES COULD NOT SEE IT
+
+With the unit corrected but the labels still torn, **`onnx@200+unit` passes `reconcile` AND
+`sane`** while writing the **OPENING** balance into the closing slot — 530,277,690 where the
+filing prints 544,528,992. Both gates see one plausible cash balance and cannot tell which line
+it came from. A layer that passes ends the cascade, so the half-right layer must never run
+first; `+unit+tail` now precedes it and bare `+unit` is the last fallback.
+
+⚠️ **`PGB-1` recorded this exact trap for `+notes` vs `+notes+seam`. This is the SECOND
+instance, so it is a rule and not an anecdote: when two new layers differ by a LABEL REPAIR,
+the repair goes first.** Caught here only because the values were checked against the filing
+rather than the gates' verdict.
+
+#### ⚠️ AND THE HISTORY-PROVIDER DOWNGRADE REPRODUCED — a second time, same shape
+
+§6-2-vicies measured a `periods` run silently downgrading Q1-2015, a quarter included only to
+give `sane` a band. It happened again: **Q3-2025's cash flow went `onnx@200+relax` →
+`onnx@200`, 38 filled cells → 37.** Restored from the pre-run backup, after which the diff is
+**one period changed across all nine CSVs**.
+
+⚠️ **So this is now reproduced, not anecdotal, and the procedure is fixed**: a `periods` run
+must be diffed against a pre-run backup and **every non-target quarter that moved must be
+restored.** The log says `RUN_SUCCESS` and names a layer; it says nothing about the downgrade.
+
+| | |
+|---|---|
+| run | 4 periods, **41m 53s**, `Q1-2026 cash_flow=19 items [onnx@200+unit+tail]` |
+| BID cash flow | 53 → **54** parsed |
+| from 2012 | **164 / 171 = 95.9 %**, balance sheet **57/57** and income statement **57/57** |
+| default path | **24 statements** across 5 filings reproduce row for row against HEAD |
+| tests | **64** — 5 new, no PDF and no network |
+
+⚠️ **Seven cash flows remain, all `fx not mapped`**: Q4-2015, Q3-2016, Q4-2016, Q2-2017,
+Q3-2017, Q4-2017, Q3-2018. `FXM-1`'s written fix is measured WRONG (§6-2-vicies) and must not
+be run as it stands.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

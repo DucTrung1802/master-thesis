@@ -103,6 +103,7 @@ class ParseLayer:
     relax_merged_seam: bool = False
     tail_continuation: bool = False
     label_wrap: bool = False
+    unit_from_document: bool = False
     crop_pad: Optional[float] = None
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
@@ -529,6 +530,29 @@ class FinancialsBuilder:
         ParseLayer("onnx@200+tail+relax+components", "onnx", 200,
                    tail_continuation=True, label_wrap=True,
                    relax_totals=True, relax_components=True),
+        # ── THE STATEMENT NAMED NO UNIT AND THE FILING DID (`unit_from_document`) ─────
+        # `unit_of` cannot tell "printed in đồng" from "did not say" and returns x1 for both.
+        # BID's Q1-2026 cash flow prints "Triệu VNĐ" on NEITHER of its two pages while the
+        # balance sheet of the same filing does, so every figure was read as đồng — a uniform
+        # 10^6 error that reconciles perfectly against itself. `sane` is the only gate that
+        # sees it (`magnitude 5.45e+08 vs typical 1.19e+14`), and it is why that quarter was
+        # refused rather than written wrong. ⚠️ Last in the cascade because it multiplies every
+        # figure of the statement it touches by a million: it may only judge one already refused.
+        # ⚠️ **`+tail` FIRST, AND THE ORDER IS LOAD-BEARING — measured 2026-08-27.** With the
+        # unit corrected but the labels still torn, `onnx@200+unit` passes `reconcile` AND
+        # `sane` while writing the OPENING balance into the closing slot (530,277,690 mn where
+        # the filing prints 544,528,992 mn) — both gates see one plausible cash balance and
+        # cannot tell which line it came from. A layer that passes ends the cascade, so the
+        # half-right layer must never run first. `PGB-1` recorded this exact trap for
+        # `+notes` vs `+notes+seam`; this is the second instance, so it is the rule and not
+        # the anecdote: **when two new layers differ by a label repair, the repair goes first.**
+        ParseLayer("onnx@200+unit+tail", "onnx", 200,
+                   unit_from_document=True, tail_continuation=True, label_wrap=True),
+        ParseLayer("onnx@200+unit+tail+relax", "onnx", 200,
+                   unit_from_document=True, tail_continuation=True, label_wrap=True,
+                   relax_totals=True),
+        # …and the unit fix WITHOUT the label repair, last of all, for a filing it hurts.
+        ParseLayer("onnx@200+unit", "onnx", 200, unit_from_document=True),
     ]
 
     def __init__(self, logger=None):
@@ -580,7 +604,7 @@ class FinancialsBuilder:
             # parse, so two layers differing only in it share one OCR pass.
             key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
                    layer.title_over_form, layer.loose_form_code, layer.realign_rows,
-                   layer.notes_boundary, layer.tail_continuation, layer.label_wrap)
+                   layer.notes_boundary, layer.tail_continuation, layer.label_wrap, layer.unit_from_document)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)
@@ -591,6 +615,7 @@ class FinancialsBuilder:
                 parser.set_notes_boundary(layer.notes_boundary)
                 parser.set_tail_continuation(layer.tail_continuation)
                 parser.set_label_wrap(layer.label_wrap)
+                parser.set_unit_from_document(layer.unit_from_document)
                 try:
                     parsed[key] = parser.parse(path, period_end)
                 except Exception as e:

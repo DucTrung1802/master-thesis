@@ -260,6 +260,12 @@ class PdfParser:
     # number, a date — can never qualify.
     MIN_TAIL_WORDS = 4
 
+    # How far below the last line that fed it a pending wrapped label survives a line that
+    # contributed nothing. Rows on these statements are set 13-32pt apart and a wrapped half
+    # sits 6-13pt from its own text, so 24pt admits one intervening noise line and no more.
+    # `label_wrap` only.
+    CARRY_GAP = 24.0
+
     NUM_RE = re.compile(r"^\(?-?[\d][\d.,]*\)?$|^[-–—]$")
     # The filing's own row numbering, in the left margin.
     NUMBER_RE = re.compile(r"^[IVXLC]+$|^\d{1,2}$|^[a-z]$|^[A-Z]$", re.I)
@@ -313,6 +319,8 @@ class PdfParser:
         self.tail_continuation = False
         # set per PARSE LAYER; see table_rows' carry
         self.label_wrap = False
+        # set per PARSE LAYER; see document_unit
+        self.unit_from_document = False
         self.ocr_ready = self._init_ocr()
 
     def set_dpi(self, dpi: int) -> None:
@@ -376,6 +384,15 @@ class PdfParser:
         of that failure are repaired here; see `table_rows`.
         """
         self.label_wrap = bool(on)
+
+    def set_unit_from_document(self, on: bool) -> None:
+        """Let a statement that names no unit take the one the rest of the filing names.
+
+        See `document_unit`. Off by default: it changes every figure of the statement it
+        touches by a factor of a million, so it may only judge a statement that has already
+        been refused.
+        """
+        self.unit_from_document = bool(on)
 
     def set_crop_pad(self, pad: Optional[float]) -> None:
         """How far outside a detected box to crop before RECOGNISING it (onnx only; points).
@@ -1019,18 +1036,6 @@ class PdfParser:
     def _is_table(self, page: dict) -> bool:
         return len(self._numbers(page["words"])) >= self.MIN_TABLE_WORDS
 
-    def _only_item_code(self, line_words: list, lo: float) -> bool:
-        """Does this line hold nothing but the filing's own row numbering, in the left margin?
-
-        The left column carries the statement's item codes (`53`, `VII`, `a`) and nothing else;
-        a line holding only those is a continuation of whatever label is pending, never a gap.
-        Deliberately strict — one word of real text, or one figure in the value zone, and the
-        line is an ordinary one again.
-        """
-        if not line_words:
-            return False
-        return all(w[2] < lo and self.NUMBER_RE.match(w[4]) for w in line_words)
-
     def _is_tail_page(self, page: dict, run: str) -> bool:
         """Is this the sparse LAST page of the statement running through it?
 
@@ -1219,6 +1224,7 @@ class PdfParser:
             # item; text before it is used only when the item printed nothing after its code.
             # `None` = no code line seen since the last row was emitted. `label_wrap` only.
             since_code: Optional[List[str]] = None
+            carry_y = 0.0                       # y of the last line that fed `carry`
             for i, (y, label, vals) in enumerate(parsed):
                 if any(v is not None for v in vals):
                     # An EMPTY `since_code` means the code was the last thing before these
@@ -1236,7 +1242,14 @@ class PdfParser:
                     # `sane` both passed. The proximity guard below is what separates a wrapped
                     # tail from the NEXT item's label: here the gap is 5.8pt against ordinary
                     # row spacing of 13-18pt on the same page.
-                    take_below = (not label) if self.label_wrap else (not words_)
+                    # ⚠️ UNDER `label_wrap` THE VALUE LINE MAY CARRY HALF ITS OWN LABEL, so
+                    # `not label` is still too strict. BID's Q1-2026 cash flow prints
+                    # "Tiền và các khoản tương đương tiền tại t" WITH the figures and
+                    # "V điểm đầu kỳ" 7.5pt below, and that suffix is what names the account.
+                    # The separator is DISTANCE, not emptiness: a wrapped half sits inside
+                    # `Y_TOL * 2` (8pt) while ordinary rows on the same page are 15-32pt apart,
+                    # so the proximity guard below is what keeps the NEXT item's label out.
+                    take_below = True if self.label_wrap else (not words_)
                     if take_below and i + 1 < len(parsed):
                         # A label sits BELOW its own figures when its box is the taller of the
                         # two — diacritics and descenders push its top down past Y_TOL, leaving
@@ -1261,9 +1274,10 @@ class PdfParser:
                     since_code = None
                 elif label:
                     carry = (carry + label)[-12:]
+                    carry_y = y
                     if since_code is not None:
                         since_code = (since_code + label)[-12:]
-                elif self.label_wrap and self._only_item_code(lines[y], lo):
+                elif self.label_wrap and carry and y - carry_y <= self.CARRY_GAP:
                     # ⚠️ A LINE HOLDING ONLY THE FILING'S OWN ITEM CODE IS NOT A GAP, and
                     # clearing the carry on it TEARS A WRAPPED LABEL IN HALF. The code column
                     # can sit on its own baseline, between the two halves of a label whose
@@ -1276,6 +1290,18 @@ class PdfParser:
                     # so the row came out keyed `thoi_diem_dau_ky`, which names no account —
                     # and the suffix it was severed from is the ONLY thing telling the opening
                     # balance from the closing one. Left alone, the carry rejoins its own tail.
+                    #
+                    # ⚠️ **GENERALISED 2026-08-27 FROM "only the item code" TO "contributed
+                    # nothing at all".** This branch is reached only when the line yielded
+                    # NEITHER a label NOR a figure, and such a line is not evidence that the
+                    # label ended, whatever it holds. BID's Q1-2026 puts the round company
+                    # stamp ("BẮT TR", x=594) between the two halves of its closing label —
+                    # outside the label zone and outside every value column, so it contributes
+                    # nothing and used to clear the carry.
+                    #
+                    # ⚠️ BOUNDED BY DISTANCE (`CARRY_GAP`), because "contributed nothing" is
+                    # also what a genuine GAP between sections looks like. A wrapped half sits
+                    # 6-13pt from its own text; past the bound the carry is dropped as before.
                     #
                     # ⚠️ AND IT OPENS A NEW ITEM. Keeping the carry alone is not enough: the
                     # line above may belong to the PREVIOUS item, which printed no figure of
@@ -1298,11 +1324,41 @@ class PdfParser:
         ONE page: every page of the statement is consulted, because the unit is printed in the
         column header and a continuation page may not repeat it.
         """
+        return self.declared_unit(pages, on) or 1
+
+    @staticmethod
+    def _declares_millions(text: str) -> bool:
+        return "trieuvnd" in text or "trieudong" in text
+
+    def declared_unit(self, pages: Dict[int, dict], on: List[int]) -> Optional[int]:
+        """The unit these pages STATE, or `None` when they state nothing.
+
+        ⚠️ **`unit_of` cannot tell "printed in đồng" from "did not say", and the two must not
+        be one answer.** A statement that says nothing is a statement whose unit is UNKNOWN,
+        and defaulting it to x1 is a silent 10^6 error that reconciles perfectly against
+        itself — `unit_of`'s own docstring says nothing downstream can catch it, and on BID's
+        Q1-2026 cash flow only `sane` did (`magnitude 5.45e+08 vs typical 1.19e+14`). Neither
+        of that statement's two pages prints "Triệu VNĐ" while the balance sheet in the SAME
+        filing does, so the figures are millions and were read as đồng.
+        """
         for i in on:
-            ns = self.norm(pages[i]["text"]).replace(" ", "")
-            if "trieuvnd" in ns or "trieudong" in ns:
+            if self._declares_millions(self.norm(pages[i]["text"]).replace(" ", "")):
                 return 1_000_000
-        return 1
+        return None
+
+    def document_unit(self, pages: Dict[int, dict]) -> Optional[int]:
+        """The unit the FILING declares, from whichever of its statements say so.
+
+        ⚠️ Only consulted for a statement that declares nothing itself (`unit_from_document`),
+        and only when the filing is not self-contradictory — if one statement said millions and
+        another said đồng outright there would be no document-level answer, and guessing one is
+        how a correct statement gets multiplied by a million. As it stands a statement can only
+        declare millions or stay silent, so this returns 1e6 or `None`.
+        """
+        units = {self.declared_unit(pages, [i])
+                 for i, pg in pages.items() if pg["kind"] in REPORTS}
+        units.discard(None)
+        return units.pop() if len(units) == 1 else None
 
     # ──────────────────────────────────────────────────────────────────────
     # Share capital (from the notes, not a statement)
@@ -1489,6 +1545,8 @@ class PdfParser:
                 if not columns:
                     continue
                 unit = self.unit_of(pages, on)
+                if self.unit_from_document and self.declared_unit(pages, on) is None:
+                    unit = self.document_unit(pages) or unit
                 # Read the COLUMN HEADINGS, not the column count: 4 columns can equally be a
                 # note reference plus an over-segmented pair. The words "quý" and "lũy kế"
                 # appearing together in the header is the filing stating outright that it prints

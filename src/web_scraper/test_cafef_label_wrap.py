@@ -115,16 +115,26 @@ def test_comparative_column_is_kept_separate(parser):
                                         [CLOSE, 54_237_979_881_580]]
 
 
-def test_only_item_code_is_strict(parser):
-    """One word of real text, or one figure in the value zone, and the line is ordinary."""
-    assert parser._only_item_code([_word(290.0, 10.0, "53")], LO)
-    assert parser._only_item_code([_word(290.0, 10.0, "VII")], LO)
-    assert not parser._only_item_code([], LO)
-    assert not parser._only_item_code([_word(290.0, 10.0, "Tiền mặt")], LO)
-    assert not parser._only_item_code([_word(290.0, 10.0, "53"),
-                                       _word(439.6, 10.0, "1.234")], LO)
-    # a five-digit figure in the left margin is a FIGURE, not a row number
-    assert not parser._only_item_code([_word(290.0, 10.0, "48919")], LO)
+def test_a_far_gap_still_ends_a_pending_label(parser):
+    """`CARRY_GAP` is what keeps "contributed nothing" from meaning "never ends".
+
+    A line that yields neither a label nor a figure is not evidence the label ended — but it
+    is also what a genuine section break looks like, so the carry survives only while the
+    figures stay within `CARRY_GAP` of the line that fed it.
+    """
+    parser.realign_rows = False
+    parser.label_wrap = True
+    far = [_word(330.0, 100.0, "Một nhãn bị bỏ lại từ mục trước"),
+           _word(590.0, 140.0, "DẤU"),                      # noise, well past CARRY_GAP
+           _word(330.0, 180.0, "Chi phí lãi"), _word(439.6, 180.0, "1.234")]
+    keys = [r.key for r in parser.table_rows({0: far}, COLUMNS)]
+    assert keys == ["chi_phi_lai"], keys
+
+    near = [_word(330.0, 100.0, "Tiền và các khoản tương đương tiền tại"),
+            _word(590.0, 108.0, "DẤU"),                     # noise, inside CARRY_GAP
+            _word(330.0, 114.0, "thời điểm cuối kỳ"), _word(439.6, 114.0, "1.234")]
+    keys = [r.key for r in parser.table_rows({0: near}, COLUMNS)]
+    assert keys == ["tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky"], keys
 
 
 # ── the page that was thrown away ────────────────────────────────────────────────
@@ -177,3 +187,42 @@ def test_no_tail_marker_is_defined_for_the_other_statements(parser):
     page = _page([str(i) for i in range(13)], CLOSING_LINE)
     assert not parser._is_tail_page(page, "balance_sheet")
     assert not parser._is_tail_page(page, "income_statement")
+
+
+# ── the unit the statement did not name ──────────────────────────────────────────
+
+def _unit_page(kind, text):
+    return {"words": [], "text": text, "kind": kind, "from_form": True, "width": 600.0}
+
+
+MILLIONS = "Đơn vị: Triệu VNĐ"
+SILENT = "STT Chỉ tiêu Kỳ này Kỳ trước"
+
+
+def test_declared_unit_separates_silence_from_dong(parser):
+    """⚠️ `unit_of` returns 1 for BOTH, and that is the defect it hides."""
+    pages = {0: _unit_page("cash_flow", SILENT)}
+    assert parser.declared_unit(pages, [0]) is None
+    assert parser.unit_of(pages, [0]) == 1
+    pages = {0: _unit_page("cash_flow", MILLIONS)}
+    assert parser.declared_unit(pages, [0]) == 1_000_000
+
+
+def test_document_unit_is_taken_from_the_other_statements(parser):
+    """BID Q1-2026: neither cash-flow page names a unit; the balance sheet does."""
+    pages = {0: _unit_page("balance_sheet", MILLIONS),
+             1: _unit_page("cash_flow", SILENT),
+             2: _unit_page("cash_flow", SILENT)}
+    assert parser.unit_of(pages, [1, 2]) == 1               # what the pages say
+    assert parser.document_unit(pages) == 1_000_000         # what the filing says
+
+
+def test_document_unit_abstains_when_nothing_declares_one(parser):
+    pages = {0: _unit_page("balance_sheet", SILENT), 1: _unit_page("cash_flow", SILENT)}
+    assert parser.document_unit(pages) is None
+
+
+def test_notes_pages_do_not_vote_on_the_unit(parser):
+    """Only the statements. A note is printed in whatever unit the note wants."""
+    pages = {0: _unit_page("notes", MILLIONS), 1: _unit_page("cash_flow", SILENT)}
+    assert parser.document_unit(pages) is None
