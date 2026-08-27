@@ -207,6 +207,11 @@ CafeF-tab fallback (see `_parse_cascaded`). `FinancialsBuilder.LAYERS`:
   → onnx@200+join+components → onnx@200+join+relax+components
   → onnx@200+title → onnx@200+title+relax → onnx@200+loose → onnx@200+loose+relax
 
+⚠️ **THAT ARROW LIST IS A SNAPSHOT AND HAS NOT BEEN RE-SYNCED — `LAYERS` holds 47 entries as of
+2026-08-27.** Everything appended since (`+realign`, `+notes`, `+seam`, `+tail`, `+unit`,
+`+annual`, `+extra`) is absent from it. **The list in the code is the list**; read `LAYERS` and
+its comments, and treat the arrows above as history rather than as an index.
+
 **The thirteen `+components` / `+pad6` / `+split` / `+join` / `+title` / `+loose` layers are appended, never inserted**, so a
 statement that reconciles today cannot reach them — `_parse_cascaded` skips a report once
 accepted. They add two relaxations, each traced to a specific cause and each recovering quarters
@@ -224,6 +229,47 @@ whose figures were already correct:
   line as 261.018 at 200/300/400 dpi and on tesseract, and correctly at pad 6, after which the
   breakdown closes to the đồng. This is the MIRROR of the phantom-leading-digit bug that set
   `CROP_PAD_PT = 2` — too tight invents a digit, too tight in the other direction loses one.
+
+  ⚠️ **AND THE BOX CAN END INSIDE THE NUMBER TOO — measured 2026-08-27 on BID's FY-2016
+  consolidated cash flow, each config run twice on the page itself.** The filing prints
+  `6.711.633`; the default crop loses the last digit at every resolution and `parse_num` turns
+  each corpse into a plausible number:
+
+  | | what OCR returns | `parse_num` |
+  |---|---|---|
+  | `onnx@200` | `6.711.6.3` | **671,163** — 10× low |
+  | `onnx@300` | `6.711.610` | **6,711,610** — off by 23 |
+  | `onnx@400` | `6.711.63)` | **671,163** |
+  | **`onnx@200+pad6`** | **`6.711.633`** | **6,711,633** ✅ |
+
+  ⚠️ **Three of the four are WELL-FORMED thousands groups, so no grouping check can catch them**
+  — and the 300 dpi read is wrong by 23 đồng in 6.7 million, which is why the identity that
+  judges such a figure is held to EXACT equality and not to `_equal`'s tolerance. ⚠️ It also
+  corrects a claim `CLAUDE.md` §6-2-tervicies carried: *"one line is misread at every DPI"* is
+  true of the default crop and false at pad 6, which that session never tried.
+- **`cash_extra_terms` — the statement has a FOURTH term and the chart of accounts has no column
+  for it.** `_cash_flow_identity` tests `closing = opening + movement + fx`, and a bank that
+  ABSORBS another bank gains cash that is none of the three. BID prints such a line in three
+  separate years (MHB 1,477,340 in 2015 and 3,004,011 in 2016, LienVietPostBank 1,540,994 in
+  2017), and its FY-2016 cash flow prints TWO at once, one per column. Both columns then close
+  only with the extra term — 55,806,145 + 6,711,633 + 3,004,011 = 65,521,789 — so the quarter
+  was refused for `fx not mapped` while every figure on the page was right.
+
+  The flag sums what the filing printed BETWEEN its two balance rows and lets that stand in for
+  `fx`, which it already contains. Three properties carry the design:
+  - ⚠️ **COUNTED, NEVER WRITTEN.** Claiming the row as the FX adjustment puts merger cash in
+    `hdtc_vi_…_ty_gia`, and the identity then CONFIRMS the wrong account because the arithmetic
+    is right (`CLAUDE.md` §6-2-vicies measured exactly this on FY-2015). So the figure is
+    admitted to the CHECK and the column is left empty — §5 rule 2. For the same reason the flag
+    stops `_recover_totals`' positional FX guess claiming a row whose own label does not say FX.
+  - ⚠️ **THE CURRENT-PERIOD CELL ONLY, never `_first_value`.** BID's 2016 column leaves the MHB
+    line blank and prints 1,477,340 beside it in the 2015 comparative; the fall-through would add
+    a prior-year figure to this year's identity and break a sum that closes exactly without it.
+  - ⚠️ **POSITION IS THE WHOLE DEFINITION.** Matching by label would mean guessing which words
+    name a reconciling item, and filings word them differently every time. Between the two
+    balances a cash flow prints nothing else, so the span needs no vocabulary — and whatever it
+    returns is tested to the đồng immediately, so a span that swept in a wrong row is rejected
+    rather than written.
 - **`relax_split_tail` — the balance line's label WRAPPED and took its figure with it.** ACB's
   Q3-2017 reads `…tương đương tiền tại ngày` with an empty current-period cell and `thang_9` on
   the next row holding **15,044,850**; `_first_value` then falls through to the comparative
@@ -269,9 +315,15 @@ whose figures were already correct:
   - **Q4-2009 is where the de-cumulated figure BEATS CafeF.** Ours reads 697,896; CafeF says
     1,395,082. Our four quarters sum to 5,004,372 against the audited FY PBT of **5,004,374**;
     CafeF's sum to 5,701,558, too much by 697,184. This is the Q4-vs-annual class above.
-- **⚠️ The parse cache key is `(engine, dpi, crop_pad, join_digits)`.** Keyed on `(engine, dpi)` alone the
-  wider-crop layer is handed the narrow crop's cached parse — the one that just failed — and the
-  layer silently does nothing.
+- **⚠️ The parse cache key is every flag that changes the OCR** — `(engine, dpi, crop_pad,
+  join_digits, title_over_form, loose_form_code, realign_rows, notes_boundary,
+  tail_continuation, label_wrap, unit_from_document)`, and `_parse_cascaded` is where it lives.
+  Keyed on `(engine, dpi)` alone the wider-crop layer is handed the narrow crop's cached parse —
+  the one that just failed — and the layer silently does nothing. ⚠️ **`relax_merged_seam`,
+  `annual_tail` and `cash_extra_terms` are deliberately ABSENT**: each re-MAPS an existing parse
+  or changes a GATE, so layers differing only in them share one OCR pass. That is what makes
+  `onnx@200+pad6+annual+extra` cost no OCR at all — `onnx@200+pad6+components` has already
+  rendered those pages.
 
 The first four are STRICT (higher resolution, then a different engine, for a filing whose scan
 merges lines or misreads a digit). The last two set `relax_totals`: they recover the balance

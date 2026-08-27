@@ -55,7 +55,7 @@ one shuffled draw scored **+0.0606, higher than the real data**.
 
 ## 3. What one draw actually does
 
-[evaluation.py:270-288](evaluation.py#L270-L288), per draw:
+[evaluation.py:270-288](../evaluation.py#L270-L288), per draw:
 
 1. Copy the joined panel.
 2. Replace the target column with `block_shuffle(y, block = lookback + horizon)`.
@@ -81,14 +81,14 @@ score.
 permutes rows, which on an N × T panel tears each date's cross-section apart and destroys
 the structure the target is computed *within*. `cross_sectional.cross_sectional_null`'s
 `date_block` mode pivots the label to `date × ticker` and permutes blocks of **dates**
-instead ([run.py:298-309](run.py#L298-L309)). `run.py` picks the right one from the
+instead ([run.py:298-309](../run.py#L298-L309)). `run.py` picks the right one from the
 `cs_` prefix on the target name; you do not pass a flag.
 
 ---
 
 ## 4. What the twenty numbers become
 
-[`NullResult`](evaluation.py#L135) turns the draws into five quantities. All five go into
+[`NullResult`](../evaluation.py#L135) turns the draws into five quantities. All five go into
 `metadata.json` and the run README.
 
 | quantity | is | how to read it |
@@ -145,7 +145,7 @@ affordable even on a wide pool**, so `--null-draws 0` there is a choice, not a b
 ## 6. What happens downstream if you skip it
 
 `--null-draws 0` is legal and does not fail. It writes `"null": null` into
-`metadata.json`, and [outstanding.py:142](outstanding.py#L142) turns that into
+`metadata.json`, and [outstanding.py:142](../outstanding.py#L142) turns that into
 `evidence=no_null` on **every row of the shortlist**. From there the string travels
 verbatim:
 
@@ -244,11 +244,11 @@ python -m feature_selection.run --pools pool__basic --null-draws 100
 
 - The null seed is `NULL_SEED = 7`, **fixed and separate from `--random-state`** — the
   bar must not move when the selector's seed does, or the bar and the number it judges
-  stop being comparable ([run.py:105](run.py#L105)).
+  stop being comparable ([run.py:105](../run.py#L105)).
 - ⚠️ **A failed null does not discard the observed run.** `run.py` catches it, prints a
   warning, records `evidence=no_null` and still writes the report — this was measured
   twice on 2026-08-10, each time costing a completed selection to an exception in a
-  summary f-string ([run.py:310-320](run.py#L310-L320)).
+  summary f-string ([run.py:310-320](../run.py#L310-L320)).
 - ⚠️ **A draw that raises is COUNTED, not skipped.** `failed_draws` is on the summary; a
   null built only from the draws that happened to succeed is a biased null.
 - Every draw's IC is written to `null_draws.csv` in the run folder. Read it — the twenty

@@ -88,11 +88,11 @@ raw_data/<source>/*.csv,*.xlsx           (produced by src/web_scraper)
 
 `DataPreprocessor` owns a `PostgreSQLDriver` (psycopg2). Two files:
 
-- [tabular_database_driver_interface.py](../tabular_database_driver/tabular_database_driver_interface.py)
+- [tabular_database_driver_interface.py](../../tabular_database_driver/tabular_database_driver_interface.py)
   — `TabularDatabaseDriverInterface(ABC)`: `connect/disconnect`, `create/drop_database`,
   `create/drop_schema`, `create/drop_table`, `insert/update/delete/select`. The
   Strategy contract so a different backend could be dropped in.
-- [postgre_sql_driver.py](../tabular_database_driver/postgre_sql_driver.py) — the
+- [postgre_sql_driver.py](../../tabular_database_driver/postgre_sql_driver.py) — the
   psycopg2 implementation. Key design points a new session must know:
   - **Per-cursor concurrency.** `_cursor_ctx()` is a `@contextmanager` that opens a
     **brand-new cursor per DML/DDL call** and closes it on exit, so the preprocessor
@@ -139,7 +139,7 @@ rows, sanitizes values bound for `REAL` columns (±inf → NaN, subnormals → 0
   `ThreadPoolExecutor`, one cursor per chunk, counting inserted vs updated.
 
 DTO helpers come from
-[dtos/tabular_database_driver_dtos](../dtos/tabular_database_driver_dtos/tabular_database_driver_dtos.py):
+[dtos/tabular_database_driver_dtos](../../dtos/tabular_database_driver_dtos/tabular_database_driver_dtos.py):
 `DataType` (classmethods returning SQL type strings), `Column`, `Condition`,
 `JoinModel`, `Record`. `CleanLayer` / `TransformLayer` / `CleanAction` /
 `TransformAction` live in `utils.enums` (imported via `from utils.enums import *`).

@@ -3,8 +3,8 @@
 @docs/INDEX.md
 
 > **ONE FILE, WHOLE PROJECT.** This is the map. The twelve `CONTEXT.md` files are the
-> evidence behind it (**~227k tokens** — re-measured 2026-08-22, up from the ~145k this
-> line claimed for months) — **open one only when you touch that package**, and §7 says
+> evidence behind it (**~212k tokens** — re-measured 2026-08-27; the ~227k this line carried
+> since 2026-08-22 was counted over a wider set) — **open one only when you touch that package**, and §7 says
 > which. Hub written 2026-08-10 against the state at commit `fcac8904`.
 >
 > ⚠️ **ALL PROSE DOCUMENTATION LIVES IN [`docs/`](docs/) SINCE 2026-08-22**, and the line
@@ -12,7 +12,7 @@
 > session automatically. **[docs/INDEX.md](docs/INDEX.md) routes all 127 `.md` files with
 > a measured token cost each** — read it before opening anything, and add a row to it when
 > you write a new doc (`python docs/check_index.py` fails if you forget). ⚠️ **The corpus
-> is ~511k tokens, ~2.5× a context window, so it can never be bulk-loaded** — the index is
+> is ~583k tokens (re-measured 2026-08-27), ~3× a context window, so it can never be bulk-loaded** — the index is
 > deliberately routing and not content. `CLAUDE.md` itself stays at the repo root because
 > that is the only place Claude Code auto-loads it from.
 >
@@ -3305,7 +3305,10 @@ restored.** The log says `RUN_SUCCESS` and names a layer; it says nothing about 
 
 ⚠️ **Seven cash flows remain, all `fx not mapped`**: Q4-2015, Q3-2016, Q4-2016, Q2-2017,
 Q3-2017, Q4-2017, Q3-2018. `FXM-1`'s written fix is measured WRONG (§6-2-vicies) and must not
-be run as it stands.
+be run as it stands. ✅ **ALL SEVEN CLOSED THE SAME DAY** — six at STRICT layers with no FX
+change at all (§6-2-duovicies) and Q4-2016 at a new one (§6-2-quatervicies). ⚠️ **And the label
+`fx not mapped` was itself the artefact**: it is the LAST layer's reason, and the last layer is
+always the most relaxed one.
 
 ### ⚠️ 6-2-duovicies. THE SEVEN `fx not mapped` QUARTERS — SIX WERE NEVER AN FX PROBLEM, AND THE SEVENTH WAS WRONG
 
@@ -3347,7 +3350,10 @@ Re-reading FY-2016 directly: *cash at start of year* **55,806,145**, *cash recei
 **3,004,011**, *cash at end of year* **65,521,789** — and 65,521,789 is exactly the opening
 that Q2-2017, Q3-2017 and Q4-2017 independently agree on. **Q4-2016 was reverted to `missing`.**
 ⚠️ Its identity residual was **exactly +1,000,000,000,000**, a suspiciously round number that
-`reconcile` and `sane` both accepted.
+`reconcile` and `sane` both accepted. ✅ **PARSED CORRECTLY LATER THE SAME DAY — §6-2-quatervicies**,
+and these three figures are what it was checked against. ⚠️ **The 61,575,636 did not come from
+this filing**: it is the UNAUDITED quarterly's figure, reached through `alternates`, i.e. a
+RESTATEMENT rather than an OCR error — which is a hazard `alternates` still has no guard for.
 
 ⚠️ **THE CHECK THAT FOUND IT IS REUSABLE AND CHEAP**: a cumulative cash flow's opening balance
 is printed four times a year and once more as the prior year's close, so **five independent
@@ -3366,8 +3372,8 @@ FX and the identity would confirm it.
 | | |
 |---|---|
 | BID cash flow | 54 → **60** parsed |
-| **from 2012** | **170 / 171 = 99.4 %** — balance sheet **57/57**, income statement **57/57**, cash flow **56/57** |
-| the one gap | **Q4-2016**, and the correct closing is known: **65,521,789** mn |
+| **from 2012** | **170 / 171 = 99.4 %** — balance sheet **57/57**, income statement **57/57**, cash flow **56/57**. ✅ **171/171 later the same day** — §6-2-quatervicies |
+| the one gap | **Q4-2016**, and the correct closing is known: **65,521,789** mn. ✅ **CLOSED 2026-08-27**, and that known figure is what the recovery was checked against |
 | collateral | **5 history-provider downgrades**, all restored — the pattern is now measured **three times** |
 
 ### ⚠️ 6-2-tervicies. BID Q4-2016 STAYS `missing`, AND NOW THE REASON IS EXACT
@@ -3403,6 +3409,11 @@ opening row **0.851 / 0.000**, closing row **0.000 / 0.840**.
 
 #### ⚠️ AND THE QUARTER IS STILL NOT WRITABLE — one line is misread at every DPI
 
+⚠️ **SUPERSEDED THE SAME DAY — the quarter IS writable, and this sub-section's own headline is
+the reason it took a second pass. "Misread at every DPI" is true of the DEFAULT CROP and false
+at `crop_pad=6`, which was never tried. §6-2-quatervicies.** Everything else below stands and
+the four verified figures it leaves behind are exactly what the recovery was checked against.
+
 With the labels fixed, opening **55,806,145** and closing **65,521,789** are both correct. The
 statement still does not close:
 
@@ -3429,6 +3440,133 @@ session can check any fix against those four numbers in seconds.
 layers added 2026-08-24: it sits last, behind the identity check, and the annual wording is
 universal — every `FY-*` filing in the archive words its cash tail this way, so it will matter
 at `P38` scale. **That is an argument, not a measurement, and it is labelled as one.**
+✅ **It stopped being an argument within hours**: `annual_tail` is half of the layer that
+recovered this quarter, and the layer WITHOUT it maps 21 items where the layer with it maps 24.
+
+### ✅ 6-2-quatervicies. BID Q4-2016 PARSED — the digit was outside the CROP, and the fourth term had no column
+
+Recovered 2026-08-27, hours after §6-2-tervicies concluded the quarter was correctly `missing`.
+⚠️ **That conclusion rested on one sentence nobody had tested — *"one line is misread at every
+DPI"*.** It is true at every DPI **with the default crop**, and false at `crop_pad=6` — a knob
+the file's own docstring names for exactly this defect and that section never tried. Two
+independent blockers, and the second is the reusable one.
+
+#### Defect 1 · the detector box ended INSIDE the number, so no DPI could help
+
+Measured on page 12 of the FY-2016 consolidated filing, every config run twice, identical both
+times. The filing prints `6.711.633`:
+
+| layer | what OCR returns | `parse_num` |
+|---|---|---|
+| `onnx@200` | `6.711.6.3` | **671,163** — 10× low |
+| `onnx@300` | `6.711.610` | **6,711,610** — wrong by **23** |
+| `onnx@400` | `6.711.63)` | **671,163** |
+| **`onnx@200+pad6`** | **`6.711.633`** | **6,711,633** ✅ |
+
+⚠️ **THIS IS `crop_pad`'s OWN DOCUMENTED DEFECT AT THE OTHER END OF THE BOX.** ACB's Q3-2023
+loses its LEADING digit because the box starts inside the number; here the box ENDS inside it
+and the last digit is never shown to the recogniser. Both are invisible to resolution — the
+pixels are outside the crop at 200, 300 and 400 alike — which is why the three default-crop
+layers agree with each other and all three are wrong.
+
+⚠️ **AND THREE OF THE FOUR MISREADS ARE WELL-FORMED THOUSANDS GROUPS**, so no grouping check
+could ever catch them: `parse_num` returns a plausible number and only the identity disagrees.
+The 300 dpi read is wrong by **23 đồng in 6.7 million** — which is why the new check below is
+held to EXACT equality and not to `_equal`'s tolerance.
+
+⚠️ **A PROBE THAT DOES NOT SET THE ENGINE IS NOT PROBING THE PIPELINE.** `PdfParser()` defaults
+to **tesseract** (`OCR_ENGINE = os.environ.get("CAFEF_OCR_ENGINE", "tesseract")`, and the var is
+NOT in `.env`), so the first two probes of this session measured the wrong engine and produced a
+different garbled token (`1/M4,011`) that sent the diagnosis sideways. Production is unaffected
+— every `ParseLayer` names its engine — but a probe must name it too.
+
+#### Defect 2 · the statement has a FOURTH term and the chart of accounts has no column for it
+
+BID's FY-2016 cash flow prints **five** lines where the bank chart has four: IV movement, V
+opening, *"…từ việc nhận sáp nhập MHB"*, *"…nhận từ các công ty con khi hợp nhất"*, VIII closing.
+**Both columns close only with the extra term:**
+
+| Triệu VND | 2016 | 2015 |
+|---|---|---|
+| opening | 55,806,145 | 50,199,476 |
+| movement | 6,711,633 | 4,129,579 |
+| **merger cash** | **3,004,011** | **1,477,340** |
+| **closing** | **65,521,789** | **55,806,145** |
+
+So the quarter was refused for `fx not mapped` while every figure on the page was correct. This
+is `FXM-1`'s real shape, and §6-2-vicies had already measured why the written fix is unsafe: the
+positional guess claims that row as FX, and the identity then **confirms** the wrong account
+because the arithmetic is right.
+
+#### ✅ What shipped — `cash_extra_terms`, and the term is COUNTED, never WRITTEN
+
+A `ParseLayer` flag, off by default, on three layers at the very end of the cascade. It sums
+what the filing printed **between** the two balance rows and lets that stand in for `fx`, which
+it already contains. Three properties carry the whole design:
+
+1. ⚠️ **COUNTED, NEVER WRITTEN.** The figure is admitted to the CHECK and the FX column is left
+   empty — §5 rule 2 for a number nothing can attribute. For the same reason the flag **stops
+   `_recover_totals`' positional FX guess claiming a row whose own label does not say FX**,
+   which is the safe half of `FXM-1` that §6-2-vicies asked for. Nothing is lost: BID's FY-2015
+   has ONE row between its balances and the guess DOES fire there, and the span counts it
+   instead (50,199,476 + 4,129,579 + 1,477,340 = 55,806,145).
+2. ⚠️ **THE CURRENT-PERIOD CELL ONLY, never `_first_value`.** The 2016 column leaves the MHB
+   line blank and prints 1,477,340 beside it in the 2015 comparative; the fall-through would add
+   a prior-year figure to this year's identity and break a sum that closes exactly without it.
+3. ⚠️ **POSITION IS THE WHOLE DEFINITION.** Matching by label would mean guessing which words
+   name a reconciling item, and filings word them differently every time. Between the two
+   balances a cash flow prints nothing else — so the span needs no vocabulary, and whatever it
+   returns is tested to the đồng immediately.
+
+⚠️ **THE FIRST OF THE THREE LAYERS COSTS NO OCR AT ALL.** `crop_pad` is part of the parse-cache
+key and `annual_tail` / `cash_extra_terms` are not, so `onnx@200+pad6+annual+extra` re-maps the
+pages `onnx@200+pad6+components` already rendered. ⚠️ **And the label repair goes FIRST**, per
+the rule `PGB-1` and §6-2-unvicies each measured independently: the bare `+extra` layer also
+accepts, with **21 items against 24**, so ordering it first would have cost three line items and
+ended the cascade.
+
+#### The run
+
+| | |
+|---|---|
+| command | `raw/cafef_financials` partition `HOSE_BID`, `skip_existing=false` `allow_parent=true` `periods=[Q1-2016 .. Q4-2016]` |
+| result | **35m 20s, RUN_SUCCESS**, `Q4-2016 cash_flow=24 items [onnx@200+pad6+annual+extra]` |
+| on disk | `pdf`, from the **audited consolidated annual**, IV **6,711,633** · V **55,806,145** · VI **empty** · VII **65,521,789** — identity exact |
+| BID cash flow | 60 → **61** parsed |
+| **from Q1-2012** | **171 / 171 = 100 %** — balance sheet 57/57, income statement 57/57, **cash flow 57/57**. Every row of the ticker reads `pdf` or `missing` and nothing else |
+| the diff | pre-run backup, and **exactly one period changed across all nine CSVs** |
+| tests | **79** in `src/web_scraper/`, of which **15 new**, no PDF and no network |
+
+⚠️ **THE HISTORY-PROVIDER DOWNGRADE REPRODUCED A THIRD TIME, and it is subtler than the first
+two.** Q3-2016's balance sheet and income statement each came back with `publish_date` **blank**
+where they held `2017-05-01` — not a changed layer, not a changed figure, one lost DOCUMENT
+FACT per statement. Restored from the backup. §6-2-vicies and §6-2-unvicies both lost a whole
+OCR layer and several figures; this lost a single metadata cell in a quarter whose numbers were
+untouched, so **a diff that only compares the figures would have called this run clean.**
+
+⚠️ **AND A FUTURE FULL RUN WILL NOW REFUSE Q1-2017 — deliberately, and it looks correct.**
+That quarter holds `VII = 65,521,789` on disk, which is exactly the closing this run accepted
+for Q4-2016, so `sane`'s equality gate will fire (*"probe exactly equals an already-accepted
+quarter"*). It is almost certainly right to: Q1-2017's own `IV` is −12,018,572 and Q2-2017's
+opening is 65,521,789, so 65,521,789 is Q1-2017's OPENING balance sitting in its closing slot.
+**A gate firing on a neighbouring quarter is the expected consequence of fixing this one.**
+
+⚠️ **WHAT THIS DOES NOT DO.** It recovers no other quarter today: the three new layers sit last,
+so only a statement that defeated all 44 before them can reach them, and no other BID quarter
+does. **`FXM-1` is not closed** — the seven cash flows §6-2-duovicies recovered did so at strict
+layers, and the unsafe positional guess is only guarded on the three layers carrying this flag,
+not removed. ⚠️ And BID's eight remaining `missing` quarters (Q1-Q3 2009, Q1-Q3 2010, Q1-Q2
+2011) have **no filing at all** — no code change can alter them.
+
+⚠️ **ONE HAZARD THE MEASUREMENT EXPOSED AND NOBODY HAS FIXED: the ALTERNATE filing disagrees
+with the audited one, and `alternates` cannot see it.** BID's unaudited Q4-2016 quarterly
+reports a closing balance around **62.6 tn** against the audited annual's **65,521,789** — a
+restatement, not an OCR error, and the two later quarters that carry 65,521,789 as their opening
+say which one the company stands behind. That unaudited figure is the likely source of the
+**61,575,636** §6-2-duovicies had to revert. Reconcile and `sane` both pass on a restated
+statement, so nothing in the parser separates them; here it is moot only because the chosen
+document now parses first. **`alternates` trades assurance for coverage and has no guard for a
+restatement.**
 
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
@@ -3575,7 +3713,7 @@ what a session budgets against.
 |---|---|---|
 | [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | **47.0k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER" — screens, `filter_schema`, and why a screen is not point-in-time) |
 | [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | **25.8k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
-| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **28.7k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
+| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **31.1k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
 | [src/feature_selection/docs/RANKER_COMPARISON.md](src/feature_selection/docs/RANKER_COMPARISON.md) | **4.5k** | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | **6.8k** | building or rebuilding a `__final__` table |
@@ -3590,7 +3728,7 @@ what a session budgets against.
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | **9.2k** | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | **44.0k** | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
-⚠️ **[ISSUES.md](docs/ISSUES.md) (~23k) is the second file to open, not an afterthought.**
+⚠️ **[ISSUES.md](docs/ISSUES.md) (~24.4k) is the second file to open, not an afterthought.**
 **22** open issues — ⚠️ *(this line read "(~4k)" and "Sixteen" until 2026-08-25; both were
 stale, and a stale cost is what a session budgets against)*. **SHP-1** is the one to read
 first — a `value`-only filter silently discarded 71% of the forex folder for as long as that

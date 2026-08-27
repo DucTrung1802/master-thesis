@@ -1632,7 +1632,8 @@ dagster asset materialize -f src/orchestration/definitions.py --select "gold/sto
 ⚠️ **What the split buys is one thing, and it is not tidiness.** PostgreSQL reads the
 whole row, so every query that wanted OHLC out of the old 935-column table paid for 905
 TA columns it did not want — ~11 GB against ~200 MB.
-[unified_schema_creator.ipynb](../train_test_creator/unified_schema_creator.ipynb) was
+⚠️ **`train_test_creator/unified_schema_creator.ipynb` — DELETED in `476cddf`, and this
+sentence is history, not a pointer.** It was
 already splitting them by hand (`GOLD_NON_TA` vs its `pool__ta` group); this makes the
 split a table boundary instead of a convention two notebooks have to agree on.
 
@@ -2826,8 +2827,10 @@ return to sequential execution.
   wrapping nothing. Making orchestration self-contained means MOVING ~6,200 lines into
   it, not removing a directory.
 - **Assets are generated from a spec table**, not copy-pasted — `TABS` in
-  [assets/cafef_index.py](assets/cafef_index.py) is four rows and produces eight
-  assets. At ~60 assets this is the difference between maintainable and not.
+  [assets/scrape.py](assets/scrape.py) is four rows and produces eight
+  assets (the bronze side is generated the same way from `assets/bronze.py`).
+  ⚠️ **Path corrected 2026-08-27** — `assets/cafef_index.py` has never existed; the
+  spec table lives in `scrape.py`. At ~60 assets this is the difference between maintainable and not.
 - **Assets call the per-tab method (`scrape_all_index_price`), never `scrape()`.**
   `scrape()` re-consults the switch config, which used to let `switch_config.json`
   silently veto a materialisation the user explicitly asked for. **Selection is
@@ -2998,7 +3001,10 @@ file and survives for GICS alone. See §`build_trading_view`.
 
 ⚠️ **A THIRD writer survives: `train_test_creator/unified_schema_creator.ipynb`**
 imports `DataPreprocessor` directly. It still works — the library is intact — but a
-notebook that writes tables is not a run plan, and it is what built the unified pools
+notebook that writes tables is not a run plan,
+✅ **DELETED SINCE, in `476cddf` ("the five stages as one runnable, self-checking
+pipeline"), so the third writer is GONE — re-checked 2026-08-27.** The paragraph is kept
+because the reason it was a problem is the reason the pipeline package exists, and it is what built the unified pools
 that vanished in the 2026-08-03 drop. `pool__ta` and `pool__fa` are assets now; the
 `_all` and `_bank` universes are not (see §"unified_schema_all").
 

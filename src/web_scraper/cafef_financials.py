@@ -82,6 +82,28 @@ class ParseLayer:
         to the wrong accounts, and `reconcile` and `sane` BOTH PASS — a wrong figure written as
         `pdf`, which is the one failure mode this parser must not have. Rides with
         `tail_continuation`: the same filing needs both, and neither is any use alone.
+      * `cash_extra_terms` — let the cash-flow identity count the reconciling lines a filing
+        prints BETWEEN its two balances that the chart of accounts has no column for. The
+        identity is `closing = opening + movement + fx`, and a bank that ABSORBS another bank
+        gains cash that is none of those three: BID prints such a line in three separate years
+        (MHB 1,477,340 in 2015 and 3,004,011 in 2016, LienVietPostBank 1,540,994 in 2017). Its
+        FY-2016 consolidated cash flow reads every figure correctly at `crop_pad=6` —
+        55,806,145 + 6,711,633 + 3,004,011 = 65,521,789, exact to the đồng — and was refused
+        for `fx not mapped`, because the fourth term has nowhere to go.
+
+        ⚠️ **THE TERM IS COUNTED, NEVER WRITTEN, AND THAT IS THE WHOLE DESIGN.** Writing it to
+        `hdtc_vi_dieu_chinh_anh_huong_cua_thay_doi_ty_gia` would put merger cash in the FX
+        column, and the identity would then CONFIRM the wrong account because the arithmetic is
+        right — measured 2026-08-27, CLAUDE.md §6-2-vicies. So this admits the figure to the
+        CHECK and leaves the column empty, which is what §5 rule 2 asks of a number nothing can
+        attribute. For the same reason it also stops `_recover_totals`' positional FX guess
+        claiming a row whose own label does not say FX.
+
+        ⚠️ Only the CURRENT-period cell counts, never `_first_value`'s fall-through: BID's 2016
+        column leaves the MHB line blank and prints 1,477,340 beside it in the 2015 comparative,
+        and taking that would break an identity that closes exactly without it. A term OCR could
+        not read is skipped, the identity then misses, and the statement is refused — which is
+        the correct outcome and not a loss.
       * `crop_pad` — how far outside a detected box to crop before RECOGNISING it (onnx only,
         in points; `None` = the engine default of 2). The detector sometimes starts its box
         INSIDE a number and the leading digit is simply not in the crop, so the recogniser
@@ -105,6 +127,7 @@ class ParseLayer:
     label_wrap: bool = False
     unit_from_document: bool = False
     annual_tail: bool = False
+    cash_extra_terms: bool = False
     crop_pad: Optional[float] = None
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
@@ -577,6 +600,37 @@ class FinancialsBuilder:
         # line, in a statement whose two balances are right. The relaxed variant refuses it.
         # A layer that can recover a label must not also be a layer that skips the arithmetic.
         ParseLayer("onnx@200+annual+relax", "onnx", 200, annual_tail=True, relax_totals=True),
+        # ── THE STATEMENT HAS A FOURTH TERM AND THE CHART HAS NO COLUMN FOR IT ────────────
+        # (`cash_extra_terms`, and `crop_pad=6` is what makes it reachable at all)
+        #
+        # BID's FY-2016 consolidated cash flow prints FIVE lines where the chart of accounts has
+        # four: IV movement, V opening, "…từ việc nhận sáp nhập MHB", "…nhận từ các công ty con
+        # khi hợp nhất", VIII closing. The identity `opening + movement + fx == closing` cannot
+        # close without the fourth term and there is nowhere to put it, so the quarter was
+        # refused for `fx not mapped` while every figure on the page was right.
+        #
+        # ⚠️ **AND EVERY FIGURE IS ONLY RIGHT AT `crop_pad=6` — measured 2026-08-27, twice, on
+        # the page itself.** The detector box ends INSIDE the movement figure and the recogniser
+        # is never shown the last digit: 6.711.633 reads as `6.711.6.3` at onnx@200, `6.711.610`
+        # at 300 and `6.711.63)` at 400, all of which `parse_num` turns into a plausible wrong
+        # number. This is `crop_pad`'s own documented defect (ACB Q3-2023) at the OTHER END of
+        # the box, and raising the DPI cannot help — the pixels are outside the crop at every
+        # resolution. At pad 6 the whole tail reads correctly and repeatably, and the identity
+        # closes to the đồng: 55,806,145 + 6,711,633 + 3,004,011 = 65,521,789.
+        #
+        # ⚠️ THE LABEL REPAIR GOES FIRST (§6-2-unvicies, the rule `PGB-1` and `Q1-2026` both
+        # measured): an annual report words its balances "cuối năm" where the schema says "cuối
+        # kỳ", so without `annual_tail` the closing balance is recovered only by POSITION, and a
+        # layer that passes the gates ends the cascade. ⚠️ The OCR pass is shared with
+        # `onnx@200+pad6+components` above — `crop_pad` is part of the parse cache key and
+        # `annual_tail` / `cash_extra_terms` are not, because they re-MAP an existing parse —
+        # so the first of these three costs no OCR at all.
+        ParseLayer("onnx@200+pad6+annual+extra", "onnx", 200, crop_pad=6.0,
+                   annual_tail=True, relax_totals=True, cash_extra_terms=True),
+        ParseLayer("onnx@200+pad6+extra", "onnx", 200, crop_pad=6.0,
+                   relax_totals=True, cash_extra_terms=True),
+        ParseLayer("onnx@300+pad6+annual+extra", "onnx", 300, crop_pad=6.0,
+                   annual_tail=True, relax_totals=True, cash_extra_terms=True),
     ]
 
     def __init__(self, logger=None):
@@ -624,8 +678,10 @@ class FinancialsBuilder:
             # engine and DPI but crop differently produce different text, and keying on
             # (engine, dpi) alone would hand the wider-crop layer the narrow crop's cached parse
             # — the one that already failed.
-            # `relax_merged_seam` is deliberately ABSENT: it changes the MAPPING, not the
-            # parse, so two layers differing only in it share one OCR pass.
+            # `relax_merged_seam`, `annual_tail` and `cash_extra_terms` are deliberately ABSENT:
+            # each changes the MAPPING or the GATE, not the parse, so two layers differing only
+            # in them share one OCR pass. That is what makes `onnx@200+pad6+annual+extra` free —
+            # `onnx@200+pad6+components` has already rendered those pages.
             key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
                    layer.title_over_form, layer.loose_form_code, layer.realign_rows,
                    layer.notes_boundary, layer.tail_continuation, layer.label_wrap, layer.unit_from_document)
@@ -669,13 +725,15 @@ class FinancialsBuilder:
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals,
                                          relax_split_tail=layer.relax_split_tail,
                                          relax_merged_seam=layer.relax_merged_seam,
-                                         annual_tail=layer.annual_tail)
+                                         annual_tail=layer.annual_tail,
+                                         cash_extra_terms=layer.cash_extra_terms)
                 # ⚠️ THE SHORT-CIRCUIT IS LOAD-BEARING AND IS PRESERVED EXACTLY: `sane` runs
                 # only when `reconcile` passed, as it always has. What is new is that the
                 # refusal is KEPT rather than discarded — see the report below the loop.
                 why = self.reconcile(st, row, verify_cash=layer.relax_totals,
                                      open_ref=open_ref,
-                                     relax_components=layer.relax_components)
+                                     relax_components=layer.relax_components,
+                                     cash_extra_terms=layer.cash_extra_terms)
                 if why is not None:
                     why = f"reconcile: {why}"
                 else:
@@ -1265,7 +1323,8 @@ class FinancialsBuilder:
                      relax_totals: bool = False,
                      relax_split_tail: bool = False,
                      relax_merged_seam: bool = False,
-                     annual_tail: bool = False) -> Dict[str, int]:
+                     annual_tail: bool = False,
+                     cash_extra_terms: bool = False) -> Dict[str, int]:
         """Parsed rows -> canonical columns.
 
         This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
@@ -1320,7 +1379,7 @@ class FinancialsBuilder:
 
         self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail)
         if relax_totals:
-            self._recover_totals(out, st, src, relax_split_tail)
+            self._recover_totals(out, st, src, relax_split_tail, cash_extra_terms)
         return out
 
     # A row OCR built by merging a SECTION HEADER with the numbered line beneath it. The filing
@@ -1555,7 +1614,8 @@ class FinancialsBuilder:
 
     def _recover_totals(self, out: Dict[str, int], st: Statement,
                         src: Optional[Dict[str, int]] = None,
-                        split_tail: bool = False) -> None:
+                        split_tail: bool = False,
+                        extra_terms: bool = False) -> None:
         """Fill a statement's subtotal columns from label variants (relaxed layers only).
 
         Runs after the ordered walk and `_anchor` have done their best and the statement STILL
@@ -1671,12 +1731,27 @@ class FinancialsBuilder:
                 # ⚠️ Two rows apart EXACTLY, never "somewhere between": a wider search would
                 # start choosing among flow lines, and a plausible wrong FX that happens to make
                 # the identity close is the one failure this must not manufacture.
+                #
+                # ⚠️ **AND THAT SAFETY ARGUMENT IS FALSE WHERE THE FOURTH TERM IS NOT FX —
+                # measured 2026-08-27 on BID's FY-2015, CLAUDE.md §6-2-vicies.** The row between
+                # the balances there is the MHB MERGER line, i.e. the genuine fourth term with
+                # the wrong NAME, so the identity closes *because the arithmetic is right and
+                # the account is wrong*, and it cannot reject what it confirms. Under
+                # `cash_extra_terms` the row must therefore say FX to be claimed as FX; when it
+                # does not, the column is left empty and `_cash_flow_identity` counts the figure
+                # as an unattributed term instead. Nothing is lost — a gate that was skipping
+                # for want of a term now runs — and nothing wrong is written.
                 fx = self.C_CASH_FX[0]
                 close_i = src.get(self.CASH_BALANCES[1])
                 if (fx not in out and close_i is not None
                         and close_i - first_i == 2):
-                    v = st._first_value(st.rows[first_i + 1].values)
-                    if v is not None:
+                    cand = st.rows[first_i + 1]
+                    v = st._first_value(cand.values)
+                    named_fx = self._label_score(
+                        fx.replace("_", ""),
+                        self._split_merged(cand.key, cand.label).replace("_", ""),
+                    ) >= self.SCHEMA_MATCH
+                    if v is not None and (named_fx or not extra_terms):
                         self._claim(out, src, fx, first_i + 1, v)
             return
         if st.report != BALANCE_SHEET:
@@ -1807,7 +1882,8 @@ class FinancialsBuilder:
                   mapped: Optional[Dict[str, int]] = None,
                   verify_cash: bool = False,
                   open_ref: Optional[int] = None,
-                  relax_components: bool = False) -> Optional[str]:
+                  relax_components: bool = False,
+                  cash_extra_terms: bool = False) -> Optional[str]:
         """None if the statement balances against its OWN printed subtotals, else why not.
 
         The subtotals are taken from the CANONICAL columns when the rows have been mapped —
@@ -1878,7 +1954,9 @@ class FinancialsBuilder:
             # sound quarter is thrown away. On a relaxed layer the mapping was recovered by label
             # variant and has to be proved, so there it still runs (fix #12).
             if verify_cash:
-                bad = self._cash_flow_identity(mapped or {}, open_ref)
+                bad = self._cash_flow_identity(
+                    mapped or {}, open_ref,
+                    st=st if cash_extra_terms else None)
                 if bad:
                     return bad
         return None
@@ -1891,8 +1969,64 @@ class FinancialsBuilder:
                        "hddt_ii_luu_chuyen_tien_thuan_tu_hd_dau_tu",
                        "hdtc_iii_luu_chuyen_tien_thuan_tu_hd_tai_chinh")
 
+    def _cash_balance_span(self, st: Statement) -> Optional[Tuple[int, int]]:
+        """(row index of the opening balance, row index of the closing balance), or None.
+
+        The SAME pairing `_recover_totals` makes — dated rows first, the undated cash phrase as
+        the fallback, opening first and closing the last one carrying a figure — factored out so
+        the identity below can ask what the filing printed BETWEEN them without re-deriving it a
+        second, subtly different way.
+        """
+        dated = [(i, r) for i, r in enumerate(st.rows) if self._is_cash_tail(r.key)]
+        if len(dated) < 2:
+            dated = self._cash_balance_rows(st)
+        if len(dated) < 2:
+            return None
+        first_i = dated[0][0]
+        close_i = next((i for i, r in reversed(dated)
+                        if i != first_i and st._first_value(r.values) is not None), None)
+        return None if close_i is None or close_i <= first_i else (first_i, close_i)
+
+    def _extra_cash_terms(self, st: Statement) -> int:
+        """What the filing printed BETWEEN its two cash balances, in the CURRENT period.
+
+        ⚠️ **A BANK THAT ABSORBS ANOTHER BANK GAINS CASH THAT IS NEITHER A FLOW NOR AN FX
+        EFFECT, AND THE CHART OF ACCOUNTS HAS NO COLUMN FOR IT.** BID prints such a line in
+        three separate years — MHB 1,477,340 (2015) and 3,004,011 (2016), LienVietPostBank
+        1,540,994 (2017) — and its FY-2016 consolidated cash flow prints TWO of them at once,
+        one for each column. Every figure is read correctly at `crop_pad=6` and the statement
+        was still refused for `fx not mapped`, because `_cash_flow_identity` needs a fourth term
+        and had nowhere to take one from.
+
+        ⚠️ **THE CURRENT-PERIOD CELL ONLY — never `_first_value`.** BID's 2016 column leaves the
+        MHB line blank and the 2015 comparative beside it reads 1,477,340; falling through to it
+        would add a prior-year figure to this year's identity and break a sum that closes
+        exactly without it (55,806,145 + 6,711,633 + 3,004,011 = 65,521,789). A line whose own
+        cell OCR could not read contributes nothing, the identity then misses, and the statement
+        is refused — which is the right answer, not a loss.
+
+        ⚠️ **POSITION IS THE WHOLE DEFINITION AND THAT IS DELIBERATE.** Matching these lines by
+        label would mean guessing which words name a reconciling item, and the filings word them
+        differently every time ("từ việc nhận sáp nhập MHB", "nhận từ … các công ty con khi hợp
+        nhất"). Between the opening balance and the closing one a cash-flow statement prints
+        nothing else — the FX adjustment and whatever else reconciles the two — so the span
+        needs no vocabulary. Whatever it returns is immediately tested by the identity to the
+        đồng, so a span that swept in a wrong row is rejected rather than written.
+        """
+        span = self._cash_balance_span(st)
+        if span is None:
+            return 0
+        first_i, close_i = span
+        total = 0
+        for row in st.rows[first_i + 1:close_i]:
+            v = row.values[0] if row.values else None
+            if v is not None:
+                total += v
+        return total
+
     def _cash_flow_identity(self, mapped: Dict[str, int],
-                            open_ref: Optional[int] = None) -> Optional[str]:
+                            open_ref: Optional[int] = None,
+                            st: Optional[Statement] = None) -> Optional[str]:
         """Closing must equal opening + movement + FX — the statement's own arithmetic.
 
         `_closing_breakdown` proves ONE figure, and that turned out not to be enough: ACB's
@@ -1910,6 +2044,9 @@ class FinancialsBuilder:
         a statement that did not yield them cannot answer this and is judged as before, and this
         runs on the relaxed layers alone, so a quarter the strict layers already read is never
         subjected to it.
+
+        `st` is passed ONLY by a `cash_extra_terms` layer, and only then is the fourth-term
+        retry below reachable. Every other caller keeps the identity it has always had.
         """
         close = next((mapped[c] for c in self.C_CASH_CLOSE if c in mapped), None)
         open_ = next((mapped[c] for c in self.C_CASH_OPEN if c in mapped), None)
@@ -1945,6 +2082,35 @@ class FinancialsBuilder:
         # being there.
         if fx is None and None not in (close, open_, net) and open_ + net == close:
             fx = 0
+        # ⚠️ THE FILING MAY PRINT A FOURTH TERM THE CHART OF ACCOUNTS HAS NO COLUMN FOR, and
+        # then the identity is unanswerable rather than false. `_extra_cash_terms` reads what
+        # the statement printed BETWEEN its two balances — the FX line if it is there, plus
+        # whatever else reconciles them — and stands in for `fx`, which it already contains.
+        # Tried BEFORE the verdict, so it rescues both shapes of failure: "fx not mapped", where
+        # nothing between the balances matched the FX account (BID's FY-2016, which prints TWO
+        # merger lines so the positional guess never fires), and "does not close", where the FX
+        # column was filled from a row that is not FX. ⚠️ It is also what makes the guard in
+        # `_recover_totals` free: BID's FY-2015 has ONE row between its balances and the guess
+        # DOES fire there, so refusing to call merger cash "FX" would leave a sound statement
+        # unverifiable — unless this counts it, which it does (50,199,476 + 4,129,579 +
+        # 1,477,340 = 55,806,145). The account is left empty; the arithmetic still holds.
+        #
+        # ⚠️ **EXACTLY, TO THE ĐỒNG — no `_equal` tolerance**, the same bar the `fx = 0`
+        # substitution above is held to and for the same reason: this is a span of rows, not a
+        # named line, so the only thing separating a sound recovery from a wrong one is that
+        # four independently-read figures agree to the last unit. BID's FY-2016 gives
+        # 55,806,145 + 6,711,633 + 3,004,011 = 65,521,789, and the total is corroborated outside
+        # this filing by the opening balance Q2/Q3/Q4-2017 each print.
+        #
+        # ⚠️ **AND THE TERM IS NOT WRITTEN ANYWHERE.** It is admitted to the CHECK and to
+        # nothing else: putting merger cash in the FX column would be a wrong figure that the
+        # identity itself then confirms (CLAUDE.md §6-2-vicies). A number nothing can attribute
+        # is left absent — §5 rule 2.
+        if st is not None and None not in (close, net):
+            extra = self._extra_cash_terms(st)
+            base = open_ if open_ is not None else open_ref
+            if base is not None and base + net + extra == close:
+                return None
         if close is None or open_ is None or fx is None or net is None:
             missing = [n for n, v in (("opening", open_), ("movement", net), ("fx", fx),
                                       ("closing", close)) if v is None]
