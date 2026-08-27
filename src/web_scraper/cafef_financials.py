@@ -96,8 +96,16 @@ class ParseLayer:
         column, and the identity would then CONFIRM the wrong account because the arithmetic is
         right — measured 2026-08-27, CLAUDE.md §6-2-vicies. So this admits the figure to the
         CHECK and leaves the column empty, which is what §5 rule 2 asks of a number nothing can
-        attribute. For the same reason it also stops `_recover_totals`' positional FX guess
-        claiming a row whose own label does not say FX.
+        attribute.
+
+        ⚠️ **THE MATCHING GUARD IN `_recover_totals` IS NO LONGER TIED TO THIS FLAG — `P39`,
+        2026-08-27.** It shipped that way and the wiring was the defect: the positional FX
+        claim was refused on the THREE layers carrying `cash_extra_terms` and allowed on the
+        other forty-four, `onnx@200+relax` (layer 5) among them. By the time it was read off
+        `cf_HOSE_BID.csv` it had already written merger cash into the FX column twice —
+        Q4-2015 `1,477,340` and Q2-2017 `1,540,994`, each confirmed by the identity to the
+        đồng. A row must now name itself FX to fill that column **on every layer**, and this
+        flag decides only whether the span is COUNTED, never whether the guard applies.
 
         ⚠️ Only the CURRENT-period cell counts, never `_first_value`'s fall-through: BID's 2016
         column leaves the MHB line blank and prints 1,477,340 beside it in the 2015 comparative,
@@ -631,6 +639,25 @@ class FinancialsBuilder:
                    relax_totals=True, cash_extra_terms=True),
         ParseLayer("onnx@300+pad6+annual+extra", "onnx", 300, crop_pad=6.0,
                    annual_tail=True, relax_totals=True, cash_extra_terms=True),
+        # ── ⚠️ THREE DEFAULT-CROP `+extra` LAYERS WERE ADDED HERE ON 2026-08-27 AND
+        # REMOVED THE SAME DAY, ON THE MEASUREMENT THAT WAS SUPPOSED TO JUSTIFY THEM.
+        #
+        # The argument was that the span REPLACES the positional FX guess (`P39`), so it must
+        # be reachable wherever the guess was — and all three layers above carry `crop_pad=6`,
+        # a padding BID's FY-2016 needed for an unrelated reason. The two quarters the guess
+        # actually wrote read correctly at the DEFAULT crop, so leaving them nothing to reach
+        # looked like a coverage loss bought for no correctness.
+        #
+        # ⚠️ **BOTH WERE RESCUED BY THE PAD-6 LAYERS ABOVE AND NEITHER NEW LAYER FIRED.**
+        # Measured through the real cascade, with the history a full run would have had:
+        #     Q4-2015 -> ACCEPTED [onnx@300+pad6+annual+extra], 27 items, 11.0 min
+        #     Q2-2017 -> ACCEPTED [onnx@200+pad6+annual+extra], 19 items, 19.7 min
+        # each with `open`, `IV` and `close` identical to what is on disk and `fx` empty.
+        # The file's own rule is that a layer recovering zero quarters is pure cost, and being
+        # well-argued is not evidence — six layers added 2026-08-24 are kept on that argument
+        # and have returned nothing since. These had a measurement available and it went
+        # against them, so they are gone rather than kept. **Do not re-add them without a
+        # quarter they demonstrably recover.**
     ]
 
     def __init__(self, logger=None):
@@ -725,8 +752,7 @@ class FinancialsBuilder:
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals,
                                          relax_split_tail=layer.relax_split_tail,
                                          relax_merged_seam=layer.relax_merged_seam,
-                                         annual_tail=layer.annual_tail,
-                                         cash_extra_terms=layer.cash_extra_terms)
+                                         annual_tail=layer.annual_tail)
                 # ⚠️ THE SHORT-CIRCUIT IS LOAD-BEARING AND IS PRESERVED EXACTLY: `sane` runs
                 # only when `reconcile` passed, as it always has. What is new is that the
                 # refusal is KEPT rather than discarded — see the report below the loop.
@@ -1323,8 +1349,7 @@ class FinancialsBuilder:
                      relax_totals: bool = False,
                      relax_split_tail: bool = False,
                      relax_merged_seam: bool = False,
-                     annual_tail: bool = False,
-                     cash_extra_terms: bool = False) -> Dict[str, int]:
+                     annual_tail: bool = False) -> Dict[str, int]:
         """Parsed rows -> canonical columns.
 
         This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
@@ -1379,7 +1404,7 @@ class FinancialsBuilder:
 
         self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail)
         if relax_totals:
-            self._recover_totals(out, st, src, relax_split_tail, cash_extra_terms)
+            self._recover_totals(out, st, src, relax_split_tail)
         return out
 
     # A row OCR built by merging a SECTION HEADER with the numbered line beneath it. The filing
@@ -1614,8 +1639,7 @@ class FinancialsBuilder:
 
     def _recover_totals(self, out: Dict[str, int], st: Statement,
                         src: Optional[Dict[str, int]] = None,
-                        split_tail: bool = False,
-                        extra_terms: bool = False) -> None:
+                        split_tail: bool = False) -> None:
         """Fill a statement's subtotal columns from label variants (relaxed layers only).
 
         Runs after the ordered walk and `_anchor` have done their best and the statement STILL
@@ -1736,11 +1760,30 @@ class FinancialsBuilder:
                 # measured 2026-08-27 on BID's FY-2015, CLAUDE.md §6-2-vicies.** The row between
                 # the balances there is the MHB MERGER line, i.e. the genuine fourth term with
                 # the wrong NAME, so the identity closes *because the arithmetic is right and
-                # the account is wrong*, and it cannot reject what it confirms. Under
-                # `cash_extra_terms` the row must therefore say FX to be claimed as FX; when it
-                # does not, the column is left empty and `_cash_flow_identity` counts the figure
-                # as an unattributed term instead. Nothing is lost — a gate that was skipping
-                # for want of a term now runs — and nothing wrong is written.
+                # the account is wrong*, and it cannot reject what it confirms.
+                #
+                # ⚠️ **THE ROW MUST NAME ITSELF FX, ON EVERY LAYER — 2026-08-27, `P39`.** The
+                # guard shipped the same day gated on `cash_extra_terms`, i.e. it was live on
+                # the THREE layers carrying that flag and absent on the other forty-four,
+                # `onnx@200+relax` among them — **layer 5 of 47**. Read off `cf_HOSE_BID.csv`
+                # afterwards, the unguarded claim had already written merger cash into this
+                # column TWICE, from two different documents, and the identity confirmed both
+                # to the đồng:
+                #
+                #   Q4-2015  50,202,708 + 4,288,806 + **1,477,340** = 55,968,854   (MHB, FY-2015
+                #            audited annual, `onnx@200+relax`)
+                #   Q2-2017  65,521,789 + 2,648,425 + **1,540,994** = 69,711,208   (LienVietPost-
+                #            Bank, Q2-2017 reviewed quarterly, `onnx@200+relax`)
+                #
+                # Nothing is lost by refusing them: the row is still COUNTED by
+                # `_extra_cash_terms` on a `cash_extra_terms` layer, where it stands in for the
+                # unattributable fourth term and is written to no column at all (§5 rule 2). A
+                # statement that reaches no such layer is `missing`, which is the correct answer
+                # for a figure this parser cannot attribute — §5 rule 24.
+                #
+                # ⚠️ `extra_terms` WAS this branch's only reader and the parameter is gone with
+                # it. A knob that decides whether a guard applies is a knob that turns a guard
+                # off, and the measurement above is what that cost.
                 fx = self.C_CASH_FX[0]
                 close_i = src.get(self.CASH_BALANCES[1])
                 if (fx not in out and close_i is not None
@@ -1751,7 +1794,7 @@ class FinancialsBuilder:
                         fx.replace("_", ""),
                         self._split_merged(cand.key, cand.label).replace("_", ""),
                     ) >= self.SCHEMA_MATCH
-                    if v is not None and (named_fx or not extra_terms):
+                    if v is not None and named_fx:
                         self._claim(out, src, fx, first_i + 1, v)
             return
         if st.report != BALANCE_SHEET:

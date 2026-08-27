@@ -260,8 +260,19 @@ whose figures were already correct:
   - ⚠️ **COUNTED, NEVER WRITTEN.** Claiming the row as the FX adjustment puts merger cash in
     `hdtc_vi_…_ty_gia`, and the identity then CONFIRMS the wrong account because the arithmetic
     is right (`CLAUDE.md` §6-2-vicies measured exactly this on FY-2015). So the figure is
-    admitted to the CHECK and the column is left empty — §5 rule 2. For the same reason the flag
-    stops `_recover_totals`' positional FX guess claiming a row whose own label does not say FX.
+    admitted to the CHECK and the column is left empty — §5 rule 2.
+  - ⚠️ **AND THE MATCHING GUARD IN `_recover_totals` IS NOT THIS FLAG'S TO GIVE — corrected
+    2026-08-27, `P39`.** This bullet used to end *"for the same reason the flag stops
+    `_recover_totals`' positional FX guess claiming a row whose own label does not say FX"*, and
+    that wiring WAS the defect: the guard was live on the three layers carrying
+    `cash_extra_terms` and absent on the other forty-four, `onnx@200+relax` — **layer 5 of 47**
+    — among them. Read off `cf_HOSE_BID.csv` afterwards, the unguarded claim had already written
+    merger cash into the FX column twice, from two different documents, and the identity
+    confirmed both to the đồng: **Q4-2015** 50,202,708 + 4,288,806 + **1,477,340** = 55,968,854
+    (MHB, FY-2015 audited annual) and **Q2-2017** 65,521,789 + 2,648,425 + **1,540,994** =
+    69,711,208 (LienVietPostBank, Q2-2017 reviewed quarterly). The guard is unconditional now
+    and `_recover_totals` takes no parameter that could switch it off. ⚠️ **A knob that decides
+    whether a guard applies is a knob that turns a guard off.**
   - ⚠️ **THE CURRENT-PERIOD CELL ONLY, never `_first_value`.** BID's 2016 column leaves the MHB
     line blank and prints 1,477,340 beside it in the 2015 comparative; the fall-through would add
     a prior-year figure to this year's identity and break a sum that closes exactly without it.

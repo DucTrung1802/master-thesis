@@ -33,6 +33,13 @@ MERGER = 3_004_011
 CLOSE = 65_521_789
 MHB_PRIOR = 1_477_340                      # 2015's merger cash, printed in the comparative
 
+# BID's FY-2015 audited annual, the quarter the unguarded FX claim actually wrote
+# (`cf_HOSE_BID.csv` Q4-2015, `onnx@200+relax`). Its own column closes exactly:
+#     50,202,708 + 4,288,806 + 1,477,340 = 55,968,854
+FY15_OPEN = 50_202_708
+FY15_NET = 4_288_806
+FY15_CLOSE = 55_968_854
+
 C_OPEN = "hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky"
 C_CLOSE = "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky"
 C_NET = "hdtc_iv_luu_chuyen_tien_thuan_trong_ky"
@@ -136,22 +143,46 @@ def test_a_positional_fx_guess_is_refused_when_the_row_does_not_say_fx(builder):
     rows apart. That is BID's FY-2015 shape, where the row between them is the MHB line — so
     the guess writes merger cash into the FX account and the identity, testing arithmetic that
     is correct, confirms it.
+
+    ⚠️ **THIS TEST ASSERTED THE DEFECT UNTIL 2026-08-27 (`P39`).** It pinned the guard as
+    CONDITIONAL — refusing under `extra_terms=True` and claiming merger cash under
+    `extra_terms=False`, which it called *"today's behaviour, and it is the defect"*. That
+    second half was live on 44 of the 47 layers, `onnx@200+relax` (layer 5) among them, and
+    by then it had already written two cells of `cf_HOSE_BID.csv`: Q4-2015 `1,477,340` (MHB)
+    and Q2-2017 `1,540,994` (LienVietPostBank), each confirmed by the identity to the đồng.
+    **A test that pins a defect as expected behaviour is how the defect survives a rewrite**,
+    so it now pins the only acceptable answer: the column stays empty, on every layer.
     """
     rows = [
-        _row("hdtc_iv_luu_chuyen_tien_thuan_trong_nam", 4_129_579),
-        _row("tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_nam", 50_199_476),
+        _row("hdtc_iv_luu_chuyen_tien_thuan_trong_nam", FY15_NET),
+        _row("tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_nam", FY15_OPEN),
         _row("tien_va_cac_khoan_tuong_duong_tien_tu_viec_nhan_sap_nhap_mhb", MHB_PRIOR),
-        _row("tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_nam", 55_806_145),
+        _row("tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_nam", FY15_CLOSE),
+    ]
+    out: dict = {}
+    builder._recover_totals(out, _statement(rows), {}, False)
+    assert C_FX not in out
+
+
+def test_the_refused_merger_row_is_still_counted_by_the_span(builder):
+    """Refusing the FX CLAIM must not refuse the STATEMENT — that is the whole trade.
+
+    The same rows the test above leaves unmapped still have to reconcile: `_extra_cash_terms`
+    sums what the filing printed between the two balances and the identity closes exactly,
+    with the merger figure written to no column at all (§5 rule 2).
+    """
+    rows = [
+        _row("hdtc_iv_luu_chuyen_tien_thuan_trong_nam", FY15_NET),
+        _row("tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_nam", FY15_OPEN),
+        _row("tien_va_cac_khoan_tuong_duong_tien_tu_viec_nhan_sap_nhap_mhb", MHB_PRIOR),
+        _row("tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_nam", FY15_CLOSE),
     ]
     st = _statement(rows)
-
-    loose: dict = {}
-    builder._recover_totals(loose, st, {}, False, False)
-    assert loose.get(C_FX) == MHB_PRIOR          # today's behaviour, and it is the defect
-
-    guarded: dict = {}
-    builder._recover_totals(guarded, st, {}, False, True)
-    assert C_FX not in guarded
+    mapped = {C_OPEN: FY15_OPEN, C_NET: FY15_NET, C_CLOSE: FY15_CLOSE}   # no C_FX
+    assert builder._extra_cash_terms(st) == MHB_PRIOR
+    assert builder._cash_flow_identity(dict(mapped), st=st) is None
+    # …and without the span it is unverifiable rather than wrong
+    assert builder._cash_flow_identity(dict(mapped)) is not None
 
 
 def test_a_real_fx_line_is_still_claimed(builder):
@@ -163,8 +194,22 @@ def test_a_real_fx_line_is_still_claimed(builder):
         _row("tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky", 10_975),
     ]
     out: dict = {}
-    builder._recover_totals(out, _statement(rows), {}, False, True)
+    builder._recover_totals(out, _statement(rows), {}, False)
     assert out.get(C_FX) == -25
+
+
+def test_no_layer_can_switch_the_fx_guard_off(builder):
+    """⚠️ `P39`: the guard may not be a knob. `_recover_totals` takes no flag that reaches it.
+
+    Pinned structurally rather than by behaviour, because the failure this replaces was not a
+    wrong threshold — it was a correct guard wired to a parameter that 44 of 47 layers left
+    false.
+    """
+    import inspect
+
+    params = set(inspect.signature(builder._recover_totals).parameters)
+    assert "extra_terms" not in params
+    assert params == {"out", "st", "src", "split_tail"}
 
 
 # ── the default path is untouched ───────────────────────────────────────────────────────
@@ -202,12 +247,28 @@ def test_the_new_layers_are_last_and_relaxed():
     names = [l.name for l in FinancialsBuilder.LAYERS]
     extra = [l for l in FinancialsBuilder.LAYERS if l.cash_extra_terms]
     assert extra, "no layer carries cash_extra_terms"
-    assert names[-3:] == [l.name for l in extra], "the new layers must sit last"
+    assert names[-len(extra):] == [l.name for l in extra], "the span layers must sit last"
     for l in extra:
         # the identity only runs under `verify_cash`, which rides with `relax_totals`
         assert l.relax_totals
-        # every figure of BID's FY-2016 tail is only correct at pad 6
-        assert l.crop_pad == 6.0
+
+
+def test_every_span_layer_still_carries_the_wide_crop():
+    """⚠️ `P39`, and this test exists to stop a plausible argument being re-made.
+
+    Three default-crop `+extra` layers were added on 2026-08-27 on the reasoning that the span
+    REPLACES the positional FX guess and so must reach the same statements — every existing
+    span layer carries `crop_pad=6.0`, a padding BID's FY-2016 needed for an unrelated reason,
+    and the two quarters the guess actually wrote read correctly at the DEFAULT crop.
+
+    **The measurement went against it.** Driven through the real cascade with a full history,
+    BID Q4-2015 was accepted by `onnx@300+pad6+annual+extra` (27 items) and Q2-2017 by
+    `onnx@200+pad6+annual+extra` (19 items) — `open`, `IV` and `close` identical to disk, `fx`
+    empty — and neither new layer fired. They were removed the same day: a layer recovering
+    zero quarters is pure cost, and being well-argued is not evidence.
+    """
+    extra = [l for l in FinancialsBuilder.LAYERS if l.cash_extra_terms]
+    assert extra and all(l.crop_pad == 6.0 for l in extra)
 
 
 def test_the_label_repair_runs_before_the_bare_layer():

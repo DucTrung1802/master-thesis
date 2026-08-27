@@ -544,6 +544,37 @@ partitions and 0 errors, so it was issued some other way (a different shell, or 
 What it means is that **the command as WRITTEN in this file does not work in this repo's
 primary shell**, which is worth more than knowing which shell was used on the day.
 
+
+#### ⚠️ 3e-quinquies. THE `periods` REPAIR PROCEDURE — four steps, and step 4 is the one people skip
+
+Measured four times now (CLAUDE.md §6-2-vicies, §6-2-unvicies, §6-2-quatervicies,
+§6-2-quinvicies). A subset run is the only affordable way to repair a quarter and it has two
+properties that make an unguarded one dangerous:
+
+1. ⚠️ **PUT THE PRECEDING QUARTERS IN `periods` TOO.** `sane` judges magnitude against the
+   quarters accepted **in this run**, so a subset run holding only the target gives it no band
+   and it fails open — and the cascade may then stop at an EARLIER layer and write something no
+   probe ever judged (`PGB-1`: `onnx@200`'s garbage passed with no history and was refused with
+   it). Three or four neighbouring quarters are enough; they need not be the expensive annuals.
+2. ⚠️ **BACK THE NINE CSVs UP FIRST.** An authoritative run writes NON-MERGING progress
+   snapshots, so an interrupted one truncates the file (`SAN-1`, measured: ACB's three CSVs left
+   at 9 rows against 74).
+3. **Diff against that backup afterwards** — `git diff` is not enough, because the run may have
+   been merged into rows that were already committed.
+4. ⚠️ **RESTORE EVERY NON-TARGET PERIOD THAT MOVED. THE RULE IS THAT A `periods` RUN MAY ONLY
+   WRITE THE QUARTER IT IS REPAIRING.** The history-providing quarters are re-parsed with a
+   THINNER history than they originally had and can be silently downgraded. Measured forms so
+   far: a whole OCR layer lost (Q1-2015 fell `onnx@200+pad6+components` → `onnx@200`, taking two
+   line items with it), figures changed, and — ⚠️ **the form to design against** —
+   **`publish_date` blanked on four statements and nothing else**, in quarters whose numbers
+   were untouched. **A diff that compares only the FIGURES would have called that run clean.**
+   Compare every column.
+
+⚠️ **AND A `periods` RUN CANNOT DELETE.** `build` sets `merge = bool(periods)`, so it upserts:
+a quarter it attempts and FAILS keeps whatever the file already held. Use it to ATTEMPT a
+repair, never to prove one is impossible — and if the goal is to REMOVE a wrong value, verify
+afterwards that the row was actually overwritten.
+
 ### ⚠️ 3e-bis. AND THE PDF IS THE ONLY SOURCE A FINANCIAL STATEMENT MAY COME FROM
 
 **Standing rule as of 2026-08-24 — CLAUDE.md §5 rule 24.** Every balance-sheet,

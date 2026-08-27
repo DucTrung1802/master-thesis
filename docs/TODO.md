@@ -130,6 +130,7 @@ table survives and is still the best thing in it.
 >
 > | group | items | what it is |
 > |---|---|---|
+> | **0 · PARSER** | **`P43`, `P41`, `P44`, `P42`, `P45`** | ⚠️ **ADDED 2026-08-27, ABOVE EVERYTHING** — a review of `cafef_pdf_parser.py` + `cafef_financials.py` against the three parsed tickers on disk. ✅ **`P39` DONE 2026-08-27** (its FX guard was live on 3 of 47 layers and had already written merger cash into two cells), and **two of its pieces moved to `P43`** rather than to a new code, because both are applications of `P43`'s invariant. Top row is now **`P43`** — WRONG NUMBERS every gate passed (10 rows, plus 4 FX cells and the `alternates` guard `FXM-1` still needs); `P41` and `P42` are the cost `P38`/`P6` are budgeted on |
 > | **A · DATA** | **`P2`** | ✅ **`P1` DONE 2026-08-23** — per-ticker freshness shipped. What is left is the filing PDFs |
 > | **B · OCR** | **`P37`, `P38`, `P6`, `P5`, `P4`** | ⚠️ **`P37` was inserted 2026-08-24 and sits ABOVE `P6`**: the builder still defaults to CafeF's HTML tabs, so running the OCR program first would import transcribed rows at 784× scale (`FIN-1`). Then `P6`, whose input is complete. ⚠️ `P3` (the JSON gate) is CLOSED BY DECISION, not by measurement — the source is CafeF PDFs |
 > | **C · OUTPUT** | `P7`-`P8` | ✅ **`P7` UNBLOCKED 2026-08-23** — the cross-section is 771 names again, not 7 |
@@ -416,15 +417,21 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 
 | # | item | ⏱ | local? | was | why it is here |
 |---|---|---|---|---|---|
+| | **⬛ 0 · THE PDF PARSER ITSELF — ⚠️ ADDED 2026-08-27, ABOVE EVERYTHING. Reviewed against the CODE and against the three parsed tickers ON DISK. Two of these are WRONG NUMBERS that every gate passes; two are the cost `P38` and `P6` are actually budgeted on** | | | | |
+| **P43** | ⚠️ **A FREE INVARIANT NOBODY CHECKS — and it flags 10 BID cash flows ALREADY ON DISK** | ~3 h | ✅ CPU | — | A cumulative cash flow opens on 1 January, so **every quarter of a year shares one opening balance and it equals the prior Q4's closing**. §6-2-duovicies used exactly that by hand to revert Q4-2016 and called it *"reusable and cheap"*; it is still not code. Run over the three parsed tickers 2026-08-27, **0 s, no OCR**: **7 BID quarters carry the 1-Jan opening in the CLOSING slot** (Q1-2013, Q3-2013, Q1-2014, Q1-2016, Q1-2017, Q3-2019, Q3-2020 — ⚠️ every one accepted at `onnx@200`, a STRICT layer where `verify_cash` is off so the identity never ran), **2 carry it in the MOVEMENT slot** (Q1-2020, Q1-2021), and **BID Q3-2011 holds a closing cash balance of −23,457,326,032,339** — negative cash, passed by `reconcile` (no sign test), `sane` (`abs()`) and `_closing_breakdown` (fails open with no printed breakdown) alike. ACB **0** of every shape. ⚠️ **VCB's 17 opening mismatches are MIXED — a SCREEN, not a verdict**: Q1-Q3 2023 differ from Q4-2022 by exactly one digit (412,235,294 vs 412,135,294) while 2018 and 2024 may be genuine restatements. **↓ detail block** |
+| **P41** | ⭐ ⚠️ **THE SHARE-CAPITAL NOTE SCAN — unbounded, repeated 22×, and its anchor is BANK-ONLY** | ~3 h | ✅ | — | ⚠️ **THIS IS THE `document size` TERM `P38`'s COST MODEL HAS NO TERM FOR.** `PdfParser.share_capital` walks from the last statement page to the **END of the document**, OCR-ing every page until it meets `SHARE_NOTE_ANCHOR`, and `parse()` calls it **once per parse key — 22 of them, counted**. Nothing caches it and nothing bounds it. **Measured 2026-08-27**: BID Q1-2021 hợp nhất is 30 pages, **100 % image-only**, 14 notes pages after the statements, **12.2 s per pass at onnx@200** (0.87 s/page, warm-up discarded) → **≈4.5 min per filing** — while BID has yielded **0 of 62** `shares_issued` and ACB **1 of 67**. FY-2010 is **96 pages**: ~80 notes pages ≈ 70 s/pass × 22 ≈ **~26 min *est.* of the 73 min** §6-2-noviesdecies measured for Q4-2010, and FY-2011 (85 pages, accepted at layer 1, ONE pass) measured **1.5 min** — about one pass over its notes and nothing else. ⚠️ **AND IT SCALES WITH `P6`, NOT WITH BANKS**: the anchor is *"phat hanh cua ngan hang"*, so on `corp`/`securities`/`insurance` it can never match — all 26,280 documents would OCR their whole notes tail and return nothing. **↓ detail block** |
+| **P44** | ⚠️ **TWO HOLES IN THE GATES THAT LET `P43`'s ROWS THROUGH** | ~2 h | ✅ CPU | — | **(1)** `sane`'s comparative-column gate is `if got and got in set(history)` — **exact integer equality, so a UNIT MISMATCH is blind to it.** BID Q1-2013 reads 37,887,175,002,994 (đồng) against an accepted Q4-2012 of 37,887,175,000,000 (triệu × 1e6): a relative gap of **8e-11**, and the gate saw two different integers. `any(self._equal(got, h) …)` at `EQUAL_REL = 1e-5` catches it and cannot reach a genuinely different quarter — the docstring's argument (*"two quarters agreeing to the last unit"*) survives, measured by ratio instead of by identity. Same shape on the balance sheet: **BID Q1-2020 and Q2-2020 carry an identical `tong_tai_san`** (1,446,040,448 tr) and both were accepted, because they were parsed in two different `periods` runs. **(2)** `reconcile`'s fallback branch allows **2 % of total assets** when the grand-total row is absent — **~61 nghìn tỷ VND for BID** — against `_equal`'s 1e-5 everywhere else, with no comment saying why. ⚠️ **MEASURE FIRST**: count how many accepted statements actually take that branch before touching the number |
+| **P42** | ⚠️ **THE PARSE CACHE IS KEYED TOO COARSELY — 22 OCR passes for 7 OCR configurations** | ~4 h | ✅ | — | `_parse_cascaded`'s cache key carries `join_digits`, `title_over_form`, `loose_form_code`, `realign_rows`, `notes_boundary`, `tail_continuation`, `label_wrap` and `unit_from_document` — ⚠️ **not one of which changes the pixels→text step**. They run in `_page_kind`, `_fill_continuations` and `table_rows`, i.e. AFTER `scan()` has already OCR'd every page; `unit_from_document` is not read inside `scan` at all. Only `(engine, dpi, crop_pad)` changes the OCR, and there are **7** of those against **22** distinct keys (counted 2026-08-27 over the 47 layers). Cache the per-page `(text, words)` under `(engine, dpi, crop_pad)` and re-derive classification and rows from it: a fully-failed document drops from 22 OCR passes to 7. ⚠️ **Compounds with `P41`** — the same cache makes the note scan free on every repeat |
+| **P45** | **PARSER HYGIENE — four small things, none of them a number** | ~3 h | ✅ CPU | — | **(a)** `if not parser.ocr_ready and layer.engine != "onnx": continue` — with onnxruntime absent the **onnx layers still run** and silently return an empty text layer for an image-only PDF, while tesseract is skipped; make it symmetric. **(b)** `_decumulate` iterates `sorted(rows)` over strings, so `"Q1-2009" < "Q2-2008"` — it is correct today **only because the quarter digit precedes the year**, and `_period_key` already exists for this. **(c)** `_label_score` runs `SequenceMatcher` n×m times per statement per layer (~32 k for a 316-row statement) with no memoisation, and layers sharing one cached parse re-score the identical pairs. **(d)** line grouping in `table_rows`, `_value_row_offset` and `share_capital` is a linear scan over existing keys — O(words × lines); sort + bisect. ⚠️ **(a) and (b) are LATENT, not observed** — recorded so they are not re-derived |
+| **P39** ✅ | **DONE 2026-08-27 — THE FX GUARD WAS WIRED TO A FLAG, AND IT HAD ALREADY WRITTEN TWO WRONG CELLS** *(closed and re-scoped 2026-08-28)* | 1h26m *actual* | ✅ | — | ✅ **This item's job was to MEASURE the two written fixes, and both are now measured.** **Fix 1 (positional FX): wrong**, and its guard was gated on `cash_extra_terms`, so it was live on 3 of the 47 layers and absent on `onnx@200+relax` — **layer 5**. It had already written merger cash into the FX column twice: BID **Q4-2015** `1,477,340` (MHB) and **Q2-2017** `1,540,994` (LienVietPostBank), each confirmed by the identity to the đồng. Guard made unconditional; `extra_terms` and `cash_extra_terms` removed from `_recover_totals` / `map_to_schema`, both dead once it was — ⚠️ *a knob that decides whether a guard applies is a knob that turns a guard off*. **Fix 2 (alternate filing): measured to need a guard that cannot be built as this item describes** — see below. ✅ **Blast radius MEASURED, not argued**: all 32 rows the branch could have produced re-parsed at their own recorded layers — **30 unchanged, 2 dropped**, exactly the defect, 7.0 min. ✅ **Repaired**: one Dagster run, 7 periods, RUN_SUCCESS; `git diff` on the CSV is **2 insertions, 2 deletions** — both targets keep `open`/`IV`/`close` and the fourth term is now unattributed. BID's FX column goes 6 rows → 4. ⚠️ **A prediction of mine died here**: three default-crop `+extra` layers I added were fired by NEITHER quarter and were removed the same day. ⚠️ **The history-provider downgrade reproduced a FOURTH time, in a new form** — four statements silently lost `publish_date`, which a figures-only diff would have called clean. ⚠️ **TWO PIECES OF WORK MOVED TO `P43`, THEY WERE NOT DROPPED**: (a) the `alternates` restatement guard, because it needs `P43`'s FORWARD invariant — BID's unaudited and audited Q4-2016 share the same opening balance, so the backward check this item proposed cannot separate them; (b) **four BID rows still carrying a wrong FX value** (Q4-2011 48,919,272, Q2-2012 40,110,402 — cash balances) written at STRICT layers, which this fix does not reach. ⚠️ **`FXM-1` STAYS OPEN in `ISSUES.md` and now points at `P43`** — the defect is not closed, only this item's half of it. CLAUDE.md §6-2-quinvicies |
 | | **⬛ A · SCRAPE — the data has to EXIST and be FRESH before anything else is worth running** | | | | |
 | **P1** ✅ | **DONE 2026-08-23 — PER-TICKER FRESHNESS SHIPPED** — `pipeline.freshness`, three `health_schema` SQL functions, and three new columns in `pipeline.status_data` | ~35 min *actual* | ✅ | *old `P36`* | ⚠️ **AND IT CORRECTED TWO DOCUMENTED CLAIMS ON ITS FIRST RUN.** (1) The 13 post-re-scrape stragglers carry **SEVEN** distinct dates, not thirteen — `FRZ-1`'s own parenthetical list disproved its prose, and the number was the diagnostic separating a delisting from a scrape failure. The conclusion survives, re-verified another way (each of the 13 raw CSVs ends exactly where silver does). (2) **28 single-name unified schemas are stale** (of 30), in four layers that are a fossil record of every scoped re-scrape: 5 at 2026-08-19, 10 banks at 2026-08-07, 9 at 2026-06-26, 4 at 2026-06-25 — now `SCH-1`, rebuilt the same day at a measured 21 s each. ⚠️ **AND IT CREATED ONE DEFECT OF ITS OWN, `DEP-1`, WHICH IS THE MOST REUSABLE THING HERE**: shipping the health objects as VIEWS blocked every `DROP TABLE` in the repo's builders, i.e. **the monitor blocked every repair it recommended**. Fixed by making them `plpgsql` functions, whose bodies carry no dependency. ⚠️ The alarm is a **SHARE**, not a count — an absolute floor of 5 tickers was written first and fired immediately on five genuine delistings; the two measured regimes are 0.6 % and 77 %. ⚠️ And `sessions_behind` is counted against the **price spine's** calendar, never the measured table's own — a frozen table's own dates cannot contain the sessions it is missing, so it would report every ticker 0 behind. **22 tests, no database.** CLAUDE.md §6-2-quinquies; `pipeline/CONTEXT.md` §1a-bis; RUNBOOK.md §8a |
 | **P2** | **SCRAPE FILING PDFs — ✅ PHASE 1 (`year_max=2020`) DONE 2026-08-23; phase 2 (`year_min=2021`) PARKED behind the OCR** (`raw/cafef_pdfs`) | 74 min *actual* + 267 GiB | ✅ | — | ✅ **50,345 of 50,382 expected documents landed for all 784 codes**, one Dagster run, 0 errors — the 37 absent are CafeF's own dead links (404 on both hosts). Verified per ticker against a pre-run count, not off the green run. ⚠️ **Phase 2 is ~269 GiB against 197 GiB free, so it does not fit today and is not supposed to** — it runs after `P6`. **↓ detail block**; CLAUDE.md §6-2-septies |
 | | **⬛ B · OCR — ⚠️ THE SOURCE IS FIXED: CafeF PDFs, decided 2026-08-23. The time wall is solvable; the SCHEMA wall is what decides how many names this reaches** | | | | |
 | **P40** ✅ | **DONE 2026-08-27 — BID IS 171 / 171 FROM 2012, all three statements complete** | 35m 20s *actual* | ✅ | — | ✅ Balance sheet **57/57**, income statement **57/57**, **cash flow 57/57**; every row of the ticker reads `pdf` or `missing` and nothing else. ⚠️ **THE LAST CELL WAS NOT AN FX PROBLEM AND NOT A DPI PROBLEM.** Two blockers: the movement figure's LAST DIGIT sat outside the detector crop (`6.711.633` reads as `6.711.6.3` / `6.711.610` / `6.711.63)` at 200/300/400 and correctly at `crop_pad=6`), and the filing prints a FOURTH term — merger cash 3,004,011 — the chart of accounts has no column for. ⚠️ **This item's own previous text said *"misread at every DPI"* and that sentence is what kept the quarter closed for a day**: true of the default crop, false at pad 6, never tried. New flag `cash_extra_terms` + three layers; identity exact to the đồng. CLAUDE.md §6-2-quatervicies |
-| **P39** | ⚠️ **RE-SCOPED 2026-08-27 — BOTH WRITTEN FIXES ARE MEASURED WRONG; what is left is the CLEAN-UP** (`FXM-1`) | ~4 h GPU | ✅ | — | ❌ **Fix 1 (positional FX) is UNSAFE** — the row it claims is BID's MERGER line in three years, so the identity closes *because the arithmetic is right and the account is wrong* and cannot reject what it confirms. ❌ **Fix 2 (alternate filing) has NO GUARD FOR A RESTATEMENT** — the unaudited Q4-2016 closes ~62.6 tn against the audited 65,521,789 and both gates pass on either; **that fallback is where the reverted 61,575,636 came from**. ✅ **The safe half shipped as `cash_extra_terms`** (sums the span, exact to the đồng, writes the term nowhere, refuses a non-FX row) and closed `P40`. ⚠️ **The unsafe guess is GUARDED, not removed.** ⚠️ **And the "8 of 13" this item was sized on was a reporting artefact** — a cascade's final refusal names the hardest path tried, not the blocking defect. CLAUDE.md §6-2-quatervicies. **↓ detail block**. ⚠️ **NOTHING BELOW THE BOX HAS BEEN RUN, AND THE CODE IS ON `main_v3`.** Probing BID's 13 failed statements through the full 26-layer cascade found ONE bottleneck: **8 of the 13 end at `cash flow unverifiable — fx not mapped`**. Two fixes are written — an FX-line positional recovery and an alternate-document fallback — and **neither has touched real data**. ⚠️ **A regression over ACB + VCB + BID is part of this item, not a follow-up**: the file's own rule is that a change recovering six quarters and quietly breaking a sixtieth is a net loss. **↓ detail block**; `ISSUES.md` `FXM-1`; CLAUDE.md §6-2-quindecies |
 | **P38** | ⭐ **PARSE THE VN30 BASKET — 27 tickers left, ONE AT A TIME** ⚠️ **STARTED 2026-08-25** | ⚠️ **~190 h GPU *est.*, re-budgeted** | ⚠️ Kaggle? | — | Every ticker in `vn30.csv`, run **per ticker** (the asset is partitioned that way and `resource: gpu` caps it to one step anyway). ✅ ACB and VCB done 2026-08-24; ✅ **BID done 2026-08-25 — 7 h 23 m, 62 documents, 168/210 cells `pdf`, 0 HTML rows, ACB/VCB verified byte-identical against a pre-run backup**. ⚠️ **AND IT TRIPLED THE COST ESTIMATE**: BID ran at **7.15 min/document** against the 2.37 this row was budgeted on, because `_parse_cascaded` breaks only when all three statements are accepted and **36 %** of BID's quarters need the full 21-layer cascade (VCB 4 %, ACB 11 %). **min/doc ≈ 0.94 + 0.173 x %failing** over three points. CLAUDE.md §6-2-quindecies. ⚠️ **ONLY 11 OF THE 28 CAN RUN TODAY**: the parser holds one template family (`bank`), and VN30 is **13 banks / 17 non-banks** — `BCM BVH FPT GAS GVR HPG MSN MWG PLX POW SAB SSI VHM VIC VJC VNM VRE` need `P5` first. **↓ detail block** |
 | **P37** | ⚠️ **TURN OFF THE HTML FALLBACK, THEN RE-PARSE ACB AND VCB AUTHORITATIVELY** (`FIN-1`) | ~5 h GPU | ✅ | — | ⚠️ **THIS HAS TO LAND BEFORE `P6`, AND THAT IS THE WHOLE ARGUMENT FOR ITS POSITION.** `CafefFinancialsBuilder` defaults `use_api=True` and fills any period the PDF pass missed from CafeF's web tabs — **run `P6` as it stands and the OCR program imports HTML-transcribed rows at 784× scale**, invisibly, because nothing downstream reads the `source` column. Today it is 34 rows (ACB 27, VCB 7). **↓ detail block** — CLAUDE.md §6-2-octies; `ISSUES.md` `FIN-1` |
-| **P6** | ⭐ **OCR THE ≤2020 CORPUS — the highest priority item** (50,345 documents, 784 codes, already on disk) | days of GPU | ⚠️ see below | — | ⚠️ **PROMOTED TO THE TOP 2026-08-23 by decision, and its INPUT is now complete** — `P2` phase 1 landed every ≤2020 filing for every listed code. ⚠️ **BUT RUNNING IT TODAY REACHES 20 OF 784 NAMES**: the parser holds one template family (`bank`), so `P5` is not a parallel task, it is the thing that decides whether this item means 20 tickers or 784. ⚠️ **AND A THIRD WALL WAS MEASURED 2026-08-24 — `documents()` OPENS ONLY 24.8 % OF THE ARCHIVE**: it keeps `consolidated == "True"` and nothing else, so **273 of 784 tickers yield NOTHING AT ALL** (a company with no subsidiaries files no `hợp nhất` report). ✅ `allow_parent` shipped the same day, off by default — it takes the archive from **13,912 to 26,280 documents** and the empty tickers from 273 to **22**, and **doubles the OCR bill**. CLAUDE.md §6-2-nonies And 2.4 h/ticker locally is ~78 days, which is what `P4` is for. ⚠️ **The parse skips complete YEARS, not quarters** (`orchestration` §2a) — a year is the unit because `_decumulate` needs this run's priors, so a partial skip deletes the very quarter the run exists to fix. ⚠️ **`skip_existing=False` is the AUTHORITATIVE run**: skipping makes every run a subset run and flips the `sane` magnitude guard to failing open |
+| **P6** | ⭐ **OCR THE ≤2020 CORPUS** (50,345 documents, 784 codes, already on disk) | days of GPU | ⚠️ see below | — | ⚠️ **THIS ROW READ *"the highest priority item"* UNTIL 2026-08-27, AND GROUP 0 NOW SITS ABOVE IT** — not because this matters less but because `P41` and `P42` change what it COSTS (~580 h *est.* of the bill is a note scan three of the four templates cannot produce a value from) and `P39`/`P43` change what it would WRITE. Run those first; this is unchanged otherwise. ⚠️ **PROMOTED TO THE TOP 2026-08-23 by decision, and its INPUT is now complete** — `P2` phase 1 landed every ≤2020 filing for every listed code. ⚠️ **BUT RUNNING IT TODAY REACHES 20 OF 784 NAMES**: the parser holds one template family (`bank`), so `P5` is not a parallel task, it is the thing that decides whether this item means 20 tickers or 784. ⚠️ **AND A THIRD WALL WAS MEASURED 2026-08-24 — `documents()` OPENS ONLY 24.8 % OF THE ARCHIVE**: it keeps `consolidated == "True"` and nothing else, so **273 of 784 tickers yield NOTHING AT ALL** (a company with no subsidiaries files no `hợp nhất` report). ✅ `allow_parent` shipped the same day, off by default — it takes the archive from **13,912 to 26,280 documents** and the empty tickers from 273 to **22**, and **doubles the OCR bill**. CLAUDE.md §6-2-nonies And 2.4 h/ticker locally is ~78 days, which is what `P4` is for. ⚠️ **The parse skips complete YEARS, not quarters** (`orchestration` §2a) — a year is the unit because `_decumulate` needs this run's priors, so a partial skip deletes the very quarter the run exists to fix. ⚠️ **`skip_existing=False` is the AUTHORITATIVE run**: skipping makes every run a subset run and flips the `sane` magnitude guard to failing open |
 | **P5** | ⚠️ **NON-BANK RECONCILE ANCHORS — the templates already exist** (`TPL-1`) | ~2-4 days | ✅ | *old `P34`* | ⚠️ **THIS IS THE WALL THAT KAGGLE DOES NOT MOVE, AND ON 2026-08-25 IT WAS MEASURED AND TURNED OUT TO BE SOMETHING ELSE.** It read *"the non-bank template does not exist"* for as long as this item has — ⚠️ **that was wrong**: `schema/` holds **all four** charts of accounts (12 files, 871 rows) and the parser is template-generic. What is bank-shaped is `FinancialsBuilder`'s seven hardcoded **reconcile anchors**. `statements/` holds one family because one family has been RUN. **761 of 781 names are not banks** (230 industrials, 117 materials, 93 consumer staples; only **20** are GICS 401010). With infinite disk and infinite T4 hours the current parser reaches **20 names**. ⚠️ The parser has **never once been run against a corporate filing**, so budget discovery, not just mapping. ⚠️ **AND THE ANCHORS ARE NOT THE ONLY WALL** — 273 tickers file no consolidated statement at all and were invisible to the parser regardless of template (CLAUDE.md §6-2-nonies, fixed by `allow_parent`). The two are independent; both must fall. **↓ detail block** |
 | **P4** | ⚠️ **PUSH THE OCR TO KAGGLE — a `kgpu` job for the statement parse** | ~2-3 days | ⚠️ **quota** | — | **What it fixes:** ~**2.4 h/ticker** on a 4 GB RTX 3050 → 781 tickers ≈ **78 days**. A T4 is 15 GiB and free 30 GPU-h/week. ⚠️ **BUT `kgpu` HAS NEVER SHIPPED A NON-TABLE PAYLOAD.** Every existing job exports `unified_schema` tables to parquet; this one ships **PDFs**, so three things are unmeasured and must be measured before any quota is spent: (a) the **Kaggle dataset size limit** against 100 GB of PDFs — if it binds, the job is per-ticker-batch, not per-universe; (b) whether the **onnx OCR stack** installs on Kaggle's image (`kgpu` §3d already records xgboost 3.2.0 / sklearn 1.6.1 vs `mt_env`, so an image difference is expected, not surprising); (c) the **5.2-min queue floor** (§3d) makes many small jobs the wrong shape — batch. ⚠️ **`rehearse` runs the worker side locally and spends NO quota — do that first, on the two banks that already parse** |
 | | **⬛ C · THE CHAIN'S OUTPUT — unblocked the moment A lands, and it runs on a DIFFERENT resource from B** | | | | |
@@ -684,6 +691,151 @@ to cite in another file.**
 file's own rule, never renumbered, never reused. A TODO item may *point at* one (`P15` at
 `STA-1`, `P1` at `FRZ-1`, `P3` at `FNM-1`) and that is the relationship: **the issue is
 what is broken, the `P<n>` is what somebody is going to do about it.**
+
+---
+
+### P41 · ⭐ ⚠️ THE SHARE-CAPITAL NOTE SCAN — UNBOUNDED, REPEATED 22×, BANK-ONLY ⏱ ~3 h  ·  *(measured 2026-08-27)*
+
+**In one line: a field only VCB has ever produced is costing every filing a full OCR pass
+over its notes section, once per parse key, and nothing bounds it.**
+
+#### The mechanism — three defects stacked, all inside `PdfParser.share_capital`
+
+| | |
+|---|---|
+| **unbounded** | `for i in range(after, doc.page_count)` — it OCRs page after page until it meets `SHARE_NOTE_ANCHOR`. When the anchor is not there, it reads to the **last page of the document** |
+| **repeated** | `parse()` calls it unconditionally, so it runs **once per distinct parse key**. The cascade is **47 layers / 22 distinct keys**, and only the FIRST result is kept — `_parse_cascaded` fills `facts["shares"]` from the first config that produced any statement and discards the other 21 |
+| **bank-only** | `SHARE_NOTE_ANCHOR = "phat hanh cua ngan hang"` — *"issued by the BANK"*. On `corp`, `securities` and `insurance` it cannot match, so the scan is GUARANTEED to run to the end and return nothing |
+
+#### What it has actually produced, counted off the statement CSVs
+
+| ticker | `shares_issued` filled |
+|---|---|
+| VCB | **66 / 68** |
+| ACB | **1 / 67** |
+| **BID** | **0 / 62** |
+
+#### The cost — measured 2026-08-27, `onnx@200`, this machine, warm-up discarded
+
+| | |
+|---|---|
+| BID Q1-2021 hợp nhất | 30 pages, **100 % image-only**, statements end ~p15 |
+| the 14 notes pages the scan walks | **12.2 s**, mean **0.87 s/page** |
+| × 22 parse keys | **≈ 4.5 min per filing**, for 0 values |
+| FY-2010 (96 pages, ~80 notes pages) | ~70 s/pass → **~26 min *est.*** of the **73 min** §6-2-noviesdecies measured for Q4-2010 |
+| FY-2011 (85 pages, accepted at layer 1, ONE pass) | measured **1.5 min** — about one pass over its notes, and nothing else |
+
+⚠️ **THIS IS THE MISSING TERM.** §6-2-noviesdecies recorded *"the cost model has no term for
+document size, and it is worth 3.6×"* and left the mechanism open. The term is
+**(pages after the last statement) × (parse keys)**, and it lives here — not in
+`_parse_cascaded`, which is where both that section and `P38` looked.
+
+#### Why it matters more at `P6` scale than at `P38` scale
+
+24 filings sampled at random across 24 tickers: **762 of 934 pages (82 %) are image-only**,
+median ~35 pages per filing. At ~20 notes pages × 0.87 s and an average ~4.6 parse keys
+(from BID's measured 36 % full-cascade rate), that is **~80 s per document × 26,280
+documents ≈ 580 h *est.***, on a field three of the four templates cannot produce at all.
+⚠️ **An ESTIMATE anchored to BID/VCB/ACB-shaped filings** — the notes tail of a corporate
+filing has never been measured, and `P5` says the parser has never met one.
+
+#### The fix, in order — none of it touches a gate or a figure
+
+1. **Cache it per DOCUMENT, not per parse key.** The share note does not change when the
+   crop padding does. One line in `_parse_cascaded`, or an `lru_cache` keyed on the PDF path.
+   ⚠️ This alone is the 22× and costs nothing in rigour.
+2. **Bound the walk.** The capital note sits early in the notes, not at the end; a cap (~25
+   pages past the last statement) turns an unbounded scan into a bounded one.
+3. **Skip it where the template cannot produce it**, by passing the template down. ⚠️
+   *Widening* the anchor instead is the one step that can change a number, so it needs the
+   ACB + VCB + BID regression like any other parser change.
+
+⚠️ **THE REGRESSION BAR IS NARROW AND THAT IS THE POINT.** `share_capital` writes only
+`shares_authorized` / `shares_issued` / `shares_outstanding`, and no statement value depends
+on them — so the bar is *"the three share columns are unchanged and every statement row is
+byte-identical"*, and it can be proven on one ticker.
+
+---
+
+### P43 · ⚠️ THE INVARIANT NOBODY CHECKS — 10 BID CASH FLOWS ALREADY ON DISK ⏱ ~3 h  ·  *(measured 2026-08-27)*
+
+**The invariant:** these filings print a cash flow that is CUMULATIVE from 1 January, so
+every quarter of a year prints the SAME opening balance, and that balance is the prior
+year's Q4 closing. §6-2-duovicies used exactly this by hand to catch Q4-2016's 61,575,636
+and called it *"reusable and cheap"*. **It is still not code.**
+
+#### What it finds over the three parsed tickers — 0 s, no OCR, no network
+
+| signature | ACB | BID | VCB |
+|---|---|---|---|
+| `closing` == prior Q4's `closing` — the 1-Jan opening in the CLOSING slot | 0 | **7** | 0 |
+| `IV` == prior Q4's `closing` — the opening in the MOVEMENT slot | 0 | **2** | 0 |
+| `opening` != prior Q4's `closing` | 0 | 6 | **17** |
+| **negative closing cash balance** | 0 | **1** | 0 |
+
+**The 7:** Q1-2013 `37,887,175,002,994` · Q3-2013 `…995` · Q1-2014 · Q1-2016 · Q1-2017 ·
+Q3-2019 · Q3-2020. ⚠️ **Every one was accepted at `onnx@200`** — a STRICT layer, where
+`verify_cash` rides with `relax_totals` and is therefore off, so `_cash_flow_identity` never
+ran and nothing tied the closing balance back to the opening one. ⚠️ **Q1-2017 was already
+predicted** by §6-2-quatervicies (*"65,521,789 is Q1-2017's OPENING balance sitting in its
+closing slot"*); **the other six were not**, and they are the reason this is an item rather
+than a footnote.
+
+**The negative:** BID **Q3-2011**, `closing = −23,457,326,032,339`. A bank does not end a
+quarter with negative cash. `reconcile` performs no sign test, `sane` compares `abs()`, and
+`_closing_breakdown` fails open when the filing prints no component list — so all three
+gates pass it.
+
+⚠️ **VCB's 17 ARE MIXED, AND THIS IS A SCREEN RATHER THAN A VERDICT.** Q1-Q3 2023 open on
+412,235,294 against a Q4-2022 closing of 412,135,294 — one digit, an OCR error — while
+2018's four quarters agree with EACH OTHER and disagree with Q4-2017 by a wide margin, which
+is also what a genuine restatement looks like. The check produces CANDIDATES; the filing
+settles them.
+
+#### The work
+
+1. A pure function over the three CSVs — no OCR, no database — asserting the invariant per
+   ticker-year and reporting every violation beside its `method` column. **It belongs at the
+   end of `build`, and it must WARN rather than raise**: a restatement is legitimate and
+   must not fail a run.
+2. A **sign test on the closing cash balance** inside `reconcile`. A balance below zero is
+   not a marginal call and needs no threshold.
+3. Then re-parse the 10 flagged BID quarters. ⚠️ Pre-run backup + diff, and restore every
+   non-target quarter the run moves — the history-provider downgrade has now reproduced
+   **four** times (§6-2-vicies, §6-2-unvicies, §6-2-quatervicies, §6-2-quinvicies), and the
+   fourth is the one to design against: it lost **`publish_date` on four statements** and
+   nothing else, so **a diff that compares only the figures would have called that run clean.**
+
+#### ⚠️ TWO PIECES ARRIVED FROM `P39` ON 2026-08-28, AND THEY ARE WHY THIS ITEM IS THE TOP ROW
+
+`P39` closed with its FX half done and two leftovers that have no independent existence —
+both are APPLICATIONS of the invariant above, not separate mechanisms, so they live here
+rather than under a new code.
+
+4. ⚠️ **GUARD `alternates` AGAINST A RESTATEMENT — and it needs the FORWARD reading, which is
+   why `P39` could not do it.** `alternates` trades assurance for coverage: when every layer
+   refuses the chosen document it retries another filing of the same period and entity. BID's
+   **unaudited Q4-2016 quarterly closes ~62.6 tn where the audited annual prints 65,521,789**,
+   both internally consistent, so `reconcile` and `sane` pass on either — and that fallback is
+   where the reverted `61,575,636` came from. ⚠️ **The check `P39` proposed cannot separate
+   them**: the two filings share the SAME opening balance, so comparing the opening against
+   the prior Q4's closing is blind to the disagreement. What separates them is the opening
+   balance the **2017** quarters print — three independent readings, all 65,521,789 — i.e.
+   exactly the forward half of the invariant this item builds. **The guard is: an
+   alternate-sourced row may not contradict what later quarters independently agree on.**
+   ⚠️ **`FXM-1` cannot close until this ships**, and that issue now points here.
+5. ⚠️ **FOUR BID ROWS CARRY A WRONG FX VALUE THAT `P39`'s FIX DOES NOT REACH.** Q4-2011
+   `48,919,272` and Q2-2012 `40,110,402` are cash BALANCES sitting in
+   `hdtc_vi_dieu_chinh_anh_huong_cua_thay_doi_ty_gia`, and both were written at **strict**
+   layers by `_align` / `_anchor` — not by the positional guess `P39` removed, so its guard is
+   irrelevant to them. (Q4-2009 and Q4-2012 hold a literal `0`, which is a different question.)
+   ⚠️ **An FX adjustment the size of the entire cash balance is a screen this item can run for
+   nothing**: `|fx| > 0.5 x |closing|` is not a threshold that needs tuning.
+
+⚠️ **WHAT THIS DOES NOT DO.** It cannot see a statement taken from the comparative column
+consistently, and it cannot judge the income statement or the balance sheet — neither has a
+cross-quarter identity of this kind. It is **one invariant, on one statement**, and it found
+ten rows that 47 layers and two gates did not.
 
 ---
 
