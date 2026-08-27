@@ -3307,6 +3307,69 @@ restored.** The log says `RUN_SUCCESS` and names a layer; it says nothing about 
 Q3-2017, Q4-2017, Q3-2018. `FXM-1`'s written fix is measured WRONG (§6-2-vicies) and must not
 be run as it stands.
 
+### ⚠️ 6-2-duovicies. THE SEVEN `fx not mapped` QUARTERS — SIX WERE NEVER AN FX PROBLEM, AND THE SEVENTH WAS WRONG
+
+Run 2026-08-27, 15 periods, **1h41m**, 0 errors. ⚠️ **A prediction was recorded before it ran**
+— *"several will parse at a STRICT layer, because `fx not mapped` is the RELAXED path's
+symptom and the real defect is the labels"* — and it holds.
+
+| target | layer that won | new layer needed? |
+|---|---|---|
+| Q4-2015 | `onnx@200+relax` | no |
+| Q3-2016 | **`onnx@200`** | no |
+| Q4-2016 | `onnx@200` | ⚠️ **the value is WRONG — see below** |
+| Q2-2017 | `onnx@200+relax` | no |
+| Q3-2017 | **`onnx@200`** | no |
+| Q4-2017 | `onnx@300` | no |
+| Q3-2018 | **`onnx@200`** | no |
+
+⚠️ **NOT ONE NEEDED `tail_continuation`, `label_wrap` OR `unit_from_document`.** Four won at
+plain `onnx@200`. What actually unblocked them was `PGB-1`'s `_anchor` seam split, shipped
+2026-08-26 — the same change that recovered Q3-2015 — and **nobody had re-run these quarters
+since.** ⚠️ **So `FXM-1` is far smaller than its "8 of 13" record claims**: at a strict layer
+`verify_cash` is off and the identity is never demanded, so the FX line is not needed at all.
+The 2026-08-25 probe read the LAST layer's reason, and the last layer is always the most
+relaxed one. **A cascade's final refusal names the hardest path tried, not the blocking
+defect.**
+
+#### ⚠️ AND ONE RECOVERED VALUE WAS WRONG — caught by a check no gate performs
+
+BID's cash flow is cumulative from 1 January, so **every quarter of a year must share one
+opening balance**, and it must equal the prior year's closing. Applied across 2014-2018, every
+recovered OPENING is corroborated by an independent quarter — and two closings are not:
+
+| | on disk | the filing's own printed figure |
+|---|---|---|
+| **Q4-2016 closing** | **61,575,636** | **65,521,789** ❌ |
+| Q4-2017 closing | 100,455,652 | plausible (0.28 % from 2018's opening — a restatement) |
+
+Re-reading FY-2016 directly: *cash at start of year* **55,806,145**, *cash received with MHB*
+**3,004,011**, *cash at end of year* **65,521,789** — and 65,521,789 is exactly the opening
+that Q2-2017, Q3-2017 and Q4-2017 independently agree on. **Q4-2016 was reverted to `missing`.**
+⚠️ Its identity residual was **exactly +1,000,000,000,000**, a suspiciously round number that
+`reconcile` and `sane` both accepted.
+
+⚠️ **THE CHECK THAT FOUND IT IS REUSABLE AND CHEAP**: a cumulative cash flow's opening balance
+is printed four times a year and once more as the prior year's close, so **five independent
+readings of one number** exist in the corpus already. No OCR, no network — and it caught what
+43 layers and two gates did not.
+
+#### ⚠️ BID HAS THREE MERGERS IN THIS DATA, AND EACH ADDS AN UNMAPPED FOURTH TERM
+
+MHB in 2015 (**1,477,340**) and again in 2016 (**3,004,011**), LVB in 2017 (**1,540,994**).
+Each is a real cash source with no column in the bank chart of accounts, so it is correctly
+left unmapped — and each shows up as a **constant identity residual across that year's
+quarters**, which is how they were told apart from OCR noise. ⚠️ **This is why `FXM-1`'s
+positional guess must not ship**: on any of these quarters it would claim the merger line as
+FX and the identity would confirm it.
+
+| | |
+|---|---|
+| BID cash flow | 54 → **60** parsed |
+| **from 2012** | **170 / 171 = 99.4 %** — balance sheet **57/57**, income statement **57/57**, cash flow **56/57** |
+| the one gap | **Q4-2016**, and the correct closing is known: **65,521,789** mn |
+| collateral | **5 history-provider downgrades**, all restored — the pattern is now measured **three times** |
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
