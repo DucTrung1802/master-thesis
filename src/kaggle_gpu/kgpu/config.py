@@ -71,6 +71,18 @@ ACCELERATORS = {
 # The single artefact a panel job ships, and the key it takes in the manifest.
 PANEL_TABLE = "panel"
 
+# ⚠️ **THE THIRD PAYLOAD SHAPE, AND THE FIRST THAT SHIPS NO DATABASE AT ALL** (2026-08-28).
+# A `documents` job runs the CafeF PDF parse on a worker's GPU, and that parse never touches
+# `database_main_v2` — its inputs are filing PDFs, twelve chart-of-accounts CSVs and two OCR
+# model files. So this mode ships a ZIP of files rather than parquet, and the bootstrap must
+# NOT swap `UnifiedSchemaReader`: there is nothing to swap it for and `feature_selection` is
+# not even in the payload. The manifest's `mode` is what tells the three worker-side branches
+# apart, and it is written for every mode so a reader never has to infer it.
+DOCUMENTS_ARCHIVE = "documents.zip"
+MODE_TABLES = "tables"
+MODE_PANEL = "panel"
+MODE_DOCUMENTS = "documents"
+
 
 @dataclass(frozen=True)
 class DataConfig:
@@ -100,6 +112,14 @@ class DataConfig:
     #
     # {"top_n": 300, "liquidity_before": "2014-01-01", "horizons": [20], "min_width": 5}
     panel: Optional[dict] = None
+    # ⚠️ **DOCUMENTS MODE — filings, not tables.** The OCR parse reads PDFs and CSV files off
+    # disk and never opens a database, so this payload is a zip of exactly the files the parse
+    # touches: the ticker's PDF index, the chosen filings, the twelve charts of accounts, the
+    # statement CSVs already on disk (the magnitude band `sane` needs, and the baseline the run
+    # scores itself against) and the two OCR models.
+    #
+    # {"exchange": "HOSE", "symbol": "VCB", "periods": ["Q1-2026"], "allow_parent": false}
+    documents: Optional[dict] = None
 
     @property
     def slug(self) -> str:
@@ -109,8 +129,22 @@ class DataConfig:
     def is_panel(self) -> bool:
         return bool(self.panel)
 
+    @property
+    def is_documents(self) -> bool:
+        return bool(self.documents)
+
+    @property
+    def mode(self) -> str:
+        if self.is_documents:
+            return MODE_DOCUMENTS
+        return MODE_PANEL if self.is_panel else MODE_TABLES
+
     def resolved_tables(self, pools: Optional[List[str]]) -> List[str]:
         """The tables to export: explicit `tables`, else the job's POOLS, + targets."""
+        if self.is_documents:
+            # No database is involved at all — naming a pool here would promise the worker a
+            # frame it never receives, which is the same defect panel mode avoids one line down.
+            return []
         if self.is_panel:
             # A panel job ships ONE artefact, already joined. Naming pools here would
             # promise a shape the worker never sees.
@@ -297,6 +331,29 @@ def _validate(cfg: JobConfig) -> JobConfig:
                 f"({title!r}); Kaggle requires 6-50 and rejects it only after the "
                 f"whole payload has been exported and uploaded."
             )
+        # ⚠️ **THE THREE MODES ARE EXCLUSIVE AND THE MANIFEST CARRIES ONLY ONE.** A job naming
+        # both `panel` and `documents` would export one of them and the worker would branch on
+        # the other — the shape of failure this loader exists to make impossible.
+        if cfg.data.is_documents and (cfg.data.is_panel or cfg.data.tables):
+            raise ValueError(
+                f"job {cfg.name!r}: data.documents cannot be combined with data.panel or "
+                f"data.tables — a documents payload ships filings and opens no database."
+            )
+        if cfg.data.is_documents:
+            spec = cfg.data.documents or {}
+            unknown = set(spec) - {
+                "exchange", "symbol", "periods", "allow_parent", "period_min",
+                "with_statements", "with_models",
+            }
+            if unknown:
+                raise ValueError(
+                    f"job {cfg.name!r}: unknown data.documents keys {sorted(unknown)}"
+                )
+            if not spec.get("symbol"):
+                raise ValueError(
+                    f"job {cfg.name!r}: data.documents needs a 'symbol' — the payload is one "
+                    f"ticker's filings, and there is no default worth guessing."
+                )
         for rel in cfg.data.source_dirs:
             if not (REPO_ROOT / rel).is_dir():
                 raise FileNotFoundError(

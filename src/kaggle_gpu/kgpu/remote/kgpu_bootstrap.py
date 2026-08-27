@@ -50,6 +50,14 @@ from pathlib import Path
 INPUT_ENV = "KGPU_INPUT_DIR"
 WORK_ENV = "KGPU_WORK_DIR"
 
+# ⚠️ **THE SEAM FOR DOCUMENTS MODE, AND IT IS A STRING IN TWO FILES ON PURPOSE.** This module
+# runs BEFORE the repo source is on `sys.path` — that is its whole job — so it cannot import
+# `web_scraper.pdf_ocr_job` to ask what the variable is called. The other end is
+# `pdf_ocr_job.DATA_ROOT_ENV` / `MODELS_DIR_ENV`, and both sides carry this note.
+DATA_ROOT_ENV = "CAFEF_DATA_ROOT"
+MODELS_DIR_ENV = "CAFEF_MODELS_DIR"
+DOCUMENTS_ARCHIVE = "documents.zip"
+
 
 def input_dir() -> Path:
     return Path(os.environ.get(INPUT_ENV, "/kaggle/input"))
@@ -218,6 +226,75 @@ def _unpack_source(payload: Path, work_dir: Path) -> int:
     return sum(1 for _ in target.rglob("*.py"))
 
 
+def _documents_base(payload: Path) -> Path:
+    """Where the shipped filings ended up — mounted already-unpacked, or extracted here.
+
+    ⚠️ **THE UPLOADED PAYLOAD AND THE MOUNTED PAYLOAD ARE DIFFERENT SHAPES**, the same
+    measured fact `_unpack_source` exists for: Kaggle extracts a zip into a folder named after
+    it and deletes the archive, so `documents.zip` arrives as `documents/`. Both are handled,
+    and `kgpu rehearse` drives both.
+
+    ⚠️ **AN EXTRACTION GOES TO THE TEMP DIR, NEVER TO `/kaggle/working`.** That directory is
+    what Kaggle collects and `kgpu pull` downloads, and this payload is ~100 MB of filings and
+    OCR checkpoints. Unpacking it there would carry every byte home again for nothing.
+    """
+    ready = payload / "documents" / "data" / "cafef"
+    if ready.is_dir():
+        return payload / "documents"
+
+    archive = payload / DOCUMENTS_ARCHIVE
+    if not archive.is_file():
+        raise FileNotFoundError(
+            f"the manifest says mode=documents but {payload} holds neither "
+            f"{DOCUMENTS_ARCHIVE} nor documents/data/cafef. Re-stage it: "
+            f"python -m kgpu data <job>"
+        )
+    import hashlib
+    import tempfile
+
+    # Keyed on the payload path so two jobs rehearsed on one machine cannot land in the same
+    # folder, and so the same payload extracts to the same place every time.
+    key = hashlib.sha256(str(payload).encode()).hexdigest()[:8]
+    base = Path(tempfile.gettempdir()) / "kgpu_documents" / key
+    base.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(archive) as zf:
+        zf.extractall(base)
+    return base
+
+
+def _setup_documents(payload: Path, work: Path, manifest: dict) -> dict:
+    """Point the CafeF PDF parse at the shipped files. Returns what it set, for the log.
+
+    Three environment variables and nothing else — no import, no monkey-patch. `pdf_ocr_job`
+    reads them (`use_data_root`, `use_models`) and the parse then behaves exactly as it does on
+    a machine with the repo's own `raw_data/cafef`.
+
+    ⚠️ `CAFEF_OCR_ENGINE` is set so a default-constructed `PdfParser` is the onnx one. Every
+    `ParseLayer` names its engine explicitly, so this changes no layer's behaviour — it only
+    stops `FinancialsBuilder.__init__` probing for a Tesseract that is not installed here.
+    """
+    base = _documents_base(payload)
+    data_root = base / "data" / "cafef"
+    models = base / "models"
+    if not (data_root / "financials" / "schema").is_dir():
+        raise FileNotFoundError(
+            f"{data_root} carries no financials/schema — without the charts of accounts "
+            f"`schema_of` raises AFTER the OCR, and every statement is rejected as "
+            f"unreconcilable."
+        )
+    os.environ[DATA_ROOT_ENV] = str(data_root)
+    os.environ[MODELS_DIR_ENV] = str(models)
+    os.environ.setdefault("CAFEF_OCR_ENGINE", "onnx")
+
+    spec = manifest.get("documents", {})
+    return {
+        "mode": "documents",
+        "data_root": str(data_root),
+        "models": sorted(p.name for p in models.glob("*")) if models.is_dir() else [],
+        "filings": [f["file"] for f in spec.get("filings", [])],
+    }
+
+
 def setup(
     payload_dir: str | None = None,
     work_dir: str | None = None,
@@ -264,6 +341,26 @@ def setup(
 
     report["stubs"] = _install_stubs()
 
+    commit = git_commit or manifest.get("git_commit")
+
+    # ⚠️ **DOCUMENTS MODE STOPS HERE, AND THE THREE STEPS BELOW MUST NOT RUN.** A PDF-parse
+    # payload ships no parquet, no `feature_selection` and no database to replace, so
+    # `import feature_selection` would be an ImportError on a job that needs nothing from it.
+    # The mode is read from the manifest rather than inferred from a missing key: a branch that
+    # tests `if manifest.get("panel")` reads a THIRD mode as the FIRST one.
+    if manifest.get("mode") == "documents":
+        report.update(_setup_documents(payload, work, manifest))
+        if commit:
+            # `pdf_ocr_job` records this into its own metadata.json. Same purpose as pinning
+            # `report._git_commit` below — the worker has no repo, and a run whose provenance
+            # is `null` is the run hardest to reproduce.
+            os.environ["KGPU_GIT_COMMIT"] = commit
+            report["git_commit"] = commit
+        if not quiet:
+            _print_summary(report, manifest)
+        report["gpu"] = _check_gpu(quiet=quiet)
+        return report
+
     # The payload directory holds `kgpu_remote_reader.py` flat beside the parquet.
     if str(payload) not in sys.path:
         sys.path.insert(0, str(payload))
@@ -280,7 +377,6 @@ def setup(
     feature_selection.UnifiedSchemaReader = kgpu_remote_reader.ParquetSchemaReader
     report["reader"] = "ParquetSchemaReader"
 
-    commit = git_commit or manifest.get("git_commit")
     if commit:
         fs_report._git_commit = lambda _c=commit: _c
         report["git_commit"] = commit
@@ -338,6 +434,15 @@ def _print_summary(report: dict, manifest: dict) -> None:
         f"@ {manifest.get('git_commit')}"
     )
     print(f"  source       : {report['source_files']} files -> {report['source_path']}")
+    if report.get("mode") == "documents":
+        spec = manifest.get("documents", {})
+        models = ", ".join(report["models"]) or "NONE — the engine would try to download"
+        print(f"  data root    : {report['data_root']}")
+        print(f"  models       : {models}")
+        print(f"  filings      : {len(report['filings'])} of "
+              f"{spec.get('exchange')}_{spec.get('symbol')} "
+              f"({', '.join(f['period'] for f in spec.get('filings', []))})")
+        return
     print(f"  reader       : {report['reader']} (parquet, join() inherited)")
     print(f"  report root  : {report['report_root']}")
     for name, entry in manifest.get("tables", {}).items():

@@ -71,6 +71,13 @@ def main(payload_dir: str, work_dir: str, notebook: str | None = None) -> int:
     manifest_probe = json.loads((payload / "manifest.json").read_text(encoding="utf-8"))
     report["git_commit"] = manifest_probe.get("git_commit")
 
+    # ⚠️ **A DOCUMENTS PAYLOAD SHIPS NO `feature_selection` AT ALL**, so the three checks below
+    # would fail on the import rather than on what they test. Everything above this line —
+    # discovery, the source unpack, the stubs — is shared and is where every defect this
+    # integration has had actually lived.
+    if manifest_probe.get("mode") == "documents":
+        return _rehearse_documents(payload, work, manifest_probe)
+
     # 1. The report root must land inside the directory Kaggle collects. If this
     #    resolves anywhere else, the run completes and downloads nothing.
     from feature_selection import report as fs_report
@@ -118,6 +125,88 @@ def main(payload_dir: str, work_dir: str, notebook: str | None = None) -> int:
     if manifest.get("panel"):
         return _rehearse_panel(payload, manifest)
     return _rehearse_pools(payload, manifest)
+
+
+def _rehearse_documents(payload, work, manifest: dict) -> int:
+    """The PDF-parse job: the filings, the charts of accounts and the models all arrived.
+
+    ⚠️ **THE POINT IS THE INPUTS, NOT A PARSE.** OCR is the expensive step and the reason the
+    job goes to a GPU at all, so this rehearsal deliberately does not run one. What it does
+    check is every input whose absence would only show up AFTER the OCR: a missing chart of
+    accounts makes `schema_of` raise ~2.4 h in (`utils/inputs.py` is named for it), a missing
+    statement CSV makes `sane` fail open, and a missing checkpoint turns into a download on a
+    worker that may have no internet.
+    """
+    import os
+    from pathlib import Path
+
+    from web_scraper import pdf_ocr_job as job
+    from web_scraper.cafef_financials import FinancialsBuilder
+
+    spec = manifest["documents"]
+    root = Path(os.environ["CAFEF_DATA_ROOT"])
+    print(f"\n  data root                    : OK ({root})")
+
+    # ⚠️ **NOT `str(work) in str(root)` — the payload is unpacked OUTSIDE the collected output
+    # on purpose.** ~100 MB of filings and checkpoints under /kaggle/working would be
+    # downloaded home again by `kgpu pull` for nothing. What must land inside `work` is the RUN
+    # FOLDER, and that is what is asserted.
+    out = Path(job.DEFAULT_OUT_ROOT).resolve()
+    if Path(work).resolve() not in out.parents:
+        raise AssertionError(
+            f"the run folder root {out} is not under the collected output {work} — the run "
+            f"would write its results somewhere Kaggle never downloads."
+        )
+    print(f"  run folder root under output : OK ({out})")
+
+    job.use_data_root(root)
+    models = job.use_models()
+    for name, path in models.items():
+        if path is None:
+            raise AssertionError(
+                f"the {name} model did not travel — the engine would DOWNLOAD it, which a "
+                f"kernel with enable_internet: false cannot do at all."
+            )
+    print(f"  models                       : OK ({', '.join(Path(p).name for p in models.values())})")
+
+    builder = FinancialsBuilder(logger=None)
+    tasks = job.plan(builder, spec["exchange"], spec["symbol"],
+                     periods=spec.get("periods_requested"),
+                     allow_parent=spec.get("allow_parent", False),
+                     period_min=spec.get("period_min"))
+    shipped = {f["file"] for f in spec["filings"]}
+    chosen = {t.file for t in tasks}
+    if chosen != shipped:
+        raise AssertionError(
+            f"the worker's own `documents()` chose {sorted(chosen)} and the payload ships "
+            f"{sorted(shipped)} — a filing that is not on disk reads as `missing`, which is "
+            f"exactly what an unreadable one reads as."
+        )
+    for task in tasks:
+        if not os.path.isfile(task.path):
+            raise AssertionError(f"{task.period}: {task.path} is not in the payload")
+        print(f"  {task.period:<8} {task.file[:52]:<52} "
+              f"{os.path.getsize(task.path) / 1024**2:>6.1f} MB")
+
+    schema = builder.schema_of(tasks[0].template, "balance_sheet")
+    print(f"  chart of accounts            : OK ({len(schema)} lines, "
+          f"{tasks[0].template})")
+
+    for task in tasks:
+        history = job.seed_history(builder, task.exchange, task.symbol, task.template,
+                                   before=task.period)
+        sizes = {r: len(v.get(task.consolidated, [])) for r, v in history.items()}
+        if not any(sizes.values()):
+            print(f"  WARNING {task.period}: the magnitude band is EMPTY — `sane` will fail "
+                  f"open, which is how a subset run writes a wrong figure (SAN-1).")
+        else:
+            print(f"  {task.period} magnitude band       : "
+                  + ", ".join(f"{r.split('_')[0]} {n}" for r, n in sizes.items()))
+
+    print(f"  cascade                      : {len(FinancialsBuilder.LAYERS)} layers")
+    print("\nrehearsal passed — the worker side of this payload has every input the parse "
+          "reads.\n⚠️ It did NOT run an OCR pass: that is what the GPU is for.")
+    return 0
 
 
 def _rehearse_panel(payload, manifest: dict) -> int:

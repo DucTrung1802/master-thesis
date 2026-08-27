@@ -425,6 +425,76 @@
         "REPORT_ROOT": "reports/feature_selection_wide",
         "NOTES": "TODO item 1/2 - THE WIDENED CROSS-SECTIONAL RUN AT THE MEASURED CEILING. 90 pool__basic + 72 pruned pool__ta channels, against PRF-9's 120 which was the T4 limit before three memory fixes shipped on 2026-08-21. WHY NOT 233: four attempts at 233 channels all died with DeadKernelError, and the phase profile tracked the wall moving each time - VRAM 6.1/14.9 GB throughout (the gpu.tree_shap row-blocking held), host peak 26.2 GB -> 26.1 -> 21.7 as the export ticker filter, the window_design cube blocking and the panel reassembly were fixed in turn, and death each time inside phase 4 (the ranker ensemble) on a 12.1 GB resident base. The remaining allocation is the ensemble's own copies of a 1,398-column design, which is a bigger change than this run is worth: PRF-9 already measured pool__ta as changing the SHORTLIST and not the MONEY at 120 channels, so the marginal value of 233 over ~160 is low and the cost of chasing a fifth wall is not. THE CHANNEL SET IS LABEL-FREE: feature_selection.prune ranks pool__ta by coverage and within-pool redundancy at corr 0.70, never by the target, so no look-ahead enters the candidate set. Seven SKW-1 duplicates of pool__basic are removed BY HAND because prune.py prunes WITHIN one pool and cannot see a cross-pool duplicate - PRF-9's own pilot shipped pool__ta.close alongside pool__basic.close_adjust at rho +0.997. pool__fa is REFUSED: on unified_schema_all it holds 2 tickers (VCB, ACB) and 8,265 rows, so an INNER join would collapse a 150-name panel to 2. The 19 pool__economy_* are date-only and cannot rank a cross-section at all. NO NULL on purpose: the question is whether any pool__ta channel survives selection at this width; PRF-9 established that the money question is settled downstream. STA-1: joining pool__ta truncates the panel at 2026-06-26, losing ~31 sessions."
       }
+    },
+    "pdf-ocr": {
+      "id": "lyductrung/mt-pdf-ocr",
+      "title": "MT pdf ocr",
+      "notebook": "src/web_scraper/RUN__pdf_ocr.ipynb",
+      "results_into": "reports/pdf_ocr",
+      "enable_internet": true,
+      "data": {
+        "id": "lyductrung/mt-cafef-filings-vcb",
+        "title": "MT CafeF filings payload VCB",
+        "ticker": "VCB",
+        "source_dirs": [
+          "src/web_scraper",
+          "src/utils"
+        ],
+        "documents": {
+          "exchange": "HOSE",
+          "symbol": "VCB",
+          "periods": [
+            "Q1-2026"
+          ],
+          "allow_parent": false
+        }
+      },
+      "parameters": {
+        "EXCHANGE": "HOSE",
+        "SYMBOL": "VCB",
+        "PERIODS": [
+          "Q1-2026"
+        ],
+        "ALLOW_PARENT": false,
+        "LAYERS": null,
+        "COMPARE": true,
+        "NOTES": "The PDF parse on a Kaggle T4. VCB Q1-2026 is the test case because all three of its statements already read `pdf` at `onnx@200` on this machine, from the consolidated filing - so the run has an exact baseline and `compare()` scores every cell against it. The question is NOT whether the quarter parses (it does, here); it is whether a T4 with Kaggle's own torch and onnxruntime reproduces the same LAYER and the same FIGURES. Run 1 (2026-08-28, 83.8 s) reproduced all 98 cells - and its log showed DB detection had fallen back to the CPU, because a bare `onnxruntime-gpu` resolves to 1.29.0 which needs CUDA 13 against Kaggle's 12.8. onnxruntime-gpu is pinned to the CUDA 12 line (1.20.1, this repo's own version) and the notebook now reports what the SESSION holds rather than what get_available_providers() advertises. Nothing is written back to the statement CSVs either way."
+      }
+    },
+    "pdf-ocr-hard": {
+      "id": "lyductrung/mt-pdf-ocr-bid-fy2016",
+      "title": "MT pdf ocr BID FY2016",
+      "notebook": "src/web_scraper/RUN__pdf_ocr.ipynb",
+      "results_into": "reports/pdf_ocr",
+      "enable_internet": true,
+      "data": {
+        "id": "lyductrung/mt-cafef-filings-bid",
+        "title": "MT CafeF filings payload BID",
+        "ticker": "BID",
+        "source_dirs": [
+          "src/web_scraper",
+          "src/utils"
+        ],
+        "documents": {
+          "exchange": "HOSE",
+          "symbol": "BID",
+          "periods": [
+            "Q4-2016"
+          ],
+          "allow_parent": false
+        }
+      },
+      "parameters": {
+        "EXCHANGE": "HOSE",
+        "SYMBOL": "BID",
+        "PERIODS": [
+          "Q4-2016"
+        ],
+        "ALLOW_PARENT": false,
+        "LAYERS": null,
+        "COMPARE": true,
+        "NOTES": "THE HARD DOCUMENT. VCB Q1-2026 accepted at layer 1 of 47, so it measured the integration and not the cascade. BID Q4-2016 is the opposite pole and it is the hardest filing this repo has on disk: the FY-2016 audited consolidated ANNUAL report, 5.0 MB, whose balance sheet and income statement accept at `onnx@200` while its CASH FLOW needs `onnx@200+pad6+annual+extra` - layer 45 of 47, three separate defects deep (a detector box that ends INSIDE the number, an annual report that dates its cash tail by the YEAR where the schema names the PERIOD, and a fourth reconciling term the bank chart of accounts has no column for: the MHB merger cash). `_parse_cascaded` breaks only when all three statements are accepted, so ONE unresolvable statement makes the other two pay the whole cascade - CLAUDE.md section 6-2-decies' bimodal cost, and the ~10 distinct OCR passes are what a T4 is actually for. Locally the four-period run that recovered this quarter took 35m 20s. THE INCOME STATEMENT WILL NOT BE SCORED and that is correct: an annual filing prints a CUMULATIVE P&L and the row on disk has been de-cumulated, so `compare()` refuses it rather than reporting every cell as changed."
+      }
     }
   }
 }

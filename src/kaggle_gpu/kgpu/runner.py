@@ -350,6 +350,12 @@ def merge_results(cfg: JobConfig, force: bool = False) -> List[Path]:
         # (`feature_selection/contract.py` §2). The notebook writes the shortlist itself
         # since 2026-08-16, so this is now a CHECK of what came home rather than a
         # reminder to go and do it by hand.
+        # ⚠️ **ONLY A SELECTION RUN OWES A SHORTLIST.** A documents (PDF-parse) run carries
+        # `summary.csv` and a JSON per filing, feeds no `final_features`, and would trip this
+        # warning on every pull — a warning that always fires is a warning nobody reads, which
+        # is the same argument `_payload_hash` makes about a staleness check that always fires.
+        if cfg.data is not None and cfg.data.is_documents:
+            return merged
         shortlist = _shortlist_filename()
         without = [m.name for m in merged if not (m / shortlist).exists()]
         if without:
@@ -515,9 +521,13 @@ def _stage_layout(cfg: JobConfig, mount: Path, extract: bool) -> Path:
     for path in cfg.payload_dir.iterdir():
         if not path.is_file() or path.name == "uploaded.json":
             continue
-        if path.name == "source.zip" and extract:
+        # ⚠️ **KAGGLE EXTRACTS EVERY ZIP, NOT JUST `source.zip`** — into a folder named after
+        # the archive, and the archive is then gone. This read `path.name == "source.zip"`
+        # until documents mode shipped a second one (2026-08-28), which would have left the
+        # nested layout rehearsing a shape the worker never sees.
+        if path.suffix == ".zip" and extract:
             with zipfile.ZipFile(path) as zf:
-                zf.extractall(mount / "source")
+                zf.extractall(mount / path.stem)
         else:
             shutil.copy2(path, mount / path.name)
     return mount

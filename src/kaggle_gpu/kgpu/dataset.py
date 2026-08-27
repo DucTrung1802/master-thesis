@@ -119,10 +119,20 @@ def upload(cfg: JobConfig, notes: str = "") -> dict:
     folder = str(cfg.payload_dir)
     api = _api()
 
-    notes = notes or (
-        f"{manifest['schema']} · {len(manifest['tables'])} tables · "
-        f"exported {manifest['exported_at']} @ {manifest.get('git_commit')}"
-    )
+    # ⚠️ **THE VERSION NOTE DESCRIBES WHATEVER THE PAYLOAD ACTUALLY IS.** This read
+    # `manifest['schema']` unconditionally and died with a bare `KeyError: 'schema'` on the
+    # first documents payload (2026-08-28) — after the export, and on the one code path
+    # `rehearse` cannot exercise because it never uploads. A payload that opens no database
+    # has no schema; saying so is the note's whole job.
+    if not notes:
+        if manifest.get("mode") == "documents":
+            spec = manifest.get("documents", {})
+            what = (f"{spec.get('exchange')}_{spec.get('symbol')} · "
+                    f"{len(spec.get('filings', []))} filing(s)")
+        else:
+            what = f"{manifest.get('schema')} · {len(manifest['tables'])} tables"
+        notes = (f"{what} · exported {manifest['exported_at']} "
+                 f"@ {manifest.get('git_commit')}")
 
     before = current_version(api, cfg.data.id) if _exists(api, cfg.data.id) else None
 

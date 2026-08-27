@@ -3679,6 +3679,102 @@ is the second instance, so it is the rule: **diff every column, not the numbers.
 
 ---
 
+### ✅ 6-2-sexvicies. THE PDF PARSE RUNS ON A KAGGLE T4 NOW — and it reproduces this machine cell for cell
+
+Shipped 2026-08-28. `src/web_scraper/pdf_ocr_job.py` is the OCR cascade with the WRITE removed
+and the machine made a parameter, `RUN__pdf_ocr.ipynb` is its ~7-cell binding, and
+`kgpu`'s payload gained a third mode — **`documents`**, which ships filings instead of parquet
+and opens no database at all.
+
+```powershell
+cd src ; python -m web_scraper.pdf_ocr_job --symbol VCB --periods Q1-2026   # here
+cd src\kaggle_gpu ; python -m kgpu rehearse pdf-ocr ; python -m kgpu run pdf-ocr   # on a T4
+```
+
+**The test case was VCB Q1-2026**, chosen because all three of its statements already read
+`pdf` at `onnx@200` on this machine — so the run has an EXACT baseline and scores itself
+against it rather than being assumed to agree. Four runs of the same filing:
+
+| run | card | onnxruntime | DETECTION on | RECOGNITION on | parse | verdict |
+|---|---|---|---|---|---|---|
+| local | RTX 3050 | — *(unrecorded)* | — | — | 100.6 s | **REPRODUCED** |
+| Kaggle 1 | Tesla T4 | 1.29.0 | ⚠️ **CPU** | cuda | 83.8 s | **REPRODUCED** |
+| **Kaggle 2** | **Tesla T4** | **1.22.0** | **CUDA** | cuda | **69.0 s** | **REPRODUCED** |
+| local | RTX 3050 | 1.20.1 | CUDA | cuda | 113.3 s | **REPRODUCED** |
+
+**REPRODUCED is the strong form and it is asserted per CELL**: 59 + 22 + 17 = **98 of 98 line
+items identical**, the same winning LAYER (`onnx@200`), the same `unit`, the same
+`publish_date`, and no column present on one side and absent on the other. ⚠️ **That was not
+the expected answer.** Kaggle ships **torch 2.10.0+cu128** against this machine's **2.5.1+cu121**
+and its own onnxruntime, and §3d records the library stack as a difference in the PROCEDURE
+rather than in the hardware. For the ranker that mattered; for this OCR stack, on this
+document, it did not — detection is a fixed convolution and recognition is an argmax, so
+neither has the RNG the XGBoost result turns on.
+
+⚠️ **ONE DOCUMENT, AND AN EASY ONE.** VCB Q1-2026 is accepted at layer 1 of 47. It says nothing
+about a filing that escalates — the `+relax`, `+realign` and `+pad6` layers were never reached,
+and a statement decided by a fuzzy threshold has more room to move between stacks than one
+decided by a reconciliation.
+
+⚠️ **THE SPEEDUP IS ~1.5× AND THE ERROR BAR IS VISIBLE IN THE TABLE.** Two local runs of the
+identical document differ by **12.7 s (12 %)**, so `107 ± 6 s` local against **69.0 s** on a T4
+is one measurement each, not a benchmark. ⚠️ **And it is a WEAK case for the T4 on purpose**: a
+document that stops at layer 1 pays for one OCR pass, while §6-2-quindecies' failing documents
+pay for ~10 and cost **18.2 min** — those are the ones a GPU is for, and none has been run
+there yet.
+
+### ⚠️ `ORT-1` — A GREEN GPU RUN CAN BE HALF ON THE CPU, AND THAT IS WHAT KAGGLE RUN 1 WAS
+
+The 21 % between the two T4 rows is the whole finding, and nothing in the first run said so.
+`pip install onnxruntime-gpu` resolves to **1.29.0**, which needs **cuDNN 9 with CUDA 13**;
+Kaggle's image is **CUDA 12.8**. `get_available_providers()` still listed
+`CUDAExecutionProvider` — and `InferenceSession` then failed to create it and fell back to
+CPU, so **DeepDoc detection ran on the worker's CPU while VietOCR ran on the T4**. The only
+trace was one warning inside a wall of ANSI-coloured onnxruntime noise.
+
+⚠️ **`get_available_providers()` IS AN ADVERTISEMENT; `session.get_providers()` IS THE
+MEASUREMENT.** This is §5 rule 10 in a new place — a green step is not evidence the step did
+what it said — and `_DbTextDetector` had been choosing its provider list from the
+advertisement since it was written. Three changes, none of them a version bump alone:
+`onnx_ocr` calls `ort.preload_dlls()` where it exists (1.21+ stopped adding the `nvidia-*`
+wheels to the loader path itself, which is the underlying cause on a pip-only CUDA image);
+`pdf_ocr_job.engine_report()` reads the SESSION back and records it in every run's
+`metadata.json`; and the notebook pins the **line** `onnxruntime-gpu>=1.19,<1.23`.
+⚠️ **An `==1.20.1` pin was tried first and cost a run** — this repo's own version is not
+published for Kaggle's cp312 Linux (the index offers 1.20.0 and 1.20.2), so an exact pin fails
+the INSTALL. ⚠️ **The two OCR halves fail independently** — detection is onnxruntime,
+recognition is torch — so *"the GPU is being used"* is two questions, and
+`runtime.gpu_report()` answers neither.
+
+### ⚠️ What the module deliberately does NOT do
+
+1. ⚠️ **IT WRITES NO STATEMENT CSV.** The artefact is a run folder. This repo has measured
+   **four** separate builds in which a `periods` run silently DOWNGRADED a quarter it was given
+   only for history while the log said `RUN_SUCCESS` (§6-2-vicies, §6-2-unvicies,
+   §6-2-quatervicies, §6-2-quinvicies); a run whose output is an artefact cannot do that.
+   Merging a recovered quarter stays a deliberate Dagster act with a pre-run backup.
+2. ⚠️ **`sane` IS SEEDED FROM DISK AND THAT IS A RECONSTRUCTION.** `seed_history` rebuilds the
+   magnitude band from the `pdf` rows already on disk, in `build()`'s own entity split, with
+   `MIN_ITEMS_FOR_HISTORY` applied and restricted to periods BEFORE the target — VCB Q1-2026
+   got 67/68/68 probes. It is not the run's own history and cannot be: it holds what disk
+   records. An empty band is what makes `sane` fail open (§6-2-octodecies), so the rehearsal
+   WARNs when one is empty.
+3. **No alternate-filing retry and no de-cumulation.** Both are `build()`'s, and both need
+   state a one-document run does not have. `compare()` therefore REFUSES to score a cumulative
+   income statement rather than reporting every cell as changed.
+4. ⚠️ **The comparison reads EVERY column, not the figures** — layer, unit and `publish_date`
+   beside the values, because a run that lost one `publish_date` and nothing else read as clean
+   to a figures-only diff, twice (§6-2-quatervicies, §6-2-quinvicies).
+
+⚠️ **Two defects were found in `kgpu` itself and both were on paths `rehearse` cannot reach**:
+the dataset version-note read `manifest['schema']` unconditionally and died with a bare
+`KeyError` on a payload that has no schema, and `_stage_layout` extracted only `source.zip`
+where Kaggle extracts EVERY zip. The first is the upload path, which a rehearsal never walks;
+the second would have left the nested rehearsal testing a shape the worker never sees. **17
+tests** pin the module's four decisions without a PDF, a network or an OCR engine.
+
+---
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -3797,7 +3893,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**25 open**, 38 resolved, codes permanent — ⚠️ **`FXM-1` OPENED 2026-08-25 with a fix that is WRITTEN AND UNMEASURED**: the FX adjustment line cannot be mapped, and it is the single bottleneck behind **8 of the 11 probed BID cash-flow refusals** — the balances are already recovered and then discarded for want of a fourth term. TODO `P39` is the measurement and it is not optional (§6-2-quindecies) — ⚠️ **`TPL-1` OPENED 2026-08-25 and it is the one to read before any non-bank parse**: the non-bank wall is NOT a missing template — all four charts of accounts exist — it is seven hardcoded reconcile anchors, and on `corp` and `insurance` the cash-flow one **fuzzy-matches the OPENING balance and returns it as the closing one** (0.885 / 0.902 against a 0.85 threshold, first hit wins in statement order). A wrong figure, not a refusal; `securities` fails safely instead, below the threshold at both ends (§6-2-quaterdecies) — ⚠️ **`FIN-1` CLOSED 2026-08-24** — no financials row anywhere reads `source='cafef'`; ⚠️ **`GLB-1` and `BRZ-1` opened the same day**, both found by the carry-up: `GLB-1` is a star import rebinding `glob` from the function to the MODULE, breaking all 11 call sites in `preprocessor.py`; **`BRZ-1` is the sharper one — a row deleted at the SOURCE is never deleted from bronze**, because every `_ingest_bronze_*` upserts, and no freshness check can see it (§6-2-terdecies) — ⚠️ **`SAN-1` opened-and-closed 2026-08-24 and is the one to read**: the magnitude guard `sane` learns its baseline from the quarters accepted in its own run, so one 2-line statement became the whole reference population and silently rejected every correct quarter after it (§6-2-undecies) — ⚠️ **`FIN-1` OPENED 2026-08-24 and it is the one to read if you touch fundamentals**: 34 financial report-rows on disk were transcribed from CafeF's HTML tabs rather than parsed from the filing PDF — the fallback fires on any absent period without checking whether a PDF exists. ⚠️ **Only 4 can be retried, all VCB**: `documents()` keeps `consolidated == "True"` only and ACB filed no consolidated statement before 2010. §5 rule 24 now forbids the source outright; the code still defaults `use_api=True` (§6-2-octies) — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**26 open**, 38 resolved, codes permanent — ⚠️ **`FXM-1` OPENED 2026-08-25 with a fix that is WRITTEN AND UNMEASURED**: the FX adjustment line cannot be mapped, and it is the single bottleneck behind **8 of the 11 probed BID cash-flow refusals** — the balances are already recovered and then discarded for want of a fourth term. TODO `P39` is the measurement and it is not optional (§6-2-quindecies) — ⚠️ **`TPL-1` OPENED 2026-08-25 and it is the one to read before any non-bank parse**: the non-bank wall is NOT a missing template — all four charts of accounts exist — it is seven hardcoded reconcile anchors, and on `corp` and `insurance` the cash-flow one **fuzzy-matches the OPENING balance and returns it as the closing one** (0.885 / 0.902 against a 0.85 threshold, first hit wins in statement order). A wrong figure, not a refusal; `securities` fails safely instead, below the threshold at both ends (§6-2-quaterdecies) — ⚠️ **`FIN-1` CLOSED 2026-08-24** — no financials row anywhere reads `source='cafef'`; ⚠️ **`GLB-1` and `BRZ-1` opened the same day**, both found by the carry-up: `GLB-1` is a star import rebinding `glob` from the function to the MODULE, breaking all 11 call sites in `preprocessor.py`; **`BRZ-1` is the sharper one — a row deleted at the SOURCE is never deleted from bronze**, because every `_ingest_bronze_*` upserts, and no freshness check can see it (§6-2-terdecies) — ⚠️ **`SAN-1` opened-and-closed 2026-08-24 and is the one to read**: the magnitude guard `sane` learns its baseline from the quarters accepted in its own run, so one 2-line statement became the whole reference population and silently rejected every correct quarter after it (§6-2-undecies) — ⚠️ **`FIN-1` OPENED 2026-08-24 and it is the one to read if you touch fundamentals**: 34 financial report-rows on disk were transcribed from CafeF's HTML tabs rather than parsed from the filing PDF — the fallback fires on any absent period without checking whether a PDF exists. ⚠️ **Only 4 can be retried, all VCB**: `documents()` keeps `consolidated == "True"` only and ACB filed no consolidated statement before 2010. §5 rule 24 now forbids the source outright; the code still defaults `use_api=True` (§6-2-octies) — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -3824,7 +3920,7 @@ what a session budgets against.
 |---|---|---|
 | [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | **47.0k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER" — screens, `filter_schema`, and why a screen is not point-in-time) |
 | [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | **25.8k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
-| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **31.1k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
+| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **32.7k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
 | [src/feature_selection/docs/RANKER_COMPARISON.md](src/feature_selection/docs/RANKER_COMPARISON.md) | **4.5k** | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | **6.8k** | building or rebuilding a `__final__` table |
@@ -3835,12 +3931,12 @@ what a session budgets against.
 | [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | **4.1k** | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
 | [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **7.6k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
 | [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | **3.4k** | anything news/text/PhoBERT |
-| [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | **6.4k** | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
+| [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | **7.5k** | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | **9.2k** | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | **44.0k** | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
-⚠️ **[ISSUES.md](docs/ISSUES.md) (~24.4k) is the second file to open, not an afterthought.**
-**25** open issues — ⚠️ *(this line read "22" until 2026-08-28 and "(~4k)"/"Sixteen" until
+⚠️ **[ISSUES.md](docs/ISSUES.md) (~25.9k) is the second file to open, not an afterthought.**
+**26** open issues — ⚠️ *(this line read "22" until 2026-08-28 and "(~4k)"/"Sixteen" until
 2026-08-25; a stale count is what a session budgets against)*. ⚠️ **CFB-1 IS THE ONE TO READ
 BEFORE QUOTING A BID FUNDAMENTAL** (opened 2026-08-28): a cash-flow anchor can hold the wrong
 ACCOUNT and every gate passes — **7 BID quarters carry the 1-Jan opening in the CLOSING slot**,

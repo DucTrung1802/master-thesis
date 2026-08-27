@@ -1419,6 +1419,86 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
   four levels + code + name + snake_case + definition); the raw xlsx is kept for
   provenance.
 
+## 3b. Running that parse somewhere else — `pdf_ocr_job.py` / `RUN__pdf_ocr.ipynb`
+
+Added 2026-08-28. §3a's cascade is expensive and its expensive half is OCR: DeepDoc DB
+detection under onnxruntime and VietOCR recognition under torch, both of which want a GPU. This
+machine has **4 GiB**; a Kaggle T4 has **15**. So the machine became a parameter, and nothing
+else did.
+
+```powershell
+cd src ; python -m web_scraper.pdf_ocr_job --symbol VCB --periods Q1-2026
+cd src\kaggle_gpu ; python -m kgpu rehearse pdf-ocr ; python -m kgpu run pdf-ocr
+```
+
+| function | what it is |
+|---|---|
+| `use_data_root()` / `use_models()` | re-point `cafef_financials`' path globals and the two model env vars. ⚠️ The globals are read at CALL time precisely so a harness can do this — `statement_path`'s docstring has said so since the experiment harnesses needed it |
+| `plan()` | the filings, from `FinancialsBuilder.documents()`. ⚠️ **The choice is never re-implemented**: it carries a measured guard against an annual report changing the ENTITY of a Q4 row |
+| `seed_history()` | the magnitude band `sane` compares against, rebuilt from the `pdf` rows on disk |
+| `run_document()` | ONE filing through **`FinancialsBuilder._parse_cascaded`** — the real 47-layer cascade, its parse cache, its `reconcile`-then-`sane` short-circuit and its refusal report |
+| `compare()` | every parsed cell against the statement CSV on disk |
+| `engine_report()` | which device each HALF of the OCR actually ran on — see `ORT-1` below |
+
+⚠️ **IT WRITES NO STATEMENT CSV, AND THAT IS THE POINT.** The output is a run folder
+(`reports/pdf_ocr/<run_id>/`: `metadata.json`, `summary.csv`, one JSON per filing written
+BEFORE the next one starts). CLAUDE.md records **four** builds in which a `periods` run
+silently DOWNGRADED a quarter it was given only for history, while the log said `RUN_SUCCESS`
+— a run whose output is an artefact cannot do that. Merging a recovered quarter back stays a
+deliberate Dagster act with a pre-run backup and a diff of every column.
+
+⚠️ **`seed_history` IS A RECONSTRUCTION OF A FULL RUN'S BAND, NOT THE RUN'S OWN.** It applies
+three of `build()`'s rules — `source == 'pdf'` only, `MIN_ITEMS_FOR_HISTORY` withheld, split
+per ENTITY — and restricts to periods BEFORE the target, because a full run judges a quarter
+against what it has already accepted and never against its own future. It holds what DISK
+records, so it diverges the moment disk is not a full run's output. ⚠️ An EMPTY band is what
+makes `sane` fail open, which is how a subset run writes a wrong figure, so `kgpu rehearse`
+warns on one.
+
+⚠️ **Three things `build()` does that this does not**: the alternate-filing retry,
+de-cumulation, and the CafeF-tab fallback (which §5 rule 24 forbids anyway). The first two need
+state a one-document run has not got — so `compare()` **refuses** to score a cumulative income
+statement against a de-cumulated row rather than reporting every cell as changed.
+
+### ⚠️ `ORT-1` — a green GPU run can be half on the CPU
+
+Measured on the first Kaggle run, 2026-08-28. `pip install onnxruntime-gpu` resolves to
+**1.29.0**, which needs **cuDNN 9 with CUDA 13**; Kaggle's image is **CUDA 12.8**.
+`ort.get_available_providers()` still listed `CUDAExecutionProvider`, `InferenceSession` then
+failed to create it, and **detection ran on the worker's CPU while VietOCR ran on the T4** —
+correct output, **21 % slower**, one warning inside a wall of ANSI-coloured onnxruntime noise.
+
+⚠️ **`get_available_providers()` is an ADVERTISEMENT; `session.get_providers()` is the
+MEASUREMENT**, and `_DbTextDetector` had been choosing from the advertisement since it was
+written. `onnx_ocr` now calls `ort.preload_dlls()` where it exists (1.21+ stopped adding the
+`nvidia-*` wheels to the loader path itself), `engine_report()` records the session's real
+providers into every `metadata.json`, and the notebook pins the LINE `onnxruntime-gpu>=1.19,
+<1.23` — ⚠️ a `==1.20.1` pin was tried first and **failed the install**, because this repo's
+own version is not published for Kaggle's cp312 Linux.
+
+### What VCB Q1-2026 measured
+
+The test case, chosen because all three of its statements already read `pdf` at `onnx@200` on
+this machine — so the run has an exact baseline. **98 of 98 cells identical on every run**,
+same layer, same unit, same `publish_date`:
+
+| | card | detection | parse |
+|---|---|---|---|
+| local | RTX 3050 | CUDA | 100.6 s / 113.3 s (two runs) |
+| Kaggle, `onnxruntime-gpu` 1.29 | Tesla T4 | ⚠️ CPU | 83.8 s |
+| **Kaggle, 1.22** | **Tesla T4** | **CUDA** | **69.0 s** |
+
+⚠️ **ONE DOCUMENT, ACCEPTED AT LAYER 1 OF 47.** It says nothing about a filing that escalates,
+where a fuzzy threshold has room to move between two library stacks. ⚠️ And the local spread is
+**12.7 s (12 %)** across two runs of the same file, so ~1.5× is one measurement each, not a
+benchmark.
+
+⚠️ **New OCR weights knob:** `CAFEF_ONNX_VIETOCR_WEIGHTS` points VietOCR at a LOCAL checkpoint.
+`download_weights` returns any non-`http` value unchanged, which is what makes it work; empty
+restores the URL, i.e. the behaviour every run had before. An unreadable path RAISES rather
+than falling back to the download — on a worker with no internet that fallback is a connection
+error minutes into the first page.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

@@ -29,15 +29,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
-from .config import PANEL_TABLE, REPO_ROOT, JobConfig, repo_src_on_path
+from .config import (
+    DOCUMENTS_ARCHIVE, PANEL_TABLE, REPO_ROOT, JobConfig, repo_src_on_path,
+)
 
 # The remote-side files, shipped flat beside the parquet.
 REMOTE_DIR = Path(__file__).resolve().parent / "remote"
@@ -331,6 +334,157 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
         )
 
 
+def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) -> None:
+    """Ship the FILES the PDF parse reads — one zip, no database, no parquet.
+
+    ⚠️ **THE PAYLOAD IS CHOSEN BY THE SAME FUNCTION THAT WILL OPEN IT.** `pdf_ocr_job.plan`
+    calls `FinancialsBuilder.documents()` here, so the filings in the zip are exactly the
+    filings the worker will parse — consolidated preferred, the audited annual standing in for
+    Q4, the `allow_parent` fallback if asked. Picking the files by a glob instead would let the
+    payload and the worker's own choice diverge, and a worker that cannot find its document
+    reports the quarter as `missing`, which is what a genuinely unreadable filing reports too.
+
+    Four things travel and each one is load-bearing:
+
+      * **the PDF index**, because `documents()` re-runs on the worker and reads it;
+      * **the chosen filings**;
+      * **the twelve charts of accounts**, because `schema_of` raises without them — after the
+        OCR (`utils/inputs.py` is named for the 2.4 h that cost once);
+      * **the statement CSVs already on disk**, twice over: `seed_history` reconstructs the
+        magnitude band `sane` needs from them, and `compare()` scores the run against them cell
+        by cell. ⚠️ Without them `sane` FAILS OPEN, which is the documented way a subset run
+        writes a wrong figure (§6-2-octodecies), and the run comes home with nothing to be read
+        against.
+
+    ⚠️ **AND THE TWO OCR MODELS**, because otherwise the engine downloads them — `det.onnx`
+    from HuggingFace and `vgg_seq2seq.pth` from vocr.vn — which a kernel with
+    `enable_internet: false` cannot do at all, and a kernel with internet does on every cold
+    start.
+    """
+    from web_scraper import pdf_ocr_job as job
+    from web_scraper.cafef_financials import FinancialsBuilder
+    from web_scraper.cafef_financials import REPORT_PREFIX, statement_path
+
+    spec = dict(cfg.data.documents or {})
+    exchange = str(spec.get("exchange", "HOSE")).upper()
+    symbol = str(spec["symbol"]).upper()
+    periods = spec.get("periods") or None
+    allow_parent = bool(spec.get("allow_parent", False))
+    period_min = spec.get("period_min", "Q1-2008")
+    with_statements = bool(spec.get("with_statements", True))
+    with_models = bool(spec.get("with_models", True))
+
+    job.use_data_root()                       # the repo's own raw_data/cafef
+    builder = FinancialsBuilder(logger=None)
+    tasks = job.plan(builder, exchange, symbol, periods=periods,
+                     allow_parent=allow_parent, period_min=period_min)
+    if not tasks:
+        raise ValueError(
+            f"{exchange}_{symbol} has no filing to ship for periods={periods!r} — "
+            f"an empty payload is a run that parses nothing and reports success."
+        )
+    template = tasks[0].template
+    root = job.data_root()
+
+    staged: Dict[str, int] = {}
+    archive = folder / DOCUMENTS_ARCHIVE
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+
+        def _add(path: Path, arcname: str) -> None:
+            zf.write(path, arcname)
+            staged[arcname] = path.stat().st_size
+
+        index = root / "pdfs" / "index" / f"{exchange}_{symbol}.csv"
+        _add(index, f"data/cafef/pdfs/index/{index.name}")
+
+        for task in tasks:
+            src = Path(task.path)
+            if not src.is_file():
+                raise FileNotFoundError(
+                    f"{task.period}: {src} is not on disk — scrape it first "
+                    f'(dagster asset materialize --select "raw/cafef_pdfs" '
+                    f"--partition {exchange}_{symbol})"
+                )
+            _add(src, f"data/cafef/pdfs/files/{exchange}_{symbol}/{src.name}")
+
+        for schema in sorted((root / "financials" / "schema").glob("*.csv")):
+            _add(schema, f"data/cafef/financials/schema/{schema.name}")
+        templates = root / "financials" / "templates.csv"
+        if templates.is_file():
+            _add(templates, "data/cafef/financials/templates.csv")
+
+        baseline: Dict[str, dict] = {}
+        if with_statements:
+            for report, prefix in REPORT_PREFIX.items():
+                path = Path(statement_path(template, report, exchange, symbol))
+                if not path.is_file():
+                    continue
+                _add(path, (f"data/cafef/financials/statements/{template}/{report}/"
+                            f"{path.name}"))
+                rows = builder._existing(exchange, symbol, template, report)
+                baseline[report] = {
+                    "rows": len(rows),
+                    "pdf_rows": sum(1 for r in rows.values() if r.get("source") == "pdf"),
+                    "shipped_periods": {
+                        t.period: {"source": rows.get(t.period, {}).get("source", "absent"),
+                                   "layer": rows.get(t.period, {}).get("method", "")}
+                        for t in tasks
+                    },
+                }
+
+        models: Dict[str, Optional[str]] = {"det": None, "vietocr": None}
+        if with_models:
+            det = Path(os.environ.get("CAFEF_ONNX_DET", "")) if os.environ.get(
+                "CAFEF_ONNX_DET") else job.DEFAULT_MODELS_DIR / "deepdoc_det.onnx"
+            if not det.is_file():
+                raise FileNotFoundError(
+                    f"no DeepDoc detector at {det}. It is gitignored, so a fresh checkout has "
+                    f"none: run the parse once locally (it fetches the model), or set "
+                    f"CAFEF_ONNX_DET."
+                )
+            _add(det, "models/deepdoc_det.onnx")
+            models["det"] = det.name
+
+            weights = job.find_vietocr_weights()
+            if weights is None:
+                raise FileNotFoundError(
+                    "no VietOCR checkpoint found. Looked at:\n  "
+                    + "\n  ".join(str(p) for p in job.vietocr_weight_candidates())
+                    + "\n  Any local run of the onnx engine leaves one in the temp dir; "
+                      "otherwise set CAFEF_ONNX_VIETOCR_WEIGHTS."
+                )
+            _add(weights, "models/vgg_seq2seq.pth")
+            models["vietocr"] = weights.name
+
+    manifest["documents"] = {
+        "exchange": exchange,
+        "symbol": symbol,
+        "template": template,
+        "allow_parent": allow_parent,
+        "period_min": period_min,
+        # ⚠️ Recorded even when the job named none, so a reader can tell "every period this
+        # ticker files" from "nobody wrote it down" — §5 rule 2 at the manifest.
+        "periods_requested": list(periods) if periods else None,
+        "filings": [
+            {"period": t.period, "file": t.file, "consolidated": t.consolidated,
+             "assurance": t.assurance, "cumulative": t.cumulative,
+             "bytes": Path(t.path).stat().st_size}
+            for t in tasks
+        ],
+        "baseline": baseline,
+        "models": models,
+        "archive": archive.name,
+        "files": len(staged),
+    }
+    if not quiet:
+        total = sum(staged.values())
+        print(f"  {len(tasks)} filing(s) of {exchange}_{symbol} "
+              f"({', '.join(t.period for t in tasks)})")
+        print(f"  {DOCUMENTS_ARCHIVE}: {len(staged)} files, "
+              f"{archive.stat().st_size / 1024**2:.1f} MB "
+              f"({total / 1024**2:.1f} MB uncompressed)")
+
+
 def export(cfg: JobConfig, quiet: bool = False) -> Path:
     """Read the job's tables out of PostgreSQL and stage the whole payload.
 
@@ -352,8 +506,6 @@ def export(cfg: JobConfig, quiet: bool = False) -> Path:
 
     load_dotenv(REPO_ROOT / ".env")
 
-    from feature_selection.unified_reader import UnifiedSchemaReader
-
     tables = cfg.tables()
     folder = cfg.payload_dir
     if folder.exists():
@@ -366,8 +518,22 @@ def export(cfg: JobConfig, quiet: bool = False) -> Path:
         "git_commit": git_commit(),
         "ticker": cfg.data.ticker,
         "job": cfg.name,
+        # ⚠️ **WRITTEN FOR EVERY MODE, INCLUDING THE TWO THAT PREDATE IT.** The worker branches
+        # on this; before it existed the branch was `if manifest.get("panel")`, i.e. a mode
+        # inferred from the presence of a key. A third mode makes that unreadable, and an
+        # inferred mode is exactly the kind of thing that keeps working until it does not.
+        "mode": cfg.data.mode,
         "tables": {},
     }
+
+    # ⚠️ **DOCUMENTS MODE OPENS NO DATABASE AT ALL** — the PDF parse reads files. Everything
+    # below this branch is `UnifiedSchemaReader`, so it must not be entered: on a machine with
+    # no `POSTGRES_*` a documents export would otherwise fail on a connection it never needed.
+    if cfg.data.is_documents:
+        _export_documents(cfg, folder, manifest, quiet=quiet)
+        return _finish_payload(cfg, folder, manifest, quiet=quiet)
+
+    from feature_selection.unified_reader import UnifiedSchemaReader
 
     with UnifiedSchemaReader(cfg.data.ticker) as reader:
         manifest["schema"] = reader.schema
@@ -439,6 +605,18 @@ def export(cfg: JobConfig, quiet: bool = False) -> Path:
             f"window. Re-materialise the lagging pool before exporting."
         )
 
+    return _finish_payload(cfg, folder, manifest, quiet=quiet)
+
+
+def _finish_payload(cfg: JobConfig, folder: Path, manifest: dict,
+                    quiet: bool = False) -> Path:
+    """The half every mode shares: the source zip, the remote files, the manifest.
+
+    Factored out when documents mode arrived (2026-08-28) rather than copied, because these
+    five files are the CONTRACT with `kgpu_bootstrap` — it finds the payload by
+    `manifest.json` beside `kgpu_remote_reader.py`, so a mode that staged its own tail and
+    forgot one would be a payload the worker cannot recognise at all.
+    """
     source_counts = _zip_sources(cfg.data.source_dirs, folder / "source.zip")
     manifest["source_dirs"] = source_counts
 

@@ -49,6 +49,14 @@ DET_MODEL = os.environ.get("CAFEF_ONNX_DET", os.path.join(_MODELS_DIR, "deepdoc_
 # VietOCR architecture + the render DPI. 200 dpi matches the Tesseract path (`OCR_DPI`) and the
 # experiments; the model weights download once from the vietocr project on first use.
 VIETOCR_ARCH = os.environ.get("CAFEF_ONNX_VIETOCR", "vgg_seq2seq")
+
+# ⚠️ **A LOCAL CHECKPOINT, FOR A MACHINE WITH NO INTERNET.** `Cfg.load_config_from_name` sets
+# `weights` to `https://vocr.vn/data/vietocr/vgg_seq2seq.pth` and vietocr's `download_weights`
+# fetches it on the first `Predictor` build — which a Kaggle kernel with `enable_internet:
+# false` cannot do, and which a kernel WITH internet does on every cold start. `download_weights`
+# returns any non-`http` value unchanged, so pointing this at a shipped file is the supported
+# way in. Empty = the URL, i.e. exactly the behaviour every run had before this existed.
+VIETOCR_WEIGHTS = os.environ.get("CAFEF_ONNX_VIETOCR_WEIGHTS", "")
 RENDER_DPI = 200
 MIN_SCORE = 0.25            # drop recognitions below this confidence (scan speckle detects as text)
 REC_BATCH = 24
@@ -156,9 +164,25 @@ class _DbTextDetector:
             "name": "DBPostProcess", "thresh": 0.3, "box_thresh": 0.5, "max_candidates": 1000,
             "unclip_ratio": 1.5, "use_dilation": False, "score_mode": "fast", "box_type": "quad"})
 
+        # ⚠️ **onnxruntime 1.21+ NEEDS TO BE TOLD WHERE THE `nvidia-*` PIP WHEELS PUT CUDA.**
+        # On Linux the GPU wheel no longer adds them to the loader path itself, so on an image
+        # that has CUDA only through pip (a Kaggle worker) `CUDAExecutionProvider` is
+        # ADVERTISED and then fails to load. `preload_dlls` is that call; it does not exist
+        # before 1.21 and it is a no-op where the libraries are already resolvable, hence the
+        # guard rather than a version test.
+        if hasattr(ort, "preload_dlls"):
+            try:
+                ort.preload_dlls()
+            except Exception:  # noqa: BLE001 — a preload that fails must not stop a CPU run
+                pass
         providers = (["CUDAExecutionProvider", "CPUExecutionProvider"]
                      if "CUDAExecutionProvider" in ort.get_available_providers()
                      else ["CPUExecutionProvider"])
+        # ⚠️ **`get_available_providers()` IS AN ADVERTISEMENT, NOT A MEASUREMENT** — measured
+        # on Kaggle 2026-08-28, where it listed `CUDAExecutionProvider` and the session then
+        # came back CPU-only because the wheel wanted CUDA 13 on a CUDA 12.8 image. The session
+        # silently downgrades, so the only honest answer is what the SESSION holds afterwards:
+        # `session.get_providers()`, which `pdf_ocr_job.engine_report` reads into the artefact.
         self.session = ort.InferenceSession(model_path, providers=providers)
         self.input_name = self.session.get_inputs()[0].name
 
@@ -204,7 +228,7 @@ class _BatchedVietOcr:
     """
 
     def __init__(self, arch: str = VIETOCR_ARCH, device: Optional[str] = None,
-                 batch_size: int = REC_BATCH):
+                 batch_size: int = REC_BATCH, weights: Optional[str] = None):
         import torch
         from vietocr.tool.config import Cfg
         from vietocr.tool.predictor import Predictor
@@ -212,6 +236,18 @@ class _BatchedVietOcr:
         cfg = Cfg.load_config_from_name(arch)
         cfg["cnn"]["pretrained"] = False       # the OCR checkpoint overwrites the backbone anyway
         cfg["predictor"]["beamsearch"] = False
+        # Read the module global rather than binding it as a default: `pdf_ocr_job.use_models`
+        # sets it after import when a payload ships the checkpoint, and a default frozen at
+        # def-time would silently keep the URL.
+        local = weights or VIETOCR_WEIGHTS
+        if local:
+            if not os.path.isfile(local):
+                raise FileNotFoundError(
+                    f"CAFEF_ONNX_VIETOCR_WEIGHTS points at {local!r}, which does not exist. "
+                    f"An unreadable local checkpoint must not fall back to the download: on a "
+                    f"worker with no internet that turns into a connection error minutes into "
+                    f"the first page.")
+            cfg["weights"] = local
         cfg["device"] = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
         self.predictor = Predictor(cfg)
         self.batch_size = batch_size

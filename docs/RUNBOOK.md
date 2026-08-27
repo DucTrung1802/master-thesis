@@ -815,6 +815,47 @@ a smoke test, never a number.
 
 ---
 
+### OCR-ing a FILING — the `pdf-ocr` job (documents mode, 2026-08-28)
+
+The CafeF PDF parse, on a T4 instead of the local 4 GiB card. ⚠️ **It writes a run folder and
+never a statement CSV** — merging a recovered quarter back stays a deliberate Dagster act with
+a pre-run backup (§3e-quater).
+
+```powershell
+# locally first — this is the baseline the Kaggle run is scored against
+cd src
+python -m web_scraper.pdf_ocr_job --symbol VCB --periods Q1-2026   # measured 1m 41s
+
+cd src\kaggle_gpu
+python -m kgpu export   pdf-ocr    # filings + schema + statements + models -> documents.zip  (5.3 s, 92.4 MB)
+python -m kgpu rehearse pdf-ocr    # both mount layouts, every input the parse reads          (9.7 s)
+python -m kgpu data     pdf-ocr    # the same export, then UPLOAD it                          (1m 50s)
+$env:PYTHONUTF8 = "1"              # ⚠️ REQUIRED — see below
+python -m kgpu run      pdf-ocr    # push, wait, download, merge into reports/pdf_ocr/        (2m 36s)
+```
+
+⚠️ **`PYTHONUTF8=1` IS NOT OPTIONAL ON THIS JOB.** `kernels_output` writes the run log with the
+process's default encoding — cp1252 on Windows — and this parse logs Vietnamese account labels,
+so the log can never be ASCII. Without it the run COMPLETES on Kaggle and the DOWNLOAD raises
+`UnicodeEncodeError`. The run is not lost; re-pull it with the variable set.
+
+⚠️ **The job needs `enable_internet: true`, and it is the PACKAGES, not the data.** Kaggle's
+image has no vietocr, pymupdf, pyclipper or onnxruntime. The two MODELS travel in the payload
+precisely so that no weight is fetched at run time.
+
+⚠️ **READ `metadata.json`'s `environment.ocr` BEFORE QUOTING A RUNTIME.** The two halves of the
+OCR run on different devices and fail independently: detection is onnxruntime, recognition is
+torch. The first Kaggle run had VietOCR on the T4 and DETECTION ON THE CPU — correct output,
+21 % slower, one warning inside a wall of onnxruntime noise (`ORT-1`).
+
+**Measured on VCB Q1-2026** — all three statements already `pdf` at `onnx@200` on disk, so the
+run has an exact baseline. **98 of 98 cells identical every time**, same layer, same unit, same
+`publish_date`: local RTX 3050 **100.6 s / 113.3 s**, T4 with CPU detection **83.8 s**, T4 with
+CUDA detection **69.0 s**. ⚠️ One document, accepted at layer 1 of 47, and the local spread is
+12 % — that is ~1.5×, not a benchmark.
+
+---
+
 ## 7b. Re-reading a FINISHED track without re-running it — measured 2026-08-21
 
 ⚠️ **The pooled row is printed, never stored.** `walkforward.evaluate` writes `per_fold.csv`

@@ -442,6 +442,75 @@ cut-down panel is a smoke test and never a measurement.**
 Measured on the real payload, 2026-08-17: `export` **2m 04s** → 1,247,098 × 104,
 **477.4 MB**, 300 tickers, 4,388 dates; `rehearse` **16.0 s**, both layouts, `n_eff = 218`.
 
+## 7c. ⚠️ DOCUMENTS MODE — the one job that ships no DATABASE at all
+
+Added 2026-08-28 for `pdf-ocr`, which runs the CafeF filing parse
+(`web_scraper.pdf_ocr_job`, notebook `src/web_scraper/RUN__pdf_ocr.ipynb`) on a T4. That parse
+never opens `database_main_v2` — its inputs are PDFs, twelve chart-of-accounts CSVs and two OCR
+model files — so the payload is a **zip of files**, not parquet, and the bootstrap must NOT
+swap `UnifiedSchemaReader`: there is nothing to swap it for, and `feature_selection` is not
+even in the payload.
+
+```json
+"data": {
+  "id": "<user>/mt-cafef-filings-vcb",
+  "title": "MT CafeF filings payload VCB",
+  "ticker": "VCB",
+  "source_dirs": ["src/web_scraper", "src/utils"],
+  "documents": { "exchange": "HOSE", "symbol": "VCB", "periods": ["Q1-2026"] }
+}
+```
+
+⚠️ **`manifest["mode"]` IS NOW WRITTEN FOR EVERY MODE, INCLUDING THE TWO THAT PREDATE IT.**
+The worker's branch used to be `if manifest.get("panel")` — a mode INFERRED from the presence
+of a key, which reads a third mode as the first one. Three values: `tables`, `panel`,
+`documents`.
+
+**What travels, and why each piece is load-bearing:**
+
+| in `documents.zip` | why |
+|---|---|
+| the ticker's PDF index | `documents()` re-runs on the worker and reads it |
+| the chosen filings | picked by `pdf_ocr_job.plan` → `FinancialsBuilder.documents()`, i.e. **the same function the worker will call**. A glob would let the payload and the worker's own choice diverge, and a worker that cannot find its document reports the quarter `missing` — which is what a genuinely unreadable one reports too |
+| the twelve charts of accounts | `schema_of` raises without them, AFTER the OCR |
+| **the statement CSVs already on disk** | twice over: `seed_history` rebuilds the magnitude band `sane` needs, and `compare()` scores the run against them cell by cell. ⚠️ Without them `sane` FAILS OPEN |
+| `deepdoc_det.onnx` + `vgg_seq2seq.pth` | otherwise the engine downloads them — from HuggingFace and vocr.vn — which a kernel with no internet cannot do at all |
+
+⚠️ **THE PAYLOAD IS UNPACKED OUTSIDE `/kaggle/working`.** That directory is what Kaggle
+collects and `pull` downloads; this payload is ~92 MB. It goes to a temp dir keyed on the
+payload path, so nothing is carried home twice.
+
+⚠️ **`enable_internet: true` IS REQUIRED, AND IT IS THE PACKAGES, NOT THE DATA.** Kaggle's
+image has torch, opencv and shapely and NOT vietocr, pymupdf, pyclipper or onnxruntime, so the
+notebook pip-installs those. The MODELS ship in the payload precisely so that no WEIGHT is ever
+fetched at run time.
+
+### ⚠️ Two defects it found in `kgpu`, both on paths `rehearse` cannot reach
+
+1. **`dataset.upload` read `manifest['schema']` unconditionally** for the version note and died
+   with a bare `KeyError: 'schema'` on the first documents payload — after the export, and on
+   the one path a rehearsal never walks, because it never uploads.
+2. **`_stage_layout` extracted only `source.zip`.** ⚠️ **Kaggle extracts EVERY zip**, into a
+   folder named after the archive, and deletes it. The nested rehearsal would therefore have
+   tested a shape the worker never sees. It now extracts by suffix.
+
+⚠️ Both are the section's own lesson from a third side: **the rehearsal covers the WORKER side,
+and the upload side has no rehearsal.**
+
+### ⚠️ And `ORT-1`: a green GPU run that was half on the CPU
+
+The first `pdf-ocr` run COMPLETED, reproduced all 98 cells of its baseline — and had run DB
+detection on the worker's **CPU**. `pip install onnxruntime-gpu` resolves to **1.29.0**, which
+needs cuDNN 9 with **CUDA 13** against Kaggle's **12.8**; `get_available_providers()` still
+advertised `CUDAExecutionProvider` and the session silently fell back. **83.8 s against 69.0 s**
+once the provider actually loaded. Pin the LINE — `onnxruntime-gpu>=1.19,<1.23` — and read
+`session.get_providers()`, never the advertisement. ⚠️ An `==1.20.1` pin was tried first and
+**failed the install**: that version is not published for Kaggle's cp312 Linux.
+
+⚠️ **The `⋈`/cp1252 trap of §7 fires on this job STRUCTURALLY, not incidentally**: the parse
+logs Vietnamese account labels, so the run log can never be ASCII. Pull it with
+`PYTHONUTF8=1 python -m kgpu pull pdf-ocr`.
+
 ## 8. Adding another notebook
 
 1. Add a job to `kaggle_config.json`: `id`, `notebook` (repo-relative), the
