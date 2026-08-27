@@ -854,6 +854,11 @@ run has an exact baseline. **98 of 98 cells identical every time**, same layer, 
 CUDA detection **69.0 s**. ⚠️ One document, accepted at layer 1 of 47, and the local spread is
 12 % — that is ~1.5×, not a benchmark.
 
+**And on the HARD document — `pdf-ocr-hard`, BID Q4-2016** (FY-2016 annual, cash flow at layer
+**45 of 47**): **32.9 min local against 26.4 min on a T4**, both REPRODUCED, both winning on the
+same layer 45. ⚠️ **The advantage SHRINKS to 1.24× on exactly the documents `P38`/`P6` are
+budgeted on** — budget the OCR programme on 1.25×, not 1.5×.
+
 ---
 
 ## 7b. Re-reading a FINISHED track without re-running it — measured 2026-08-21

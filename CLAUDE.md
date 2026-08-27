@@ -3718,10 +3718,52 @@ decided by a reconciliation.
 
 ⚠️ **THE SPEEDUP IS ~1.5× AND THE ERROR BAR IS VISIBLE IN THE TABLE.** Two local runs of the
 identical document differ by **12.7 s (12 %)**, so `107 ± 6 s` local against **69.0 s** on a T4
-is one measurement each, not a benchmark. ⚠️ **And it is a WEAK case for the T4 on purpose**: a
-document that stops at layer 1 pays for one OCR pass, while §6-2-quindecies' failing documents
-pay for ~10 and cost **18.2 min** — those are the ones a GPU is for, and none has been run
-there yet.
+is one measurement each, not a benchmark.
+
+### ⚠️ THE HARD DOCUMENT — BID Q4-2016, and it INVERTED the prediction written above it
+
+I wrote here, before running one, that an easy document is *"a WEAK case for the T4"* and that
+the failing documents *"are the ones a GPU is for"*. **Measured 2026-08-28, and the advantage
+gets SMALLER, not larger.**
+
+`HOSE_BID Q4-2016` is the hardest filing on disk: the FY-2016 audited consolidated **annual**
+report, 5.0 MB, whose balance sheet and income statement accept at `onnx@200` while its
+**cash flow needs `onnx@200+pad6+annual+extra` — layer 45 of 47**, three stacked defects deep
+(§6-2-quatervicies). `_parse_cascaded` breaks only when all three statements are accepted, so
+one unresolvable statement makes the whole document pay the entire cascade.
+
+| | card | parse | balance sheet | cash flow |
+|---|---|---|---|---|
+| local | RTX 3050 | **32.9 min** | REPRODUCED, `onnx@200` | REPRODUCED, `onnx@200+pad6+annual+extra` |
+| **Kaggle** | **Tesla T4** | **26.4 min** | REPRODUCED, `onnx@200` | REPRODUCED, **the same layer 45** |
+
+| | easy document (VCB Q1-2026) | **hard document (BID Q4-2016)** |
+|---|---|---|
+| local | 107 ± 6 s | 1,975 s |
+| T4 | 69.0 s | 1,587 s |
+| **speedup** | **1.55×** | **1.24×** |
+
+✅ **REPRODUCING THE LAYER IS THE STRONGER RESULT, AND IT IS WHAT THIS RUN WAS FOR.** The
+document does not merely read the same digits — it has to **lose 44 layers and win on the
+45th**, which means `reconcile`, `sane`, the per-`(engine, dpi, crop, …)` parse cache and the
+escalation order all behaved identically on Kaggle's **torch 2.10.0+cu128 / onnxruntime 1.22**
+as on this machine's **2.5.1+cu121 / 1.20.1**. `sane` got its band from disk (24/19/23 probes)
+and `open_ref = 55,968,854 mn`, the 1-Jan-2016 opening this repo verified in §6-2-vicies.
+
+⏭ **The INCOME STATEMENT was refused, not scored, and that is the design working.** An annual
+filing prints a CUMULATIVE P&L (19 mapped items) where the row on disk has been de-cumulated
+(12). `compare()` abstains and says so.
+
+⚠️ **WHY THE ADVANTAGE SHRINKS — a hypothesis, labelled as one, not a measurement.** A hard
+document runs ~10 distinct OCR passes (the cache keys on engine/dpi/crop/join/title/loose/…)
+but **47 MAPPING rounds**, and `map_to_schema` / `reconcile` / `sane` / `table_rows` are host
+work no GPU touches. So the GPU-bound share falls as a document gets harder, which is the
+opposite of what "the GPU is for the hard ones" assumes. **Nothing here measures that split**
+— it would need per-phase timing inside `_parse_cascaded`, which does not exist.
+
+⚠️ **RE-BUDGET `P38`/`P6` ON 1.25×, NOT 1.5×.** Those rows are costed on the FAILING document,
+which is precisely where the T4 helps least. A T4 does not make the OCR programme cheap; what
+it buys is a machine that is not this laptop, running in parallel with it, for free.
 
 ### ⚠️ `ORT-1` — A GREEN GPU RUN CAN BE HALF ON THE CPU, AND THAT IS WHAT KAGGLE RUN 1 WAS
 

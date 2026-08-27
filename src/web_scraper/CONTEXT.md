@@ -1488,10 +1488,27 @@ same layer, same unit, same `publish_date`:
 | Kaggle, `onnxruntime-gpu` 1.29 | Tesla T4 | ⚠️ CPU | 83.8 s |
 | **Kaggle, 1.22** | **Tesla T4** | **CUDA** | **69.0 s** |
 
-⚠️ **ONE DOCUMENT, ACCEPTED AT LAYER 1 OF 47.** It says nothing about a filing that escalates,
-where a fuzzy threshold has room to move between two library stacks. ⚠️ And the local spread is
-**12.7 s (12 %)** across two runs of the same file, so ~1.5× is one measurement each, not a
-benchmark.
+⚠️ The local spread is **12.7 s (12 %)** across two runs of the same file, so ~1.5× is one
+measurement each, not a benchmark.
+
+### And BID Q4-2016 — the HARD document, which inverts the speedup
+
+The hardest filing on disk: FY-2016 audited consolidated annual, 5.0 MB, cash flow at
+**layer 45 of 47** (`onnx@200+pad6+annual+extra`). `_parse_cascaded` breaks only when all three
+statements are accepted, so one unresolvable statement makes the whole document pay the cascade.
+
+| | local RTX 3050 | Tesla T4 | |
+|---|---|---|---|
+| parse | **32.9 min** | **26.4 min** | **1.24×** — against 1.55× on the easy document |
+| balance sheet | `onnx@200`, 52 items | same | REPRODUCED |
+| cash flow | `onnx@200+pad6+annual+extra`, 24 items | **the same layer 45** | REPRODUCED |
+| income statement | — | — | ⏭ refused: the filing is cumulative, the row on disk de-cumulated |
+
+✅ **Reproducing the LAYER is the stronger claim**: the document must lose 44 layers and win on
+the 45th, so `reconcile`, `sane`, the parse cache and the escalation order all behaved
+identically across two torch majors. ⚠️ **The T4 helps LEAST on the documents the OCR programme
+is budgeted on** — ~10 OCR passes against 47 host-side mapping rounds is the hypothesis, and it
+is not measured.
 
 ⚠️ **New OCR weights knob:** `CAFEF_ONNX_VIETOCR_WEIGHTS` points VietOCR at a LOCAL checkpoint.
 `download_weights` returns any non-`http` value unchanged, which is what makes it work; empty
