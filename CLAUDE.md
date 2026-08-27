@@ -3158,6 +3158,80 @@ lines for **73 minutes** while Dagster's compute log and the task output stayed 
 the **`LastAccessTime` of the filing PDFs**, which shows which document is open. That works and
 is worth reusing; a 7-hour `P38` ticker will be just as blind without it.
 
+### ⚠️ 6-2-vicies. BID Q3-2015 — THE FOURTH TERM IS A MERGER, NOT FX, AND `FXM-1` MISFIRES ON IT
+
+Recovered 2026-08-27, and **no code was written for it**. The value of this quarter is the two
+things it measured on the way.
+
+#### It was already parseable — `801a88b`'s `_anchor` seam split did it
+
+The filing's tail merges each label with the next item's numeral, so the closing balance came
+out keyed `nhan_sap_nhap_mhb_viii_tien_va_cac_khoan_tuong_duong_tien_`. `MERGED_SEAM_RE` — the
+**strict** one, no flag needed — splits that at `_viii_` to `tien_va_cac_khoan_tuong_duong_tien_`,
+which answers `C_CASH_CLOSE`. `_anchor` only gained that split on 2026-08-26 (`PGB-1`), so the
+2026-08-25 run could not map it. **`onnx@200` now passes `reconcile` AND `sane`**; the run took
+3m39s and the quarter needed no new layer. Cash flow **52 → 53 parsed**; from 2012 BID is
+**163 / 171 = 95.3 %**, with the balance sheet and income statement complete.
+
+#### ⚠️ THE FOURTH TERM IS THE MHB MERGER — BID absorbed MHB in 2015
+
+The tail reads **V** opening, **VII** `Tiền và các khoản tương đương tiền từ việc nhận sáp nhập
+MHB`, **VIII** closing. There is **no FX line at all**, and the identity closes to the đồng on
+the merger line instead:
+
+| | |
+|---|---|
+| opening (V) | **50,202,708** mn — equal to Q4-2014's closing, as a cumulative-from-1-Jan statement requires |
+| net for the period | 16,160,895 mn |
+| **VII · cash acquired with MHB** | **1,477,340** mn |
+| closing (VIII) | **67,840,943** mn |
+| **residual** | **0** |
+
+✅ **The merger line is correctly left UNMAPPED** — the bank chart of accounts has no column for
+it, and inventing one is not this run's business. The two balances are on disk and right.
+
+#### ⚠️ AND THAT IS WHY `FXM-1`'s WRITTEN RECOVERY IS UNSAFE — measured, before it ever ran
+
+`_recover_totals` claims *"when the recovered pair sits exactly two rows apart the row between
+them is the FX line"*, and defends itself with *"`_cash_flow_identity` tests opening + IV + fx ==
+closing to the đồng immediately afterwards, so a wrong row is REJECTED, not written"*.
+
+⚠️ **THAT ARGUMENT IS FALSE, AND THIS FILING IS THE COUNTEREXAMPLE.** The row between the two
+balances **is** the genuine fourth term — it is simply not FX. The identity therefore closes
+*because the row is right about the arithmetic and wrong about the account*, and it cannot
+reject what it confirms. Measured at `onnx@200+relax`: **`hdtc_vi_dieu_chinh_anh_huong_cua_thay_doi_ty_gia`
+= 1,477,340,000,000**, i.e. merger cash written into the FX column. Nothing reached disk only
+because that layer was refused for an unrelated reason (`opening not mapped`).
+
+⚠️ **This is `SLD-1`'s shape a third time: a wrong figure that passes every gate.** `P39` must not
+be run until the recovery names what it claims — the positional guess needs the row's own label
+to be consistent with FX, or the term must be written to a column that says "unidentified fourth
+term". **A structural defect, not a threshold.**
+
+#### ⚠️ AND A `periods` RUN SILENTLY DOWNGRADED THE QUARTER IT WAS GIVEN FOR HISTORY
+
+`PGB-1`'s remedy is *"put the preceding quarters in `periods` so the run's history matches the
+probe's"*. This run did that — `[Q1-2015, Q2-2015, Q3-2015]` — and **Q1-2015 came back worse**:
+
+| | before | after |
+|---|---|---|
+| winning layer | `onnx@200+pad6+components` | **`onnx@200`** |
+| `hddt_mua_sam_tai_san_co_dinh` | −424,367 mn | **lost** |
+| `hdkd_4_chenh_lech_...` | −11,922 mn | **−21,922 mn** — the two runs disagree |
+| `publish_date` (all 3 statements) | 2015-09-16 | **lost** |
+
+⚠️ **THE MECHANISM IS `sane`, PROVEN BY ELIMINATION.** Layer 1 is deterministic — the
+2026-08-26 regression reproduced 24 statements row for row — so the parse and `reconcile` were
+identical in both runs. The full run held a complete history there and **refused layer 1**; this
+run held almost none, `sane` failed open, and the earlier, worse layer won.
+
+⚠️ **SO `PGB-1`'s REMEDY CARRIES A COST NOBODY HAD MEASURED: the history-supplying quarters are
+themselves re-parsed with a THINNER history than they originally had, and can be silently
+downgraded.** The rule that survives is narrower — **a `periods` run may only WRITE the quarter
+it is repairing.** Q1-2015 was restored from the pre-run backup and the final diff is **one
+period changed across all nine CSVs**. ⚠️ Taking that backup is what made this visible at all;
+the log said `RUN_SUCCESS` and named `onnx@200` without a word about the downgrade.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
