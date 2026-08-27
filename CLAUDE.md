@@ -3370,6 +3370,66 @@ FX and the identity would confirm it.
 | the one gap | **Q4-2016**, and the correct closing is known: **65,521,789** mn |
 | collateral | **5 history-provider downgrades**, all restored — the pattern is now measured **three times** |
 
+### ⚠️ 6-2-tervicies. BID Q4-2016 STAYS `missing`, AND NOW THE REASON IS EXACT
+
+Worked 2026-08-27. The label defect was found and fixed; **the quarter is still not writable,
+and that is the correct outcome.** Both halves are worth carrying.
+
+#### What was wrong with the label, and what fixes it
+
+FY-2016's closing balance comes out keyed
+`ty_con_khi_hop_nhat_tien_vi_cac_khoan_tuong_duong_tien_cuo` while the line ITSELF reads
+"Tiền vì các khoản tương đương tiền cuối năm" and carries the right figures. Three separate
+things had to be true at once:
+
+1. **Somebody else's words are stuck on the front.** The previous item's label wrapped onto its
+   own line and was still pending when this row's figures arrived. ⚠️ **`table_rows` cannot fix
+   it**: on that page a wrapped continuation is **11.8pt** below its line and the next ordinary
+   row is **15.1pt** below, so widening the forward branch is tuning on a 3pt margin.
+2. **`slug` caps a key at 60 characters** and that is exactly where "cuối năm" lived, so no
+   amount of trimming recovers it — the trim must run on the re-slugged FULL label.
+3. ⚠️ **An ANNUAL report dates its balances by the YEAR where the chart of accounts names the
+   PERIOD** — "cuối năm" against "tại thời điểm cuối kỳ". A wording difference in the FILING,
+   like `CASH_TAIL`'s, so it does not improve with resolution: the trimmed label scores
+   **0.765** against the schema wording and **0.944** against the annual one.
+
+⚠️ **AND THE FIRST VERSION OF THE FIX SWAPPED THE TWO BALANCES.** Rewriting the account to the
+annual wording drops "tại thời điểm" — text the two lines SHARE — which raises the relative
+weight of everything else until the OPENING row scores **0.804** against the CLOSING account,
+over the bar. The walk then put the opening figure in the closing slot and **only `sane`'s
+equality gate caught it.** So the period word is now a **hard discriminator**: a row saying
+"đầu" is refused for the closing account outright, whatever it scores. Measured after:
+opening row **0.851 / 0.000**, closing row **0.000 / 0.840**.
+
+#### ⚠️ AND THE QUARTER IS STILL NOT WRITABLE — one line is misread at every DPI
+
+With the labels fixed, opening **55,806,145** and closing **65,521,789** are both correct. The
+statement still does not close:
+
+| | |
+|---|---|
+| net cash flow as parsed | **671,163** |
+| net cash flow REQUIRED | **6,711,633** |
+| what the OCR actually read | **`6.711.6.3`** — `parse_num` strips the dots and gets a **10x** error |
+| the 2015 comparative column | 50,199,476 + 4,129,329 + 1,477,340 = **55,806,145** ✅ closes exactly |
+
+⚠️ **A STRICT LAYER WOULD HAVE WRITTEN THAT.** `verify_cash` rides with `relax_totals`, so
+`onnx@200+annual` accepts a statement whose two balances are right and whose net is out by a
+factor of ten. **Only the `+relax` variant ships** — a layer that can recover a label must not
+also be a layer that skips the arithmetic. That is the third ordering lesson of the day and the
+sharpest: **the earlier lessons were about which layer runs first; this one is about which
+layer may exist at all.**
+
+⚠️ **So `missing` is the correct answer for Q4-2016**, and it is now `missing` for a reason that
+is written down rather than unknown: **opening 55,806,145 · net 6,711,633 · MHB 3,004,011 ·
+closing 65,521,789**, all four verified against the filing and against 2017's opening. A future
+session can check any fix against those four numbers in seconds.
+
+⚠️ **`annual_tail` HAS RECOVERED ZERO QUARTERS SO FAR** and is kept on the same terms as the six
+layers added 2026-08-24: it sits last, behind the identity check, and the annual wording is
+universal — every `FY-*` filing in the archive words its cash tail this way, so it will matter
+at `P38` scale. **That is an argument, not a measurement, and it is labelled as one.**
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

@@ -104,6 +104,7 @@ class ParseLayer:
     tail_continuation: bool = False
     label_wrap: bool = False
     unit_from_document: bool = False
+    annual_tail: bool = False
     crop_pad: Optional[float] = None
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
@@ -553,6 +554,29 @@ class FinancialsBuilder:
                    relax_totals=True),
         # …and the unit fix WITHOUT the label repair, last of all, for a filing it hurts.
         ParseLayer("onnx@200+unit", "onnx", 200, unit_from_document=True),
+        # ── SOMEBODY ELSE'S WORDS ARE STUCK TO THE FRONT OF THE LABEL (`annual_tail`) ──
+        # `table_rows` keys a row on `carry + label`, so a previous item whose label wrapped
+        # onto its own line — too far below its figures for the forward branch to reclaim —
+        # is still pending when the NEXT item's figures arrive. BID's FY-2016 cash flow keys
+        # its closing balance `ty_con_khi_hop_nhat_tien_vi_cac_khoan_tuong_duong_tien_cuoi_nam`
+        # while the line itself reads "Tiền vì các khoản tương đương tiền cuối năm" and carries
+        # the right figures (65,521,789 / 55,806,145). `_split_merged` cannot cut it (no section
+        # numeral at the seam) and containment cannot either (OCR "tiền vì" for "tiền và",
+        # and the filing says "cuối năm" where the schema says "cuối kỳ").
+        #
+        # ⚠️ **AND `table_rows` CANNOT FIX IT EITHER, WHICH IS WHY THIS SITS IN THE SCORER.**
+        # On that page a wrapped continuation is 11.8pt below its own line and the next ordinary
+        # row is 15.1pt below — widening the forward branch would be tuning on a 3pt margin and
+        # would swallow real labels. Scoring the suffixes is bounded instead: a trimmed
+        # candidate still has to clear `SCHEMA_MATCH` and still has to pass the ordered walk.
+        # ⚠️ **ONLY THE `+relax` VARIANT SHIPS, AND THAT IS THE WHOLE POINT — measured.** A
+        # STRICT layer does not run `_cash_flow_identity` (`verify_cash` rides with
+        # `relax_totals`), so `onnx@200+annual` ACCEPTS BID's FY-2016 with its opening and
+        # closing correct and its NET CASH FLOW misread: the cell reads "6.711.6.3", which
+        # `parse_num` strips to **671,163** against a true **6,711,633** — a 10x error on one
+        # line, in a statement whose two balances are right. The relaxed variant refuses it.
+        # A layer that can recover a label must not also be a layer that skips the arithmetic.
+        ParseLayer("onnx@200+annual+relax", "onnx", 200, annual_tail=True, relax_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -644,7 +668,8 @@ class FinancialsBuilder:
                     continue
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals,
                                          relax_split_tail=layer.relax_split_tail,
-                                         relax_merged_seam=layer.relax_merged_seam)
+                                         relax_merged_seam=layer.relax_merged_seam,
+                                         annual_tail=layer.annual_tail)
                 # ⚠️ THE SHORT-CIRCUIT IS LOAD-BEARING AND IS PRESERVED EXACTLY: `sane` runs
                 # only when `reconcile` passed, as it always has. What is new is that the
                 # refusal is KEPT rather than discarded — see the report below the loop.
@@ -1130,7 +1155,51 @@ class FinancialsBuilder:
                 s = s.replace(short, full)
         return s
 
-    def _label_score(self, account: str, key: str, relax: bool = False) -> float:
+    # How many leading words `annual_tail` may drop from a row's label. A carry that leaked in
+    # is one wrapped line — a handful of words — never half a statement, and an unbounded search
+    # would let any row match any account by discarding enough of itself.
+    MAX_TAIL_TRIM = 6
+
+    # How an ANNUAL report words the two cash balances, against how the chart of accounts does.
+    # Keyed schema-side so only these two lines are ever rewritten; everything else scores as
+    # before. ⚠️ The OPENING already matched by luck — "tại đầu năm" keeps the "tai" the schema
+    # also has — and it is listed anyway so the pair is treated the same way.
+    ANNUAL_WORDING = {
+        "taithoidiemcuoiky": "cuoinam",
+        "taithoidiemdauky": "daunam",
+    }
+
+    def _prefix_trims(self, key: str):
+        """The key, then the key with 1..`MAX_TAIL_TRIM` leading words dropped.
+
+        ⚠️ **A ROW'S LABEL CAN CARRY A PREFIX THAT BELONGS TO THE LINE ABOVE IT, and neither
+        `_split_merged` nor containment can remove it.** `table_rows` builds a label as
+        `carry + label`, so when the previous item's label wrapped onto its own line and was
+        too far below its figures to be reclaimed, that wrapped half is still pending when the
+        NEXT item's figures arrive. BID's FY-2016 cash flow prints
+        "…nhận từ [công] / ty con khi hợp nhất" and then, 18pt lower, its closing balance —
+        which comes out keyed `ty_con_khi_hop_nhat_tien_vi_cac_khoan_tuong_duong_tien_cuoi_nam`
+        while the line ITSELF reads "Tiền vì các khoản tương đương tiền cuối năm" and is
+        perfectly good.
+
+        ⚠️ `_split_merged` cannot cut it — there is no section numeral at the seam — and
+        containment cannot either, because OCR wrote "tiền vì" for "tiền và" and the filing says
+        "cuối năm" where the schema says "cuối kỳ". Distance cannot separate the two cases on
+        this page: the wrapped half sits **11.8pt** below its own line while the next ordinary
+        row is **15.1pt** below, so widening `table_rows`' forward branch would be tuning on a
+        3pt margin and would swallow real labels.
+
+        Scoring the suffixes instead costs nothing structural: a trimmed candidate must still
+        clear `SCHEMA_MATCH` and still pass the ordered walk, so this cannot invent a match —
+        it can only stop a good line being hidden behind somebody else's words.
+        """
+        yield key
+        parts = key.split("_")
+        for i in range(1, min(self.MAX_TAIL_TRIM, max(0, len(parts) - 2)) + 1):
+            yield "_".join(parts[i:])
+
+    def _label_score(self, account: str, key: str, relax: bool = False,
+                     annual_tail: bool = False) -> float:
         """How alike a schema account and a parsed row label are, both separator-stripped.
 
         One measure shared by the ordered walk and `_anchor`, so a line is scored the same way
@@ -1152,6 +1221,36 @@ class FinancialsBuilder:
         """
         from difflib import SequenceMatcher
 
+        if annual_tail:
+            # ⚠️ AN ANNUAL REPORT DATES ITS CASH BALANCES BY THE **YEAR** WHERE THE CHART OF
+            # ACCOUNTS NAMES THE **PERIOD** — "cuối năm" against "tại thời điểm cuối kỳ". That
+            # is a wording difference in the FILING, like `CASH_TAIL`'s, so it does not improve
+            # with resolution: BID's FY-2016 closing scores **0.79** against its own account and
+            # is lost. Both halves are needed and neither suffices alone — measured on that
+            # filing, the trimmed label scores 0.765 against the schema wording and **0.944**
+            # against the annual one.
+            bare = account.replace("_", "")
+            accounts = {account}
+            want = None
+            for schema_words, annual_words in self.ANNUAL_WORDING.items():
+                if schema_words in bare:
+                    accounts.add(bare.replace(schema_words, annual_words))
+                    want = annual_words[:4]          # "cuoi" / "daun" -> the period word
+            # ⚠️ **THE PERIOD WORD IS A HARD DISCRIMINATOR HERE, NOT A SCORE — measured.**
+            # Rewriting the account to the annual wording drops "tại thời điểm", which is text
+            # the two balances SHARE, and that raises the relative weight of everything else
+            # until the OPENING row scores **0.804** against the CLOSING account — over the bar.
+            # The walk then handed BID's FY-2016 closing slot the opening figure, and only
+            # `sane`'s equality gate caught it. A row that says "đầu" cannot be the closing
+            # balance whatever it scores, so it is refused outright rather than out-ranked.
+            if want:
+                other = "daun" if want == "cuoi" else "cuoi"
+                bare_key = key.replace("_", "")
+                if other in bare_key and want not in bare_key:
+                    return 0.0
+            return max(self._label_score(a, k, relax)
+                       for a in accounts for k in self._prefix_trims(key))
+
         account, key = self._expand(account), self._expand(key)
         r = SequenceMatcher(None, account, key).ratio()
         if (len(account) >= self.MIN_CONTAINS
@@ -1165,7 +1264,8 @@ class FinancialsBuilder:
     def map_to_schema(self, st: Statement, template: str,
                      relax_totals: bool = False,
                      relax_split_tail: bool = False,
-                     relax_merged_seam: bool = False) -> Dict[str, int]:
+                     relax_merged_seam: bool = False,
+                     annual_tail: bool = False) -> Dict[str, int]:
         """Parsed rows -> canonical columns.
 
         This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
@@ -1183,6 +1283,8 @@ class FinancialsBuilder:
         the balance-sheet grand-total columns from label variants the fuzzy match rejects — see
         `_recover_totals`.
         """
+        from web_scraper.cafef_pdf_parser import PdfParser
+
         schema = self.schema_of(template, st.report)
         if not schema:
             return {}
@@ -1198,17 +1300,25 @@ class FinancialsBuilder:
             if val is None:
                 continue
             key = self._split_merged(row.key, row.label,
-                                     relax_merged_seam).replace("_", "")
+                                     relax_merged_seam)
+            if annual_tail and key == row.key and row.label:
+                # ⚠️ `slug` CAPS A KEY AT 60 CHARACTERS AND THAT IS WHERE THE SUFFIX LIVES.
+                # With somebody else's words on the front, "…tiền cuối năm" is cut to "…tien_cuo"
+                # and no amount of trimming can bring it back. Re-slug the full label, exactly
+                # as `_split_merged` already does when hunting for a seam.
+                key = PdfParser.slug(row.label, maxlen=self.SEAM_SLUG_LEN)
+            key = key.replace("_", "")
             if key:
                 rows.append((i, val, key))
 
         accounts = [a.replace("_", "") for _, a in schema]
         out: Dict[str, int] = {}
         src: Dict[str, int] = {}                # column -> the parsed row that filled it
-        for j, ri in self._align([k for _, _, k in rows], accounts, relax_totals).items():
+        for j, ri in self._align([k for _, _, k in rows], accounts, relax_totals,
+                                 annual_tail).items():
             self._claim(out, src, schema[j][0], rows[ri][0], rows[ri][1])
 
-        self._anchor(out, schema, st, relax_totals, src, relax_merged_seam)
+        self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
         return out
@@ -1305,7 +1415,7 @@ class FinancialsBuilder:
     SCHEMA_GAP = 0.001
 
     def _align(self, keys: List[str], accounts: List[str],
-               relax: bool) -> Dict[int, int]:
+               relax: bool, annual_tail: bool = False) -> Dict[int, int]:
         """Best monotonic alignment of parsed rows onto schema lines -> {schema index: row index}.
 
         The ordered walk this replaces was greedy: each row took the best account still open
@@ -1339,7 +1449,7 @@ class FinancialsBuilder:
                 cand = fi[j - 1] - self.SCHEMA_GAP
                 if cand > best:
                     best, b = cand, 1
-                s = self._label_score(accounts[j - 1], key, relax)
+                s = self._label_score(accounts[j - 1], key, relax, annual_tail)
                 if s >= self.SCHEMA_MATCH:
                     cand = fp[j - 1] + s
                     if cand > best:
@@ -1601,7 +1711,8 @@ class FinancialsBuilder:
     def _anchor(self, out: Dict[str, int], schema: List[Tuple[str, str]],
                 st: Statement, relax: bool = False,
                 src: Optional[Dict[str, int]] = None,
-                relax_merged_seam: bool = False) -> None:
+                relax_merged_seam: bool = False,
+                annual_tail: bool = False) -> None:
         """Re-match the subtotals without regard to position.
 
         The ordered walk drifts. Once it has advanced past a column, a row that belongs there
@@ -1643,7 +1754,7 @@ class FinancialsBuilder:
                 # statement never printed on its own line (CLAUDE.md §5 rule 2).
                 k = self._split_merged(row.key, row.label,
                                        relax_merged_seam).replace("_", "")
-                r = self._label_score(a, k, relax)
+                r = self._label_score(a, k, relax, annual_tail)
                 # Length ratio: how much of the target the OCR'd label actually spans (min/max
                 # so a too-long label is penalised too). It also ranks the ties containment
                 # creates, since 0.95 is awarded flat to the line itself AND to anything that
