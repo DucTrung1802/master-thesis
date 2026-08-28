@@ -4047,6 +4047,70 @@ need it. ⚠️ **This does not make the Kaggle route worthless — it re-prices
 
 ---
 
+### ✅ 6-2-undetricies. THE TWO ENVIRONMENTS, ALIGNED 9 OF 10 — and the tenth is measured-impossible
+
+Done 2026-08-28, immediately after §6-2-duodetricies, and it **withdraws that section's
+range-pin**. Final state, verified by an interleaved pair that both REPRODUCE VCB Q1-2026's
+98 cells at `onnx@200`:
+
+| | local | Kaggle | |
+|---|---|---|---|
+| `onnxruntime-gpu` · `pymupdf` · `vietocr` · `opencv-python` · `opencv-python-headless` · `shapely` · `pyclipper` · `numpy` · `einops` | | | ✅ **identical, 9 of 9** |
+| **`torch`** | 2.5.1+cu121 | 2.10.0+cu128 | ❌ **cannot be aligned — measured** |
+
+⚠️ **THE FIRST ATTEMPT FAILED BECAUSE I ONLY TRIED ONE DIRECTION.** §6-2-duodetricies concluded
+*"pin the LINE, each platform keeps its own version"* after moving Kaggle DOWN to this
+machine's 1.20.2 broke the worker's parse. **Moving this machine UP to Kaggle's 1.22.0 was
+never tried.** It works: VCB Q1-2026 still reproduces 98 of 98 here under 1.22.0, so both
+machines now hold **one** version. ⚠️ **The finding is about the method, not the number: *"we
+cannot align"* was an inference drawn from a single direction, and the other direction cost
+four minutes.** The same treatment then aligned opencv — BOTH distributions to Kaggle's
+4.13.0.92, because Kaggle ships both and either can win the `cv2` import, so pinning one and
+leaving the other is a collision rather than an alignment.
+
+#### ❌ `torch` CANNOT BE ALIGNED, AND THAT IS NOW A MEASUREMENT
+
+Pushed once with `ALIGN_TORCH=True` and `torch==2.5.1+cu121 / torchvision==0.20.1+cu121` from
+`requirements-ocr-torch.txt`: pip reported success, **the very next cell still printed
+`torch 2.10.0+cu128`** — a running interpreter cannot be handed a different torch, its shared
+objects are already mapped — and the kernel then **died with `DeadKernelError` after 4.7
+minutes**. Doing it properly would need the install before any import *and a restart*, which a
+papermill batch run does not offer. The file is kept, **off**, so the next person does not
+spend a run learning it.
+
+### ⚠️ SO: CAN THE TWO ENVIRONMENTS BE MADE COMPLETELY IDENTICAL? **NO — and four things remain**
+
+| residue | why |
+|---|---|
+| **torch** 2.5.1+cu121 vs 2.10.0+cu128 | measured above. Aligning UP would also invalidate every model run in this repo, which records `env_fingerprint` for exactly that reason |
+| **Python** 3.12.10 vs 3.12.13 | Kaggle's image, not choosable |
+| **OS** Windows vs Linux | not choosable |
+| **GPU** RTX 3050 (sm_86) vs Tesla T4 (sm_75) | not choosable, and the deepest of the four |
+
+⚠️ **THE GPU IS THE ONE THAT WOULD SURVIVE EVEN A BYTE-IDENTICAL LIBRARY SET.** cuDNN and
+onnxruntime select different kernels per architecture, and a different reduction order is a
+different floating-point result. So "identical environment" is not merely unreached here — it
+is **unreachable** while the two machines have different silicon.
+
+#### ⚠️ AND CHASING IT IS THE WRONG INVARIANT — both halves are now measured
+
+**Version identity is neither necessary nor sufficient for output identity**, and this session
+produced one measurement of each:
+
+| | |
+|---|---|
+| **not necessary** | ort **1.20.1 local vs 1.22.0 Kaggle** — mismatched — **REPRODUCED 98/98** (§6-2-sexvicies) |
+| **not sufficient** | ort **1.20.2 on both** — identical — **DIVERGED**, and the fallback layer wrote a row-slid income statement both gates accepted (`ORT-2`) |
+
+✅ **The invariant that holds is VERIFIED-EQUAL OUTPUT, and this repo already has the machinery
+for it**: `compare()` scores every parsed cell against the statement CSV on disk, and
+`stack_fingerprint` makes any residual difference visible rather than absent. Alignment is
+worth doing — it removes whole classes of drift, and 9 of 10 is a much narrower place to look
+when something moves — but it is a **narrowing of the search space, not a proof**. The proof is
+the 98 cells.
+
+---
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -4192,7 +4256,7 @@ what a session budgets against.
 |---|---|---|
 | [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | **47.0k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER" — screens, `filter_schema`, and why a screen is not point-in-time) |
 | [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | **25.8k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
-| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **34.1k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
+| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **34.4k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
 | [src/feature_selection/docs/RANKER_COMPARISON.md](src/feature_selection/docs/RANKER_COMPARISON.md) | **4.5k** | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | **6.8k** | building or rebuilding a `__final__` table |

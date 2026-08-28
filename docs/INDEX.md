@@ -27,7 +27,7 @@
 
 | file | ~tokens | what it answers |
 |---|---|---|
-| [../CLAUDE.md](../CLAUDE.md) | **74.4k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state |
+| [../CLAUDE.md](../CLAUDE.md) | **75.6k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state |
 | **docs/INDEX.md** *(this file)* | ~2k | *where is everything else, and what does it cost to open?* |
 
 ---
@@ -78,7 +78,7 @@ one or two.**
 |---|---|---|
 | [../src/feature_selection/CONTEXT.md](../src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar. §15a the country-sweep guide, §16 the GPU conversion, §19 the ranker measurement |
 | [../src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md) | **47.0k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER") |
-| [../src/web_scraper/CONTEXT.md](../src/web_scraper/CONTEXT.md) | **34.1k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
+| [../src/web_scraper/CONTEXT.md](../src/web_scraper/CONTEXT.md) | **34.4k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [../src/orchestration/preprocessor/CONTEXT.md](../src/orchestration/preprocessor/CONTEXT.md) | **25.8k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library |
 | [../src/walkforward/CONTEXT.md](../src/walkforward/CONTEXT.md) | **16.0k** | asking whether a result survives more than ONE split, or which MODEL to use. §8 is PRF-8 (three architectures, 101× capacity, all tied) |
 | [../src/model/CONTEXT.md](../src/model/CONTEXT.md) | **12.0k** | training, adding a model type, or quoting a run's numbers. §1a is the RUN STANDARD |

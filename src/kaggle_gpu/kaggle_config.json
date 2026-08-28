@@ -450,6 +450,7 @@
         }
       },
       "parameters": {
+        "ALIGN_TORCH": false,
         "MODE": "kgpu",
         "TEMPLATE": null,
         "EXCHANGE": "HOSE",
@@ -487,6 +488,7 @@
         }
       },
       "parameters": {
+        "ALIGN_TORCH": false,
         "MODE": "kgpu",
         "TEMPLATE": null,
         "EXCHANGE": "HOSE",
@@ -524,6 +526,7 @@
         }
       },
       "parameters": {
+        "ALIGN_TORCH": false,
         "MODE": "kgpu",
         "TEMPLATE": "corp",
         "EXCHANGE": "HOSE",

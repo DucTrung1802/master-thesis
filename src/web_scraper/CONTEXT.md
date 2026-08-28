@@ -1558,11 +1558,22 @@ Q1-2026's 98 cells at `onnx@200`, `1.20.2` makes that layer FAIL, and the `onnx@
 writes a row-slid income statement that `reconcile` and `sane` both accept. Both versions are
 inside the CUDA 12 / cuDNN 9 line — **supported is not equivalent**.
 
+✅ **AND THEN ALIGNED PROPERLY, 9 OF 10** — because the range-pin above was an answer drawn
+from ONE direction. Only the DOWNWARD move had been tried; moving THIS machine UP to Kaggle's
+**1.22.0** reproduces 98/98 here too, so a single version holds. The same treatment aligned
+**both** opencv distributions to 4.13.0.92 (Kaggle ships both, either can win the `cv2` import,
+so pinning one is a collision). Every pin is guarded by a VCB Q1-2026 re-parse.
+
 | | |
 |---|---|
-| pinned exactly | `pymupdf`, `vietocr`, `shapely`, `pyclipper`, `numpy`, `einops` — verified reproducing on both |
-| pinned as a LINE | `onnxruntime-gpu>=1.19,<1.23` — Windows 1.20.2, Linux 1.22.0, each measured to reproduce there |
-| recorded, not pinned | `opencv` (Kaggle ships BOTH distributions; a pin moves one and leaves the other), `torch`, Python patch, OS |
+| pinned to ONE version, both machines | `onnxruntime-gpu==1.22.0`, `pymupdf`, `vietocr`, `opencv-python`, `opencv-python-headless`, `shapely`, `pyclipper`, `numpy`, `einops` |
+| ❌ cannot be aligned | `torch` — measured: pip succeeds, the next cell still prints the OLD version because a running interpreter cannot be handed a new torch, and the kernel then DIES. `requirements-ocr-torch.txt` is kept OFF so nobody spends a run re-learning it |
+| unchoosable | Python patch (3.12.10 / 3.12.13), OS, and the **GPU architecture** — sm_86 against sm_75, which selects different cuDNN kernels and would survive a byte-identical library set |
+
+⚠️ **VERSION IDENTITY IS NEITHER NECESSARY NOR SUFFICIENT FOR OUTPUT IDENTITY, and one
+measurement of each exists**: a MISMATCHED pair (1.20.1/1.22.0) reproduced 98/98, and an
+IDENTICAL pair (1.20.2 both) diverged. Alignment narrows where to look when something moves;
+**the proof is `compare()` against the cells on disk.**
 
 ⚠️ **"Same version" is not the goal; "same OUTPUT" is.** `engine_report()` records the whole
 stack, a 12-char `stack_fingerprint` and `pin_violations` into every `metadata.json` —
