@@ -1,0 +1,4 @@
+period,report,layer,items,status,verdict,seconds
+Q1-2026,balance_sheet,onnx@200,59,pdf,REPRODUCED,53.82
+Q1-2026,income_statement,onnx@200,22,pdf,REPRODUCED,53.82
+Q1-2026,cash_flow,onnx@200,17,pdf,REPRODUCED,53.82

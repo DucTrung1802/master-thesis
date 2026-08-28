@@ -661,6 +661,29 @@ class DocumentResult:
         }
 
 
+def _rows_digest(statement) -> str:
+    """12 hex characters over EVERY parsed row — label, numbering and figures.
+
+    ⚠️ **THE MAPPED CELLS ARE THE MINORITY, AND THEY ARE ALL THE ARTEFACT USED TO CARRY.** A
+    statement's `rows` are what the OCR read; `map_to_schema` then places some of them on chart
+    columns and drops the rest. Two runs agreeing on the mapped cells therefore agree on the
+    part that reconciles and say NOTHING about the rest — a label read differently on an
+    unmapped line, or a figure on a line the chart has no column for, is invisible. This is the
+    comparison that is not.
+
+    ⚠️ It is a DIGEST, so it answers "identical or not" and never "how do they differ". That is
+    the right trade for an artefact that must stay small; a run that disagrees is re-read with
+    both statements in hand.
+    """
+    import hashlib
+
+    blob = "\n".join(
+        f"{r.number}|{r.key}|{r.label}|" + ",".join("" if v is None else str(v) for v in r.values)
+        for r in statement.rows
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
+
+
 def run_document(builder: FinancialsBuilder, task: DocumentTask,
                  history: Dict[str, Dict[str, List[int]]],
                  open_ref: Optional[int] = None,
@@ -696,6 +719,26 @@ def run_document(builder: FinancialsBuilder, task: DocumentTask,
         result.accepted[report] = {
             "layer": layer,
             "items": len(row),
+            # ⚠️ **EVERY ROW THE PARSER READ, NOT ONLY THE ONES THAT MAPPED.** `values` below
+            # holds the mapped cells — 98 for VCB Q1-2026 — and two runs agreeing on those says
+            # nothing about the lines that mapped to no column, which is most of a statement.
+            # This digest covers the label, the filing's own numbering and every figure of every
+            # parsed row, so two runs can be compared on what the OCR actually READ rather than
+            # on what survived the mapping. Added 2026-08-28 to answer exactly that question.
+            "rows": len(statement.rows),
+            "rows_sha": _rows_digest(statement),
+            # ⚠️ **THE ROWS THEMSELVES, BECAUSE A DIGEST THAT DISAGREES IS USELESS ON ITS OWN.**
+            # The first cross-machine comparison at row level found the cash flow's digest
+            # differing while all 98 mapped cells matched — and the artefact could not say
+            # WHERE, so locating it needed another run on each machine. That is §6-2-quindecies'
+            # lesson exactly: the parser computed the answer and threw it away. ~10 KB per
+            # document, against an artefact that is already ~9 KB and a re-run that costs
+            # minutes on two machines.
+            "row_dump": [
+                [r.number, r.key, r.label,
+                 [None if v is None else int(v) for v in r.values]]
+                for r in statement.rows
+            ],
             "pages": statement.pages,
             "unit": statement.unit,
             "n_columns": statement.n_columns,

@@ -4111,6 +4111,51 @@ the 98 cells.
 
 ---
 
+### ⚠️ 6-2-tricies. IS THE VCB OUTPUT IDENTICAL ON BOTH MACHINES? **NO — one diacritic, and it is harmless**
+
+Asked and measured 2026-08-28, after §6-2-undetricies aligned 9 of 10 libraries. ⚠️ **The
+question could not be answered by anything already recorded**: `compare()` scores each run
+against the statement CSV on DISK, so two runs both reading `REPRODUCED` agree on the **98
+mapped cells** and say nothing about the rest of the statement. `pdf_ocr_job` now records
+`rows`, `rows_sha` and a `row_dump` per statement — every line the OCR read, mapped or not.
+
+| statement | rows read | mapped | identical? |
+|---|---|---|---|
+| balance sheet | 72 | 59 | ✅ |
+| income statement | 29 | 22 | ✅ |
+| **cash flow** | **32** | 17 | ❌ **one row** |
+
+**The whole difference, located from the artefacts alone:**
+
+| | |
+|---|---|
+| local | `Các kho**ản** tiền gửi của khách hàng` |
+| Kaggle | `Các kho**àn** tiền gửi của khách hàng` |
+
+⚠️ **ONE TONE MARK, ON AN UNMAPPED LINE, AND NO FIGURE DIFFERS ANYWHERE.** Every `values` list
+of every row is identical on both machines; only that label's text moved. So the honest answer
+is *"not byte-identical, and identical in every number"*.
+
+✅ **AND THE REASON IT CANNOT PROPAGATE IS STRUCTURAL, NOT LUCK.** A row is matched on its
+`key`, which is `slug(label)` — accent-stripped ASCII — and both labels slug to
+`cac_khoan_tien_gui_cua_khach_hang`. **A tone-mark misread cannot move a figure**, because
+nothing downstream reads the accented text. That is worth knowing before anyone tries to
+"fix" it.
+
+⚠️ **IT IS A RECOGNITION DIFFERENCE, AND THE REMAINING RESIDUE EXPLAINS IT — but which part of
+the residue is not established.** Detection is onnxruntime, now the same version on both;
+recognition is VietOCR under **torch**, which cannot be aligned (§6-2-undetricies), running on
+**different silicon** (sm_86 against sm_75). Either would do it and this measurement does not
+separate them.
+
+⚠️ **THE ARTEFACT COULD NOT LOCATE THIS UNTIL IT WAS MADE TO.** The first cross-machine check
+carried only `rows_sha`, so it reported *that* the cash flow differed and not *where* — and
+finding out cost another run on each machine. §6-2-quindecies' lesson, one stage over: the
+parser computed the rows and the artefact threw them away. `row_dump` is ~10 KB per document
+against a re-run measured in minutes on two machines.
+
+---
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

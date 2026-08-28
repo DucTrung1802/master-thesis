@@ -1585,6 +1585,21 @@ nothing else.
 install cell had to stop reconstructing `==` pins from the file, because the day one became a
 RANGE it was silently never installed and the run blamed a missing internet connection it had.
 
+
+### Is the output identical on both machines? One diacritic, and no figure
+
+Measured 2026-08-28. `compare()` scores a run against the CSV on disk, so two `REPRODUCED`
+runs agree on the MAPPED cells only. `rows_sha` + `row_dump` record every line the OCR read:
+VCB Q1-2026's balance sheet (72 rows) and income statement (29) are identical on both
+machines; the cash flow's 32 rows differ in **one label** — `khoản` locally, `khoàn` on the
+worker — and **no `values` entry differs anywhere**.
+
+✅ It cannot propagate: a row is matched on `slug(label)`, accent-stripped ASCII, and both slug
+to `cac_khoan_tien_gui_cua_khach_hang`. **A tone-mark misread cannot move a figure.**
+
+⚠️ It is a RECOGNITION difference — VietOCR under `torch`, the one library that cannot be
+aligned, on different silicon (sm_86 / sm_75). Which of the two is unestablished.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):
