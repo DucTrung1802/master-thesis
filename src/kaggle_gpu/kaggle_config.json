@@ -499,6 +499,43 @@
         "COMPARE": true,
         "NOTES": "THE HARD DOCUMENT. VCB Q1-2026 accepted at layer 1 of 47, so it measured the integration and not the cascade. BID Q4-2016 is the opposite pole and it is the hardest filing this repo has on disk: the FY-2016 audited consolidated ANNUAL report, 5.0 MB, whose balance sheet and income statement accept at `onnx@200` while its CASH FLOW needs `onnx@200+pad6+annual+extra` - layer 45 of 47, three separate defects deep (a detector box that ends INSIDE the number, an annual report that dates its cash tail by the YEAR where the schema names the PERIOD, and a fourth reconciling term the bank chart of accounts has no column for: the MHB merger cash). `_parse_cascaded` breaks only when all three statements are accepted, so ONE unresolvable statement makes the other two pay the whole cascade - CLAUDE.md section 6-2-decies' bimodal cost, and the ~10 distinct OCR passes are what a T4 is actually for. Locally the four-period run that recovered this quarter took 35m 20s. THE INCOME STATEMENT WILL NOT BE SCORED and that is correct: an annual filing prints a CUMULATIVE P&L and the row on disk has been de-cumulated, so `compare()` refuses it rather than reporting every cell as changed."
       }
+    },
+    "pdf-ocr-vic": {
+      "id": "lyductrung/mt-pdf-ocr-vic-q1-2026",
+      "title": "MT pdf ocr VIC Q1 2026",
+      "notebook": "src/web_scraper/RUN__pdf_ocr.ipynb",
+      "results_into": "reports/pdf_ocr",
+      "enable_internet": true,
+      "data": {
+        "id": "lyductrung/mt-cafef-filings-vic",
+        "title": "MT CafeF filings payload VIC",
+        "ticker": "VIC",
+        "source_dirs": [
+          "src/web_scraper",
+          "src/utils"
+        ],
+        "documents": {
+          "exchange": "HOSE",
+          "symbol": "VIC",
+          "periods": [
+            "Q1-2026"
+          ],
+          "allow_parent": false
+        }
+      },
+      "parameters": {
+        "MODE": "kgpu",
+        "TEMPLATE": "corp",
+        "EXCHANGE": "HOSE",
+        "SYMBOL": "VIC",
+        "PERIODS": [
+          "Q1-2026"
+        ],
+        "ALLOW_PARENT": false,
+        "LAYERS": null,
+        "COMPARE": true,
+        "NOTES": "VIC Q1-2026 on a T4, INTERLEAVED with a local run of the same document started the same minute. The previous local-vs-T4 comparisons were taken hours apart and were withdrawn when two further local runs of one document came in 2.25x faster with nothing recorded to explain it (CLAUDE.md 6-2-sexvicies) - interleaving is the fix. This document is the WORST case for a GPU: 47 of 47 layers entered, 22 fresh OCR passes over 71 pages and 25 cached re-maps, because the income statement is never found and `_parse_cascaded` only breaks when all three are accepted. TEMPLATE is stated rather than resolved so both machines take the same route. Nothing here may be quoted as a fundamental: CRP-1."
+      }
     }
   }
 }

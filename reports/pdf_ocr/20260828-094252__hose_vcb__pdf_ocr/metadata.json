@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "run_id": "20260828-094252__hose_vcb__pdf_ocr",
+  "stage": "web_scraper.pdf_ocr_job",
+  "created": "2026-08-28T09:44:08+07:00",
+  "git_commit": "1f62a1e+dirty",
+  "notes": "The PDF parse on a Kaggle T4. VCB Q1-2026 is the test case because all three of its statements already read `pdf` at `onnx@200` on this machine, from the consolidated filing - so the run has an exact baseline and `compare()` scores every cell against it. The question is NOT whether the quarter parses (it does, here); it is whether a T4 with Kaggle's own torch and onnxruntime reproduces the same LAYER and the same FIGURES. Run 1 (2026-08-28, 83.8 s) reproduced all 98 cells - and its log showed DB detection had fallen back to the CPU, because a bare `onnxruntime-gpu` resolves to 1.29.0 which needs CUDA 13 against Kaggle's 12.8. onnxruntime-gpu is pinned to the CUDA 12 line (1.20.1, this repo's own version) and the notebook now reports what the SESSION holds rather than what get_available_providers() advertises. Nothing is written back to the statement CSVs either way.",
+  "inputs": {
+    "exchange": "HOSE",
+    "symbol": "VCB",
+    "periods": [
+      "Q1-2026"
+    ],
+    "allow_parent": false,
+    "period_min": "Q1-2008",
+    "template_requested": null,
+    "layers_requested": null,
+    "compare_with_disk": true,
+    "notes": "The PDF parse on a Kaggle T4. VCB Q1-2026 is the test case because all three of its statements already read `pdf` at `onnx@200` on this machine, from the consolidated filing - so the run has an exact baseline and `compare()` scores every cell against it. The question is NOT whether the quarter parses (it does, here); it is whether a T4 with Kaggle's own torch and onnxruntime reproduces the same LAYER and the same FIGURES. Run 1 (2026-08-28, 83.8 s) reproduced all 98 cells - and its log showed DB detection had fallen back to the CPU, because a bare `onnxruntime-gpu` resolves to 1.29.0 which needs CUDA 13 against Kaggle's 12.8. onnxruntime-gpu is pinned to the CUDA 12 line (1.20.1, this repo's own version) and the notebook now reports what the SESSION holds rather than what get_available_providers() advertises. Nothing is written back to the statement CSVs either way.",
+    "template": "bank",
+    "template_how": "templates.csv",
+    "data_root": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-vcb/documents/data/cafef",
+    "models": {
+      "det": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-vcb/documents/models/deepdoc_det.onnx",
+      "vietocr": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-vcb/documents/models/vgg_seq2seq.pth"
+    },
+    "documents": [
+      "HOSE_VCB__Q1-2026"
+    ],
+    "layers": [
+      "onnx@200",
+      "onnx@300",
+      "onnx@400",
+      "tesseract@200",
+      "onnx@200+relax",
+      "onnx@300+relax",
+      "tesseract@400+relax",
+      "onnx@200+components",
+      "onnx@300+components",
+      "onnx@200+relax+components",
+      "onnx@200+pad6+components",
+      "onnx@200+pad6+relax+components",
+      "onnx@300+split",
+      "onnx@300+split+components",
+      "onnx@200+join+components",
+      "onnx@200+join+relax+components",
+      "onnx@200+title",
+      "onnx@200+title+relax",
+      "onnx@200+loose",
+      "onnx@200+loose+relax",
+      "onnx@400+loose",
+      "onnx@400+loose+relax",
+      "onnx@300+loose",
+      "onnx@300+loose+relax",
+      "onnx@200+title+loose",
+      "onnx@200+title+loose+relax",
+      "onnx@200+realign",
+      "onnx@200+realign+relax",
+      "onnx@300+realign",
+      "onnx@300+realign+relax",
+      "onnx@200+realign+relax+components",
+      "onnx@200+notes+seam",
+      "onnx@200+notes+seam+relax",
+      "onnx@300+notes+seam",
+      "onnx@200+notes+seam+realign",
+      "onnx@200+notes",
+      "onnx@200+tail",
+      "onnx@200+tail+relax",
+      "onnx@300+tail",
+      "onnx@200+tail+relax+components",
+      "onnx@200+unit+tail",
+      "onnx@200+unit+tail+relax",
+      "onnx@200+unit",
+      "onnx@200+annual+relax",
+      "onnx@200+pad6+annual+extra",
+      "onnx@200+pad6+extra",
+      "onnx@300+pad6+annual+extra"
+    ],
+    "layers_are_the_full_cascade": true
+  },
+  "environment": {
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "Tesla T4",
+      "count": 2,
+      "vram_total_mb": 14912,
+      "vram_free_mb": 12817,
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128"
+    },
+    "host": "a81e074afc4d",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "timezone": "GMT+7",
+    "ocr": {
+      "det_providers": [
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ],
+      "recognizer_device": "cuda",
+      "stack": {
+        "onnxruntime-gpu": "1.20.2",
+        "pymupdf": "1.28.0",
+        "vietocr": "0.3.13",
+        "opencv-python-headless": "4.13.0.92",
+        "opencv-python": "4.13.0.92",
+        "shapely": "2.1.2",
+        "pyclipper": "1.4.0",
+        "numpy": "2.2.6",
+        "einops": "0.2.0",
+        "torch": "2.10.0+cu128"
+      },
+      "stack_fingerprint": "dbc5f2a24eca",
+      "pin_violations": {},
+      "onnxruntime": "1.20.2",
+      "onnxruntime_advertises": [
+        "TensorrtExecutionProvider",
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ]
+    }
+  },
+  "execution": {
+    "started_at": "2026-08-28T09:42:52+07:00",
+    "finished_at": "2026-08-28T09:44:08+07:00",
+    "timezone": "GMT+7",
+    "runtime_seconds": 75.78,
+    "runtime": "1m 16s",
+    "device": "cuda",
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "Tesla T4",
+      "count": 2,
+      "vram_total_mb": 14912,
+      "vram_free_mb": 12813,
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128"
+    },
+    "host": "a81e074afc4d",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35"
+  },
+  "results": [
+    {
+      "period": "Q1-2026",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 58,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 75.73
+    },
+    {
+      "period": "Q1-2026",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 75.73
+    },
+    {
+      "period": "Q1-2026",
+      "report": "cash_flow",
+      "layer": "onnx@300",
+      "items": 16,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 75.73
+    }
+  ]
+}

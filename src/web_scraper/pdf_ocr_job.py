@@ -1009,6 +1009,74 @@ def _ocr_device() -> str:
         return "unknown"
 
 
+# ⚠️ **THE STACK THAT DECIDES WHAT THE OCR READS.** Every one of these changes pixels, boxes
+# or characters — `requirements-ocr.txt` says which does what — so two runs that differ in any
+# of them are two PROCEDURES, not one repeated. `torch` is on the list and is NOT pinnable
+# (Kaggle ships its own), which is exactly why the list is RECORDED rather than merely pinned.
+# The same shape as `feature_selection.report.FINGERPRINTED_LIBRARIES`, one stage over.
+FINGERPRINTED_LIBRARIES = (
+    "onnxruntime-gpu", "pymupdf", "vietocr", "opencv-python-headless", "opencv-python",
+    "shapely", "pyclipper", "numpy", "einops", "torch",
+)
+
+REQUIREMENTS = Path(__file__).resolve().parent / "requirements-ocr.txt"
+
+
+def ocr_stack() -> Dict[str, Optional[str]]:
+    """`{package: version or None}` for everything that decides what the OCR reads."""
+    import importlib.metadata as md
+
+    out: Dict[str, Optional[str]] = {}
+    for name in FINGERPRINTED_LIBRARIES:
+        try:
+            out[name] = md.version(name)
+        except Exception:  # noqa: BLE001 — absent is an answer, and it is `None`
+            out[name] = None
+    return out
+
+
+def stack_fingerprint(stack: Optional[Dict[str, Optional[str]]] = None) -> str:
+    """12 hex characters over the whole stack — what makes a drift comparable, not invisible.
+
+    ⚠️ **A DIFFERENT FINGERPRINT MEANS TWO RUNS MAY NOT BE COMPARED ON ANYTHING BUT
+    CORRECTNESS.** This machine and a Kaggle worker cannot be brought to one stack — Kaggle's
+    torch is preinstalled and this repo's modelling is validated against ours — so the residue
+    is real and permanent. Recording it is the only honest option: an unrecorded difference is
+    not an absent one (§5 rule 2).
+    """
+    import hashlib
+
+    stack = ocr_stack() if stack is None else stack
+    blob = ";".join(f"{k}=={v}" for k, v in sorted(stack.items()))
+    return hashlib.sha256(blob.encode()).hexdigest()[:12]
+
+
+def requirement_pins() -> Dict[str, str]:
+    """`{package: pinned version}` read from `requirements-ocr.txt` — the single source."""
+    pins: Dict[str, str] = {}
+    if not REQUIREMENTS.is_file():
+        return pins
+    for raw in REQUIREMENTS.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if "==" in line:
+            name, _, version = line.partition("==")
+            pins[name.strip()] = version.strip()
+    return pins
+
+
+def pin_violations() -> Dict[str, str]:
+    """Which pinned packages are NOT at the pinned version here. Empty = aligned.
+
+    ⚠️ **REPORTED, NEVER ENFORCED.** A worker that could not honour a pin has still done work
+    worth collecting, and refusing the run would throw it away; what must not happen is the
+    mismatch going unnoticed. So it lands in `metadata.json` and is printed.
+    """
+    installed = ocr_stack()
+    return {name: f"pinned {want}, installed {installed.get(name) or 'ABSENT'}"
+            for name, want in requirement_pins().items()
+            if installed.get(name) != want}
+
+
 def engine_report() -> Dict[str, object]:
     """Which device each HALF of the OCR actually ran on. Cheap: it loads the 4.7 MB detector.
 
@@ -1025,7 +1093,17 @@ def engine_report() -> Dict[str, object]:
     can have VietOCR on a T4 and the DB detector on the worker's CPU, which is exactly what the
     first Kaggle run did.
     """
-    out: Dict[str, object] = {"det_providers": None, "recognizer_device": _ocr_device()}
+    stack = ocr_stack()
+    out: Dict[str, object] = {
+        "det_providers": None,
+        "recognizer_device": _ocr_device(),
+        # ⚠️ The whole stack and its fingerprint, so a later reader can tell two runs apart
+        # without diffing version lists — and so the part that CANNOT be pinned (torch, the
+        # Python patch level, the OS) is visible rather than merely absent.
+        "stack": stack,
+        "stack_fingerprint": stack_fingerprint(stack),
+        "pin_violations": pin_violations(),
+    }
     try:
         import onnxruntime as ort
 

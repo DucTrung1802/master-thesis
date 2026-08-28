@@ -1545,6 +1545,35 @@ restores the URL, i.e. the behaviour every run had before. An unreadable path RA
 than falling back to the download — on a worker with no internet that fallback is a connection
 error minutes into the first page.
 
+
+### The OCR stack — `requirements-ocr.txt`, and why it is not all `==`
+
+One file, installed into `mt_env` by hand and onto a Kaggle worker by the notebook. Every line
+in it changes pixels, boxes or characters, so a drift between the two machines is a drift in
+what the OCR reads.
+
+⚠️ **PINNING BOTH MACHINES TO ONE onnxruntime VERSION BROKE THE WORKER** (`ORT-2`, measured
+2026-08-28 over four T4 runs with opencv varied to exonerate it): `1.22.0` reproduces VCB
+Q1-2026's 98 cells at `onnx@200`, `1.20.2` makes that layer FAIL, and the `onnx@300` fallback
+writes a row-slid income statement that `reconcile` and `sane` both accept. Both versions are
+inside the CUDA 12 / cuDNN 9 line — **supported is not equivalent**.
+
+| | |
+|---|---|
+| pinned exactly | `pymupdf`, `vietocr`, `shapely`, `pyclipper`, `numpy`, `einops` — verified reproducing on both |
+| pinned as a LINE | `onnxruntime-gpu>=1.19,<1.23` — Windows 1.20.2, Linux 1.22.0, each measured to reproduce there |
+| recorded, not pinned | `opencv` (Kaggle ships BOTH distributions; a pin moves one and leaves the other), `torch`, Python patch, OS |
+
+⚠️ **"Same version" is not the goal; "same OUTPUT" is.** `engine_report()` records the whole
+stack, a 12-char `stack_fingerprint` and `pin_violations` into every `metadata.json` —
+**reported, never enforced**, because a worker that could not honour a pin has still done work
+worth collecting. Two runs whose fingerprints differ may be compared on correctness and on
+nothing else.
+
+⚠️ **`source.zip` had to learn `.txt`** or the pins file never reached the worker; and the
+install cell had to stop reconstructing `==` pins from the file, because the day one became a
+RANGE it was silently never installed and the run blamed a missing internet connection it had.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

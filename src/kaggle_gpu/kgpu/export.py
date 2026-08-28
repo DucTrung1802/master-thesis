@@ -50,7 +50,13 @@ REMOTE_FILES = ("kgpu_bootstrap.py", "kgpu_remote_reader.py")
 # notebook being run is uploaded as the KERNEL; the four `study_*.ipynb` files
 # beside it are 1.4 MB each of finished write-up and would be dead weight in
 # every dataset version.
-SOURCE_INCLUDE = (".py",)
+# ⚠️ **`.txt` JOINED `.py` ON 2026-08-28 FOR ONE FILE, AND IT IS LOAD-BEARING**:
+# `src/web_scraper/requirements-ocr.txt` is the single source of truth for the OCR stack, and
+# the worker's notebook installs FROM it. Shipping only `.py` would have left the worker
+# raising on a missing file — after the queue and the upload. Measured across all three
+# `source_dirs`, this adds exactly one 8 KB file, so it costs nothing; if a large `.txt` ever
+# lands in a shipped package, narrow this rather than widening it further.
+SOURCE_INCLUDE = (".py", ".txt")
 SOURCE_EXCLUDE_DIRS = {"__pycache__", ".ipynb_checkpoints", ".git", "runs"}
 
 MANIFEST = "manifest.json"
@@ -633,7 +639,9 @@ def _finish_payload(cfg: JobConfig, folder: Path, manifest: dict,
     total = sum(p.stat().st_size for p in folder.iterdir() if p.is_file())
     if not quiet:
         print(
-            f"  source.zip: {sum(source_counts.values())} .py from "
+            # ⚠️ "files", not ".py" — `SOURCE_INCLUDE` gained `.txt` on 2026-08-28 and this
+            # line kept saying `.py`, which is a count that describes the wrong thing.
+            f"  source.zip: {sum(source_counts.values())} files from "
             f"{', '.join(source_counts)}"
         )
         print(f"staged payload -> {folder}  ({total / 1024**2:.1f} MB total)")

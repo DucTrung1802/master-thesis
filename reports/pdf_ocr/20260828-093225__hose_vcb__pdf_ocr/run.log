@@ -1,0 +1,16 @@
+symbol       : HOSE_VCB
+template     : bank   (templates.csv)
+documents    : 1  (Q1-2026)
+cascade      : 47 of 47 layers
+data root    : D:\GIT\master-thesis\raw_data\cafef
+models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+
+[doc 1/1 100% of DOCUMENTS, not of time] HOSE_VCB__Q1-2026  Q1-2026_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2026.pdf  8.1 MB  bank/consolidated
+  band: balance 67, income 68, cash 68   open_ref=541688802000000
+  [layer 1/47   2% of POSITIONS] onnx@200
+    [ocr page 1/53   1% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/53  11% of PAGES — the only fraction here that predicts time]  ~75 s left
+    [ocr page 12/53  22% of PAGES — the only fraction here that predicts time]  ~57 s left
+  Q1-2026: balance_sheet=59 items [onnx@200]; income_statement=22 items [onnx@200]; cash_flow=17 items [onnx@200]  (0.8 min)
+
+run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260828-093225__hose_vcb__pdf_ocr
