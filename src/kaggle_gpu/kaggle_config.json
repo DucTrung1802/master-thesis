@@ -450,6 +450,8 @@
         }
       },
       "parameters": {
+        "MODE": "kgpu",
+        "TEMPLATE": null,
         "EXCHANGE": "HOSE",
         "SYMBOL": "VCB",
         "PERIODS": [
@@ -485,6 +487,8 @@
         }
       },
       "parameters": {
+        "MODE": "kgpu",
+        "TEMPLATE": null,
         "EXCHANGE": "HOSE",
         "SYMBOL": "BID",
         "PERIODS": [

@@ -665,13 +665,32 @@ class FinancialsBuilder:
         self._parser = PdfParser(logger=logger)          # env-default engine (kept for callers)
         self._parsers: Dict[str, PdfParser] = {self._parser.engine: self._parser}
         self._schema_cache: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
+        # ⚠️ **PROGRESS HOOK — `on_layer(index, total, layer, cached)`, called once per layer of
+        # `_parse_cascaded` before it runs.** It reports a POSITION in the cascade, never a
+        # fraction of the work: the layers are wildly unequal (one runs a fresh OCR pass over
+        # every page, the next re-maps a cached parse in milliseconds), and `cached` says which
+        # kind this one is. `None` = no reporting, which is every caller but `pdf_ocr_job`.
+        self.on_layer = None
+        # ⚠️ **THE PAGE HOOK IS OWNED BY THE BUILDER, NOT SET ON THE PARSERS FROM OUTSIDE.**
+        # `_parser_for` builds a parser LAZILY, per engine, on the first layer that needs it —
+        # so a caller that reached into `_parsers` and set `on_page` on what was there reached
+        # the DEFAULT parser and not the onnx one that does the work. Measured 2026-08-28: page
+        # progress emitted zero lines for exactly that reason. Owning it here means every
+        # parser the builder creates gets it, whenever it is created.
+        self.on_page = None
 
     def _parser_for(self, engine: str) -> PdfParser:
         """A reusable parser per engine — built once, its DPI re-pointed per config, so the onnx
         models and Tesseract setup are not reloaded on every retry."""
         if engine not in self._parsers:
             self._parsers[engine] = PdfParser(logger=self._logger, engine=engine)
-        return self._parsers[engine]
+        parser = self._parsers[engine]
+        # Re-pointed on every call rather than at construction: both are set on the BUILDER
+        # after it exists, and a parser cached from an earlier document would otherwise keep
+        # whichever logger was in force when it was first built.
+        parser._logger = self._logger
+        parser.on_page = self.on_page
+        return parser
 
     def _parse_cascaded(self, path: str, period_end,
                         template: str, history: Dict[str, List[int]],
@@ -695,7 +714,7 @@ class FinancialsBuilder:
         # filing — the relaxed layers reuse a strict layer's already-OCR'd statements and only
         # re-map them, no second OCR pass.
         parsed: Dict[Tuple[str, int], Dict[str, Statement]] = {}
-        for layer in self.LAYERS:
+        for layer_index, layer in enumerate(self.LAYERS, start=1):
             if len(accepted) == len(REPORTS):
                 break
             parser = self._parser_for(layer.engine)
@@ -712,6 +731,10 @@ class FinancialsBuilder:
             key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
                    layer.title_over_form, layer.loose_form_code, layer.realign_rows,
                    layer.notes_boundary, layer.tail_continuation, layer.label_wrap, layer.unit_from_document)
+            if self.on_layer is not None:
+                # `cached` is the whole cost story: a layer whose parse key is already in
+                # `parsed` re-maps in milliseconds, while a new key re-OCRs every page.
+                self.on_layer(layer_index, len(self.LAYERS), layer, key in parsed)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)

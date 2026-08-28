@@ -315,3 +315,112 @@ def test_provenance_columns_are_never_read_as_line_items():
            "shares_issued": "5000", ASSETS: "1000000"}
 
     assert job._line_items(row) == {ASSETS: 1_000_000}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# resolve_template — the input that used to be silently defaulted
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_an_unresolvable_template_raises_rather_than_assuming_bank(data_root, monkeypatch):
+    """⚠️ THE DEFAULT THIS REPLACES WAS `or "bank"`, AND IT IS A SILENT WRONG ANSWER.
+
+    761 of 781 listed names are not banks. Mapping a corporate filing against the bank chart
+    of accounts rejects every statement as unreconcilable — hours of OCR later, reported as a
+    parse failure rather than as the wrong schema. `utils/inputs.py` is named for this shape.
+    """
+    monkeypatch.setattr(fin, "TEMPLATES_INDEX", str(data_root / "financials" / "nope.csv"))
+    monkeypatch.setattr("web_scraper.cafef_schema.detect_template", lambda symbol: None)
+    builder = FinancialsBuilder(logger=None)
+
+    with pytest.raises(ValueError, match="cannot resolve the accounting template"):
+        job.resolve_template(builder, "VIC")
+
+
+def test_templates_csv_answers_before_the_network_does(data_root, monkeypatch):
+    """`detect_template` is a CafeF API call. A ticker already in `templates.csv` must never
+    reach it — on a Kaggle worker that round trip is the difference between a resolved
+    template and a run that cannot start."""
+    index = data_root / "financials" / "templates.csv"
+    index.write_text("exchange,symbol,template\nHOSE,TST,securities\n", encoding="utf-8")
+    monkeypatch.setattr(fin, "TEMPLATES_INDEX", str(index))
+
+    def _boom(symbol):
+        raise AssertionError("detect_template must not be reached")
+
+    monkeypatch.setattr("web_scraper.cafef_schema.detect_template", _boom)
+    template, how = job.resolve_template(FinancialsBuilder(logger=None), "TST")
+
+    assert (template, how) == ("securities", "templates.csv")
+
+
+def test_an_override_naming_a_template_that_does_not_exist_is_refused():
+    with pytest.raises(ValueError, match="unknown template"):
+        job.resolve_template(FinancialsBuilder(logger=None), "TST", override="banking")
+
+
+def test_the_route_that_answered_is_reported_because_the_claims_differ():
+    """"read off templates.csv" and "guessed from a line-item count" are not the same claim,
+    and the artefact has to be able to tell a reader which one it was."""
+    template, how = job.resolve_template(FinancialsBuilder(logger=None), "TST",
+                                         override="corp")
+    assert (template, how) == ("corp", "override")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Progress — every percentage names its denominator
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _layer(name="onnx@200"):
+    return next(l for l in FinancialsBuilder.LAYERS if l.name == name)
+
+
+def test_each_percentage_says_what_it_is_a_percentage_OF(tmp_path):
+    """⚠️ `kaggle_gpu/README.md` §3 records that this repo's progress readouts have different
+    denominators and only one predicts time. Printing the number without the denominator is
+    how "32 %" gets read as "a third of the way through"."""
+    log = job.Progress(3, log_path=tmp_path / "run.log", echo=False)
+    log.document(1, _task(), 5.0)
+    log.layer(12, 47, _layer(), cached=False)
+    log.page(0, 10)
+    text = "\n".join(log.lines)
+    log.close()
+
+    assert "of DOCUMENTS, not of time" in text
+    assert "of POSITIONS" in text
+    assert "of PAGES" in text and "predicts time" in text
+
+
+def test_a_cached_layer_says_so_because_that_is_the_whole_cost_story(tmp_path):
+    """A layer whose parse key is already cached re-maps in milliseconds; the next one re-OCRs
+    every page. Without the flag the two look identical in the log and the reader cannot tell
+    a stalled run from a fast one."""
+    log = job.Progress(1, log_path=tmp_path / "run.log", echo=False)
+    log.layer(5, 47, _layer(), cached=True)
+    log.close()
+
+    assert "cached parse, re-map only" in log.lines[-1]
+
+
+def test_page_progress_is_rate_limited_so_a_96_page_document_is_not_960_lines(tmp_path):
+    """10 percentage points or 15 s, whichever comes first — the same shape `kgpu wait` uses."""
+    log = job.Progress(1, log_path=tmp_path / "run.log", echo=False)
+    log.layer(1, 47, _layer(), cached=False)
+    before = len(log.lines)
+    for i in range(96):
+        log.page(i, 96)
+    emitted = len(log.lines) - before
+
+    assert 5 <= emitted <= 12, emitted
+
+
+def test_the_log_file_is_written_as_the_run_goes_not_at_the_end(tmp_path):
+    """§5 rule 20: a 4-hour run was lost entirely to a wrapper that re-buffered on top of
+    `python -u`. The file must hold the line before the next unit of work starts."""
+    path = tmp_path / "run.log"
+    log = job.Progress(1, log_path=path, echo=False)
+    log.line("first")
+
+    assert "first" in path.read_text(encoding="utf-8")
+    log.close()

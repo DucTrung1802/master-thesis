@@ -1506,9 +1506,38 @@ statements are accepted, so one unresolvable statement makes the whole document 
 
 ✅ **Reproducing the LAYER is the stronger claim**: the document must lose 44 layers and win on
 the 45th, so `reconcile`, `sane`, the parse cache and the escalation order all behaved
-identically across two torch majors. ⚠️ **The T4 helps LEAST on the documents the OCR programme
-is budgeted on** — ~10 OCR passes against 47 host-side mapping rounds is the hypothesis, and it
-is not measured.
+identically across two torch majors.
+
+### ⚠️ BOTH SPEEDUPS ARE WITHDRAWN — the local clock moves 2.25× on its own
+
+Four runs of VCB Q1-2026 on this machine, same document, same code: **100.6 s, 113.3 s** (01:04
+and 01:26) and **50.8 s, 50.3 s** (06:46 and 06:48). Two tight clusters five hours apart, and
+the T4's 69.0 s sits BETWEEN them. Nothing recorded distinguishes the clusters — same torch,
+same onnxruntime, same providers, same `vram_free_mb`, same 12 of 53 pages read.
+
+**So no cross-machine timing number here is established**, including the 1.24× on the hard
+document. **To compare two machines, INTERLEAVE the runs.** What survives is the correctness,
+which is deterministic and was reproduced four times.
+
+### The three contracts — input, log, output
+
+| | |
+|---|---|
+| **input** | ONE frozen `JobSpec`, built identically by the CLI, the notebook and `kgpu`. `prepare()` resolves root / models / TEMPLATE / documents and RAISES on any of them, before a page is rendered |
+| **log** | every percentage names its denominator: `of DOCUMENTS, not of time`, `of POSITIONS`, `of PAGES — the only fraction here that predicts time`. Rate-limited to a 10-point step or 15 s |
+| **output** | `metadata.json` (`schema_version`, resolved spec, `template_how`, `environment.ocr`), `summary.csv`, `documents/<key>.json`, and `run.log` written line-buffered as it goes |
+
+⚠️ **`resolve_template` REPLACED A SILENT `or "bank"`.** 761 of 781 listed names are not banks;
+the default would have mapped a corporate filing against the bank chart of accounts and
+rejected every statement hours later as a parse failure. It now raises, and records WHICH
+route answered — `templates.csv` and "CafeF's line-item fingerprint, over the network" are not
+the same claim.
+
+⚠️ **THE PAGE HOOK REPORTED NOTHING ON ITS FIRST VERSION AND LOOKED FINE.** It was set on
+`builder._parsers.values()`, which on a fresh builder holds the env-default parser only — the
+onnx parser is built lazily by `_parser_for` on the first layer that needs it. Zero lines, no
+error. The builder owns it now. **A progress reporter that reports nothing fails exactly like a
+fast run.**
 
 ⚠️ **New OCR weights knob:** `CAFEF_ONNX_VIETOCR_WEIGHTS` points VietOCR at a LOCAL checkpoint.
 `download_weights` returns any non-`http` value unchanged, which is what makes it work; empty

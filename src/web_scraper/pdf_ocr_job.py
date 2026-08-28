@@ -50,6 +50,51 @@ functions read at CALL time precisely so a harness can do this (`statement_path`
 has said so since the experiment harnesses needed it). The models are separate: the det model
 and the VietOCR weights are found through the env vars `onnx_ocr` reads, so an offline worker
 never reaches for HuggingFace or vocr.vn.
+
+## ⚠️ THE THREE CONTRACTS — input, log, output (standardised 2026-08-28)
+
+### INPUT is ONE object, `JobSpec`, and it is validated before anything is spent
+
+The CLI, the notebook and `kgpu` all build the same frozen `JobSpec` and hand it to `run()`.
+There is no second way in. `JobSpec.validate()` resolves the data root, the models and the
+TEMPLATE, and raises on anything it cannot answer — before a page is rendered.
+
+⚠️ **THE TEMPLATE IS RESOLVED, NEVER DEFAULTED.** This module's first version ended
+`builder.template_of(symbol) or "bank"`, which is a silent wrong answer for the 761 of 781
+listed names that are not banks: it would map a corporate filing against the bank chart of
+accounts and reject every statement as unreconcilable, hours later, reported as a parse
+failure. `resolve_template()` tries the explicit override, then `templates.csv`, then
+CafeF's own fingerprint — and **raises** if all three are silent. Which route answered is
+recorded in the artefact, because "read off templates.csv" and "guessed from a line-item
+count" are not the same claim.
+
+### LOG is one line per event, flushed, and every percentage names its DENOMINATOR
+
+`kaggle_gpu/README.md` §3 already records that this repo's three progress readouts have three
+different denominators and only one of them predicts time. The same rule is applied here, and
+the label is printed rather than assumed:
+
+| line | denominator | predicts time? |
+|---|---|---|
+| `[doc 2/3   67%]` | **documents** | ❌ 4.2 min against 18.2 for a failing one |
+| `[layer 12/47  26%]` | **positions in the cascade** | ❌ one layer re-OCRs 96 pages, the next re-maps a cache in ms |
+| `[ocr onnx@200  page 40/96  42%  ~49 s left]` | **pages of one OCR pass** | ✅ **the only one** — 0.87 s/page, measured |
+
+⚠️ **A LONG RUN USED TO PRINT NOTHING FOR 73 MINUTES** (§6-2-noviesdecies): the only live
+signal was the `LastAccessTime` of the PDF. Page progress is what replaces that, and it is
+rate-limited to a 10-point step or 15 s so a 96-page document over 10 passes does not emit 960
+lines.
+
+### OUTPUT is a run folder with a declared schema, written INCREMENTALLY
+
+    <out_root>/<run_id>/
+        metadata.json        schema_version, the resolved JobSpec, environment (incl. `ocr`),
+                             execution, and the per-statement results table
+        summary.csv          one row per (period, report) — the file a reader opens first
+        run.log              every log line, written as it happens (§5 rule 20)
+        documents/<EX>_<SYM>__<period>.json   accepted values, refusal reasons, compare verdict
+
+⚠️ **NO STATEMENT CSV IS EVER WRITTEN — see the top of this docstring.**
 """
 
 from __future__ import annotations
@@ -197,6 +242,70 @@ def find_vietocr_weights() -> Optional[Path]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Which chart of accounts
+# ──────────────────────────────────────────────────────────────────────────────
+
+TEMPLATES = ("bank", "corp", "securities", "insurance")
+
+
+def resolve_template(builder: FinancialsBuilder, symbol: str,
+                     override: Optional[str] = None) -> tuple:
+    """`(template, how)` — and it RAISES rather than defaulting to anything.
+
+    ⚠️ **THE FIRST VERSION OF THIS MODULE ENDED `or "bank"` AND THAT IS A SILENT WRONG
+    ANSWER.** 761 of 781 listed names are not banks; mapping a corporate filing against the
+    bank chart of accounts rejects every statement as unreconcilable, hours later, and reports
+    it as a parse failure rather than as the wrong schema. `utils/inputs.py` is named for
+    exactly this shape.
+
+    Three routes, best first, and `how` records which one answered because they are not the
+    same claim:
+
+      * `override` — the caller stated it, and it is checked against the four that exist;
+      * `templates.csv` — written by `build_templates_index` from the tickers actually parsed;
+      * `detect_template` — CafeF's own line-item fingerprint. ⚠️ **THIS ONE IS A NETWORK
+        CALL**, so on a Kaggle worker it either fails or costs a round trip; `kgpu` resolves
+        the template at EXPORT time and ships the answer in the manifest for that reason.
+
+    ⚠️ **A resolved template is not a safe one.** `TPL-1`: seven reconcile anchors are
+    bank-shaped, and on `corp` and `insurance` the cash-flow one fuzzy-matches the OPENING
+    balance and returns it as the closing one. Resolving the template correctly is necessary
+    and nowhere near sufficient.
+    """
+    if override:
+        if override not in TEMPLATES:
+            raise ValueError(
+                f"unknown template {override!r} — the four that exist are {TEMPLATES}.")
+        return override, "override"
+
+    if os.path.exists(fin.TEMPLATES_INDEX):
+        with open(fin.TEMPLATES_INDEX, encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if row.get("symbol") == symbol and row.get("template"):
+                    return row["template"], "templates.csv"
+
+    try:
+        from web_scraper.cafef_schema import detect_template
+
+        guess = detect_template(symbol)
+    except Exception as exc:  # noqa: BLE001 — an unreachable network is an unknown, not a crash
+        guess = None
+        why = f"{type(exc).__name__}: {exc}"
+    else:
+        why = "returned None"
+    if guess:
+        return guess, "detect_template (CafeF fingerprint, over the network)"
+
+    raise ValueError(
+        f"cannot resolve the accounting template for {symbol!r}: it is not in "
+        f"{fin.TEMPLATES_INDEX}, and detect_template {why}.\n"
+        f"  Pass one explicitly — {TEMPLATES} — but read ISSUES.md `TPL-1` first: two of the "
+        f"seven reconcile anchors are bank-shaped, and on corp/insurance the cash-flow one "
+        f"returns the OPENING balance as the closing one."
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # What to parse
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -227,7 +336,8 @@ class DocumentTask:
 def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
          periods: Optional[Sequence[str]] = None,
          allow_parent: bool = False,
-         period_min: Optional[str] = fin.FINANCIALS_PERIOD_MIN) -> List[DocumentTask]:
+         period_min: Optional[str] = fin.FINANCIALS_PERIOD_MIN,
+         template: Optional[str] = None) -> List[DocumentTask]:
     """The filings to open, oldest first — `documents()` chooses them, this only filters.
 
     ⚠️ **THE CHOICE IS NOT RE-IMPLEMENTED.** Consolidated beats standalone, the audited annual
@@ -253,7 +363,10 @@ def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
             )
         docs = [d for d in docs if d["period"] in wanted]
 
-    template = builder.template_of(symbol) or "bank"
+    # ⚠️ RESOLVED, NEVER DEFAULTED — see `resolve_template`. This line read
+    # `builder.template_of(symbol) or "bank"` until 2026-08-28, which is a silent wrong answer
+    # for every non-bank ticker and would have been one for VIC.
+    template = template or resolve_template(builder, symbol)[0]
     tasks: List[DocumentTask] = []
     for d in docs:
         path = os.path.join(fin.PDFS_DIR, d["path"].replace("/", os.sep))
@@ -353,6 +466,110 @@ def open_reference(builder: FinancialsBuilder, exchange: str, symbol: str, templ
 # ──────────────────────────────────────────────────────────────────────────────
 # Running one filing
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+class Progress:
+    """The log. One line per event, flushed, and every percentage NAMES its denominator.
+
+    ⚠️ **THREE DENOMINATORS, ONE OF WHICH PREDICTS TIME**, and the line says which:
+
+      * `[doc i/N]` — DOCUMENTS. A clean filing costs 4.2 min and a failing one 18.2
+        (§6-2-quindecies), so this is a position in a list, never a time estimate.
+      * `[layer k/47]` — POSITIONS IN THE CASCADE. One layer re-OCRs every page; the next
+        re-maps a cached parse in milliseconds. `cached` is printed for exactly that reason.
+      * `[ocr <layer> page p/P]` — **PAGES OF ONE OCR PASS, and this one is real.** Pages of
+        one document cost about the same (0.87 s/page at onnx@200), so the fraction is a
+        fraction of the work and the ETA is an extrapolation rather than a guess.
+
+    ⚠️ **RATE-LIMITED, because a 96-page document over ~10 passes is 960 page events.** A page
+    line is emitted on a 10-point step or after 15 s, whichever comes first — the same shape
+    `kgpu wait` uses so a long poll does not fill a log with lines nobody reads.
+
+    ⚠️ **THE PAGE ETA IS AN UPPER BOUND, and the denominator is why.** It extrapolates over
+    `doc.page_count`, while `scan` STOPS at the notes boundary once all three statements are
+    behind it — VCB Q1-2026 reads 12 of 53 pages and finishes while the last line printed said
+    *"~61 s left"*. That is the honest direction for a progress estimate to be wrong in, and it
+    is stated rather than hidden: the alternative is to not know the denominator until the page
+    that ends the scan, which is one page before the end.
+    """
+
+    PAGE_STEP = 10          # percentage points
+    PAGE_SECONDS = 15.0
+
+    def __init__(self, total_documents: int, log_path: Optional[Path] = None,
+                 echo: bool = True):
+        self.total_documents = total_documents
+        self.echo = echo
+        self.lines: List[str] = []
+        self._handle = None
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            # ⚠️ Line-buffered and utf-8: §5 rule 20 (a 4-hour run lost to a re-buffering
+            # wrapper) and §5 rule 18 (the cascade logs Vietnamese account labels).
+            self._handle = log_path.open("w", encoding="utf-8", buffering=1)
+        self._doc = ""
+        self._page_at = 0.0
+        self._page_pct = -100
+        self._page_started = 0.0
+
+    # ---- emitting ---------------------------------------------------------
+    def line(self, text: str) -> None:
+        self.lines.append(text)
+        if self._handle is not None:
+            self._handle.write(text + "\n")
+        if self.echo:
+            print(text, flush=True)
+
+    def close(self) -> None:
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None
+
+    # ---- the three denominators -------------------------------------------
+    def document(self, index: int, task: "DocumentTask", size_mb: float) -> None:
+        self._doc = task.period
+        self.line(f"[doc {index}/{self.total_documents} "
+                  f"{index / self.total_documents:>4.0%} of DOCUMENTS, not of time] "
+                  f"{task.key}  {task.file}  {size_mb:.1f} MB  "
+                  f"{task.template}/{'consolidated' if task.consolidated == 'True' else 'parent'}"
+                  f"{'  CUMULATIVE' if task.cumulative else ''}")
+
+    def layer(self, index: int, total: int, layer, cached: bool) -> None:
+        self._page_pct = -100
+        self._page_started = time.perf_counter()
+        self.line(f"  [layer {index}/{total} {index / total:>4.0%} of POSITIONS] "
+                  f"{layer.name}" + ("   (cached parse, re-map only)" if cached else ""))
+
+    def page(self, index: int, total: int) -> None:
+        pct = int(100 * (index + 1) / max(1, total))
+        now = time.perf_counter()
+        if pct - self._page_pct < self.PAGE_STEP and now - self._page_at < self.PAGE_SECONDS:
+            return
+        self._page_at, self._page_pct = now, pct
+        elapsed = now - self._page_started
+        eta = ""
+        if index >= 2 and elapsed > 0:
+            left = (total - index - 1) * elapsed / (index + 1)
+            eta = f"  ~{left:.0f} s left"
+        self.line(f"    [ocr page {index + 1}/{total} {pct:>3}% of PAGES — the only "
+                  f"fraction here that predicts time]{eta}")
+
+    # ---- the `Logger` shape the parser expects ----------------------------
+    def log_info(self, message: str) -> None:
+        self.line(message)
+
+    def log_warning(self, message: str) -> None:
+        self.line(f"WARNING: {message}")
+
+    def log_error(self, message: str) -> None:
+        self.line(f"ERROR: {message}")
+
+    def log_debug(self, message: str) -> None:
+        self.lines.append(f"DEBUG: {message}")
+
+    def take(self) -> List[str]:
+        lines, self.lines = self.lines, []
+        return lines
 
 
 class CollectingLogger:
@@ -561,58 +778,163 @@ def compare(builder: FinancialsBuilder, result: DocumentResult) -> Dict[str, dic
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# The run
+# The run — one input object, one log, one folder
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ⚠️ Bump when the run folder's SHAPE changes, so a reader of an old artefact is not left
+# guessing whether a missing key means "absent" or "this run predates it" (§5 rule 2).
+SCHEMA_VERSION = 1
 
-def run(tasks: Sequence[DocumentTask], out_root: os.PathLike = DEFAULT_OUT_ROOT,
-        run_id: Optional[str] = None, layers: Optional[Sequence[str]] = None,
-        notes: str = "", git_commit: Optional[str] = None,
-        compare_with_disk: bool = True) -> Path:
-    """Parse every task, writing each document's JSON AS IT FINISHES. Returns the run folder.
 
-    ⚠️ **ONE FILE PER DOCUMENT, WRITTEN BEFORE THE NEXT ONE STARTS** — §5 rule 20. A four-hour
-    run that keeps its results in memory loses all of them to the first crash, and this stage
-    has documents that cost 73 minutes each (§6-2-noviesdecies).
+@dataclass(frozen=True)
+class JobSpec:
+    """THE input. The CLI, the notebook and `kgpu` all build this and nothing else.
+
+    ⚠️ **ONE OBJECT, AND IT IS VALIDATED BEFORE ANYTHING IS SPENT.** Three callers with three
+    argument lists is three places for a default to differ, and the defaults here decide which
+    chart of accounts a filing is read against — a wrong one costs the whole OCR and reports
+    itself as a parse failure. `prepare()` resolves the root, the models, the template and the
+    document list, and raises on any of them.
+    """
+
+    exchange: str = "HOSE"
+    symbol: str = "VCB"
+    periods: Optional[Sequence[str]] = None      # None = every period the ticker files
+    allow_parent: bool = False
+    period_min: Optional[str] = fin.FINANCIALS_PERIOD_MIN
+    # ⚠️ None means RESOLVE it (templates.csv, then CafeF's fingerprint), never "assume bank".
+    template: Optional[str] = None
+    layers: Optional[Sequence[str]] = None       # None = the full cascade, in cascade order
+    data_root: Optional[str] = None
+    models_dir: Optional[str] = None
+    out_root: Optional[str] = None
+    compare_with_disk: bool = True
+    notes: str = ""
+    run_id: Optional[str] = None
+
+    def prepare(self) -> "PreparedJob":
+        """Resolve every input and RAISE on anything unanswerable. Cheap: no OCR, no PDF."""
+        root = use_data_root(self.data_root)
+        models = use_models(self.models_dir)
+        builder = FinancialsBuilder(logger=None)
+        template, how = (
+            (self.template, "override") if self.template
+            else resolve_template(builder, self.symbol.upper()))
+        tasks = plan(builder, self.exchange.upper(), self.symbol.upper(),
+                     periods=self.periods, allow_parent=self.allow_parent,
+                     period_min=self.period_min, template=template)
+        if not tasks:
+            raise ValueError(
+                f"{self.exchange}_{self.symbol} has no filing to parse — a run that parses "
+                f"nothing and reports success is the failure this raises to prevent.")
+        return PreparedJob(spec=self, builder=builder, tasks=tasks, template=template,
+                           template_how=how, data_root=root, models=models,
+                           layers=select_layers(self.layers))
+
+    def to_json(self) -> dict:
+        return {
+            "exchange": self.exchange, "symbol": self.symbol,
+            "periods": list(self.periods) if self.periods else None,
+            "allow_parent": self.allow_parent, "period_min": self.period_min,
+            "template_requested": self.template,
+            "layers_requested": list(self.layers) if self.layers else None,
+            "compare_with_disk": self.compare_with_disk, "notes": self.notes,
+        }
+
+
+@dataclass(frozen=True)
+class PreparedJob:
+    """A `JobSpec` with every input resolved — what `run()` actually consumes."""
+
+    spec: JobSpec
+    builder: FinancialsBuilder
+    tasks: List[DocumentTask]
+    template: str
+    template_how: str
+    data_root: Path
+    models: Dict[str, Optional[str]]
+    layers: List[ParseLayer]
+
+    def describe(self) -> List[str]:
+        """The header every run prints — the resolved inputs, before any of them is used."""
+        return [
+            f"symbol       : {self.spec.exchange.upper()}_{self.spec.symbol.upper()}",
+            f"template     : {self.template}   ({self.template_how})",
+            f"documents    : {len(self.tasks)}  "
+            f"({', '.join(t.period for t in self.tasks[:8])}"
+            f"{' …' if len(self.tasks) > 8 else ''})",
+            f"cascade      : {len(self.layers)} of {len(FinancialsBuilder.LAYERS)} layers",
+            f"data root    : {self.data_root}",
+            f"models       : det={_name(self.models.get('det'))} "
+            f"vietocr={_name(self.models.get('vietocr'))}",
+        ]
+
+
+def _name(path: Optional[str]) -> str:
+    return Path(path).name if path else "⚠️ NONE — the engine would try to download one"
+
+
+def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
+    """Parse every planned filing, writing each document's JSON AS IT FINISHES.
+
+    ⚠️ **ONE FILE PER DOCUMENT, WRITTEN BEFORE THE NEXT ONE STARTS** — §5 rule 20. This stage
+    has single documents that cost 33 minutes, and a run that keeps its results in memory
+    loses all of them to the first crash.
 
     The folder holds a `metadata.json`, which is also what makes it a RUN FOLDER to
-    `kgpu pull` — that merge copies any directory carrying one, so nothing extra is needed to
-    bring a Kaggle run home.
+    `kgpu pull` — that merge copies any directory carrying one.
     """
     from utils import runtime
 
-    if not tasks:
-        raise ValueError("nothing to parse — `plan()` returned no documents.")
-
-    builder = FinancialsBuilder(logger=None)
-    chosen = select_layers(layers)
-    builder.LAYERS = chosen                      # instance attribute; the class list is intact
+    prepared = spec.prepare()
+    builder, tasks = prepared.builder, prepared.tasks
 
     symbols = sorted({f"{t.exchange}_{t.symbol}" for t in tasks})
-    run_id = run_id or f"{runtime.folder_stamp()}__{'_'.join(symbols).lower()}__pdf_ocr"
-    folder = Path(out_root) / run_id
+    run_id = spec.run_id or (f"{runtime.folder_stamp()}__"
+                             f"{'_'.join(symbols).lower()}__pdf_ocr")
+    folder = Path(spec.out_root or DEFAULT_OUT_ROOT) / run_id
     (folder / "documents").mkdir(parents=True, exist_ok=True)
 
+    log = Progress(len(tasks), log_path=folder / "run.log")
     timer = runtime.RunTimer("web_scraper.pdf_ocr_job", device=_ocr_device()).start()
+    builder.LAYERS = prepared.layers          # instance attribute; the class list is intact
     rows: List[dict] = []
     try:
+        for line in prepared.describe():
+            log.line(line)
+        log.line("")
+
         for index, task in enumerate(tasks, start=1):
-            logger = CollectingLogger()
-            builder._logger = logger
-            for parser in builder._parsers.values():
-                parser._logger = logger
-            print(f"[{index}/{len(tasks)}] {task.key}  {task.file}", flush=True)
+            # ⚠️ Set on the BUILDER, which hands them to every parser it creates — including
+            # the onnx one it builds lazily on the first layer that needs it. Setting them on
+            # `builder._parsers` instead reaches whatever happens to exist already, which on a
+            # fresh builder is the env-default parser and not the one that does the work.
+            builder._logger = log
+            builder.on_layer = log.layer
+            builder.on_page = log.page
+            log.document(index, task, os.path.getsize(task.path) / 1024 ** 2)
 
             history = seed_history(builder, task.exchange, task.symbol, task.template,
                                    before=task.period)
             open_ref = open_reference(builder, task.exchange, task.symbol, task.template,
                                       task.period)
-            result = run_document(builder, task, history, open_ref, logger=logger)
+            sizes = {r: len(v.get(task.consolidated, [])) for r, v in history.items()}
+            if not any(sizes.values()):
+                log.log_warning(
+                    f"{task.period}: the magnitude band is EMPTY, so `sane` will FAIL OPEN — "
+                    f"this ticker has no accepted quarters on disk to reconstruct one from.")
+            else:
+                log.line(f"  band: " + ", ".join(f"{r.split('_')[0]} {n}"
+                                                 for r, n in sizes.items())
+                         + f"   open_ref={open_ref if open_ref is not None else '—'}")
+
+            result = run_document(builder, task, history, open_ref, logger=log)
             payload = result.to_json()
             payload["history_sizes"] = {r: {e: len(v) for e, v in history[r].items()}
                                         for r in REPORTS}
             payload["open_ref"] = open_ref
-            if compare_with_disk:
+            payload["template_how"] = prepared.template_how
+            if spec.compare_with_disk:
                 payload["compare"] = compare(builder, result)
             (folder / "documents" / f"{task.key}.json").write_text(
                 json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -628,12 +950,12 @@ def run(tasks: Sequence[DocumentTask], out_root: os.PathLike = DEFAULT_OUT_ROOT,
                     "verdict": payload.get("compare", {}).get(report, {}).get("verdict", ""),
                     "seconds": round(result.seconds, 2),
                 })
-            print("    " + task.period + ": "
-                  + "; ".join(f"{r}={result.accepted[r]['items']} items "
-                              f"[{result.accepted[r]['layer']}]"
-                              for r in REPORTS if r in result.accepted)
-                  + (f"; absent {result.absent}" if result.absent else "")
-                  + f"  ({result.seconds / 60:.1f} min)", flush=True)
+            log.line("  " + task.period + ": "
+                     + "; ".join(f"{r}={result.accepted[r]['items']} items "
+                                 f"[{result.accepted[r]['layer']}]"
+                                 for r in REPORTS if r in result.accepted)
+                     + (f"; absent {result.absent}" if result.absent else "")
+                     + f"  ({result.seconds / 60:.1f} min)")
     finally:
         timer.stop(ok=True)
 
@@ -644,17 +966,24 @@ def run(tasks: Sequence[DocumentTask], out_root: os.PathLike = DEFAULT_OUT_ROOT,
         writer.writerows(rows)
 
     metadata = {
+        "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
         "stage": "web_scraper.pdf_ocr_job",
         "created": runtime.iso(),
         "git_commit": git_commit or os.environ.get("KGPU_GIT_COMMIT") or _git_commit(),
-        "notes": notes,
+        "notes": spec.notes,
         "inputs": {
-            "data_root": str(data_root()),
-            "models": use_models(),
+            **spec.to_json(),
+            "template": prepared.template,
+            # ⚠️ "read off templates.csv" and "guessed from a line-item count" are not the
+            # same claim, and a reader of this artefact must be able to tell them apart.
+            "template_how": prepared.template_how,
+            "data_root": str(prepared.data_root),
+            "models": prepared.models,
             "documents": [t.key for t in tasks],
-            "layers": [layer.name for layer in chosen],
-            "layers_are_the_full_cascade": len(chosen) == len(FinancialsBuilder.LAYERS),
+            "layers": [layer.name for layer in prepared.layers],
+            "layers_are_the_full_cascade":
+                len(prepared.layers) == len(FinancialsBuilder.LAYERS),
         },
         # ⚠️ `runtime.environment()` names the CARD; `engine_report()` names what each half of
         # the OCR actually ran on, which is not the same question — the first Kaggle run had
@@ -665,7 +994,8 @@ def run(tasks: Sequence[DocumentTask], out_root: os.PathLike = DEFAULT_OUT_ROOT,
     }
     (folder / "metadata.json").write_text(
         json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"\nrun folder -> {folder}", flush=True)
+    log.line(f"\nrun folder -> {folder}")
+    log.close()
     return folder
 
 
@@ -742,6 +1072,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                              "exists (documents(); consolidated still wins).")
     parser.add_argument("--layers", nargs="*", default=None,
                         help="restrict the cascade to these layer names, in cascade order.")
+    parser.add_argument("--template", default=None, choices=TEMPLATES,
+                        help="override the chart of accounts. ⚠️ Read ISSUES.md TPL-1 first: "
+                             "two of the seven reconcile anchors are bank-shaped.")
     parser.add_argument("--data-root", default=None)
     parser.add_argument("--models", default=None)
     parser.add_argument("--out", default=str(DEFAULT_OUT_ROOT))
@@ -754,13 +1087,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except (AttributeError, ValueError):
         pass
 
-    use_data_root(args.data_root)
-    use_models(args.models)
-    builder = FinancialsBuilder(logger=None)
-    tasks = plan(builder, args.exchange.upper(), args.symbol.upper(),
-                 periods=args.periods, allow_parent=args.allow_parent)
-    run(tasks, out_root=args.out, layers=args.layers, notes=args.notes,
-        compare_with_disk=not args.no_compare)
+    # ⚠️ ONE input object, the same one the notebook and `kgpu` build. The CLI parses
+    # arguments and constructs it; it does not resolve anything itself.
+    run(JobSpec(
+        exchange=args.exchange, symbol=args.symbol, periods=args.periods,
+        allow_parent=args.allow_parent, layers=args.layers, template=args.template,
+        data_root=args.data_root, models_dir=args.models, out_root=args.out,
+        compare_with_disk=not args.no_compare, notes=args.notes,
+    ))
     return 0
 
 

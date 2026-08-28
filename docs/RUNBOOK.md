@@ -856,8 +856,23 @@ CUDA detection **69.0 s**. ⚠️ One document, accepted at layer 1 of 47, and t
 
 **And on the HARD document — `pdf-ocr-hard`, BID Q4-2016** (FY-2016 annual, cash flow at layer
 **45 of 47**): **32.9 min local against 26.4 min on a T4**, both REPRODUCED, both winning on the
-same layer 45. ⚠️ **The advantage SHRINKS to 1.24× on exactly the documents `P38`/`P6` are
-budgeted on** — budget the OCR programme on 1.25×, not 1.5×.
+same layer 45.
+
+⚠️ **DO NOT QUOTE A SPEEDUP FROM ANY OF THIS.** Four runs of the identical easy document on this
+machine came in at 100.6, 113.3, **50.8 and 50.3 s** — a **2.25× swing** in two clusters five
+hours apart, with the T4's 69.0 s between them and nothing recorded to tell the clusters apart.
+**To compare two machines, INTERLEAVE the runs.** What a T4 buys is a second machine running in
+parallel with this laptop, free — not a multiplier.
+
+**Reading the log.** Three percentages, three denominators, and the line says which:
+`of DOCUMENTS, not of time` (4.2 min against 18.2 for a failing filing), `of POSITIONS` in the
+cascade (one layer re-OCRs every page, the next re-maps a cache), and `of PAGES` — the only one
+that predicts time, and an UPPER bound, because `scan` stops at the notes boundary.
+
+**`MODE`.** The notebook takes `"auto" | "local" | "kgpu"`. `auto` resolves from
+`$CAFEF_DATA_ROOT` and prints what it chose; an explicit `"kgpu"` with no payload mounted
+**raises** rather than parsing the repo's own `raw_data/` and reporting a Kaggle run that never
+touched the payload.
 
 ---
 

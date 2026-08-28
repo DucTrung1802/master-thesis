@@ -321,6 +321,13 @@ class PdfParser:
         self.label_wrap = False
         # set per PARSE LAYER; see document_unit
         self.unit_from_document = False
+        # ⚠️ **PROGRESS HOOK, AND THE ONLY DENOMINATOR IN THIS FILE THAT PREDICTS TIME.**
+        # `on_page(index, total)` is called once per page of `scan`, before it is read. Pages
+        # of one document cost roughly the same (0.87 s/page at onnx@200, measured for `P41`),
+        # so a page fraction really is a fraction of the WORK — where a document count and a
+        # layer index are positions in a list of wildly unequal items. `None` = no reporting,
+        # which is every caller but `pdf_ocr_job`.
+        self.on_page = None
         self.ocr_ready = self._init_ocr()
 
     def set_dpi(self, dpi: int) -> None:
@@ -886,6 +893,8 @@ class PdfParser:
         # page tree") and iterating the document simply stops at the bad node — one VCB
         # filing yielded 14 of its 58 pages that way, dropping every statement after it.
         for i in range(doc.page_count):
+            if self.on_page is not None:
+                self.on_page(i, doc.page_count)
             try:
                 page = doc.load_page(i)
             except Exception:
