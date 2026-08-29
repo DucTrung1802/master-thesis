@@ -1152,7 +1152,7 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-28)
+## 6. State today (2026-08-29)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section
 is the bug.** It was 7 days stale once already.
@@ -4153,6 +4153,225 @@ carried only `rows_sha`, so it reported *that* the cash flow differed and not *w
 finding out cost another run on each machine. §6-2-quindecies' lesson, one stage over: the
 parser computed the rows and the artefact threw them away. `row_dump` is ~10 KB per document
 against a re-run measured in minutes on two machines.
+
+---
+
+### ✅ 6-2-untricies. THE `corp` ANCHORS — `TPL-1` FIXED, and the defect was DUPLICATION
+
+Done 2026-08-28. `CRP-1` recorded the first non-bank parse writing a wrong cash figure that
+every gate passed; this is what was actually wrong. ⚠️ **It is bigger than the seven `C_*`
+tuples `TPL-1` named**, and the extra term is the one that explains why nobody noticed.
+
+⚠️ **`ANCHORS` WAS A HAND-WRITTEN LITERAL DUPLICATING THE ROLE TUPLES.** `_anchor` — the
+position-independent re-match that exists because *"the ordered walk drifts"* — filters
+`if c in self.ANCHORS`, and that list held **nine bank column names**. So on the `corp` chart
+it re-matched **2 of 7 roles** (only the two grand totals, whose names happen to be shared)
+and on `insurance` the same 2. Total liabilities, equity, PBT, the net cash movement and the
+closing balance had **no position-independent recovery at all** on any non-bank filing.
+`ANCHORS` is now DERIVED from the role tuples, so a column added to a role cannot be missed
+here again.
+
+**Three defects, each measured on VIC Q1-2026 before and after:**
+
+| | before | after |
+|---|---|---|
+| `_anchor` roles resolved on `corp` | **2 of 7** | **7 of 7** |
+| `_cash_flow_identity` | *"opening, movement, fx, closing not mapped"* — **not one of the four names it looks for exists in the corp chart** | **runs, and CLOSES**: 72,226,561 − 17,476,201 + 0 = 54,750,360 to the đồng |
+| the closing cash balance | **54,750,360 mn in the FX column**, closing column empty | **54,750,360 in the closing column**, FX empty |
+| `_probe` (what `sane` bands on) | **72,226,561 — the OPENING balance** | **54,750,360** |
+| `find(*CASH_CLOSE)` on the opening row | returns **72,226,561** | returns **None** — a refusal |
+
+✅ **CONFIRMED ON THE PRODUCTION PATH, NOT ONLY IN THE REPLAY** — `20260828-172722__hose_vic__pdf_ocr`,
+the full 47-layer cascade, **31m 57s** on the RTX 3050. Cash flow accepted at `onnx@200`, 23
+items: opening **72,226,561**, movement **−17,476,201**, **FX EMPTY**, closing **54,750,360**,
+identity residual **exactly 0** — and the same filing's balance-sheet cash line reads
+**54,750,360**, which is the independent corroboration. ⚠️ **It costs nothing in time**: the
+same document took 31.1 and 31.9 min before the change, because the income statement still
+forces every layer. ⚠️ **And the run's magnitude band was EMPTY on all three statements** (VIC
+has no accepted quarter on disk), so `sane` failed open throughout and the job WARNed that it
+would — the parse is right, but it was not GUARDED, and that is why nothing here may be
+written to a statement CSV yet.
+
+⚠️ **THE CASH DEFECT WAS A MERGED LABEL, NOT A MISSING ANCHOR, AND THE ANCHOR FIX ALONE DOES
+NOT REACH IT.** The filing prints the FX line with **no figure**, so `table_rows` carried its
+label forward and the closing balance's figures arrived under both labels joined — and `slug`
+caps a key at 60 characters, which is exactly where *"…tương đương tiền cuối kỳ"* was cut off.
+The row read as a pure FX line and mapped there correctly. ⚠️ **So the repair had to go in the
+DEFAULT PATH**: VIC's cash flow is accepted at `onnx@200`, **layer 1 of 47**, and a late
+cascade layer is never reached. `PGB-1` and §6-2-unvicies each recorded that trap from the
+other side (*a half-right layer that passes the gates ends the cascade*); this is the first
+time the conclusion was **when the gates cannot see the defect, the repair cannot be an
+escalation**.
+
+⚠️ **AND ADDING THE ANCHORS EXPOSED A LATENT HAZARD IN `_anchor` THAT COST TWO CELLS AT ONCE.**
+Equity's account text is *"vốn chủ sở hữu"* — **11 characters, one over `MIN_CONTAINS`** — so
+containment awards a flat 0.95 to any line that merely MENTIONS it, and the length-ratio
+tie-break then prefers the SHORT impostor: *"Quỹ khác thuộc vốn chủ sở hữu"* (117,845 mn,
+ratio 0.48) beat the real equity row (153,703,820 mn, ratio 0.32, its label polluted by page
+header text OCR merged onto it), and `_claim` then evicted the account the impostor came from.
+The guard is not a threshold: **an anchor may not take a row that fits another account of the
+same chart STRICTLY better.** Strictly, because that is what preserves `_claim`'s own
+documented case — ACB's Q1-2022 merges *"Dự phòng rủi ro khác"* with *"TỔNG NỢ PHẢI TRẢ"*, both
+score 0.95, and the anchor must still win the tie.
+
+✅ **THE BANK REGRESSION IS THE REASON THIS SHIPS: 15 statements across 5 filings of ACB, VCB
+and BID re-map IDENTICALLY, under EVERY ONE of the 6 distinct mapping-flag combinations the 47
+layers use — 90 of 90 mappings** (every value, the item count, both `reconcile` verdicts and
+the `sane` probe). ⚠️ **The strict default alone was not enough to check**: `relax_totals`,
+`relax_split_tail`, `relax_merged_seam` and `annual_tail` each change `map_to_schema`, and a
+filing that escalates takes a path a strict-only regression never measured. The **6** that do
+change are one statement — VIC's cash flow — under all six combinations. ⚠️ **And it cost minutes, not hours, because the ROWS were replayed rather
+than re-parsed**: a mapping change cannot alter what the OCR read, so re-mapping a stored
+`row_dump` (§6-2-tricies) or a single-layer probe measures the blast radius exactly. That is
+the second thing `row_dump` has now paid for. **203 tests pass**, 96 of them new and none
+needing a PDF, a network or an engine.
+
+### ⚠️ What this does NOT fix — and one recorded cause that was wrong
+
+1. ⚠️ **THE INCOME STATEMENT IS STILL ABSENT, AND `CRP-1`'s DIAGNOSIS OF IT WAS WRONG.** That
+   entry read *"it is a `_page_kind` classification failure and not an OCR one"*. Dumping the
+   page scan: pages 9 and 10 — the P&L, sitting between the balance sheet on 6-9 and the cash
+   flow on 12-13 — come back with **25 and 5 words** against **94-169** on every neighbouring
+   page, headers reading `I s / E / 3 / co`. **The OCR read almost nothing there, so the
+   classifier had nothing to classify.** The pages are structurally identical to their
+   neighbours (612×792, rotation 0, four DeviceGray strips each), so it is not geometry — and
+   no further cause is established, so none is offered.
+2. ⚠️ **`C_LIABILITIES` STILL MISSES ON `corp` IN THE FIELD, so a corp balance sheet still
+   reconciles on the TRIVIAL identity** (`assets == resources`, true by construction). The row
+   IS on the page — VIC's is **1,024,990,928 mn**, and 1,024,990,928 + 153,703,820 =
+   1,178,694,748 = total assets **exactly** — but its label carries page-header text merged
+   onto it and its account text `no_phai_tra` is **9 characters, below `MIN_CONTAINS = 10`**,
+   so containment cannot reach it. Lowering that floor would re-open the hazard the new guard
+   was just added for, so this is recorded rather than patched.
+3. `insurance` still has **no closing-cash line in its chart of accounts** — §6-2-quaterdecies
+   called that a schema repair and it still is.
+4. ⚠️ **THE RELAXED CASH-TAIL RECOVERY IS INERT ON `corp`, AND SAFE ONLY BY ACCIDENT.**
+   `_recover_totals` claims into `CASH_BALANCES`, which are BANK column names, so on a corp
+   chart it would write a column the chart does not have — straight into `_write`'s `extra`.
+   Measured on VIC's real rows: it never fires, because `CASH_TAIL`
+   (`tienvacackhoantuongduongtientai`) and `CASH_PHRASE` are the BANK wording and corp prints
+   *"tiền và tương đương tiền cuối kỳ"* — no *"các khoản"*, no *"tại"* — so the scan finds
+   **0 rows** and all three of `onnx@200`, `+relax` and `onnx@300+relax` emit **0 columns
+   outside the corp chart**. That is protection by vocabulary mismatch, the same shape
+   §6-2-quaterdecies found protecting `bank`'s own cash tail. **The cost is coverage**: a corp
+   cash flow that NEEDS the relaxed recovery gets nothing from it.
+5. ⚠️ **ONE FILING, ONE QUARTER, ONE TEMPLATE.** `securities` and `insurance` anchors are
+   verified against their CHARTS and have never met a filing. **Nothing from VIC may be quoted
+   as a fundamental yet** — `CRP-1` stays open on point 1 alone.
+
+### ⚠️ AND ADDING A TICKER TO THE PARSE TAKES **TWO** REGISTRATIONS, NOT ONE
+
+Measured 2026-08-28 by two failed launches, ~40 s apart, with two DIFFERENT errors:
+
+| step | what is missing | the error |
+|---|---|---|
+| 1 | `CAFEF_FINANCIALS_TICKERS` in `utils/constants.py` | `DagsterInvalidSubsetError: All selected assets must have a PartitionsDefinition containing the passed partition key` |
+| 2 | `partitions -> raw/cafef_financials` in `orchestration/config.json` | `DagsterUnknownPartitionError: Could not find a partition with key` |
+
+⚠️ **`dagster definitions validate` PASSES AFTER STEP 1 AND THE RUN STILL CANNOT START** —
+the definitions are valid, the partition simply is not in the set. §5 rule 12 is why:
+`enabled.register` FILTERS the constant's list through `config.json`, and **absent = OFF**,
+so a ticker present in the constant and absent from the config is silently unaddressable.
+That is the same shape the `unified` block's own comment warns about (*"a new ticker must
+appear here AND in UNIFIED_PARTITIONS or it is silently unmaterialisable"*), and it applies
+to `raw/cafef_financials` too. ⚠️ **The constant's comment says *"Add, never substitute"***
+— `build_templates_index` REWRITES `templates.csv` from exactly that list, so a ticker
+dropped from it loses its template mapping while its statement CSVs survive.
+
+⚠️ **VIC's statements land under `statements/corp/`, a directory that did not exist**, so the
+parse feeds NO existing silver asset: `silver/cafef_financials_bank` and the three after it
+are bank-shaped by name AND by chart of accounts. Parsing VIC changes no existing table, and
+carrying `corp` up is a separate ingest that has not been written.
+
+⚠️ **THE LESSON, and it is `SAN-1`'s and `DEP-1`'s in a third shape: a check that CANNOT RUN
+is not a check that passed.** `_cash_flow_identity` reported *"opening, movement, fx, closing
+not mapped"* on a statement that had mapped three of the four — the names it was looking for
+simply did not exist in that chart — and that message is indistinguishable from a genuinely
+unreadable statement. §5 rule 2 is written for an absent NULL; this is an absent GATE, wearing
+the same words as a failed one.
+
+---
+
+### ⚠️ 6-2-duotricies. THE FIRST AUTHORITATIVE NON-BANK RUN — VIC, STOPPED AT 27 OF 72, and the BALANCE SHEET only reads an ASSURED filing
+
+Launched 2026-08-28 20:01 through `raw/cafef_financials` partition `HOSE_VIC`,
+`skip_existing: false` `allow_parent: true`, **no `periods`** — the full authoritative shape,
+which is what makes `sane`'s magnitude band the run's own rather than a subset one's. **Stopped
+by hand on 2026-08-29 at 08:39**, after **12 h 00 m** and **27 of 72 consolidated quarters
+(37.5 %)**, Q2-2008 … Q4-2014.
+
+⚠️ **STOPPING IT COST NOTHING, AND THAT WAS DESIGNED IN.** `_write` snapshots after every
+quarter on a full run, so the three CSVs hold 27 complete rows each, written at 08:02:26 with
+the last quarter that finished. **A killed run is inspectable; it is not a partial row.**
+
+| | balance sheet | income statement | cash flow |
+|---|---|---|---|
+| `pdf` | **13** | **21** | **20** |
+| `missing` | 14 | 6 | 7 |
+| `cafef` (HTML) | **0** | **0** | **0** ✅ |
+| line items | 66 | 22 | 34 |
+
+**54 of 81 cells = 66.7 %**, and rule 24 holds with no special handling — `use_api` now defaults
+to `False`, so not one row came from a web tab. 8 quarters triggered the alternate-filing retry
+and **4 recovered** by it. Winning layers are cheap: `onnx@200` took 42 of the 54, `onnx@300`
+7, `tesseract@200` 2, and one income statement needed `onnx@300+pad6+annual+extra` — layer 45.
+
+#### ⚠️ THE BALANCE SHEET SPLITS ON ASSURANCE AND THE OTHER TWO STATEMENTS DO NOT
+
+This is the finding, and the control is what makes it one: if the quarterly filings were simply
+worse scans, all three statements would fail on them together.
+
+| parse rate | audited / reviewed | **unaudited (self-prepared quarterly)** |
+|---|---|---|
+| **balance sheet** | **12 / 13 = 92 %** | **1 / 14 = 7 %** |
+| income statement | 10 / 13 = 77 % | 11 / 14 = 79 % |
+| cash flow | 7 / 9 = 78 % | 13 / 18 = 72 % |
+
+**The income statement and the cash flow do not care. The balance sheet cares completely.** The
+13 that parsed are every FY annual and every Q2 half-year review from Q4-2008 on; the one
+exception each way is `Q1-2011` (unaudited, parsed) and `Q4-2010` (audited, missing).
+
+#### ⚠️ AND THE CAUSE IS THE COMPARATIVE COLUMN — evidence, not inference
+
+`sane`'s equality gate fires on the quarterly filings and **repeats one figure across
+consecutive quarters**, which is not something a going concern's balance sheet does:
+
+| quarters refused | probe read |
+|---|---|
+| Q1-2009, Q3-2009, Q4-2009 | **6.02e+12 — the same number three times** |
+| Q1-2010, Q3-2010 | **1.43e+13 — the same number twice** |
+
+A balance sheet prints the prior year-end beside the current period, and that prior column is a
+quarter this run had **already accepted** — so the gate recognised its own earlier figure coming
+back. The remaining refusals are `assets != liabilities + equity` (11, the most common of all)
+and `no total assets` (3), both consistent with two columns being mixed. ⚠️ **The two columns
+were not read off the PDF page to confirm it**, so the mechanism is strongly indicated and not
+verified; what IS measured is the assurance split, the repeated probes and the refusal mix.
+
+⚠️ **`sane` IS THE ONLY GATE THAT CAUGHT THIS.** `reconcile` passed several of these — a
+comparative column is internally consistent, so assets equal resources within it. This is the
+second field case (after BID Q3-2016) of the equality gate catching a whole statement taken from
+the wrong column, and the first where it fires systematically rather than once.
+
+#### ⚠️ WHAT THE NEXT RUN MUST NOT DO
+
+**Resume is not available and must not be improvised.** Re-running with `skip_existing: true`,
+or with `periods`, makes it a SUBSET run — and this repo has measured four separate builds where
+that flipped `sane` to failing open and silently downgraded a quarter (§6-2-vicies,
+§6-2-unvicies, §6-2-quatervicies, §6-2-quinvicies). The 27 quarters on disk cost 12 h; **the
+correct next action is the same full run again, from Q2-2008, once `P5`'s remaining half is
+fixed** — otherwise it re-earns the same 14 missing balance sheets at the same price.
+
+⚠️ **This changes `P5`'s shape, not only its size.** §6-2-untricies fixed the anchors on one
+quarter of one filing; 27 quarters say the anchors were never the balance sheet's problem — the
+column choice is. And `P38`'s cost model gains a data point: **26.7 min/quarter** averaged over
+the run, **38.3 min** over the last eleven, on a ticker whose documents grow with the years.
+
+⚠️ **Nothing here may be quoted as a fundamental.** VIC has no accepted quarter behind it, so
+`sane` built its band inside this run from the first quarters it accepted — and those are the
+2008-2009 filings, the least reliable in the set. The `corp` template still reconciles a balance
+sheet on the trivial `assets == resources` (`CRP-1` point b), and the income statement's own
+structural failure is untouched.
 
 ---
 

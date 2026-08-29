@@ -543,6 +543,26 @@ that already parses** — that is the design rule here, not a nicety: a change t
 quarters and quietly breaks a sixtieth is a net loss, and the only way to know which you have is
 to re-run the ones that already work. Each was traced to a specific cause in the pixels.
 
+> ⚠️ **AND THE RULE HAS ONE MEASURED EXCEPTION SINCE 2026-08-28 — `_split_fx_from_balance`,
+> which runs on EVERY layer including the strict ones.** "Scope it to a relaxed layer" works only
+> when the defect makes a statement FAIL, because that is what escalates the cascade. VIC's
+> Q1-2026 cash flow was **ACCEPTED at `onnx@200`, layer 1 of 47**, carrying its closing balance
+> in the FX column — so a late layer was unreachable by construction, and a scoped fix would have
+> been dead code that looked like a repair. `PGB-1` and CLAUDE.md §6-2-unvicies each recorded the
+> same trap from the other side (a half-right layer that passes the gates ends the cascade). The
+> generalisation: **when the gates cannot SEE the defect, the repair cannot be an escalation.**
+>
+> What replaces the scoping is a narrow precondition plus a real regression. It fires only when
+> the closing column is EMPTY, the row holding FX begins with the FX account's own wording, and
+> what follows that wording matches the closing account — and **15 statements across 5 filings
+> of ACB, VCB and BID re-map identically under all 6 mapping-flag combinations the 47 layers
+> use: 90 of 90 mappings** with it in. ⚠️ **Re-map at every combination, not just the strict
+> default** — a filing that escalates takes a path a strict-only check never touches. ⚠️ **That regression cost minutes
+> rather than hours because the ROWS were replayed, not re-parsed**: a mapping change cannot
+> alter what the OCR read, so re-mapping a stored `row_dump` (CLAUDE.md §6-2-tricies) or a
+> single-layer probe measures the blast radius exactly. Reach for that before booking a re-parse.
+> CLAUDE.md §6-2-untricies; `ISSUES.md` `TPL-1` / `CRP-1`.
+
 | # | fix | reaches only |
 |---|---|---|
 | 1 | `_page_content_text` — a page whose whole text layer is a SIGNATURE STAMP has none | pages previously classified `None` |
@@ -632,6 +652,46 @@ to re-run the ones that already work. Each was traced to a specific cause in the
 > Coverage over the whole re-parse: **360 → 393** statement-quarters read from the filing. VCB
 > gains 34 (balance sheet 57→67, income statement 46→65, cash flow 62→67); ACB was already
 > complete.
+
+### ⚠️ THE FIRST CORP TICKER WAS BUILT — VIC, 27 of 72 quarters, 2026-08-29
+
+The paragraph above says the corp/securities/insurance case *"becomes testable the first time a
+corp ticker is built"*. It has been, partly: `raw/cafef_financials` partition `HOSE_VIC`,
+`skip_existing: false` `allow_parent: true`, no `periods` — **stopped by hand after 12 h at 27 of
+72 consolidated quarters** (Q2-2008 … Q4-2014). `_write` snapshots per quarter on a full run, so
+the three CSVs under `statements/corp/` hold 27 complete rows each.
+
+| | balance sheet | income statement | cash flow |
+|---|---|---|---|
+| `pdf` / `missing` | **13 / 14** | **21 / 6** | **20 / 7** |
+| line items | 66 | 22 | 34 |
+
+**0 rows from any HTML tab** (`use_api` defaults to `False` now), 8 alternate-filing retries of
+which 4 recovered, and the winning layers are cheap — `onnx@200` took 42 of the 54 accepted
+statements.
+
+⚠️ **THE BALANCE SHEET FAILS ON SELF-PREPARED QUARTERLIES AND NOWHERE ELSE**, and the other two
+statements are the control that makes that a finding rather than an impression:
+
+| parse rate | audited / reviewed | unaudited quarterly |
+|---|---|---|
+| **balance sheet** | **12 / 13** | **1 / 14** |
+| income statement | 10 / 13 | 11 / 14 |
+| cash flow | 7 / 9 | 13 / 18 |
+
+⚠️ **The mechanism is indicated as the COMPARATIVE COLUMN, and `sane` is the only gate that sees
+it.** The magnitude guard refused Q1-2009, Q3-2009 and Q4-2009 on the *same* probe (6.02e+12) and
+Q1-2010 / Q3-2010 on another (1.43e+13) — a quarterly balance sheet prints the prior year-end
+beside the current period, and that prior figure is a quarter the run had already accepted.
+`reconcile` cannot catch it: a comparative column balances against itself. The rest of the
+refusals (11 × `assets != liabilities + equity`, 3 × `no total assets`) fit two columns being
+mixed. ⚠️ **Not verified against the PDF's own columns** — what is measured is the assurance
+split, the repeated probes and the refusal mix.
+
+⚠️ **A resumed run is not available.** `skip_existing: true` or `periods` makes it a subset run
+and flips `sane` to failing open — four measured downgrades in this repo — so the next VIC attempt
+is the same 72-quarter run from scratch, and it should wait for `P5`'s remaining half.
+CLAUDE.md §6-2-duotricies; `ISSUES.md` `CRP-1`.
 - **Detection runs on the GPU** (`onnxruntime-gpu`, CUDAExecutionProvider): ~0.25 vs ~1.8 s/page
   for the CPU wheel. **⚠️ onnxruntime-gpu's version must match the machine's CUDA** — the current
   1.28 wheel needs CUDA 13 and silently falls back to CPU here (CUDA 12.1); the **1.20.x** line is

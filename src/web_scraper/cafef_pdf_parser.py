@@ -6,7 +6,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 # Tesseract ships no Vietnamese data and Program Files is not writable without admin, so the
 # language pack lives in a user-writable dir. PyMuPDF needs the binary on PATH and the
@@ -108,7 +108,7 @@ class Statement:
             return None
         return next((v for v in values if v is not None), None)
 
-    def find(self, *needles: str) -> Optional[int]:
+    def find(self, *needles: str, reject: Sequence[str] = ()) -> Optional[int]:
         """The current-period value on a row whose name is (or is close to) one of `needles`.
 
         The match must tolerate OCR damage. The lines reconciliation depends on are exactly
@@ -120,15 +120,32 @@ class Statement:
         Rows are scanned in statement order and the first hit wins, which is what keeps
         "tổng nợ phải trả" from being answered by the grand total that contains it as a
         substring — the liabilities line always precedes it.
+
+        ⚠️ AND FIRST-HIT-WINS IS EXACTLY WHY `reject` EXISTS. Fuzzy matching plus
+        statement order gives a wrong ANSWER, not a refusal, whenever two lines differ in one
+        word and the wrong one is printed first. Measured on VIC Q1-2026: the closing-cash
+        needle "tien va tuong duong tien cuoi ky" scores 0.90 against the row
+        `tien_va_tuong_duong_tien_dau_ky` - the OPENING balance, printed two lines above - so
+        `reconcile` passed on 72,226,561 for a statement that closes at 54,750,360. TPL-1
+        predicted this from the charts of accounts before it was ever run.
+
+        A row whose key contains any `reject` token is skipped OUTRIGHT, whatever it scores.
+        That is the same hard-discriminator shape `_label_score` uses under `annual_tail` - "a
+        row that says dau cannot be the closing balance" - and it is a discriminator rather
+        than a threshold because no amount of resolution separates two labels that differ by
+        one word a fuzzy window mostly ignores.
         """
         from difflib import SequenceMatcher
 
         flat = [n.replace(" ", "").replace("_", "") for n in needles]
+        bad = [n.replace(" ", "").replace("_", "") for n in reject]
         for r in self.rows:
             v0 = self._first_value(r.values)
             if v0 is None:
                 continue
             k = r.key.replace("_", "")
+            if any(n in k for n in bad):
+                continue
             for n in flat:
                 if n in k:
                     return v0

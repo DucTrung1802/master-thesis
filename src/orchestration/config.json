@@ -219,11 +219,12 @@
             "// options": "queues 0 tasks; its data adder takes no skip_existing argument, so the partition raises if run",
             "options": true
         },
-        "// raw/cafef_financials": "The tickers whose PDFs are OCR-parsed, ~2.4 h EACH. All on - select the one you want rather than materializing the asset. BID added 2026-08-25 (TODO P38, the VN30 bank batch): 62 documents, and allow_parent changes nothing for it (62 either way) because BID files a consolidated statement for every period.",
+        "// raw/cafef_financials": "The tickers whose PDFs are OCR-parsed, ~2.4 h EACH. All on - select the one you want rather than materializing the asset. BID added 2026-08-25 (TODO P38, the VN30 bank batch): 62 documents, and allow_parent changes nothing for it (62 either way) because BID files a consolidated statement for every period. VIC added 2026-08-28 - THE FIRST NON-BANK TICKER, template `corp`, 72 documents with allow_parent (71 without: only Q3-2008 lacks a consolidated filing). Its statements land under statements/corp/, so it feeds NO existing silver asset - those are bank-shaped by name and by chart of accounts. It is far dearer than 2.4 h: 66 of its 72 filings are scans with no text layer and its INCOME STATEMENT is never found (CRP-1), so `_parse_cascaded` runs all 47 layers on every document - measured 31.9 min for Q1-2026 alone, i.e. ~30-35 h for the ticker.",
         "raw/cafef_financials": {
             "HOSE_VCB": true,
             "HOSE_ACB": true,
-            "HOSE_BID": true
+            "HOSE_BID": true,
+            "HOSE_VIC": true
         },
         "// unified": "The universes of the unified schema, shared by all pool__* assets. Same rule as before: the group's `enabled` under `assets` is the off switch, NOT setting every partition false (enabled.register raises on that). VCB / BANK / ALL are the sentinels and VN30 is a fourth - ⚠ VN30 is today's vn30.csv membership and is NOT point-in-time; see UNIFIED_VN30 in preprocessor.py for why that is survivorship in its worst form. The 30 single names are one schema per company for the SINGLE-STOCK track. This block IS listed, so absent means OFF: a new ticker must appear here AND in UNIFIED_PARTITIONS or it is silently unmaterialisable.",
         "// filter": "THE SCREENS of the FILTER LAYER, one key per entry in preprocessor/filters.py SCREENS. A screen is a named list of conditions over silver/gold that decides WHICH TICKERS unified_schema_<screen> may hold. Setting one false removes it from this PartitionsDefinition but NOT from the `unified` set below, so switch both -- otherwise the unified partition survives and raises for want of its membership table.",

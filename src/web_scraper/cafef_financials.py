@@ -279,18 +279,63 @@ class FinancialsBuilder:
     NET_CF = ("luu chuyen tien thuan trong ky", "luu chuyen tien thuan trong nam")
     CASH_CLOSE = ("tien va cac khoan tuong duong tien tai thoi diem cuoi",
                   "tien va tuong duong tien cuoi ky")
+    # ⚠️ THE OPENING BALANCE IS THE ONE THING THE CLOSING NEEDLE MUST NEVER ANSWER,
+    # and on a fuzzy sliding window it very nearly does: the two lines are the same words with
+    # one different, and the opening is printed FIRST, so first-hit-wins hands it over.
+    # Measured on VIC Q1-2026 at 0.90 against a 0.85 threshold, which is TPL-1's predicted
+    # failure arriving. Passed to `Statement.find` as a disqualifier, so a row saying "dau ky"
+    # is skipped whatever it scores. Both the period and the annual wordings, because an
+    # annual report says "dau nam" - see ANNUAL_WORDING, which makes the same distinction on
+    # the scoring side.
+    CASH_OPEN_WORDS = ("dau ky", "dau nam", "dau quy")
 
     # The same subtotals, as CANONICAL columns (schema/<template>_<report>.csv). Looked up here
     # a line cannot be lost to OCR damage — which is what most rejections were.
-    C_ASSETS = ("tong_tai_san", "tong_cong_tai_san")
-    C_RESOURCES = ("tong_no_phai_tra_va_von_chu_so_huu", "tong_cong_nguon_von")
-    C_LIABILITIES = ("tong_no_phai_tra", "no_phai_tra")
-    C_EQUITY = ("viii_von_chu_so_huu", "von_chu_so_huu", "d_von_chu_so_huu")
-    C_PBT = ("xi_tong_loi_nhuan_truoc_thue", "tong_loi_nhuan_truoc_thue",
-             "tong_loi_nhuan_ke_toan_truoc_thue")
-    C_NET_CF = ("hdtc_iv_luu_chuyen_tien_thuan_trong_ky", "luu_chuyen_tien_thuan_trong_ky")
-    C_CASH_CLOSE = ("hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky",
-                    "tien_va_tuong_duong_tien_cuoi_ky")
+    #
+    # ⚠️ **ONE TUPLE PER ROLE, COVERING ALL FOUR CHARTS OF ACCOUNTS — not one per template.**
+    # These were BANK column names only until 2026-08-28, and `reconcile`, `_probe` and
+    # `_cash_flow_identity` take no `template` argument to pick a set with, so on a non-bank
+    # filing every one of them fell through to `Statement.find`'s fuzzy TEXT search. That is
+    # not a graceful degradation: measured on VIC Q1-2026 (`corp`), the closing-cash needle
+    # matched the OPENING balance row and `reconcile` passed on 72,226,561 where the filing
+    # closes at 54,750,360 — a wrong figure, not a refusal (`TPL-1`, `CRP-1`).
+    #
+    # A UNION rather than a per-template table because the lookup is
+    # `next(c for c in C_X if c in mapped)` and a chart of accounts answers at most ONE name
+    # per role — verified for all 4 templates x 3 reports in
+    # `test_cafef_financials_anchors.py`, which is what makes the union equivalent to the
+    # table and lets it ship without changing four signatures. The bank entries stay FIRST so
+    # a reader can see which came from where, and `test_bank_anchor_resolution_is_unchanged`
+    # pins that the bank charts resolve exactly what they resolved before.
+    #
+    # ⚠️ Two roles are genuinely ABSENT from a chart and that is a fact about the filing,
+    # never a gap to be filled by the nearest thing: `securities` prints no "lưu chuyển tiền
+    # thuần trong kỳ" (so `_cash_flow_identity` sums the section subtotals instead, which is
+    # what that fallback is for), and `insurance` prints NO CLOSING CASH LINE AT ALL — it ends
+    # at HDTC_39 "đầu kỳ" and HDTC_40 (FX). That one needs a schema repair, not a tuple entry.
+    C_ASSETS = ("tong_tai_san",                      # bank
+                "tong_cong_tai_san")                 # corp / securities / insurance
+    C_RESOURCES = ("tong_no_phai_tra_va_von_chu_so_huu",        # bank
+                   "tong_cong_nguon_von",                       # corp / insurance
+                   "tong_cong_no_phai_tra_va_von_chu_so_huu")   # securities
+    C_LIABILITIES = ("tong_no_phai_tra", "no_phai_tra",   # bank
+                     "c_no_phai_tra")                     # corp / securities / insurance
+    C_EQUITY = ("viii_von_chu_so_huu", "von_chu_so_huu",  # bank
+                "d_von_chu_so_huu")                       # corp / securities / insurance
+    # ⚠️ The non-bank charts keep the filing's own line NUMBER on this column ("15." for corp,
+    # "IX." for securities, "25." for insurance), so the unprefixed name matches none of them.
+    C_PBT = ("xi_tong_loi_nhuan_truoc_thue", "tong_loi_nhuan_truoc_thue",   # bank
+             "tong_loi_nhuan_ke_toan_truoc_thue",
+             "15_tong_loi_nhuan_ke_toan_truoc_thue",                        # corp
+             "ix_tong_loi_nhuan_ke_toan_truoc_thue",                        # securities
+             "25_tong_loi_nhuan_ke_toan_truoc_thue")                        # insurance
+    C_NET_CF = ("hdtc_iv_luu_chuyen_tien_thuan_trong_ky",            # bank
+                "luu_chuyen_tien_thuan_trong_ky",
+                "hdtc_luu_chuyen_tien_thuan_trong_ky_50_20_30_40")   # corp / insurance
+    C_CASH_CLOSE = ("hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky",  # bank
+                    "tien_va_tuong_duong_tien_cuoi_ky",
+                    "hdtc_vi_tien_va_cac_khoan_tuong_duong_tien_cuoi_ky",       # securities
+                    "hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61")        # corp
 
     MIN_ROWS = 12          # a statement with fewer parsed rows than this is not a statement
 
@@ -1426,9 +1471,86 @@ class FinancialsBuilder:
             self._claim(out, src, schema[j][0], rows[ri][0], rows[ri][1])
 
         self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail)
+        self._split_fx_from_balance(out, src, st, schema)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
         return out
+
+    def _split_fx_from_balance(self, out: Dict[str, int], src: Dict[str, int],
+                               st: Statement, schema: List[Tuple[str, str]]) -> None:
+        """The FX line printed BLANK, so its label rode onto the closing balance's figures.
+
+        ⚠️ **MEASURED ON VIC Q1-2026 (`corp`), 2026-08-28, and it wrote a wrong figure that
+        BOTH GATES PASSED.** The filing prints
+
+            Ảnh hưởng của thay đổi tỷ giá hối đoái quy đổi ngoại tệ        (no figure)
+            Tiền và tương đương tiền cuối kỳ (70 = 50+60+61)      54,750,360   32,491,938
+
+        A line with no figure of its own becomes `carry` in `table_rows`, so the next line's
+        figures arrive under BOTH labels joined — and `slug` caps a key at 60 characters,
+        which is exactly where "…tương đương tiền cuối kỳ" was cut off. The row therefore
+        reads as a pure FX line, the ordered walk maps it to the FX column, and the statement
+        comes out with **54,750,360 in the foreign-exchange adjustment and no closing balance
+        at all** — a 54.75 tn FX effect on 72 tn of cash. `reconcile` never noticed (its
+        closing-balance lookup fell through to the fuzzy text search and answered with the
+        OPENING row), and `sane` had no band for a ticker with nothing on disk.
+
+        ⚠️ **IT IS FIXED IN THE DEFAULT PATH AND THAT IS DELIBERATE.** Every comparable
+        recovery in this file is a `ParseLayer` flag sitting late in the cascade, and that
+        would be useless here: VIC's cash flow is ACCEPTED at `onnx@200`, layer 1 of 47, so a
+        layer that fixes it is never reached. `PGB-1` and CLAUDE.md §6-2-unvicies each record
+        the same trap from the other side — a half-right layer that passes the gates ends the
+        cascade — and the lesson generalises: when the gates cannot see the defect, the repair
+        cannot be an escalation.
+
+        Four preconditions, and every one of them narrows it to this shape:
+
+          * the statement is a CASH FLOW, and this chart of accounts has both an FX column and
+            a closing-balance column (`insurance` has no closing line at all, so it is skipped
+            rather than guessed at);
+          * the closing column is EMPTY — a statement that already found its closing balance is
+            never touched;
+          * the row holding FX begins with the FX account's own wording, so this is the merge
+            being described and not some other line that reached the FX column;
+          * and what FOLLOWS that wording matches the closing account. The tail is re-slugged
+            from the FULL label at `SEAM_SLUG_LEN`, because the 60-character cap is what
+            destroyed the evidence in the first place — the same reason `annual_tail` re-slugs.
+
+        ⚠️ **THE FIGURE MOVES; IT IS NOT COPIED.** The FX cell is left EMPTY, because the
+        filing printed no FX figure — writing one would be a number nothing can attribute
+        (§5 rule 2), and `_cash_flow_identity`'s `fx = 0` substitution already handles a filing
+        that made no adjustment, but only when the arithmetic then closes to the đồng.
+        """
+        if st.report != CASH_FLOW:
+            return
+        cols = {c for c, _ in schema}
+        fx_col = next((c for c in self.C_CASH_FX if c in cols), None)
+        close_col = next((c for c in self.C_CASH_CLOSE if c in cols), None)
+        if fx_col is None or close_col is None:
+            return
+        if close_col in out or fx_col not in out or fx_col not in src:
+            return
+        ri = src[fx_col]
+        if ri is None or ri >= len(st.rows):
+            return
+        accounts = dict(schema)
+        head = accounts[fx_col].replace("_", "")
+        full = PdfParser.slug(st.rows[ri].label,
+                              maxlen=self.SEAM_SLUG_LEN).replace("_", "")
+        if len(full) <= len(head):
+            return
+        if self._label_score(head, full[:len(head)]) < Statement.NAME_MATCH:
+            return
+        tail = full[len(head):]
+        if not tail or self._label_score(accounts[close_col].replace("_", ""),
+                                         tail) < Statement.NAME_MATCH:
+            return
+        value = out.pop(fx_col)
+        src.pop(fx_col, None)
+        self._claim(out, src, close_col, ri, value)
+        self._warn(f"    cash flow: the FX line printed no figure and its label rode onto the "
+                   f"closing balance — {value:,} moved from `{fx_col}` to `{close_col}`, "
+                   f"FX left empty")
 
     # A row OCR built by merging a SECTION HEADER with the numbered line beneath it. The filing
     # numbers its lines ("09.", "15."), so a two-digit group sitting mid-label is the seam:
@@ -1833,11 +1955,21 @@ class FinancialsBuilder:
 
     # The lines reconciliation stands on. They are unambiguous — no other line in a statement
     # is called "TỔNG TÀI SẢN" — so they are re-matched GLOBALLY, ignoring position.
-    ANCHORS = ("tong_tai_san", "tong_cong_tai_san", "tong_no_phai_tra",
-               "tong_no_phai_tra_va_von_chu_so_huu", "tong_cong_nguon_von",
-               "viii_von_chu_so_huu", "xi_tong_loi_nhuan_truoc_thue",
-               "hdtc_iv_luu_chuyen_tien_thuan_trong_ky",
-               "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky")
+    # ⚠️ **DERIVED FROM THE ROLE TUPLES, NOT RE-LISTED — and the duplication is exactly how
+    # this went wrong.** Until 2026-08-28 this was a hand-written literal of NINE bank column
+    # names, so `_anchor`'s `if c in self.ANCHORS` filter selected 2 of 7 roles on the `corp`
+    # chart and 2 on `insurance`: the position-independent re-match, which exists because "the
+    # ordered walk drifts", simply did not run for total liabilities, equity, PBT, the net cash
+    # movement or the closing balance on any non-bank filing. Deriving it means a column added
+    # to a role can no longer be missed here.
+    #
+    # ⚠️ **THE SEVEN ROLES ARE THE ROLES IT HAS ALWAYS HAD.** `C_CASH_OPEN`, `C_CASH_FX` and
+    # `C_FLOW_SECTIONS` are deliberately NOT anchored: adding them would change which row wins
+    # on a BANK filing, and `_anchor`'s own docstring records that the two dated balance lines
+    # are separated only by a position tie-break. Widening that competition is a separate
+    # change with its own regression, not a side effect of this one.
+    ANCHORS = (C_ASSETS + C_RESOURCES + C_LIABILITIES + C_EQUITY
+               + C_PBT + C_NET_CF + C_CASH_CLOSE)
     ANCHOR_MATCH = 0.86      # stricter than the ordered pass: this one has no order to lean on
     # A heavily OCR-damaged anchor label can fall just under ANCHOR_MATCH while still being the
     # right line — ACB's Q4-2014 grand total reads "tong_ng_pha_tra_va_von_chu_sd_hoij" (nợ->ng,
@@ -1913,10 +2045,36 @@ class FinancialsBuilder:
         # reasoning `_recover_totals` uses for a grand total sitting at the foot of its section.
         # Without it ACB's Q1-2025 closing balance took the opening's 139,824,608.
         cands.sort(key=lambda c: (c[0], c[1], c[3]), reverse=True)
+        # ⚠️ **AN ANCHOR MAY NOT STEAL A ROW THAT FITS ANOTHER ACCOUNT BETTER** — measured on
+        # VIC Q1-2026 (`corp`) the day the non-bank anchors were added. Equity's account text
+        # is "vốn chủ sở hữu", ELEVEN characters, so containment awards a flat 0.95 to every
+        # line that merely mentions it, and the length-ratio tie-break then prefers the SHORT
+        # impostor: "Quỹ khác thuộc vốn chủ sở hữu" (117,845 mn, ratio 0.48) beat the real
+        # equity row (153,703,820 mn, ratio 0.32, its label polluted by the page header OCR
+        # merged onto it). `_claim` then evicted `i_9_quy_khac_thuoc_von_chu_so_huu`, so ONE
+        # anchor turned two correct cells into two wrong ones.
+        #
+        # The discriminator is not a threshold: the impostor is a line the chart of accounts
+        # ALREADY HAS, and the ordered walk had placed it there EXACTLY (1.00 against 0.95).
+        # A row whose own account fits it better than this anchor does is not this anchor's
+        # line, whatever the containment score says.
+        #
+        # ⚠️ **STRICTLY better, and that is what preserves `_claim`'s documented case.** ACB's
+        # Q1-2022 reads "Dự phòng rủi ro khác" and "TỔNG NỢ PHẢI TRẢ" as ONE row: both
+        # accounts score 0.95 by containment, so the anchor still wins the tie and still takes
+        # the row — which is the behaviour that case exists to pin.
+        held_account = {c: a.replace("_", "") for c, a in schema}
         taken_col, taken_row = set(), set()
         for r, ln, col, ri, val in cands:
             if col in taken_col or ri in taken_row:
                 continue
+            if src:
+                other = next((c for c, i in src.items() if i == ri and c != col), None)
+                if other is not None and other in held_account:
+                    k = self._split_merged(st.rows[ri].key, st.rows[ri].label,
+                                           relax_merged_seam).replace("_", "")
+                    if self._label_score(held_account[other], k, relax, annual_tail) > r:
+                        continue
             # through _claim, so winning an anchor also RELEASES whatever else this row had
             # been given by the alignment pass — one printed line, one line item
             self._claim(out, src if src is not None else {}, col, ri, val)
@@ -1960,12 +2118,13 @@ class FinancialsBuilder:
         if len(st.rows) < self.MIN_ROWS:
             return f"only {len(st.rows)} rows parsed"
 
-        def get(canonical: Tuple[str, ...], *text: str) -> Optional[int]:
+        def get(canonical: Tuple[str, ...], *text: str,
+                reject: Tuple[str, ...] = ()) -> Optional[int]:
             if mapped:
                 for c in canonical:
                     if c in mapped:
                         return mapped[c]
-            return st.find(*text)
+            return st.find(*text, reject=reject)
 
         if st.report == BALANCE_SHEET:
             assets = get(self.C_ASSETS, *self.TOTAL_ASSETS)
@@ -1987,7 +2146,8 @@ class FinancialsBuilder:
                 return "no profit before tax"
 
         if st.report == CASH_FLOW:
-            close = get(self.C_CASH_CLOSE, *self.CASH_CLOSE)
+            close = get(self.C_CASH_CLOSE, *self.CASH_CLOSE,
+                         reject=self.CASH_OPEN_WORDS)
             # THE CLOSING BALANCE IS REQUIRED, not "either this or IV". Satisfying the gate with
             # IV alone is what wrote five quarters as `pdf` with an empty closing-balance column
             # — ACB Q3-2012, Q1-2015, Q1-2019 and VCB Q4-2011, Q2-2019 — each with the figure
@@ -2029,11 +2189,37 @@ class FinancialsBuilder:
 
     # The statement's own arithmetic: closing = opening + what moved + the FX adjustment. The
     # movement is IV when it was mapped, else the section subtotals it is the sum of.
-    C_CASH_OPEN = ("hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky",)
-    C_CASH_FX = ("hdtc_vi_dieu_chinh_anh_huong_cua_thay_doi_ty_gia",)
-    C_FLOW_SECTIONS = ("hdkd_i_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh",
+    #
+    # ⚠️ **ALL FOUR CHARTS, for the reason C_ASSETS gives.** These three were bank-only until
+    # 2026-08-28, which is why the identity could not run on a non-bank filing AT ALL: VIC
+    # Q1-2026 mapped its opening, its movement and (wrongly) its FX and still reported
+    # "opening, movement, fx, closing not mapped", because not one of the three names it was
+    # looking for exists in the `corp` chart. A check that cannot run is not a check that
+    # passed — §5 rule 2 — and it left `_recover_totals`' positional FX guess as the only
+    # thing standing between a merged label and a wrong FX column.
+    C_CASH_OPEN = ("hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky",  # bank
+                   "hdtc_v_tien_va_cac_khoan_tuong_duong_tien_dau_ky",   # securities
+                   "hdtc_tien_va_tuong_duong_tien_dau_ky_60",            # corp
+                   "hdtc_tien_va_tuong_duong_tien_dau_ky")               # insurance
+    C_CASH_FX = ("hdtc_vi_dieu_chinh_anh_huong_cua_thay_doi_ty_gia",     # bank
+                 # corp / securities / insurance all word it identically. ⚠️ `securities`
+                 # carries a SECOND one (`…_ngoai_te_2`) and it is deliberately left out: the
+                 # unsuffixed line is the one printed in the tail, and admitting both would
+                 # make `next(...)` depend on tuple order rather than on the filing.
+                 "hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te")
+    # ⚠️ Unlike the others this one is a SUM, so several matches per chart is the correct
+    # answer and the at-most-one invariant deliberately does not apply to it.
+    C_FLOW_SECTIONS = ("hdkd_i_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh",   # bank
                        "hddt_ii_luu_chuyen_tien_thuan_tu_hd_dau_tu",
-                       "hdtc_iii_luu_chuyen_tien_thuan_tu_hd_tai_chinh")
+                       "hdtc_iii_luu_chuyen_tien_thuan_tu_hd_tai_chinh",
+                       "hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh",     # corp
+                       "hddt_luu_chuyen_tien_thuan_tu_hoat_dong_dau_tu",
+                       "hdtc_luu_chuyen_tien_thuan_tu_hoat_dong_tai_chinh",      # corp / sec / ins
+                       "hdkd_luu_chuyen_tien_thuan_su_dung_vao_hoat_dong_kinh_doanh",  # securities
+                       "hddt_luu_chuyen_tien_thuan_tu_su_dung_vao_hoat_dong_dau_tu",
+                       "hdkd_indirect_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh",  # insurance
+                       "hdkd_direct_luu_chuyen_tien_thuan_tu_hdkd",
+                       "hddt_luu_chuyen_tien_thuan_su_dung_vao_hoat_dong_dau_tu")
 
     def _cash_balance_span(self, st: Statement) -> Optional[Tuple[int, int]]:
         """(row index of the opening balance, row index of the closing balance), or None.
@@ -2298,7 +2484,10 @@ class FinancialsBuilder:
         for c in canonical:
             if c in mapped:
                 return mapped[c]
-        return st.find(*text)
+        # ⚠️ the same disqualifier `reconcile` applies, and for the same reason: this
+        # is the figure `sane` bands a cash flow on, so answering it with the OPENING balance
+        # poisons the magnitude history for every quarter that follows it (SAN-1).
+        return st.find(*text, reject=self.CASH_OPEN_WORDS if report == CASH_FLOW else ())
 
     def sane(self, st: Statement, history: List[int],
              mapped: Optional[Dict[str, int]] = None) -> Optional[str]:

@@ -276,6 +276,13 @@ CAFEF_FINANCIALS_TICKERS: list[tuple[str, str]] = [
     ("HOSE", "VCB"),
     ("HOSE", "ACB"),
     ("HOSE", "BID"),
+    # ⚠️ **THE FIRST NON-BANK TICKER, ADDED 2026-08-28 — template `corp`, not `bank`.** Its
+    # statements land under `statements/corp/`, a directory that did not exist before, so
+    # every consumer keyed on `statements/bank/` sees nothing from it: `silver/
+    # cafef_financials_bank` and the three assets after it are BANK-shaped by name and by
+    # chart of accounts, and carrying `corp` up needs its own ingest. Parsing it changes no
+    # existing table. CLAUDE.md §6-2-untricies; `CRP-1`.
+    ("HOSE", "VIC"),
 ]
 
 # ── GICS classification crosswalk ──────────────────────────────────────────────
