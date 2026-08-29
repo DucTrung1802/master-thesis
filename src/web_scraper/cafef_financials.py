@@ -238,6 +238,29 @@ def _blank(v):
     return "" if v is None else v
 
 
+def parse_key(layer: ParseLayer) -> tuple:
+    """What makes two layers share ONE OCR pass — the parse cache's key.
+
+    The crop padding is part of the KEY, not just a setting: two layers that share an engine
+    and DPI but crop differently produce different text, and keying on (engine, dpi) alone
+    would hand the wider-crop layer the narrow crop's cached parse — the one that already
+    failed. `relax_merged_seam`, `annual_tail` and `cash_extra_terms` are deliberately ABSENT:
+    each changes the MAPPING or the GATE, not the parse, so two layers differing only in them
+    share one pass. That is what makes `onnx@200+pad6+annual+extra` free — `onnx@200+pad6+
+    components` has already rendered those pages.
+
+    ⚠️ **A FUNCTION SINCE 2026-08-30, BECAUSE A SECOND READER NEEDED IT.** `pdf_ocr_job`
+    counts the DISTINCT keys of a planned cascade to know how many OCR passes a document can
+    cost — which is the denominator its overall % is a fraction of. Re-typing this tuple there
+    would be two copies of one contract, and the copy would be wrong the first time a
+    `ParseLayer` field moved between "changes the parse" and "changes the mapping".
+    """
+    return (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
+            layer.title_over_form, layer.loose_form_code, layer.realign_rows,
+            layer.notes_boundary, layer.tail_continuation, layer.label_wrap,
+            layer.unit_from_document)
+
+
 class FinancialsBuilder:
     """Build quarterly financial statements for a ticker from its LOCAL PDF archive.
 
@@ -797,17 +820,7 @@ class FinancialsBuilder:
             parser = self._parser_for(layer.engine)
             if not parser.ocr_ready and layer.engine != "onnx":
                 continue                                  # engine unavailable on this machine
-            # The crop padding is part of the KEY, not just a setting: two layers that share an
-            # engine and DPI but crop differently produce different text, and keying on
-            # (engine, dpi) alone would hand the wider-crop layer the narrow crop's cached parse
-            # — the one that already failed.
-            # `relax_merged_seam`, `annual_tail` and `cash_extra_terms` are deliberately ABSENT:
-            # each changes the MAPPING or the GATE, not the parse, so two layers differing only
-            # in them share one OCR pass. That is what makes `onnx@200+pad6+annual+extra` free —
-            # `onnx@200+pad6+components` has already rendered those pages.
-            key = (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
-                   layer.title_over_form, layer.loose_form_code, layer.realign_rows,
-                   layer.notes_boundary, layer.tail_continuation, layer.label_wrap, layer.unit_from_document)
+            key = parse_key(layer)
             if self.on_layer is not None:
                 # `cached` is the whole cost story: a layer whose parse key is already in
                 # `parsed` re-maps in milliseconds, while a new key re-OCRs every page.

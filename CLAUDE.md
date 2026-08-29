@@ -5123,6 +5123,65 @@ are free, they need no OCR, and they also run on tickers that DO have history �
 on but sees only its own entity's band. `P47`(a) — `plan()` warning ONCE, up front, before any
 GPU is spent, rather than per document after the cost — is also untouched.
 
+### ✅ 6-2-undequadragies. ONE PROGRESS LINE, BOTH MACHINES — and the denominator is OCR PASSES
+
+Shipped 2026-08-30 on request. The OCR run reported itself as THREE nested percentages on
+three differently-indented lines — `[doc 2/3 67% of DOCUMENTS]`, `[layer 12/47 26% of
+POSITIONS]`, `[ocr page 40/96 42% of PAGES]` — each honest about its own denominator and
+**none of them answering the only question a progress readout exists to answer**: how far
+through the whole thing am I? It is now one line, on both machines:
+
+```
+ 33.7% - doc 2/3 HOSE_TCB Q3-2013 - layer 12/47 onnx@300 - page 40/96  ~76 s left   <- the OCR
+ 42.5% - step 4/6 HOSE_TCB 2013-Q3 - wait kernel - [ 1.5 min] RUNNING  25% of last  <- the control
+```
+
+`xx.x% - task - sub-task - detail`, formatted by **`src/utils/progress.py`** — one module, so
+the machine that does the OCR and the machine that drives Kaggle cannot drift apart. The three
+denominators did not go away; they moved into the segments, where each still names its own
+(`doc 2/3`, `layer 12/47`, `page 40/96`) and only the last predicts time.
+
+⚠️ **THE WITHIN-DOCUMENT DENOMINATOR IS OCR PASSES, NOT CASCADE POSITIONS, AND THAT IS THE
+DIFFERENCE BETWEEN A USEFUL NUMBER AND A STUCK ONE.** Measured 2026-08-30: the cascade's **49
+layers share 24 distinct parse keys** (`cafef_financials.parse_key`, now a function precisely
+so a second reader cannot re-type it), because a layer that changes only the MAPPING or the
+GATE re-maps a cached parse in milliseconds. On a layer index the first — and usually only —
+OCR pass is 1/49 of a document, so the bar would sit at 2 % through the most expensive thing
+the run does. A cached layer now moves nothing, and the line says `cached parse, re-map only`.
+
+⚠️ **THE NUMBER IS A POSITION IN THE PLAN AND A LOWER BOUND ON REAL PROGRESS.** A filing
+accepted at layer 1 is ~1 min and one that defeats the cascade was 33 min (§6-2-noviesdecies),
+so no fraction of documents is a fraction of time. Low is the honest direction: a run finishes
+early, it does not stall at 99 %. ⚠️ Passes are counted EQUAL and are not — a 400 dpi pass
+costs more — and a layer whose engine is missing here (no tesseract) never runs at all.
+
+⚠️ **ON KAGGLE THE OVERALL % STANDS STILL THROUGH `wait kernel` UNLESS THAT EXACT JOB HAS
+COMPLETED ONCE BEFORE, AND THAT IS DELIBERATE.** `kernels_status` returns QUEUED / RUNNING /
+COMPLETE and **no completion fraction**, so the only honest clock is the job's own last
+duration — and a PDF-OCR job is named after its ticker and quarters, so its FIRST run has
+none. `runner.RUN_STAGES`' six weights (export 10, upload 15, push 5, wait 50, download 10,
+merge 10) are ⚠️ **NOMINAL**: they say which step is the long one and measure nothing. Anything
+else would be §5 rule 2 wearing a progress bar.
+
+⚠️ **ANYTHING THAT PARSED `run.log` IS BROKEN BY THIS AND ONE THING WAS.** Every line now
+begins with the percentage, so a filter anchored at the start of a line
+(`startswith("WRITE ")`) matches nothing — the control notebook's own *"what was refused"*
+cell was the first casualty. `progress.detail_of(line)` is the segment that used to BE the
+line.
+
+✅ **`progress=None` LEAVES `python -m kgpu run` BYTE FOR BYTE AS IT WAS** — the reporter is
+opt-in and only the PDF-OCR control notebook passes one, because a formatting change that
+reaches a command nobody asked to change is a change nobody consented to. **345 tests pass in
+`src/web_scraper` + `src/utils` (15 of them new, none needing a PDF, a network or an engine),
+688 across `src/`.**
+
+⚠️ **AND `src/utils` GAINED AN `__init__.py`, WHICH IS NOT COSMETIC.** `utils/` also holds a
+module called `utils.py`, and pytest's default import mode puts a test file's own directory
+first on `sys.path` — so the first test ever placed in `src/utils/` made `import utils`
+resolve to `utils/utils.py` and every `from utils.constants import …` under it fail with
+*"'utils' is not a package"*, which reads as a missing dependency rather than a shadowed name.
+9 of the 12 packages under `src/` already carried one.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

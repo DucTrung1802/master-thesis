@@ -1905,8 +1905,13 @@ which is deterministic and was reproduced four times.
 | | |
 |---|---|
 | **input** | ONE frozen `JobSpec`, built identically by the CLI, the notebook and `kgpu`. `prepare()` resolves root / models / TEMPLATE / documents and RAISES on any of them, before a page is rendered |
-| **log** | every percentage names its denominator: `of DOCUMENTS, not of time`, `of POSITIONS`, `of PAGES — the only fraction here that predicts time`. Rate-limited to a 10-point step or 15 s |
+| **log** | ⚠️ **ONE LINE, FOUR SEGMENTS, LEADING WITH THE OVERALL % (2026-08-30):** ` 33.7% - doc 2/3 HOSE_TCB Q3-2013 - layer 12/47 onnx@300 - page 40/96  ~76 s left`. Formatted by `utils.progress`, which the Kaggle CONTROL side uses for its own six steps, so the two cannot drift. The three denominators are still named, in the segments (`doc 2/3`, `layer 12/47`, `page 40/96` — only the last predicts time), and the overall % is `documents finished + this document's place in the cascade`: **a position in the plan, a LOWER BOUND on real progress, never a fraction of the time**. Rate-limited to a 10-point step or 15 s |
 | **output** | `metadata.json` (`schema_version`, resolved spec, `template_how`, `environment.ocr`), `summary.csv`, `documents/<key>.json`, and `run.log` written line-buffered as it goes |
+
+⚠️ **ANYTHING THAT PARSED `run.log` MUST BE RE-READ.** A filter anchored at the start of
+a line (`startswith("WRITE ")`) matches nothing now — the line starts with the
+percentage. `progress.detail_of(line)` is the segment that used to BE the line, and the
+control notebook's own "what was refused" cell was the first thing this broke.
 
 ⚠️ **`resolve_template` REPLACED A SILENT `or "bank"`.** 761 of 781 listed names are not banks;
 the default would have mapped a corporate filing against the bank chart of accounts and

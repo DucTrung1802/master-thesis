@@ -182,6 +182,33 @@ The notebook's last two cells read it; `metadata.json` carries the whole scoreca
 ⚠️ **`compare()` READS EVERY COLUMN, NOT THE FIGURES.** Two runs have been caught losing a
 single `publish_date` and nothing else — a figures-only diff called both of them clean.
 
+### The log's shape — one line, leading with the OVERALL % (2026-08-30)
+
+Both machines print the same shape, from the same formatter (`utils/progress.py`), so a
+LOCAL run and a KAGGLE run read alike:
+
+```
+ 33.7% - doc 2/3 HOSE_TCB Q3-2013 - layer 12/47 onnx@300 - page 40/96  ~76 s left   <- the OCR
+ 42.5% - step 4/6 HOSE_TCB 2013-Q3 - wait kernel - [ 1.5 min] RUNNING  25% of last  <- the control
+```
+
+`xx.x% - task - sub-task - detail`. ⚠️ **The percentage is a POSITION IN THE PLAN, not a
+fraction of the time left.** LOCAL it is `documents finished + this document's place in the
+47-layer cascade`, so a filing accepted at layer 1 (~1 min) jumps its whole share at once
+while one that defeats the cascade (33 min) crawls through it — the number is a LOWER BOUND,
+and low is the honest direction to be wrong in: a run finishes early, it does not stall at
+99 %.
+
+⚠️ **ON KAGGLE IT STANDS STILL THROUGH `wait kernel` UNLESS THIS EXACT JOB HAS COMPLETED
+ONCE BEFORE.** `kernels_status` reports QUEUED / RUNNING / COMPLETE and no fraction, so the
+only honest clock is this job's own last duration — and a job is named after its ticker and
+quarters, so its first run has none. The detail keeps printing the elapsed minutes; nothing
+here invents a curve to make the bar move.
+
+⚠️ **A READER THAT MATCHED THE START OF A LOG LINE IS NOW BROKEN.** `run.log` lines begin
+with the percentage — `progress.detail_of(line)` returns the segment that used to BE the
+line, and the control notebook's own "what was refused" cell was the first thing this broke.
+
 ### When a statement is `absent`, read the FIRST refusal
 
 `_parse_cascaded` prints the distinct reasons with the first layer that gave each. ⚠️ **A

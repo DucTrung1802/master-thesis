@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from utils import progress
 from web_scraper import cafef_financials as fin
 from web_scraper import pdf_ocr_job as job
 from web_scraper import pdf_ocr_merge
@@ -444,10 +445,32 @@ def _layer(name="onnx@200"):
     return next(l for l in FinancialsBuilder.LAYERS if l.name == name)
 
 
-def test_each_percentage_says_what_it_is_a_percentage_OF(tmp_path):
+def test_every_line_is_one_shape_and_leads_with_the_overall_percent(tmp_path):
+    """⚠️ THE SHAPE, and it is the whole point of the 2026-08-30 change: one line, four
+    segments, ` xx.x% - task - sub-task - detail`, on every line a run emits — the header,
+    the cascade, the parser's warnings, the merge. It used to be three nested percentages on
+    three indents, none of which answered *how far through the whole run am I?*"""
+    log = job.Progress(3, log_path=tmp_path / "run.log", echo=False)
+    log.document(1, _task(), 5.0)
+    log.layer(12, 47, _layer(), cached=False)
+    log.page(0, 10)
+    log.log_warning("the band is EMPTY")
+    log.close()
+
+    for line in log.lines:
+        head, _, rest = line.partition(progress.SEPARATOR)
+        assert head.endswith("%") and rest, line
+        assert 0.0 <= float(head.strip().rstrip("%")) <= 100.0, line
+    # ⚠️ ONE DECIMAL. `34%` would not move for a whole document of a 3-document run.
+    assert log.lines[0].split("%")[0].strip() == "0.0"
+
+
+def test_each_fraction_still_says_what_it_is_a_fraction_OF(tmp_path):
     """⚠️ `kaggle_gpu/README.md` §3 records that this repo's progress readouts have different
-    denominators and only one predicts time. Printing the number without the denominator is
-    how "32 %" gets read as "a third of the way through"."""
+    denominators and only one predicts time. The denominators did not go away when the line
+    was flattened — they moved into the segments, where `doc 1/3`, `layer 12/47` and
+    `page 1/10` each name their own. Printing a number without its denominator is how "32 %"
+    gets read as "a third of the way through"."""
     log = job.Progress(3, log_path=tmp_path / "run.log", echo=False)
     log.document(1, _task(), 5.0)
     log.layer(12, 47, _layer(), cached=False)
@@ -455,9 +478,104 @@ def test_each_percentage_says_what_it_is_a_percentage_OF(tmp_path):
     text = "\n".join(log.lines)
     log.close()
 
-    assert "of DOCUMENTS, not of time" in text
-    assert "of POSITIONS" in text
-    assert "of PAGES" in text and "predicts time" in text
+    assert "doc 1/3" in text
+    assert "layer 12/47" in text
+    assert "page 1/10" in text and "of this pass" in text
+
+
+def test_the_overall_percent_never_goes_backwards(tmp_path):
+    """⚠️ A percentage that retreats is read as a bug in the RUN rather than in the
+    reporting, and the reader then stops trusting the whole line. `run()` walks the cascade
+    once per document so the raw position only rises today — but `build()` re-enters
+    `_parse_cascaded` for an ALTERNATE filing, which starts again at layer 1 with the same
+    reporter, so the guard is pinned rather than assumed."""
+    log = job.Progress(2, log_path=tmp_path / "run.log", echo=False, passes=4)
+    seen = []
+    log.document(1, _task(), 5.0)
+    log.layer(40, 47, _layer(), cached=False)
+    log.layer(41, 47, _layer(), cached=False)
+    log.layer(42, 47, _layer(), cached=False)
+    seen.append(log.fraction)
+    log.layer(1, 47, _layer(), cached=False)         # an alternate filing starts over
+    seen.append(log.fraction)
+    # ⚠️ THE GUARD ITSELF. Every call sequence `run()` makes happens to rise on its own, so
+    # the only way to produce the situation the floor exists for is to put the raw position
+    # back by hand — which is what a second `_parse_cascaded` over one document would do.
+    highest = log.fraction
+    log._within = 0.0
+    assert log.fraction == highest
+    log.document_done(1)
+    seen.append(log.fraction)
+    log.document(2, _task(), 5.0)
+    seen.append(log.fraction)
+    log.finish("done", "run folder -> nowhere")
+    seen.append(log.fraction)
+    log.close()
+
+    assert seen == sorted(seen), seen
+    assert seen[-1] == 1.0
+
+
+def test_the_within_document_denominator_is_OCR_PASSES_not_cascade_positions(tmp_path):
+    """⚠️ THE DIFFERENCE BETWEEN A USEFUL NUMBER AND A STUCK ONE. 47 layers share ~12 distinct
+    parse keys, so on a layer index the FIRST — and usually only — OCR pass would be 1/47 of a
+    document and the bar would sit at 2 % through the most expensive thing the run does."""
+    log = job.Progress(1, log_path=tmp_path / "run.log", echo=False, passes=10)
+    log.document(1, _task(), 5.0)
+    log.layer(1, 47, _layer(), cached=False)          # pass 1 of 10 begins
+    assert log.fraction == pytest.approx(0.0)
+    log.page(49, 100)                                  # half of its pages
+    assert log.fraction == pytest.approx(0.05, abs=0.005)
+    log.layer(2, 47, _layer(), cached=False)          # pass 2 of 10
+    assert log.fraction == pytest.approx(0.10, abs=0.005)
+    log.close()
+
+    assert "OCR pass 2/10" in log.lines[-1]
+
+
+def test_a_cached_layer_does_not_move_the_number_because_it_does_no_work(tmp_path):
+    """A layer that only changes the MAPPING re-maps a parse already in the cache, in
+    milliseconds. Counting it as progress would spend a tenth of the bar on nothing."""
+    log = job.Progress(1, log_path=tmp_path / "run.log", echo=False, passes=10)
+    log.document(1, _task(), 5.0)
+    log.layer(1, 47, _layer(), cached=False)
+    log.page(99, 100)
+    after_the_pass = log.fraction
+    for position in range(2, 8):
+        log.layer(position, 47, _layer(), cached=True)
+    log.close()
+
+    assert log.fraction == after_the_pass
+    assert "cached parse, re-map only" in log.lines[-1]
+
+
+def test_the_pass_denominator_comes_from_the_cascade_own_cache_key():
+    """⚠️ `run()` counts the DISTINCT `fin.parse_key` of the planned layers — the same key
+    `_parse_cascaded` caches on — so 47 layers collapse to the passes they really are. Two
+    copies of that tuple would disagree the first time a `ParseLayer` field moved between
+    "changes the parse" and "changes the mapping"."""
+    layers = list(FinancialsBuilder.LAYERS)
+    passes = {fin.parse_key(layer) for layer in layers}
+
+    assert 1 < len(passes) < len(layers), (len(passes), len(layers))
+    # a mapping-only relaxation must NOT open a new pass
+    by_name = {layer.name: layer for layer in layers}
+    if "onnx@200" in by_name and "onnx@200+relax" in by_name:
+        assert fin.parse_key(by_name["onnx@200"]) == fin.parse_key(by_name["onnx@200+relax"])
+
+
+def test_a_blank_line_is_dropped_rather_than_printed_as_a_bare_percentage(tmp_path):
+    """The old log used blank lines to separate blocks; the task and sub-task segments do
+    that job now, and ` 0.0% - HOSE_TST - plan` with nothing after it is noise."""
+    log = job.Progress(1, log_path=tmp_path / "run.log", echo=False)
+    log.line("")
+    log.line("   ")
+    before = len(log.lines)
+    log.line("first")
+    log.close()
+
+    assert before == 0
+    assert len(log.lines) == 1 and progress.detail_of(log.lines[0]) == "first"
 
 
 def test_a_cached_layer_says_so_because_that_is_the_whole_cost_story(tmp_path):

@@ -148,6 +148,28 @@ In a terminal `wait` rewrites one line in place; redirected to a pipe or a file 
 prints only when the state changes or the percentage crosses a 5-point step, so a
 12-hour poll does not leave 2,880 lines in a log.
 
+### ⚠️ AND THE PDF-OCR JOB REPORTS ONE OVERALL % ON TOP OF THEM (2026-08-30)
+
+`runner.run(cfg, progress=utils.progress.Stages(runner.RUN_STAGES, label=…))` — which is
+what `RUN__pdf_ocr_control.ipynb` passes — re-emits every line of the round trip as
+
+```
+ 42.5% - step 4/6 HOSE_TCB 2013-Q3 - wait kernel - [  1.5 min] RUNNING    25% of last
+```
+
+the same shape `web_scraper.pdf_ocr_job` prints on the machine that does the OCR
+(`33.7% - doc 2/3 … - layer 12/47 … - page 40/96`). The stage weights in `RUN_STAGES`
+are ⚠️ **NOMINAL** — they say which step is the long one and measure nothing.
+
+⚠️ **THE NUMBER STANDS STILL THROUGH `wait kernel` UNLESS THIS JOB HAS COMPLETED ONCE.**
+The row above is the reason: there is no completion fraction to read, so the only honest
+clock is this job's own last duration — and a PDF-OCR job is named after its ticker and
+quarters, so its first run has none. The detail keeps printing the elapsed minutes.
+
+⚠️ `progress=None` (every CLI command, and every feature-selection job) prints exactly
+what it always printed. A formatting change that reached a command nobody asked to
+change is a change nobody consented to.
+
 Cost, measured rather than asserted: nine `_tick` calls per selection are
 **0.010 ms**, or 4.3e-8 of the 3.7-minute run and 7.8e-10 of one wide-pool
 permutation step.

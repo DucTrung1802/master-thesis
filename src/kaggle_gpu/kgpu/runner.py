@@ -193,7 +193,7 @@ def status(cfg: JobConfig) -> str:
     return name
 
 
-def wait(cfg: JobConfig) -> str:
+def wait(cfg: JobConfig, on_poll=None) -> str:
     """Poll until the run reaches a terminal state. Returns the final status.
 
     ⚠️ **KAGGLE REPORTS NO PROGRESS, SO THE PERCENTAGE HERE IS AGAINST THE LAST
@@ -205,6 +205,13 @@ def wait(cfg: JobConfig) -> str:
 
     Bounded by `max_wait_minutes`: an unbounded poll on a hung worker is a process
     that never returns and a quota that keeps draining.
+
+    `on_poll(status, elapsed_seconds, baseline_or_None)` is called once per poll, before
+    the line is decided, so a caller reporting an OVERALL percentage can move it while this
+    blocks. ⚠️ **It is handed the baseline it does not have, too** — `None` — because the
+    honest answer for a job that has never completed is that this stage cannot report a
+    fraction, and a hook that invented one would put this module's own warning above into
+    the very number it warns about.
     """
     api = _api()
     start = time.perf_counter()
@@ -222,6 +229,11 @@ def wait(cfg: JobConfig) -> str:
         response = _fetch_status(api, cfg, retry_minutes=POLL_RETRY_MINUTES)
         name = _status_name(response.status)
         elapsed = time.perf_counter() - start
+        # ⚠️ The hook MOVES A NUMBER; it does not print. The poll's own line is already the
+        # one the reader sees (through `Stages.capture`), and a hook that printed too would
+        # double every line of a 12-hour wait.
+        if on_poll is not None:
+            on_poll(name, elapsed, baseline)
         pct = f"{elapsed / baseline:>4.0%} of last" if baseline else "  no baseline"
         line = f"[{elapsed / 60:5.1f} min] {name:<9} {pct}"
 
@@ -482,9 +494,65 @@ def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
     return 0
 
 
-def pull(cfg: JobConfig, force: bool = False) -> List[str]:
-    files = download(cfg)
-    if files:
+#: The six steps of `run()`, and what share of the round trip each is worth.
+#:
+#: ⚠️ **THE WEIGHTS ARE NOMINAL — they say which step is the long one, and they are
+#: not a measurement of any run.** The same job queues for five minutes or for fifty
+#: (`kgpu` §3d: a smoke job took 8m 15s of which 5.2 min was QUEUE), and the payload upload
+#: is an 86 MB push over whatever the line is doing today. Presenting them as measured would
+#: be §5 rule 2 wearing a progress bar. They exist so a reader can tell a run stuck on the
+#: upload from one stuck on the kernel, at a glance.
+RUN_STAGES = (
+    ("export", "stage payload", 10.0),
+    ("upload", "upload dataset", 15.0),
+    ("push", "push kernel", 5.0),
+    ("wait", "wait kernel", 50.0),
+    ("download", "pull results", 10.0),
+    ("merge", "merge into repo", 10.0),
+)
+
+
+@contextlib.contextmanager
+def _stage(reporter, key: str, detail: str = ""):
+    """Run one step of `RUN_STAGES`, with its output re-emitted as progress lines.
+
+    ⚠️ **`reporter=None` IS TODAY'S BEHAVIOUR, UNCHANGED, AND THAT IS DELIBERATE.** The
+    percentage was added for the PDF-OCR control notebook (2026-08-30); `python -m kgpu run`
+    on a feature-selection job prints exactly what it printed before, because a formatting
+    change that reaches a command nobody asked to change is a change nobody consented to.
+    """
+    if reporter is None:
+        yield
+        return
+    reporter.begin(key, detail)
+    with reporter.capture():
+        yield
+    reporter.end()
+
+
+def _poll_hook(reporter):
+    """Move the overall % through the `wait` stage — only where a baseline exists."""
+    if reporter is None:
+        return None
+
+    def hook(status: str, elapsed: float, baseline) -> None:
+        if baseline:
+            # ⚠️ CAPPED BELOW THE CEILING. The stage is over when Kaggle says COMPLETE,
+            # not when this job's last run would have finished; a bar parked at the ceiling
+            # while the kernel is still running reads as a hang.
+            reporter.inside(min(elapsed / baseline, 0.99))
+
+    return hook
+
+
+def pull(cfg: JobConfig, force: bool = False, progress=None) -> List[str]:
+    with _stage(progress, "download", "results/ is wiped first — it is a scratch mirror"):
+        files = download(cfg)
+    if not files:
+        if progress is not None:
+            progress.skip("merge", "nothing was downloaded, so there is nothing to merge")
+        return files
+    with _stage(progress, "merge", f"-> {cfg.results_into or 'results/ only'}"):
         merged = merge_results(cfg, force=force)
         # ⚠️ Only what THIS pull merged. A job whose folder already existed was skipped by
         # `merge_results`, and re-merging it into the CSVs would upsert a run the user did not
@@ -499,26 +567,59 @@ def logs(cfg: JobConfig) -> None:
     print(api.kernels_logs(cfg.id))
 
 
-def run(cfg: JobConfig, refresh_data: bool = False, force: bool = False) -> int:
-    """(export+upload) -> push -> wait -> pull -> merge. Returns a process exit code."""
+def run(cfg: JobConfig, refresh_data: bool = False, force: bool = False,
+        progress=None) -> int:
+    """(export+upload) -> push -> wait -> pull -> merge. Returns a process exit code.
+
+    `progress` is an optional `utils.progress.Stages` built over `RUN_STAGES` — pass
+    one and every line of the round trip comes out as
+    `xx.x% - step i/6 <label> - <stage> - <detail>`, the same shape
+    `web_scraper.pdf_ocr_job.Progress` prints on the machine that does the OCR. Pass
+    None (the CLI default) and the output is what it has always been.
+
+    ⚠️ **THE OVERALL % MOVES THROUGH `wait` ONLY WHEN THIS JOB HAS COMPLETED BEFORE.**
+    `kernels_status` reports QUEUED / RUNNING / COMPLETE and no fraction, so the only
+    honest clock is this job's own last duration — and a PDF-OCR job is named after its
+    ticker and quarters, so its FIRST run has none: the number then holds still at the
+    stage floor while the detail keeps printing the elapsed minutes. Standing still is
+    the correct behaviour there; inventing a curve would not be.
+    """
     started = time.perf_counter()
 
     if refresh_data:
         from . import dataset, export
 
-        export.export(cfg)
-        dataset.upload(cfg)
+        with _stage(progress, "export", cfg.name):
+            export.export(cfg)
+        with _stage(progress, "upload", cfg.data.id if cfg.data else ""):
+            dataset.upload(cfg)
+    elif progress is not None:
+        # ⚠️ A skipped step CLAIMS its weight rather than redistributing it: the plan
+        # is the plan, and "we did not have to do that" is progress through it.
+        progress.skip("export", "refresh_data=False — the staged payload is reused")
+        progress.skip("upload", "refresh_data=False — the dataset on Kaggle is reused")
 
-    push(cfg)
-    final = wait(cfg)
+    with _stage(progress, "push", cfg.id):
+        push(cfg)
+    with _stage(progress, "wait", cfg.accelerator or "default GPU"):
+        final = wait(cfg, on_poll=_poll_hook(progress))
 
     if final != "COMPLETE":
-        print(f"\nrun ended as {final}; fetching logs\n")
+        # ⚠️ NOT advanced to 100 %: the run did not finish, and a bar that completes
+        # on a failure is the "green step that did nothing" this repo keeps measuring.
+        if progress is not None:
+            progress.note(f"run ended as {final}; fetching logs")
+        else:
+            print(f"\nrun ended as {final}; fetching logs\n")
         logs(cfg)
         return 1
 
-    pull(cfg, force=force)
-    print(f"\ndone in {(time.perf_counter() - started) / 60:.1f} min")
+    pull(cfg, force=force, progress=progress)
+    minutes = (time.perf_counter() - started) / 60
+    if progress is not None:
+        progress.done(f"COMPLETE and pulled — round trip {minutes:.1f} min")
+    else:
+        print(f"\ndone in {minutes:.1f} min")
     return 0
 
 

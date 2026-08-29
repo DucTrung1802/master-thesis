@@ -68,17 +68,36 @@ CafeF's own fingerprint — and **raises** if all three are silent. Which route 
 recorded in the artefact, because "read off templates.csv" and "guessed from a line-item
 count" are not the same claim.
 
-### LOG is one line per event, flushed, and every percentage names its DENOMINATOR
+### LOG is ONE LINE PER EVENT, flushed, and it LEADS WITH THE OVERALL % (2026-08-30)
 
-`kaggle_gpu/README.md` §3 already records that this repo's three progress readouts have three
-different denominators and only one of them predicts time. The same rule is applied here, and
-the label is printed rather than assumed:
+     33.7% - doc 2/3 HOSE_TCB Q3-2013 - layer 12/47 onnx@300 - page 40/96  ~76 s left
+    ^^^^^^   ^^^^^^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^^^^
+    overall  task                       sub-task               detail
 
-| line | denominator | predicts time? |
+Formatted by `utils.progress`, which the Kaggle CONTROL side uses for its own six steps —
+so `xx.x% - step 4/6 HOSE_TCB 2013-Q3 - wait kernel - …` and the line above come out of one
+formatter and cannot drift apart. **Every** line takes this shape: the header, the band, the
+parser's warnings, the merge's decisions.
+
+⚠️ **THE OVERALL % IS A POSITION IN THE PLAN — `documents finished + OCR PASSES done of
+the 24 this 49-layer cascade can cost` — AND NOT A FRACTION OF THE TIME.** (Passes, because
+half the layers only re-map a cached parse; measured 2026-08-30.) The three denominators this
+log used to print separately are still here, in the segments where each still names its own,
+and only one of them ever predicted time:
+
+| segment | denominator | predicts time? |
 |---|---|---|
-| `[doc 2/3   67%]` | **documents** | ❌ 4.2 min against 18.2 for a failing one |
-| `[layer 12/47  26%]` | **positions in the cascade** | ❌ one layer re-OCRs 96 pages, the next re-maps a cache in ms |
-| `[ocr onnx@200  page 40/96  42%  ~49 s left]` | **pages of one OCR pass** | ✅ **the only one** — 0.87 s/page, measured |
+| `doc 2/3` | **documents** | ❌ 4.2 min against 18.2 for a failing one |
+| `layer 12/47` | **positions in the cascade** | ❌ one layer re-OCRs 96 pages, the next re-maps a cache in ms |
+| `page 40/96  ~49 s left` | **pages of one OCR pass** | ✅ **the only one** — 0.87 s/page, measured |
+
+So the number at the front is a LOWER BOUND on real progress: a filing accepted at layer 1
+jumps its whole share at once. Lower is the honest direction to be wrong in — a run finishes
+early, it does not stall at 99 %.
+
+⚠️ **ANYTHING THAT PARSED THIS LOG MUST BE RE-READ.** A filter anchored at the start of a
+line (`startswith("WRITE ")`) now matches nothing; `progress.detail_of(line)` is the segment
+that used to BE the line.
 
 ⚠️ **A LONG RUN USED TO PRINT NOTHING FOR 73 MINUTES** (§6-2-noviesdecies): the only live
 signal was the `LastAccessTime` of the PDF. Page progress is what replaces that, and it is
@@ -112,6 +131,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 # ===== Local / Custom Modules =====
+# ⚠️ The line format is `utils`', not this module's: the Kaggle CONTROL side prints its own
+# six steps in the same shape from the same code, and two formatters would drift the moment
+# one of them gained a decimal. `cafef_financials` already imports `utils` at module scope,
+# so this costs the worker nothing it was not already paying.
+from utils import progress
 from web_scraper import cafef_financials as fin
 from web_scraper.cafef_financials import FinancialsBuilder, ParseLayer
 from web_scraper.cafef_pdf_parser import REPORTS
@@ -691,17 +715,35 @@ class CollectingLogger:
 
 
 class Progress(CollectingLogger):
-    """The run log. One line per event, flushed, and every percentage NAMES its denominator.
+    """The run log. ONE LINE PER EVENT, flushed, and every line carries the OVERALL %.
 
-    ⚠️ **THREE DENOMINATORS, ONE OF WHICH PREDICTS TIME**, and the line says which:
+        ` 33.7% - doc 2/3 HOSE_TCB Q3-2013 - layer 12/47 onnx@300 - page 40/96  ~76 s left`
+          ^^^^^   ^^^^^^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^^   ^^^^^^^^^^^^^^^^^^^^^^
+          overall task                       sub-task               detail
 
-      * `[doc i/N]` — DOCUMENTS. A clean filing costs 4.2 min and a failing one 18.2
-        (§6-2-quindecies), so this is a position in a list, never a time estimate.
-      * `[layer k/47]` — POSITIONS IN THE CASCADE. One layer re-OCRs every page; the next
-        re-maps a cached parse in milliseconds. `cached` is printed for exactly that reason.
-      * `[ocr <layer> page p/P]` — **PAGES OF ONE OCR PASS, and this one is real.** Pages of
-        one document cost about the same (0.87 s/page at onnx@200), so the fraction is a
-        fraction of the work and the ETA is an extrapolation rather than a guess.
+    ⚠️ **THE SHAPE CHANGED ON 2026-08-30 AND ANYTHING THAT PARSED THIS LOG MUST BE
+    RE-READ.** It used to print three nested percentages on three differently-indented
+    lines — `[doc 2/3]`, `[layer 12/47]`, `[ocr page 40/96]` — each honest about its own
+    denominator and none of them answering *how far through the WHOLE run am I?* The three
+    fractions are still here, in the segments where they still name their denominators; the
+    number at the front is the answer, and `utils.progress` is the one place it is formatted
+    (the Kaggle control side prints the same shape for its own six steps).
+
+    ⚠️ **THE OVERALL % IS A POSITION IN THE PLAN, NEVER A FRACTION OF THE TIME.** It is
+    `documents finished + OCR PASSES done of the 24 this cascade can cost`, over the
+    documents planned — so a filing accepted at layer 1 (~1 min) jumps its whole share at
+    once while one that defeats the cascade (33 min, §6-2-noviesdecies) crawls through it.
+    That makes the number a LOWER BOUND on real progress, and lower is the honest direction
+    to be wrong in: a run finishes early, it does not stall at 99 %.
+
+    ⚠️ **PASSES, NOT LAYERS, AND THAT IS THE DIFFERENCE BETWEEN A USEFUL NUMBER AND A
+    STUCK ONE.** The cascade's 49 layers share **24** distinct parse keys — measured
+    2026-08-30 over `cafef_financials.parse_key`, and half of them because a layer that only
+    changes the MAPPING or the GATE re-maps a cached parse in milliseconds. On a layer index
+    the first — and usually only — OCR pass is 1/49 of a document, so the bar would sit at
+    2 % through the most expensive thing the run does. ⚠️ Passes are counted as
+    EQUAL and they are not: a 400 dpi pass costs more than a 200 dpi one, and a layer whose
+    engine is missing here (no tesseract) never runs at all.
 
     ⚠️ **RATE-LIMITED, because a 96-page document over ~10 passes is 960 page events.** A page
     line is emitted on a 10-point step or after 15 s, whichever comes first — the same shape
@@ -719,9 +761,18 @@ class Progress(CollectingLogger):
     PAGE_SECONDS = 15.0
 
     def __init__(self, total_documents: int, log_path: Optional[Path] = None,
-                 echo: bool = True):
+                 echo: bool = True, label: str = "", passes: int = 1):
         super().__init__(echo=echo)
-        self.total_documents = total_documents
+        self.total_documents = max(1, int(total_documents))
+        # ⚠️ **THE WITHIN-DOCUMENT DENOMINATOR IS OCR PASSES, NOT CASCADE POSITIONS**, and the
+        # difference is the whole usefulness of the number. The 49 layers share 24 distinct
+        # parse keys (`cafef_financials.parse_key`), so a layer index would put the FIRST —
+        # and usually only — OCR pass at 1/49 of a document and leave the bar at 2 % through the
+        # single most expensive thing the run does. A pass is real work: it renders and reads
+        # every page. ⚠️ Passes are counted as EQUAL, and they are not — a 400 dpi pass costs
+        # more than a 200 dpi one — so this is a work-shaped position, not a clock.
+        self.total_passes = max(1, int(passes))
+        self.label = label
         self._handle = None
         if log_path is not None:
             log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -732,36 +783,88 @@ class Progress(CollectingLogger):
         self._page_at = 0.0
         self._page_pct = -100
         self._page_started = 0.0
+        # The position the overall % is read off: documents FINISHED, plus where the current
+        # document is inside its own cascade.
+        self._done_documents = 0
+        self._within = 0.0
+        self._floor = 0.0
+        self._pass = 0
+        self._task = label or "run"
+        self._sub = "plan"
+
+    # ---- the overall fraction ---------------------------------------------
+    @property
+    def fraction(self) -> float:
+        """⚠️ **MONOTONE, AND IT IS ENFORCED HERE RATHER THAN ASSUMED.** `run()` walks the
+        cascade once per document, so today's raw position only rises — but a percentage that
+        retreats is read as a bug in the RUN rather than in the reporting, and the shape that
+        would cause one already exists next door: `build()` re-enters `_parse_cascaded` for an
+        ALTERNATE filing, which would start again at layer 1 with the same reporter."""
+        position = progress.clamp(
+            (self._done_documents + self._within) / self.total_documents)
+        self._floor = max(self._floor, position)
+        return self._floor
 
     # ---- emitting ---------------------------------------------------------
-    def line(self, text: str) -> None:
+    def raw(self, text: str) -> None:
+        """The only writer. Everything else formats a line and hands it here."""
         if self._handle is not None:
             self._handle.write(text + "\n")
-        super().line(text)
+        CollectingLogger.line(self, text)
+
+    def say(self, detail: str = "", sub: Optional[str] = None) -> None:
+        self.raw(progress.format_line(self.fraction, self._task,
+                                      self._sub if sub is None else sub, detail))
+
+    def line(self, text: str) -> None:
+        """⚠️ EVERY caller's text becomes the DETAIL of the current position, so a run log
+        has one shape and one only — the header, the parser's warnings, the merge's
+        decisions. A BLANK line is dropped rather than printed as a bare percentage: it
+        used to separate blocks, and the position now does that job."""
+        for chunk in str(text).splitlines():
+            if chunk.strip():
+                self.say(chunk.strip())
+
+    def stage(self, sub: str) -> None:
+        """Name the sub-task the next lines belong to (`band`, `merge`, `done`)."""
+        self._sub = sub
 
     def close(self) -> None:
         if self._handle is not None:
             self._handle.close()
             self._handle = None
 
-    # ---- the three denominators -------------------------------------------
+    # ---- the three denominators, now inside the segments -------------------
     def document(self, index: int, task: "DocumentTask", size_mb: float) -> None:
         self._doc = task.period
-        self.line(f"[doc {index}/{self.total_documents} "
-                  f"{index / self.total_documents:>4.0%} of DOCUMENTS, not of time] "
-                  f"{task.key}  {task.file}  {size_mb:.1f} MB  "
-                  f"{task.template}/{'consolidated' if task.consolidated == 'True' else 'parent'}"
-                  f"{'  CUMULATIVE' if task.cumulative else ''}")
+        self._done_documents = index - 1
+        self._within = 0.0
+        self._pass = 0
+        self._task = f"doc {index}/{self.total_documents} {task.key.replace('__', ' ')}"
+        self._sub = "open"
+        self.say(f"{task.file}  {size_mb:.1f} MB  "
+                 f"{task.template}/"
+                 f"{'consolidated' if task.consolidated == 'True' else 'parent'}"
+                 f"{'  CUMULATIVE' if task.cumulative else ''}")
 
     def layer(self, index: int, total: int, layer, cached: bool) -> None:
         self._page_pct = -100
         self._page_started = time.perf_counter()
-        self.line(f"  [layer {index}/{total} {index / total:>4.0%} of POSITIONS] "
-                  f"{layer.name}" + ("   (cached parse, re-map only)" if cached else ""))
+        # ⚠️ A LAYER IS A POSITION IN THE CASCADE AND NOT A UNIT OF WORK — one re-OCRs every
+        # page, the next re-maps a cached parse in milliseconds. `cached` is what tells them
+        # apart, so only an uncached layer moves the overall %.
+        if not cached:
+            self._pass += 1
+            self._within = min(1.0, (self._pass - 1) / self.total_passes)
+        self._sub = f"layer {index}/{total} {layer.name}"
+        self.say("cached parse, re-map only"
+                 if cached else f"OCR pass {self._pass}/{self.total_passes}")
 
     def page(self, index: int, total: int) -> None:
         pct = int(100 * (index + 1) / max(1, total))
         now = time.perf_counter()
+        self._within = progress.clamp(
+            (max(self._pass, 1) - 1 + (index + 1) / max(1, total)) / self.total_passes)
         if pct - self._page_pct < self.PAGE_STEP and now - self._page_at < self.PAGE_SECONDS:
             return
         self._page_at, self._page_pct = now, pct
@@ -769,9 +872,21 @@ class Progress(CollectingLogger):
         eta = ""
         if index >= 2 and elapsed > 0:
             left = (total - index - 1) * elapsed / (index + 1)
-            eta = f"  ~{left:.0f} s left"
-        self.line(f"    [ocr page {index + 1}/{total} {pct:>3}% of PAGES — the only "
-                  f"fraction here that predicts time]{eta}")
+            eta = f"   ~{left:.0f} s left"
+        self.say(f"page {index + 1}/{total} {pct:>3}% of this pass{eta}")
+
+    def document_done(self, index: int) -> None:
+        """This document is finished: the overall % is exactly `index/N` from here."""
+        self._done_documents = max(self._done_documents, index)
+        self._within = 0.0
+
+    def finish(self, sub: str = "done", detail: str = "") -> None:
+        self._done_documents = self.total_documents
+        self._within = 0.0
+        self._task = self.label or self._task
+        self._sub = sub
+        if detail:
+            self.say(detail)
 
 
 def select_layers(names: Optional[Sequence[str]]) -> List[ParseLayer]:
@@ -1195,8 +1310,11 @@ def _upsert_period(folder: Path, task: DocumentTask, *, overwrite: bool,
                                      force_differs=overwrite,
                                      force_empty_band=force_empty_band,
                                      backup=backup, quiet=True)
+    # ⚠️ No indent here any more: since 2026-08-30 `Progress.line` makes every caller's text
+    # the DETAIL of one formatted line, so leading spaces are stripped and the `merge`
+    # sub-task is what says where these came from.
     for line in result.lines()[1:]:            # [0] repeats the ticker header
-        log.line("  " + line.strip() if line.strip() else line)
+        log.line(line)
     return result.backup
 
 
@@ -1221,7 +1339,15 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
     folder = Path(spec.out_root or DEFAULT_OUT_ROOT) / run_id
     (folder / "documents").mkdir(parents=True, exist_ok=True)
 
-    log = Progress(len(tasks), log_path=folder / "run.log")
+    # ⚠️ THE DENOMINATOR OF THE OVERALL %, COMPUTED FROM THE PLAN AND NOT GUESSED: how
+    # many DISTINCT OCR passes this cascade can cost a document. `fin.parse_key` is the
+    # cache key `_parse_cascaded` itself uses, so 47 layers collapse to the ~12 passes
+    # they really are. ⚠️ It is a CEILING — a document accepted at layer 1 pays one pass,
+    # and layers whose engine is unavailable here (no tesseract) pay none — so the number
+    # under-reports progress rather than over-reporting it.
+    passes = len({fin.parse_key(layer) for layer in prepared.layers})
+    log = Progress(len(tasks), log_path=folder / "run.log", label="_".join(symbols),
+                   passes=passes)
     # ⚠️ **A WORKER MAY NOT WRITE THE STATEMENT CSVs, AND THE ROOT IS HOW WE KNOW.** On Kaggle
     # `CAFEF_DATA_ROOT` points at the unpacked payload, so an upsert there would edit a copy
     # that is deleted with the kernel — and report success. The write belongs to whoever holds
@@ -1237,6 +1363,13 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
     # so there is nothing to be able to restore.
     merge_backup: Optional[Path] = None
     try:
+        log.stage("plan")
+        # ⚠️ SAID ONCE, AT THE TOP, BECAUSE THE NUMBER IS ON EVERY LINE AFTER IT. A reader
+        # who takes the overall % for "how much time is left" will misread a document that
+        # accepts at layer 1 as a stall and one that runs the whole cascade as a hang.
+        log.line(f"overall %    : documents finished + OCR passes done of the {passes} this "
+                 f"{len(prepared.layers)}-layer cascade can cost, over {len(tasks)} "
+                 f"document(s) — a POSITION IN THE PLAN, never a fraction of the time")
         for line in prepared.describe():
             log.line(line)
         if spec.merge_into_csv:
@@ -1263,14 +1396,14 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
                                    before=task.period)
             open_ref = open_reference(builder, task.exchange, task.symbol, task.template,
                                       task.period)
+            log.stage("band")
             sizes = {r: len(v.get(task.consolidated, [])) for r, v in history.items()}
             if not any(sizes.values()):
                 log.log_warning(
                     f"{task.period}: the magnitude band is EMPTY, so `sane` will FAIL OPEN — "
                     f"this ticker has no accepted quarters on disk to reconstruct one from.")
             else:
-                log.line("  band: " + ", ".join(f"{r.split('_')[0]} {n}"
-                                                 for r, n in sizes.items())
+                log.line(", ".join(f"{r.split('_')[0]} {n}" for r, n in sizes.items())
                          + f"   open_ref={open_ref if open_ref is not None else '—'}")
 
             result = run_document(builder, task, history, open_ref, logger=log)
@@ -1295,7 +1428,9 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
                     "verdict": payload.get("compare", {}).get(report, {}).get("verdict", ""),
                     "seconds": round(result.seconds, 2),
                 })
-            log.line("  " + task.period + ": "
+            log.document_done(index)
+            log.stage("accepted")
+            log.line(task.period + ": "
                      + "; ".join(f"{r}={result.accepted[r]['items']} items "
                                  f"[{result.accepted[r]['layer']}]"
                                  for r in REPORTS if r in result.accepted)
@@ -1307,6 +1442,7 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
             # `.tmp` and `os.replace`s it, so an interrupt can lose the quarter in flight and
             # never a quarter already on disk.
             if merge_into_csv:
+                log.stage("merge")
                 merge_backup = _upsert_period(
                     folder, task, overwrite=spec.overwrite, log=log,
                     backup=merge_backup is None,
@@ -1354,7 +1490,7 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
     }
     (folder / "metadata.json").write_text(
         json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
-    log.line(f"\nrun folder -> {folder}")
+    log.finish("done", f"run folder -> {folder}")
     log.close()
     return folder
 
