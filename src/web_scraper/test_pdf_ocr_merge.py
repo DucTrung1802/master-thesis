@@ -7,12 +7,14 @@ failures these pin.
 """
 import csv
 import json
+import os
 import shutil
 from pathlib import Path
 
 import pytest
 
 from web_scraper import cafef_financials as fin
+from web_scraper import pdf_ocr_job as job
 from web_scraper import pdf_ocr_merge as merge
 
 TEMPLATE = "bank"
@@ -440,3 +442,45 @@ def test_a_run_folder_written_before_the_field_existed_still_merges(root, tmp_pa
     assert "engine_errors" not in payload
     assert _reason(merge.merge_run(folder, apply=False, quiet=True),
                    fin.BALANCE_SHEET).writing
+
+# ──────────────────────────────────────────────────────────────────────────────
+# WHICH DISK — the statements directory is resolved from this file, not from the CWD
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_the_disk_it_compares_against_is_resolved_from_the_repo_not_the_cwd(
+        tmp_path, monkeypatch):
+    """⚠️ `on_disk="absent"` is a LEGITIMATE state (a ticker being bootstrapped, `BND-1`), so
+    reading the wrong directory produced the same word as reading the right one and refusal 3
+    silently could not fire.
+
+    Measured 2026-08-30 on the BID Q4-2016 repair: the identical call planned **2 writes** from
+    `src/` and **0** from the repo root. `kgpu merge` runs from `src/kaggle_gpu/`.
+    """
+    for name in ("PDFS_DIR", "FIN_DIR", "SCHEMA_DIR", "STATEMENTS_DIR", "TEMPLATES_INDEX"):
+        monkeypatch.setattr(fin, name, getattr(fin, name))     # restored on teardown
+    monkeypatch.setenv(job.DATA_ROOT_ENV, os.environ.get(job.DATA_ROOT_ENV, ""))
+    monkeypatch.setattr(fin, "STATEMENTS_DIR", os.path.join("raw_data", "cafef",
+                                                            "financials", "statements"))
+    monkeypatch.chdir(tmp_path)                                # a cwd with no raw_data/
+
+    merge.plan_merge(_run_folder(tmp_path))
+
+    expected = job.DEFAULT_DATA_ROOT.resolve() / "financials" / "statements"
+    assert Path(fin.STATEMENTS_DIR) == expected
+    assert os.path.isabs(fin.STATEMENTS_DIR)
+
+
+def test_an_absolute_statements_dir_is_a_DELIBERATE_root_and_is_left_alone(root, tmp_path):
+    """The other half, and it is the one that keeps this test file honest.
+
+    ⚠️ The first version of the anchor called `use_data_root` unconditionally, which pointed
+    every `apply=True` test in this file at the real `raw_data/`. An absolute value was put
+    there on purpose — by `pdf_ocr_job.run`, by an experiment harness, or by this fixture — and
+    the merge must not overrule it.
+    """
+    before = fin.STATEMENTS_DIR
+    assert os.path.isabs(before) and str(tmp_path) in before
+
+    merge.plan_merge(_run_folder(tmp_path))
+
+    assert fin.STATEMENTS_DIR == before

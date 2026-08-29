@@ -1986,6 +1986,43 @@ to `cac_khoan_tien_gui_cua_khach_hang`. **A tone-mark misread cannot move a figu
 ⚠️ It is a RECOGNITION difference — VietOCR under `torch`, the one library that cannot be
 aligned, on different silicon (sm_86 / sm_75). Which of the two is unestablished.
 
+### ⚠️ `CWD-1` — the merge read the statement CSVs through a RELATIVE path
+
+Measured 2026-08-30 while repairing BID Q4-2016 (`PAR-1`'s last open cell). `statement_path()`
+reads `fin.STATEMENTS_DIR` **at call time**, and the module default is relative
+(`raw_data/cafef/financials/statements`). `pdf_ocr_job.use_data_root` re-points it from the
+resolved data root — which is why `compare()` finds disk from any cwd — and
+**`pdf_ocr_merge.plan_merge` never did**.
+
+| the identical `merge_run(..., apply=False)` | `on_disk` | refusal 3 | plans |
+|---|---|---|---|
+| from `src/` | **`absent`** | **could not run** | **2 writes** |
+| from the repo root | `pdf` | ran | **0** — DIFFERS, refused correctly |
+
+⚠️ **`absent` IS A LEGITIMATE ANSWER, WHICH IS WHY THIS WAS SILENT.** A ticker with no CSV yet
+reads exactly the same (`BND-1`, and BSR was bootstrapped that way on 2026-08-30), so a
+mislocated root and a genuinely new ticker are indistinguishable from the reason string. The
+guard that stands between a merge and a wrong figure on disk was skipped, and `_write` would
+have put the row under the wrong root as well. ⚠️ **`kgpu merge` runs from `src/kaggle_gpu/`** —
+the same cwd that mislocated `BACKUP_ROOT` on 2026-08-29, which was anchored then while this
+was not.
+
+✅ **Anchored to `pdf_ocr_job.DEFAULT_DATA_ROOT`, and ONLY while the path is still relative.**
+That predicate is the defect's own definition rather than a proxy: a relative `STATEMENTS_DIR`
+is exactly one that resolves against the cwd, and the module default is the only relative value
+there is. Anything absolute was set deliberately — by `pdf_ocr_job.run`, by an experiment
+harness (`statement_path`'s docstring records that contract) or by a test fixture — and
+overruling it would move the WRITE, not just the read.
+
+⚠️ **The first version was unconditional, and it was worse than the defect**: the `root` fixture
+in `test_pdf_ocr_merge.py` monkeypatches `STATEMENTS_DIR` into a `tmp_path`, so every
+`apply=True` test would have written into the real `raw_data/`. Caught by reading the fixture
+before running the suite. **2 tests, one per direction.**
+
+⚠️ **`DEFAULT_DATA_ROOT`, never `data_root()`** — the merge upserts into THIS repo by definition
+(`pdf_ocr_job.run` refuses to merge at all when the root is a payload), so honouring
+`$CAFEF_DATA_ROOT` could only point it at a copy that dies with a kernel.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

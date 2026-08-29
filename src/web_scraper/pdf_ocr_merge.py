@@ -192,6 +192,35 @@ def plan_merge(folder: os.PathLike | str,
     exchange = docs[0]["exchange"]
     symbol = docs[0]["symbol"]
     template = docs[0]["template"]
+
+    # ⚠️ **THE DISK THIS COMPARES AGAINST IS THE REPO'S, RESOLVED FROM THIS FILE AND NEVER
+    # FROM THE CWD.** `statement_path()` reads `fin.STATEMENTS_DIR` at call time and its
+    # module default is RELATIVE, so a caller running from anywhere but the repo root read an
+    # empty directory and every quarter came back `on_disk="absent"` — **which is a legitimate
+    # state for a ticker being bootstrapped (`BND-1`)**, so nothing looked wrong. Refusal 3
+    # then could not fire, and a figure that DIFFERS from a good `pdf` row would have been
+    # written unguarded; `_write` would have put it under the wrong root too.
+    #
+    # Measured 2026-08-30 on the BID Q4-2016 repair: the identical call planned **2 writes**
+    # from `src\` and **0** from the repo root, where refusal 3 correctly refused. ⚠️ `kgpu
+    # merge` runs from `src\kaggle_gpu\` — the same cwd that mislocated `BACKUP_ROOT` on
+    # 2026-08-29, which was anchored then while this was not.
+    #
+    # ⚠️ **`DEFAULT_DATA_ROOT`, NOT `data_root()`** — the merge upserts into THIS repo by
+    # definition (`pdf_ocr_job.run` refuses to merge at all when the root is a payload), so
+    # honouring `$CAFEF_DATA_ROOT` could only ever point it at a copy that dies with a kernel.
+    #
+    # ⚠️ **ONLY WHEN THE PATH IS STILL RELATIVE, AND THAT PREDICATE IS THE DEFECT'S OWN
+    # DEFINITION rather than a proxy for it**: a relative `STATEMENTS_DIR` is exactly one that
+    # resolves against the CWD, and the module default (`raw_data/cafef/financials/statements`)
+    # is the only relative value there is. Anything absolute was put there deliberately — by
+    # `pdf_ocr_job.run`, by an experiment harness (`statement_path`'s docstring records that
+    # contract) or by a test fixture — and overriding a deliberate root would point the write
+    # itself somewhere the caller did not ask for. ⚠️ An unconditional call here made every
+    # `apply=True` test in `test_pdf_ocr_merge.py` write into the real `raw_data/`.
+    if not os.path.isabs(fin.STATEMENTS_DIR):
+        job.use_data_root(job.DEFAULT_DATA_ROOT)
+
     builder = FinancialsBuilder(logger=None)
     report = MergeReport(folder=folder, exchange=exchange, symbol=symbol, template=template)
 
