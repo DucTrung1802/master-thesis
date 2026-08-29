@@ -113,6 +113,7 @@ def job(
     periods: Optional[Sequence[str]] = None,
     quarters: Optional[Sequence[str]] = None,
     allow_parent: bool = False,
+    overwrite: bool = False,
     template: Optional[str] = None,
     layers: Optional[Sequence[str]] = None,
     compare: bool = True,
@@ -134,10 +135,16 @@ def job(
     ⚠️ **AN EMPTY LIST MEANS EVERY QUARTER, NEVER NONE.** That is `plan()`'s contract and it is
     preserved here: `quarters=[]` and `quarters=None` produce the same job.
     """
+    from web_scraper.pdf_ocr_job import canonical_quarters
+
     symbol = symbol.upper()
     exchange = exchange.upper()
     periods = list(periods) if periods else None
-    quarters = sorted({str(q).strip() for q in quarters}) if quarters else None
+    # ⚠️ **FOLDED BEFORE ANYTHING IS NAMED.** `2014-03` and `2014-Q3` are one quarter, and
+    # `cfg.name` — which decides the payload directory, the rehearsal directory AND the Kaggle
+    # kernel slug — is derived from this list. Normalising afterwards would leave two jobs
+    # racing for one slug; normalising here means the two spellings cannot diverge at all.
+    quarters = canonical_quarters(quarters)
     scope = scope or scope_of(periods, quarters)
     user = user or kaggle_user()
 
@@ -155,6 +162,13 @@ def job(
         "exchange": exchange,
         "symbol": symbol,
         "allow_parent": allow_parent,
+        # ⚠️ **IN THE PAYLOAD SPEC AS WELL AS THE PARAMETERS, AND `_validate` CHECKS THE TWO
+        # AGAINST EACH OTHER.** With `overwrite=False` the export drops quarters already read
+        # `pdf` in all three statements, so it decides what is UPLOADED; the worker applies the
+        # same rule to decide what is OPENED. Two copies that disagreed would ship one set of
+        # filings and parse another, and the shortfall would come home as `missing` — the word
+        # a genuinely unreadable filing also gets.
+        "overwrite": overwrite,
     }
     if periods:
         documents["periods"] = periods
@@ -170,6 +184,7 @@ def job(
         "PERIODS": periods,
         "QUARTERS": quarters,
         "ALLOW_PARENT": allow_parent,
+        "OVERWRITE": overwrite,
         "LAYERS": list(layers) if layers else None,
         "COMPARE": compare,
         "NOTES": notes or _default_notes(exchange, symbol, periods, quarters, template),
@@ -233,5 +248,8 @@ def describe(cfg: JobConfig) -> List[str]:
         f"periods={d.get('periods') or 'all'}  quarters={d.get('quarters') or 'all'}  "
         f"allow_parent={d['allow_parent']}",
         f"template     : {cfg.parameters['TEMPLATE'] or 'resolve on the worker'}",
+        f"overwrite    : {d['overwrite']}"
+        + ("" if d["overwrite"] else
+           "   (quarters already `pdf` in all three statements are not shipped)"),
         f"results into : {cfg.results_into}",
     ]

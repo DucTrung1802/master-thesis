@@ -752,6 +752,15 @@ class FinancialsBuilder:
         # {report: [(layer name, why it was refused)]} — kept so an absent statement can say
         # WHY. Populated even for reports that later succeed; only the absent ones are printed.
         refused: Dict[str, List[Tuple[str, str]]] = {}
+        # ⚠️ **A LAYER THAT RAISES IS NOT A LAYER THAT REFUSED, AND THE DIFFERENCE DECIDES
+        # WHETHER A RESULT MAY BE BELIEVED.** A refusal is a measurement of the document; an
+        # exception is a broken tool, and the cascade's answer then comes from whichever layer
+        # the tool did not break on. Measured 2026-08-29: `vocr.vn`'s TLS certificate expired,
+        # `Cfg.load_config_from_name` fetches `base.yml` from it on EVERY predictor
+        # construction, so all three `onnx@*` layers raised and `tesseract@200` won a filing
+        # that has read `onnx@200` since it was first parsed — with different figures, both
+        # gates passing. The warning was there and nothing downstream could see it.
+        self.layer_errors: List[Tuple[str, str]] = []
         facts = {"publish_date": "", "shares": {"shares_authorized": None,
                                                 "shares_issued": None,
                                                 "shares_outstanding": None}}
@@ -795,6 +804,7 @@ class FinancialsBuilder:
                     parsed[key] = parser.parse(path, period_end)
                 except Exception as e:
                     self._warn(f"    {layer.name}: parse failed — {type(e).__name__}: {e}")
+                    self.layer_errors.append((layer.name, f"{type(e).__name__}: {e}"))
                     parsed[key] = {}
             statements = parsed[key]
 

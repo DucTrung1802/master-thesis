@@ -1546,25 +1546,33 @@ machine has **4 GiB**; a Kaggle T4 has **15**. So the machine became a parameter
 else did.
 
 ```powershell
-cd src ; python -m web_scraper.pdf_ocr_job --symbol VCB --periods Q1-2026
+# the notebook is the entry point: ONE parameter cell, ENVIRONMENT = LOCAL | KAGGLE
+jupyter lab src\kaggle_gpu\RUN__pdf_ocr_control.ipynb
+
+# the same thing without a notebook
+cd src ; python -m web_scraper.pdf_ocr_job --symbol VCB --quarters 2026-Q1 --merge
 cd src\kaggle_gpu ; python -m kgpu rehearse pdf-ocr ; python -m kgpu run pdf-ocr
 ```
 
 | function | what it is |
 |---|---|
 | `use_data_root()` / `use_models()` | re-point `cafef_financials`' path globals and the two model env vars. ⚠️ The globals are read at CALL time precisely so a harness can do this — `statement_path`'s docstring has said so since the experiment harnesses needed it |
-| `plan()` | the filings, from `FinancialsBuilder.documents()`, filtered by `periods` and/or `years`. ⚠️ **The choice is never re-implemented**: it carries a measured guard against an annual report changing the ENTITY of a Q4 row |
+| `plan()` | the filings, from `FinancialsBuilder.documents()`, filtered by `periods` and/or `quarters`. ⚠️ **The choice is never re-implemented**: it carries a measured guard against an annual report changing the ENTITY of a Q4 row |
+| `partition_by_disk()` | splits those into "a re-parse could still win something" and "already `pdf` in all three statements". Applied by `prepare()` unless `overwrite` |
 | `seed_history()` | the magnitude band `sane` compares against, rebuilt from the `pdf` rows on disk |
 | `run_document()` | ONE filing through **`FinancialsBuilder._parse_cascaded`** — the real 47-layer cascade, its parse cache, its `reconcile`-then-`sane` short-circuit and its refusal report |
 | `compare()` | every parsed cell against the statement CSV on disk |
 | `engine_report()` | which device each HALF of the OCR actually ran on — see `ORT-1` below |
 
-⚠️ **IT WRITES NO STATEMENT CSV, AND THAT IS THE POINT.** The output is a run folder
-(`reports/pdf_ocr/<run_id>/`: `metadata.json`, `summary.csv`, one JSON per filing written
-BEFORE the next one starts). CLAUDE.md records **four** builds in which a `periods` run
+⚠️ **IT WRITES NO STATEMENT CSV BY DEFAULT, AND THAT IS STILL THE POINT.** The output is a
+run folder (`reports/pdf_ocr/<run_id>/`: `metadata.json`, `summary.csv`, one JSON per filing
+written BEFORE the next one starts). CLAUDE.md records **four** builds in which a `periods` run
 silently DOWNGRADED a quarter it was given only for history, while the log said `RUN_SUCCESS`
-— a run whose output is an artefact cannot do that. Merging a recovered quarter back stays a
-deliberate Dagster act with a pre-run backup and a diff of every column.
+— a run whose output is an artefact cannot do that.
+
+⚠️ **`merge_into_csv=True` IS THE OPT-IN THAT GIVES THE OTHER HALF OF THAT TRADE**, added
+2026-08-29 by request, and it does not weaken the argument above because it goes through
+`pdf_ocr_merge` and its three refusals. See "`OVERWRITE`, and the per-quarter upsert" below.
 
 ### `quarters` — the batch filter, `YYYY-QQ` (was `years` until 2026-08-29)
 
@@ -1577,7 +1585,7 @@ filter, not a re-derivation of one.
 | | |
 |---|---|
 | the unit | ⚠️ **a QUARTER since 2026-08-29; it was a YEAR before.** The year came from the unit the statement BUILD skips in (`orchestration` §2a — `_decumulate` needs Q1..Q(q-1) of the same year, so a partial skip deletes the very quarter a run exists to fix). ⚠️ **That argument never bound this module**: nothing here de-cumulates and nothing here writes, so the wider unit only ever bought extra OCR. The hazard still exists where the WRITE is, and `pdf_ocr_merge` already refuses a cumulative income statement a one-document run cannot de-cumulate |
-| the form | ⚠️ **`YYYY-QQ`, and the repo-native `QQ-YYYY` is REFUSED rather than accepted.** They name the same quarter and only one of them SORTS. A lenient parser would be easy — and then a caller who used the wrong form would never find out, while a caller who made a TYPO gets "files no document for [...]" and goes looking at CafeF for a filing that is sitting there. `as_quarter()` converts; the form is checked BEFORE the corpus is |
+| the form | ⚠️ **`YYYY-QQ` in one of TWO spellings — `2014-Q3` and the zero-padded `2014-03`** — folded onto the first by `normalise_quarter` at the edge, because `cfg.name`, the payload directory and the Kaggle kernel slug are all derived from this list and two spellings reaching those would be two runs racing for one slug. ⚠️ **`2014-3` is refused although it is unambiguous**: one digit is a keystroke from a MONTH. ⚠️ **And the repo-native `QQ-YYYY` is REFUSED rather than accepted.** They name the same quarter and only one of them SORTS. A lenient parser would be easy — and then a caller who used the wrong form would never find out, while a caller who made a TYPO gets "files no document for [...]" and goes looking at CafeF for a filing that is sitting there. `as_quarter()` converts; the form is checked BEFORE the corpus is |
 | the quarter of a document | `_quarter_of` reads it from the **PERIOD**, never from the index's `year` column. `documents()` folds a quarter-5 annual onto that year's Q4 and rewrites `period`, so `period` is the normalised key everything else compares on — and CafeF files 10 of 84,076 documents with a `Year` of `0`, `202` or `203` |
 | with `periods` | they **INTERSECT**. `quarters=["2014-Q3"]` + `periods=["Q3-2014"]` is Q3-2014, and each filter is checked against what survives the one before it, so the error names the filter that emptied the plan |
 | matching nothing | **raises**, exactly as `periods` already did — a filter that matches nothing is a run that parses nothing and reports success |
@@ -1597,6 +1605,55 @@ of 2008 instead. And the first rehearsal of the first `quarters` job exposed **`
 so it compared a filtered shipment against an UNFILTERED `documents()` and tripped its own
 assertion. ⚠️ **`years` had the identical defect for as long as it existed** and nothing ever
 exercised it, because every documents job rehearsed until then was narrowed by `periods` alone.
+
+### ⚠️ `OVERWRITE`, and the per-quarter upsert (2026-08-29)
+
+Two knobs on `JobSpec`, one question each, and the notebook exposes both in the same cell.
+
+**`overwrite`** decides what happens to a quarter that is already on disk, in BOTH places it
+can be decided — before the OCR and at the write:
+
+| | `overwrite=False` (the default) | `overwrite=True` |
+|---|---|---|
+| a quarter already `pdf` in all three statements | **dropped by `partition_by_disk` before any OCR**, and — on Kaggle — before it is uploaded | re-parsed |
+| a figure that DIFFERS from a good `pdf` row | refused by `pdf_ocr_merge` | written (`force_differs`) |
+
+⚠️ **THE SKIP IS AT QUARTER GRAIN HERE AND AT YEAR GRAIN IN `build()`, AND THE DIFFERENCE IS
+MEASURED RATHER THAN STYLISTIC.** `_skippable_years` keeps a YEAR whole because `_decumulate`
+turns a cumulative income statement into a standalone quarter using Q1..Q(q-1) of THAT run — so
+dropping Q1..Q3 while keeping Q4 would delete the very quarter the run exists to fix. **Nothing
+in this module de-cumulates**: `run_document` writes what the cascade accepted, `pdf_ocr_merge`
+refuses a cumulative income statement outright, and both `seed_history` and `open_reference`
+read from DISK. No quarter here depends on another quarter of the same run, so the finer grain
+is safe — and at 4-18 min a document, a year held whole for one missing cash flow costs three
+filings that had nothing left to win.
+
+⚠️ **A QUARTER IS "COMPLETE" ONLY WHEN ALL THREE STATEMENTS READ `pdf`.** One filing produces
+all three, so a quarter missing its cash flow re-opens the document, and the two statements that
+come back with it are judged on their own merits — identical is SKIPPED, different is REFUSED
+unless overwrite was asked for. ⚠️ A `cafef` row is not evidence a quarter is done either: §5
+rule 24 makes it exactly the row a re-parse exists to replace.
+
+**`merge_into_csv`** upserts each quarter into the statement CSVs **as it finishes**, before the
+next document is opened. That is the whole point of doing it per quarter:
+`FinancialsBuilder._write` renders to a `.tmp` and `os.replace`s it, and only the quarters a
+merge PRODUCED are rewritten — so **a 12-hour run stopped at hour 6 keeps every quarter that
+finished and can lose at most the one in flight.** The backup is taken ONCE, by the first
+quarter that actually writes something (`merge_run(backup=False)` exists for this one caller);
+seventy timestamped copies of three CSVs answer *"what did this run change?"* worse than one.
+
+⚠️ **A WORKER MAY NOT DO IT, AND `run()` REFUSES RATHER THAN TRUSTING THE CALLER.** On Kaggle
+`CAFEF_DATA_ROOT` is an unpacked payload that dies with the kernel, so an upsert there would
+edit a copy and report success; `run()` compares the resolved data root against the repo's own
+and turns the flag off with a line in the log. The write belongs to whoever holds the real
+`raw_data/` — `kgpu pull`, which merges after the folder comes home.
+
+⚠️ **`OVERWRITE` REACHES THE MERGE, NOT ONLY THE PARSE.** Without that, a re-parse asked for
+explicitly would come home and be refused by `force_differs` — the run would do the work and
+disk would keep the old figure, which is the worst of both answers. `kgpu`'s `merge_statements`
+and `merge_latest` both read it off `cfg.parameters["OVERWRITE"]`, and `config._validate`
+refuses a job whose `data.documents.overwrite` disagrees with it, the same way it already
+refuses a quarters mismatch: one decides what is UPLOADED, the other what is OPENED.
 
 ### ⚠️ WHICH TOOL STARTS A TICKER — `pdf_ocr_job` does NOT (`BND-1`, measured 2026-08-29)
 
@@ -1652,13 +1709,14 @@ same upsert `build()` uses, so only the quarters this run PRODUCED are rewritten
 other row keeps what the file holds. A second CSV writer would be a second place for the column
 contract to be wrong.
 
-**Three refusals, each from a measurement, each with a `force_*` escape:**
+**Four refusals, each from a measurement, each with a `force_*` escape:**
 
 | refused | the measurement |
 |---|---|
 | a **cumulative income statement** | an annual filing prints the year to date; the column holds the quarter, and a one-document run has no Q1..Q(q-1) to de-cumulate with |
 | an **empty `sane` band** | with no band the magnitude guard fails open — the documented way a subset run writes a wrong figure (§6-2-octodecies) |
 | a figure that **DIFFERS from a good `pdf` row** | `compare()` already scored it; two runs disagreeing is not resolved by preferring the newer |
+| a document whose parse **RAISED** (`VCR-1`, 2026-08-29) | a refusal measures the FILING, an exception measures the MACHINE — `vocr.vn`'s certificate expired, every `onnx@*` layer raised, and `tesseract@200` rewrote 13 columns of a filing that had reproduced 98 of 98 cells, both gates passing |
 
 ⚠️ **AND THE SECOND REFUSAL HAS A FIELD CASE FROM THE DAY IT SHIPPED.** VIC Q3-2014,
 2026-08-29: the Kaggle worker ACCEPTED an income statement at `onnx@300` that the full local run
@@ -1668,10 +1726,10 @@ sheet was refused for the same reason on both. What differed is the population t
 against: `seed_history` rebuilds the band from the `pdf` rows on DISK (12 income-statement
 probes for VIC) while a full run accumulates it IN THE RUN, over more quarters and over
 pre-de-cumulation figures. **A statement a worker accepts is not a statement a full run would
-accept**, and no code here can tell the difference — which is why `apply=False` is the default
-and the diff is printed rather than summarised.
+accept**, and no code here can tell the difference — which is why every decision and every
+changed cell is printed rather than summarised, and why a backup is taken first.
 
-**15 tests**, no PDF, no network, no OCR engine.
+**19 tests**, no PDF, no network, no OCR engine.
 
 ⚠️ **`seed_history` IS A RECONSTRUCTION OF A FULL RUN'S BAND, NOT THE RUN'S OWN.** It applies
 three of `build()`'s rules — `source == 'pdf'` only, `MIN_ITEMS_FOR_HISTORY` withheld, split

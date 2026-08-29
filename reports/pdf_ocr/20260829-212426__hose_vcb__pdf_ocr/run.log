@@ -1,0 +1,53 @@
+symbol       : HOSE_VCB
+template     : bank   (templates.csv)
+documents    : 1  (Q1-2026)
+quarters     : ['2026-Q1']   selected ['2026-Q1']
+skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]
+cascade      : 47 of 47 layers
+data root    : D:\GIT\master-thesis\raw_data\cafef
+models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+upsert       : ON — each finished quarter is upserted into the statement CSVs
+
+[doc 1/1 100% of DOCUMENTS, not of time] HOSE_VCB__Q1-2026  Q1-2026_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2026.pdf  8.1 MB  bank/consolidated
+  band: balance 67, income 68, cash 68   open_ref=541688802000000
+  [layer 1/47   2% of POSITIONS] onnx@200
+    [ocr page 1/53   1% of PAGES — the only fraction here that predicts time]
+WARNING:     onnx@200: parse failed — SSLError: HTTPSConnectionPool(host='vocr.vn', port=443): Max retries exceeded with url: /data/vietocr/config/base.yml (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired (_ssl.c:1010)')))
+  [layer 2/47   4% of POSITIONS] onnx@300
+    [ocr page 1/53   1% of PAGES — the only fraction here that predicts time]
+WARNING:     onnx@300: parse failed — SSLError: HTTPSConnectionPool(host='vocr.vn', port=443): Max retries exceeded with url: /data/vietocr/config/base.yml (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired (_ssl.c:1010)')))
+  [layer 3/47   6% of POSITIONS] onnx@400
+    [ocr page 1/53   1% of PAGES — the only fraction here that predicts time]
+WARNING:     onnx@400: parse failed — SSLError: HTTPSConnectionPool(host='vocr.vn', port=443): Max retries exceeded with url: /data/vietocr/config/base.yml (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired (_ssl.c:1010)')))
+  [layer 4/47   9% of POSITIONS] tesseract@200
+    [ocr page 1/53   1% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/53  11% of PAGES — the only fraction here that predicts time]  ~152 s left
+    [ocr page 11/53  20% of PAGES — the only fraction here that predicts time]  ~150 s left
+  Q1-2026: balance_sheet=61 items [tesseract@200]; income_statement=22 items [tesseract@200]; cash_flow=17 items [tesseract@200]  (3.1 min)
+  WRITE  Q1-2026   balance_sheet      [tesseract@200] 61 items         re-writes a `pdf` row
+  i_1_tien_gui_va_vay_chinh_phu_ngan_hang_nha_nuoc         None -> 198629540000000
+  i_cac_khoan_no_chinh_phu_va_nhnn                         198629540000000 -> None
+  i_tien_mat_vang_bac_da_quy                               None -> 12930996000000
+  ix_2_von_gop_lien_doanh                                  13626000000 -> 1982637000000
+  ix_3_dau_tu_vao_cong_ty_lien_ket                         1589089000000 -> 13626000000
+  ix_4_dau_tu_dai_han_khac                                 None -> 1589089000000
+  vii_cac_khoan_no_khac                                    None -> 39990706000000
+  viii_1_a_von_dieu_le                                     4995389000000 -> 83556751000000
+  … and 3 more columns
+  WRITE  Q1-2026   cash_flow          [tesseract@200] 17 items         re-writes a `pdf` row
+  hddt_mua_sam_tai_san_co_dinh                             None -> -308060000000
+  hdkd_10_tang_giam_cac_khoan_ve_kinh_doanh_chung_khoan    5995390000000 -> None
+  hdkd_12_tang_giam_cac_khoan_cho_vay_khach_hang           None -> -81400593000000
+  hdkd_13_tang_giam_nguon_du_phong_de_xu_ly_rui_ro_xu_ly_bu_dap_ton_that_cac_khoan_tin_dung_chung_khoan_dau_tu_dai_han 2195812000000 -> 0
+  hdkd_15_tang_giam_cac_khoan_no_chinh_phu_va_nhnn         None -> 38501215000000
+  hdkd_22_chi_tu_cac_quy_cua_tctd                          35398194000000 -> -1330221000000
+  hdkd_4_chenh_lech_so_tien_thuc_thu_thuc_chi_tu_hoat_dong_kinh_doanh_chung_khoan_vang_bac_ngoai_te 1396283000000 -> None
+  hdkd_6_tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap_bang_nguon_du_phong_rui_ro None -> 870211000000
+  … and 2 more columns
+  WRITE  Q1-2026   income_statement   [tesseract@200] 22 items         re-writes a `pdf` row
+  1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu            24574904000000 -> 32091990000000
+  v_lai_lo_thuan_tu_mua_ban_chung_khoan_dau_tu             1267597000000 -> 0
+  backup: D:\GIT\master-thesis\raw_data\_backup\statements\20260829-212734__HOSE_VCB
+  written: {'balance_sheet': 68, 'income_statement': 69, 'cash_flow': 69}
+
+run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260829-212426__hose_vcb__pdf_ocr

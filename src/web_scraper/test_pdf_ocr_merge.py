@@ -45,7 +45,7 @@ def root(tmp_path, monkeypatch):
 def _run_folder(tmp_path, *, period="Q3-2014", accepted=None, cumulative=False,
                 bands=None, error=None, consolidated="True"):
     """A minimal `pdf_ocr_job` run folder — the shape `merge_run` reads."""
-    folder = tmp_path / f"20260829-000000__hose_tst__pdf_ocr"
+    folder = tmp_path / "20260829-000000__hose_tst__pdf_ocr"
     (folder / "documents").mkdir(parents=True, exist_ok=True)
     (folder / "metadata.json").write_text(json.dumps({"run_id": folder.name}), "utf-8")
     doc = {
@@ -309,3 +309,100 @@ def test_writing_is_the_DEFAULT_and_the_refusals_are_what_keeps_it_honest(root, 
     report = merge.merge_run(refused, quiet=True)
     assert report.to_write == []
     assert report.applied is False
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# merging quarter by quarter, as a long run proceeds
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_only_the_named_quarters_record_is_parsed(tmp_path):
+    """⚠️ Each record carries a `row_dump` of every row the OCR read, so re-parsing the whole
+    folder once per quarter would make a 70-quarter run read 2,450 files for no reason."""
+    folder = _run_folder(tmp_path, period="Q3-2014",
+                         accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 100})})
+    _run_folder(tmp_path, period="Q4-2014",
+                accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 200})})
+    assert [d["period"] for d in merge._documents(folder, ["Q4-2014"])] == ["Q4-2014"]
+    assert len(merge._documents(folder)) == 2
+
+
+def test_a_quarter_written_earlier_survives_the_next_quarters_merge(root, tmp_path):
+    """⚠️ **THE INTERRUPTION GUARANTEE.** `_write` renders to a `.tmp` and `os.replace`s it, and
+    only the quarters a merge PRODUCED are rewritten — so stopping a 12-hour run at hour 6
+    keeps every quarter that finished."""
+    folder = _run_folder(tmp_path, period="Q3-2014",
+                         accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 100})})
+    merge.merge_run(folder, periods=["Q3-2014"], quiet=True)
+    _run_folder(tmp_path, period="Q4-2014",
+                accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 200})})
+    merge.merge_run(folder, periods=["Q4-2014"], backup=False, quiet=True)
+
+    rows = _rows(fin.BALANCE_SHEET)
+    assert rows["Q3-2014"][ASSETS] == "100"
+    assert rows["Q4-2014"][ASSETS] == "200"
+    assert rows["Q3-2014"]["source"] == rows["Q4-2014"]["source"] == "pdf"
+
+
+def test_the_backup_can_be_taken_once_for_a_run_rather_than_once_per_quarter(root, tmp_path):
+    """Seventy timestamped copies of three CSVs answer "what did this run change?" worse than
+    one taken before the first write — so `pdf_ocr_job.run` asks for exactly one."""
+    folder = _run_folder(tmp_path, period="Q3-2014",
+                         accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 100})})
+    first = merge.merge_run(folder, periods=["Q3-2014"], quiet=True)
+    _run_folder(tmp_path, period="Q4-2014",
+                accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 200})})
+    second = merge.merge_run(folder, periods=["Q4-2014"], backup=False, quiet=True)
+
+    assert first.backup is not None and first.backup.is_dir()
+    assert second.backup is None
+    assert second.applied is True
+    assert "taken earlier in this run" in "\n".join(second.lines())
+
+
+def test_the_default_is_still_a_backup_every_time(root, tmp_path):
+    """`backup=False` is for ONE caller. Nothing else may quietly stop making a merge
+    reversible — `SAN-1` was found by diffing against a backup, not by reading a log."""
+    folder = _run_folder(tmp_path, period="Q3-2014",
+                         accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 100})})
+    assert merge.merge_run(folder, quiet=True).backup is not None
+
+
+def test_a_document_whose_layers_RAISED_is_refused_whole(root, tmp_path):
+    """⚠️ Refused for all three reports, not statement by statement: the broken tool was broken
+    for the whole document, so whichever layer won did so by default."""
+    folder = _run_folder(tmp_path, period="Q3-2014",
+                         accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 100})})
+    doc = folder / "documents" / "HOSE_TST__Q3-2014.json"
+    payload = json.loads(doc.read_text(encoding="utf-8"))
+    payload["engine_errors"] = [["onnx@200", "SSLError: certificate has expired"]]
+    doc.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = merge.merge_run(folder, quiet=True)
+    assert [d.action for d in report.decisions] == ["skip"] * 3
+    assert "RAISED rather than refusing" in _reason(report, fin.BALANCE_SHEET).reason
+    assert report.backup is None                    # nothing written, nothing to back up
+
+
+def test_force_engine_errors_exists_and_is_not_the_default(root, tmp_path):
+    folder = _run_folder(tmp_path, period="Q3-2014",
+                         accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 100})})
+    doc = folder / "documents" / "HOSE_TST__Q3-2014.json"
+    payload = json.loads(doc.read_text(encoding="utf-8"))
+    payload["engine_errors"] = [["onnx@200", "SSLError"]]
+    doc.write_text(json.dumps(payload), encoding="utf-8")
+
+    forced = merge.merge_run(folder, force_engine_errors=True, quiet=True)
+    assert _reason(forced, fin.BALANCE_SHEET).writing
+
+
+def test_a_run_folder_written_before_the_field_existed_still_merges(root, tmp_path):
+    """Absent is read as "none recorded" — the only reading available. Refusing every v1 folder
+    would break `kgpu merge` on artefacts already pulled, and they carry `schema_version`."""
+    folder = _run_folder(tmp_path, period="Q3-2014",
+                         accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 100})})
+    payload = json.loads(
+        (folder / "documents" / "HOSE_TST__Q3-2014.json").read_text(encoding="utf-8"))
+    assert "engine_errors" not in payload
+    assert _reason(merge.merge_run(folder, apply=False, quiet=True),
+                   fin.BALANCE_SHEET).writing

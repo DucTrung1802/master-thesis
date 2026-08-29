@@ -194,7 +194,8 @@ def use_models(models_dir: Optional[os.PathLike] = None) -> Dict[str, Optional[s
     """
     models = Path(models_dir) if models_dir is not None else Path(
         os.environ.get(MODELS_DIR_ENV, DEFAULT_MODELS_DIR))
-    chosen: Dict[str, Optional[str]] = {"det": None, "vietocr": None}
+    chosen: Dict[str, Optional[str]] = {"det": None, "vietocr": None,
+                                        "vietocr_config": None}
 
     det = models / "deepdoc_det.onnx"
     if det.is_file():
@@ -210,12 +211,24 @@ def use_models(models_dir: Optional[os.PathLike] = None) -> Dict[str, Optional[s
         os.environ["CAFEF_ONNX_VIETOCR_WEIGHTS"] = str(weights)
         chosen["vietocr"] = str(weights)
 
+    # ⚠️ **THE RECOGNISER'S CONFIG IS A THIRD FILE, AND A NETWORK CALL WITHOUT IT.**
+    # `Cfg.load_config_from_name` fetches base.yml + <arch>.yml from vocr.vn on every Predictor
+    # build and caches neither, so the two model files alone never made the engine offline —
+    # measured 2026-08-29, when that host's certificate expired and the cascade fell silently
+    # through to tesseract.
+    config = models / "vietocr_vgg_seq2seq.yml"
+    if config.is_file():
+        os.environ["CAFEF_ONNX_VIETOCR_CONFIG"] = str(config)
+        chosen["vietocr_config"] = str(config)
+
     engine = sys.modules.get("web_scraper.onnx_ocr")
     if engine is not None:
         if chosen["det"]:
             engine.DET_MODEL = chosen["det"]
         if chosen["vietocr"]:
             engine.VIETOCR_WEIGHTS = chosen["vietocr"]
+        if chosen["vietocr_config"]:
+            engine.VIETOCR_CONFIG = chosen["vietocr_config"]
     os.environ[MODELS_DIR_ENV] = str(models)
     return chosen
 
@@ -334,7 +347,46 @@ class DocumentTask:
         return f"{self.exchange}_{self.symbol}__{self.period}"
 
 
-QUARTER_RE = re.compile(r"^(\d{4})-Q([1-4])$")
+# ⚠️ **TWO SPELLINGS OF ONE QUARTER, AND NOTHING ELSE.** `2014-Q3` is the canonical form and
+# `2014-03` the zero-padded one; both SORT, both are unambiguous, and `normalise_quarter` folds
+# the second onto the first before anything compares — so two spellings can never become two
+# job names, two payload directories or two run folders for one quarter.
+#
+# ⚠️ **EVERY OTHER SHAPE IS REFUSED, THE REPO-NATIVE `Q3-2014` INCLUDED.** It names the same
+# quarter, so a lenient parser would be easy to write — and then a caller who used the wrong
+# form would never find out, while a caller who made a TYPO would get "files no document for
+# [...]" and go looking at CafeF for a filing that is sitting there. `2014-3` is refused in the
+# other direction: one digit is a keystroke away from a MONTH, and the unit here is a quarter.
+QUARTER_RE = re.compile(r"^(\d{4})-(?:Q([1-4])|0([1-4]))$")
+
+# The sentence every error about this form has to say, written once.
+QUARTER_FORM = ("quarters are written YYYY-QQ — '2014-Q3', or the zero-padded '2014-03'. The "
+                "repo-native period key is the other way round ('Q3-2014') and is what "
+                "`periods` takes")
+
+
+def normalise_quarter(text: str) -> str:
+    """`2014-Q3` / `2014-03` -> `2014-Q3`. Raises on anything else.
+
+    ⚠️ **THE CANONICAL FORM IS THE ONE WITH THE `Q`**, because that is what `_quarter_of`
+    builds from a document's own period and what every comparison here is against. The fold
+    happens once, at the edge, so nothing downstream has to know there were two spellings.
+    """
+    match = QUARTER_RE.match(str(text).strip())
+    if not match:
+        raise ValueError(f"{text!r} is not a quarter: {QUARTER_FORM}.")
+    return f"{match.group(1)}-Q{match.group(2) or match.group(3)}"
+
+
+def canonical_quarters(quarters: Optional[Sequence[str]]) -> Optional[List[str]]:
+    """A sorted, de-duplicated, canonical quarter list — or None for "every quarter".
+
+    ⚠️ **EMPTY AND ABSENT ARE ONE ANSWER AND IT IS `None`.** `[]` is falsy everywhere it is
+    read, so it already behaved this way by accident; returning None makes it the contract.
+    """
+    if not quarters:
+        return None
+    return sorted({normalise_quarter(q) for q in quarters})
 
 
 def _quarter_of(doc: dict) -> str:
@@ -409,11 +461,10 @@ def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
         bad = [q for q in quarters if not QUARTER_RE.match(str(q).strip())]
         if bad:
             raise ValueError(
-                f"quarters must be written YYYY-QQ (e.g. '2014-Q3'), got {bad}.\n"
-                f"  The repo-native period key is the other way round ('Q3-2014') and is what "
-                f"`periods` takes; `quarters` SORTS, which is why it is the batch form."
+                f"quarters must be written YYYY-QQ, got {bad}.\n"
+                f"  {QUARTER_FORM}; `quarters` SORTS, which is why it is the batch form."
             )
-        wanted_q = sorted({str(q).strip() for q in quarters})
+        wanted_q = canonical_quarters(quarters) or []
         have_q = sorted({_quarter_of(d) for d in docs})
         unknown_q = [q for q in wanted_q if q not in have_q]
         if unknown_q:
@@ -451,6 +502,48 @@ def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
             cumulative=(d.get("half_year") == "True" or d.get("annual") == "True"),
         ))
     return tasks
+
+
+def parsed_reports(builder: FinancialsBuilder, task: DocumentTask) -> List[str]:
+    """Which of the three statements this quarter ALREADY reads `pdf` on disk.
+
+    `pdf` and nothing else: a `missing` row is a quarter nothing was written for, and rule 24
+    leaves no third answer — a `cafef` row would be a transcription, which is forbidden as a
+    source and is therefore not evidence that a quarter is done either.
+    """
+    return [report for report in REPORTS
+            if (builder._existing(task.exchange, task.symbol, task.template, report)
+                .get(task.period, {}).get("source") == "pdf")]
+
+
+def partition_by_disk(builder: FinancialsBuilder,
+                      tasks: Sequence[DocumentTask]) -> tuple:
+    """`(to_parse, already_complete)` — the quarters a re-parse could still win, and the rest.
+
+    ⚠️ **THE UNIT IS A QUARTER HERE AND A YEAR IN `build()`, AND THE DIFFERENCE IS MEASURED
+    RATHER THAN STYLISTIC.** `FinancialsBuilder._skippable_years` skips whole YEARS because
+    `_decumulate` turns a cumulative income statement into a standalone quarter as
+    `YTD − (Q1..Q(q-1))`, taking those priors from THAT run — so dropping Q1..Q3 while keeping
+    Q4 would delete the very quarter the run exists to fix.
+
+    ⚠️ **NOTHING IN THIS MODULE DE-CUMULATES**, which is what makes the finer grain safe:
+    `run_document` writes what the cascade accepted and no more, `pdf_ocr_merge` REFUSES a
+    cumulative income statement outright, `seed_history` rebuilds `sane`'s band from DISK, and
+    a Q1's `open_ref` comes from disk too. No quarter here depends on another quarter of the
+    same run. The grain is worth having: at 4-18 min a document, a year held whole for one
+    missing cash flow costs three filings that had nothing left to win.
+
+    ⚠️ **A QUARTER IS "COMPLETE" ONLY WHEN ALL THREE STATEMENTS READ `pdf`** — one filing
+    produces all three, so a quarter missing its cash flow must re-open the document, and the
+    two statements that come back with it are then judged by `pdf_ocr_merge` on their own
+    merits (identical -> skipped, different -> refused unless overwrite was asked for).
+    """
+    to_parse: List[DocumentTask] = []
+    complete: List[DocumentTask] = []
+    for task in tasks:
+        (complete if len(parsed_reports(builder, task)) == len(REPORTS)
+         else to_parse).append(task)
+    return to_parse, complete
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -542,8 +635,52 @@ def open_reference(builder: FinancialsBuilder, exchange: str, symbol: str, templ
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-class Progress:
-    """The log. One line per event, flushed, and every percentage NAMES its denominator.
+class CollectingLogger:
+    """A `Logger`-shaped sink that KEEPS the lines and echoes them, flushed.
+
+    Two reasons, both measured. `_parse_cascaded` computes a refusal reason per layer and
+    reports it through `_warn` only — so an artefact that does not capture the log cannot say
+    why a statement is absent, and recovering one such reason afterwards took four probe runs
+    (§6-2-quindecies). And a long parse prints nothing for over an hour when stdout is block
+    buffered in a subprocess (§5 rule 20, §6-2-noviesdecies), which on a batch worker is the
+    difference between a progress signal and a black box.
+
+    ⚠️ **`line()` IS THE ONLY EMIT POINT, WHICH IS WHAT MAKES `Progress` A SUBCLASS.** The two
+    sinks each re-implemented the four `log_*` methods until 2026-08-29, so a change to how a
+    warning is written had two places to be made and one of them would have been missed.
+    """
+
+    def __init__(self, echo: bool = True):
+        self.lines: List[str] = []
+        self.echo = echo
+
+    def line(self, text: str) -> None:
+        self.lines.append(text)
+        if self.echo:
+            print(text, flush=True)
+
+    # ---- the `Logger` shape the parser expects ----------------------------
+    def log_info(self, message: str) -> None:
+        self.line(message)
+
+    def log_warning(self, message: str) -> None:
+        self.line(f"WARNING: {message}")
+
+    def log_error(self, message: str) -> None:
+        self.line(f"ERROR: {message}")
+
+    def log_debug(self, message: str) -> None:
+        # Kept, never echoed and never written to the log file: the cascade emits a DEBUG line
+        # per row, which would bury the refusal reasons this log exists to carry.
+        self.lines.append(f"DEBUG: {message}")
+
+    def take(self) -> List[str]:
+        lines, self.lines = self.lines, []
+        return lines
+
+
+class Progress(CollectingLogger):
+    """The run log. One line per event, flushed, and every percentage NAMES its denominator.
 
     ⚠️ **THREE DENOMINATORS, ONE OF WHICH PREDICTS TIME**, and the line says which:
 
@@ -572,9 +709,8 @@ class Progress:
 
     def __init__(self, total_documents: int, log_path: Optional[Path] = None,
                  echo: bool = True):
+        super().__init__(echo=echo)
         self.total_documents = total_documents
-        self.echo = echo
-        self.lines: List[str] = []
         self._handle = None
         if log_path is not None:
             log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -588,11 +724,9 @@ class Progress:
 
     # ---- emitting ---------------------------------------------------------
     def line(self, text: str) -> None:
-        self.lines.append(text)
         if self._handle is not None:
             self._handle.write(text + "\n")
-        if self.echo:
-            print(text, flush=True)
+        super().line(text)
 
     def close(self) -> None:
         if self._handle is not None:
@@ -628,60 +762,6 @@ class Progress:
         self.line(f"    [ocr page {index + 1}/{total} {pct:>3}% of PAGES — the only "
                   f"fraction here that predicts time]{eta}")
 
-    # ---- the `Logger` shape the parser expects ----------------------------
-    def log_info(self, message: str) -> None:
-        self.line(message)
-
-    def log_warning(self, message: str) -> None:
-        self.line(f"WARNING: {message}")
-
-    def log_error(self, message: str) -> None:
-        self.line(f"ERROR: {message}")
-
-    def log_debug(self, message: str) -> None:
-        self.lines.append(f"DEBUG: {message}")
-
-    def take(self) -> List[str]:
-        lines, self.lines = self.lines, []
-        return lines
-
-
-class CollectingLogger:
-    """A `Logger`-shaped sink that KEEPS the lines and echoes them, flushed.
-
-    Two reasons, both measured. `_parse_cascaded` computes a refusal reason per layer and
-    reports it through `_warn` only — so an artefact that does not capture the log cannot say
-    why a statement is absent, and recovering one such reason afterwards took four probe runs
-    (§6-2-quindecies). And a long parse prints nothing for over an hour when stdout is block
-    buffered in a subprocess (§5 rule 20, §6-2-noviesdecies), which on a batch worker is the
-    difference between a progress signal and a black box.
-    """
-
-    def __init__(self, echo: bool = True):
-        self.lines: List[str] = []
-        self.echo = echo
-
-    def _put(self, level: str, message: str) -> None:
-        self.lines.append(message if level == "INFO" else f"{level}: {message}")
-        if self.echo:
-            print(message, flush=True)
-
-    def log_info(self, message: str) -> None:
-        self._put("INFO", message)
-
-    def log_warning(self, message: str) -> None:
-        self._put("WARNING", message)
-
-    def log_error(self, message: str) -> None:
-        self._put("ERROR", message)
-
-    def log_debug(self, message: str) -> None:  # never echoed; the cascade is chatty enough
-        self.lines.append(f"DEBUG: {message}")
-
-    def take(self) -> List[str]:
-        lines, self.lines = self.lines, []
-        return lines
-
 
 def select_layers(names: Optional[Sequence[str]]) -> List[ParseLayer]:
     """The cascade, or the named subset of it, in the cascade's OWN order.
@@ -715,6 +795,10 @@ class DocumentResult:
     facts: dict = field(default_factory=dict)
     log: List[str] = field(default_factory=list)
     error: Optional[str] = None
+    # ⚠️ `(layer, exception)` for every layer whose PARSE RAISED — an engine failure, not a
+    # verdict on the filing. A run with any of these was decided by whichever layer the broken
+    # tool did not reach, so `pdf_ocr_merge` refuses to write from it.
+    engine_errors: List[tuple] = field(default_factory=list)
 
     def to_json(self) -> dict:
         return {
@@ -729,6 +813,7 @@ class DocumentResult:
             "seconds": round(self.seconds, 2),
             "accepted": self.accepted,
             "absent": self.absent,
+            "engine_errors": [list(e) for e in self.engine_errors],
             "facts": self.facts,
             "error": self.error,
             "log": self.log,
@@ -783,6 +868,16 @@ def run_document(builder: FinancialsBuilder, task: DocumentTask,
         result.log = logger.take()
         return result
 
+    # ⚠️ Read off the builder rather than scraped out of the log: a WARNING is prose, and the
+    # decision downstream ("was this parse decided by a broken tool?") must not depend on
+    # matching a sentence.
+    result.engine_errors = list(getattr(builder, "layer_errors", []))
+    if result.engine_errors:
+        engines = sorted({name.split("@")[0] for name, _ in result.engine_errors})
+        logger.log_warning(
+            f"{task.period}: {len(result.engine_errors)} layer(s) RAISED rather than refusing "
+            f"({', '.join(engines)}) — whatever won did so because those layers could not run. "
+            f"The upsert refuses this document; see `engine_errors` in its JSON.")
     result.seconds = time.perf_counter() - started
     for report in REPORTS:
         got = accepted.get(report)
@@ -900,7 +995,12 @@ def compare(builder: FinancialsBuilder, result: DocumentResult) -> Dict[str, dic
 
 # ⚠️ Bump when the run folder's SHAPE changes, so a reader of an old artefact is not left
 # guessing whether a missing key means "absent" or "this run predates it" (§5 rule 2).
-SCHEMA_VERSION = 1
+#   1 -> 2 (2026-08-29): documents carry `engine_errors`, and `inputs` carries `overwrite`,
+#           `skipped_already_parsed`, `merged_into_csv` and `merge_backup`. ⚠️ A v1 folder has
+#           no `engine_errors` key and `pdf_ocr_merge` reads that as "none recorded", which is
+#           the only reading available — it CANNOT mean "none happened", and the version is
+#           what lets a reader tell those apart.
+SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -925,6 +1025,15 @@ class JobSpec:
     # not `YYYY-QQ`.
     quarters: Optional[Sequence[str]] = None     # None/[] = every quarter the ticker files
     allow_parent: bool = False
+    # ⚠️ **OVERWRITE DECIDES TWO THINGS AND THEY ARE THE SAME QUESTION.** False FILLS THE GAPS:
+    # a quarter already reading `pdf` in all three statements is dropped before any OCR
+    # (`partition_by_disk`), and the upsert below still refuses to replace a `pdf` row that
+    # disagrees with this run. True parses every selected quarter and lets the upsert replace
+    # what disk holds (`pdf_ocr_merge`'s `force_differs`). ⚠️ Re-parsing is not free and it is
+    # not obviously better: a quarter on disk was written by a run whose `sane` band was the
+    # RUN'S OWN, and this module reconstructs the band from disk instead (`seed_history`), so
+    # the two gates look at different populations. Overwrite when the PARSER changed.
+    overwrite: bool = False
     period_min: Optional[str] = fin.FINANCIALS_PERIOD_MIN
     # ⚠️ None means RESOLVE it (templates.csv, then CafeF's fingerprint), never "assume bank".
     template: Optional[str] = None
@@ -933,6 +1042,16 @@ class JobSpec:
     models_dir: Optional[str] = None
     out_root: Optional[str] = None
     compare_with_disk: bool = True
+    # ⚠️ **UPSERT EACH QUARTER INTO THE STATEMENT CSVs AS IT FINISHES — OFF BY DEFAULT.** The
+    # module docstring says why the default is off: the artefact is the product, and a run that
+    # writes nothing cannot silently downgrade a quarter. What turning it ON buys is the other
+    # half of that trade — a 12-hour run that is stopped at hour 6 keeps every quarter it
+    # finished, because `_write` is an upsert onto a `.tmp` file replaced atomically, so an
+    # interrupt can lose the quarter in flight and nothing else.
+    # ⚠️ It goes through `pdf_ocr_merge`, so all three refusals are in force per quarter — a
+    # cumulative income statement, an empty `sane` band, and a figure that DIFFERS from a good
+    # `pdf` row are skipped and SAID, not written.
+    merge_into_csv: bool = False
     notes: str = ""
     run_id: Optional[str] = None
 
@@ -948,21 +1067,35 @@ class JobSpec:
                      periods=self.periods, quarters=self.quarters,
                      allow_parent=self.allow_parent,
                      period_min=self.period_min, template=template)
+        # ⚠️ THE SKIP IS APPLIED HERE, NOT IN `plan`, so that the quarters it dropped survive
+        # into the artefact. "Nothing was selected" and "everything selected was already done"
+        # are different facts and a reader of the run folder must be able to tell them apart.
+        skipped: List[DocumentTask] = []
+        if not self.overwrite:
+            tasks, skipped = partition_by_disk(builder, tasks)
         if not tasks:
+            if skipped:
+                raise ValueError(
+                    f"{self.exchange.upper()}_{self.symbol.upper()}: all {len(skipped)} "
+                    f"selected quarter(s) already read `pdf` in all three statements, so a "
+                    f"re-parse has nothing left to win — "
+                    f"{', '.join(as_quarter(t.period) for t in skipped[:8])}"
+                    f"{' …' if len(skipped) > 8 else ''}.\n"
+                    f"  Pass overwrite=True (OVERWRITE in the notebook) to parse them anyway.")
             raise ValueError(
                 f"{self.exchange}_{self.symbol} has no filing to parse — a run that parses "
                 f"nothing and reports success is the failure this raises to prevent.")
         return PreparedJob(spec=self, builder=builder, tasks=tasks, template=template,
                            template_how=how, data_root=root, models=models,
-                           layers=select_layers(self.layers))
+                           layers=select_layers(self.layers), skipped=skipped)
 
     def to_json(self) -> dict:
         return {
             "exchange": self.exchange, "symbol": self.symbol,
             "periods": list(self.periods) if self.periods else None,
-            "quarters": sorted({str(q).strip() for q in self.quarters})
-                        if self.quarters else None,
+            "quarters": canonical_quarters(self.quarters),
             "allow_parent": self.allow_parent, "period_min": self.period_min,
+            "overwrite": self.overwrite, "merge_into_csv": self.merge_into_csv,
             "template_requested": self.template,
             "layers_requested": list(self.layers) if self.layers else None,
             "compare_with_disk": self.compare_with_disk, "notes": self.notes,
@@ -981,6 +1114,9 @@ class PreparedJob:
     data_root: Path
     models: Dict[str, Optional[str]]
     layers: List[ParseLayer]
+    # Selected, then dropped because disk already holds all three statements as `pdf`. Empty
+    # whenever `overwrite` is on, because nothing is dropped then.
+    skipped: List[DocumentTask] = field(default_factory=list)
 
     def describe(self) -> List[str]:
         """The header every run prints — the resolved inputs, before any of them is used."""
@@ -990,18 +1126,51 @@ class PreparedJob:
             f"documents    : {len(self.tasks)}  "
             f"({', '.join(t.period for t in self.tasks[:8])}"
             f"{' …' if len(self.tasks) > 8 else ''})",
-            f"quarters     : "
-            f"{sorted({str(q).strip() for q in self.spec.quarters}) if self.spec.quarters else 'all'}"
+            f"quarters     : {canonical_quarters(self.spec.quarters) or 'all'}"
             f"   selected {sorted(as_quarter(t.period) for t in self.tasks)}",
+            f"skipped      : {len(self.skipped)} quarter(s) already `pdf` in all three "
+            f"statements"
+            + (f" ({', '.join(as_quarter(t.period) for t in self.skipped[:8])}"
+               f"{' …' if len(self.skipped) > 8 else ''})" if self.skipped else "")
+            + ("   [overwrite=True — nothing is skipped]" if self.spec.overwrite else ""),
             f"cascade      : {len(self.layers)} of {len(FinancialsBuilder.LAYERS)} layers",
             f"data root    : {self.data_root}",
             f"models       : det={_name(self.models.get('det'))} "
             f"vietocr={_name(self.models.get('vietocr'))}",
+            # ⚠️ The recogniser's CONFIG is a third file and a network call without it.
+            f"vietocr cfg  : {self.models.get('vietocr_config') or NO_VIETOCR_CONFIG}",
         ]
+
+
+NO_VIETOCR_CONFIG = ("⚠️ NONE — vietocr will FETCH base.yml from vocr.vn on every "
+                     "Predictor build, and a failure there falls the cascade through to "
+                     "tesseract")
 
 
 def _name(path: Optional[str]) -> str:
     return Path(path).name if path else "⚠️ NONE — the engine would try to download one"
+
+
+def _upsert_period(folder: Path, task: DocumentTask, *, overwrite: bool,
+                   log: "Progress", backup: bool) -> Optional[Path]:
+    """Upsert ONE finished quarter into the statement CSVs, through `pdf_ocr_merge`.
+
+    ⚠️ **IT IS THE SAME MODULE `kgpu pull` USES, SCOPED TO ONE PERIOD** — so the three
+    refusals (a cumulative income statement, an empty `sane` band, a figure that DIFFERS from a
+    good `pdf` row) are in force here exactly as they are there, and a quarter that clears them
+    is written by `FinancialsBuilder._write(merge=True)`, the upsert `build()` itself uses.
+
+    ⚠️ **THE BACKUP IS TAKEN ONCE PER RUN, NOT ONCE PER QUARTER.** A backup exists to answer
+    "what did this run change?", and 70 timestamped copies of three CSVs answer it worse than
+    one taken before the first write.
+    """
+    from web_scraper import pdf_ocr_merge
+
+    result = pdf_ocr_merge.merge_run(folder, apply=True, periods=[task.period],
+                                     force_differs=overwrite, backup=backup, quiet=True)
+    for line in result.lines()[1:]:            # [0] repeats the ticker header
+        log.line("  " + line.strip() if line.strip() else line)
+    return result.backup
 
 
 def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
@@ -1026,12 +1195,29 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
     (folder / "documents").mkdir(parents=True, exist_ok=True)
 
     log = Progress(len(tasks), log_path=folder / "run.log")
+    # ⚠️ **A WORKER MAY NOT WRITE THE STATEMENT CSVs, AND THE ROOT IS HOW WE KNOW.** On Kaggle
+    # `CAFEF_DATA_ROOT` points at the unpacked payload, so an upsert there would edit a copy
+    # that is deleted with the kernel — and report success. The write belongs to whoever holds
+    # the real `raw_data/`, which is what `kgpu pull` does after the run folder comes home.
+    merge_into_csv = spec.merge_into_csv
+    if merge_into_csv and prepared.data_root != DEFAULT_DATA_ROOT.resolve():
+        merge_into_csv = False
     timer = runtime.RunTimer("web_scraper.pdf_ocr_job", device=_ocr_device()).start()
     builder.LAYERS = prepared.layers          # instance attribute; the class list is intact
     rows: List[dict] = []
+    # ⚠️ ONE backup per RUN, taken by the FIRST quarter that actually writes something. Stays
+    # None while every quarter is refused or identical, which is correct: nothing was changed,
+    # so there is nothing to be able to restore.
+    merge_backup: Optional[Path] = None
     try:
         for line in prepared.describe():
             log.line(line)
+        if spec.merge_into_csv:
+            log.line("upsert       : " + (
+                "ON — each finished quarter is upserted into the statement CSVs"
+                if merge_into_csv else
+                "REFUSED — this data root is a payload, not the repo's own raw_data/. A "
+                "worker writes a copy that dies with the kernel; `kgpu pull` writes here."))
         log.line("")
 
         for index, task in enumerate(tasks, start=1):
@@ -1054,7 +1240,7 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
                     f"{task.period}: the magnitude band is EMPTY, so `sane` will FAIL OPEN — "
                     f"this ticker has no accepted quarters on disk to reconstruct one from.")
             else:
-                log.line(f"  band: " + ", ".join(f"{r.split('_')[0]} {n}"
+                log.line("  band: " + ", ".join(f"{r.split('_')[0]} {n}"
                                                  for r, n in sizes.items())
                          + f"   open_ref={open_ref if open_ref is not None else '—'}")
 
@@ -1086,6 +1272,15 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
                                  for r in REPORTS if r in result.accepted)
                      + (f"; absent {result.absent}" if result.absent else "")
                      + f"  ({result.seconds / 60:.1f} min)")
+
+            # ⚠️ **UPSERTED HERE, BEFORE THE NEXT DOCUMENT IS OPENED.** That is the whole
+            # point of doing it per quarter rather than at the end: `_write` renders to a
+            # `.tmp` and `os.replace`s it, so an interrupt can lose the quarter in flight and
+            # never a quarter already on disk.
+            if merge_into_csv:
+                merge_backup = _upsert_period(
+                    folder, task, overwrite=spec.overwrite, log=log,
+                    backup=merge_backup is None) or merge_backup
     finally:
         timer.stop(ok=True)
 
@@ -1114,6 +1309,11 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
             "layers": [layer.name for layer in prepared.layers],
             "layers_are_the_full_cascade":
                 len(prepared.layers) == len(FinancialsBuilder.LAYERS),
+            # ⚠️ §5 rule 2 at the artefact: "no quarter was skipped" and "the skip was off"
+            # are different facts, and only one of them says anything about the corpus.
+            "skipped_already_parsed": [t.period for t in prepared.skipped],
+            "merged_into_csv": merge_into_csv,
+            "merge_backup": str(merge_backup) if merge_backup else None,
         },
         # ⚠️ `runtime.environment()` names the CARD; `engine_report()` names what each half of
         # the OCR actually ran on, which is not the same question — the first Kaggle run had
@@ -1284,6 +1484,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="e.g. --quarters 2014-Q3 2014-Q4 (YYYY-QQ, the sortable form; "
                              "the repo-native 'Q3-2014' is refused). Omit or pass none for "
                              "every quarter the ticker files. Intersects with --periods.")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="re-parse quarters that already read `pdf` in all three "
+                             "statements, and let --merge replace what disk holds. Without "
+                             "it those quarters are dropped before any OCR.")
+    parser.add_argument("--merge", action="store_true",
+                        help="upsert each quarter into raw_data/.../statements/ AS IT "
+                             "FINISHES, through pdf_ocr_merge and its three refusals. Off by "
+                             "default: the run folder is this module's product.")
     parser.add_argument("--allow-parent", action="store_true",
                         help="fall back to the STANDALONE filing where no consolidated one "
                              "exists (documents(); consolidated still wins).")
@@ -1308,10 +1516,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # arguments and constructs it; it does not resolve anything itself.
     run(JobSpec(
         exchange=args.exchange, symbol=args.symbol, periods=args.periods,
-        quarters=args.quarters,
+        quarters=args.quarters, overwrite=args.overwrite,
         allow_parent=args.allow_parent, layers=args.layers, template=args.template,
         data_root=args.data_root, models_dir=args.models, out_root=args.out,
-        compare_with_disk=not args.no_compare, notes=args.notes,
+        compare_with_disk=not args.no_compare, merge_into_csv=args.merge, notes=args.notes,
     ))
     return 0
 

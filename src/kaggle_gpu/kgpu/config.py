@@ -350,6 +350,7 @@ def _validate(cfg: JobConfig) -> JobConfig:
             spec = cfg.data.documents or {}
             unknown = set(spec) - {
                 "exchange", "symbol", "periods", "quarters", "allow_parent", "period_min",
+                "overwrite",
                 "with_statements", "with_models",
             }
             if unknown:
@@ -392,6 +393,17 @@ def _validate(cfg: JobConfig) -> JobConfig:
             # and parses another, and the worker reports the shortfall as `missing` — which
             # is exactly what a genuinely unreadable filing reports. Checked here because it
             # is free, and because the run that discovers it costs a Kaggle round trip.
+            # ⚠️ `overwrite` decides which filings are SHIPPED as well as which are
+            # opened, so it is the same class of split-brain as the two filters and is checked
+            # the same way — here, where it is free.
+            if "OVERWRITE" in (cfg.parameters or {}):
+                if bool(spec.get("overwrite", False)) != bool(cfg.parameters["OVERWRITE"]):
+                    raise ValueError(
+                        f"job {cfg.name!r}: data.documents.overwrite="
+                        f"{spec.get('overwrite', False)!r} but parameters.OVERWRITE="
+                        f"{cfg.parameters['OVERWRITE']!r} — one decides which filings are "
+                        f"uploaded and the other which are opened."
+                    )
             for key, param in (("quarters", "QUARTERS"), ("periods", "PERIODS")):
                 if param in (cfg.parameters or {}):
                     a = spec.get(key) or []

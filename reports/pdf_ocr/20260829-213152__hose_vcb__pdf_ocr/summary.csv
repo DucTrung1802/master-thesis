@@ -1,0 +1,4 @@
+period,report,layer,items,status,verdict,seconds
+Q1-2026,balance_sheet,tesseract@200,61,pdf,DIFFERS,211.36
+Q1-2026,income_statement,tesseract@200,22,pdf,DIFFERS,211.36
+Q1-2026,cash_flow,tesseract@200,17,pdf,DIFFERS,211.36

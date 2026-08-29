@@ -433,11 +433,16 @@ def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True) ->
     from web_scraper import pdf_ocr_job, pdf_ocr_merge
 
     pdf_ocr_job.use_data_root()
-    print("\nmerging into raw_data/.../statements/")
+    # ⚠️ **`OVERWRITE` REACHES THE MERGE, NOT ONLY THE PARSE.** Without it a re-parse asked for
+    # explicitly would come home and be refused by `force_differs` — the run would do the work
+    # and the disk would keep the old figure, which is the worst of both answers.
+    overwrite = bool((cfg.parameters or {}).get("OVERWRITE", False))
+    print("\nmerging into raw_data/.../statements/"
+          + ("   (overwrite=True — a `pdf` row that DIFFERS is replaced)" if overwrite else ""))
     for folder in folders:
         if not (folder / "documents").is_dir():
             continue                     # not a pdf_ocr run folder
-        pdf_ocr_merge.merge_run(folder, apply=apply)
+        pdf_ocr_merge.merge_run(folder, apply=apply, force_differs=overwrite)
 
 
 def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
@@ -466,7 +471,9 @@ def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
         print(f"no run folder for {spec.get('exchange')}_{spec['symbol']} — pull one first")
         return 1
     print(f"merging {folder.name}")
-    pdf_ocr_merge.merge_run(folder, apply=apply)
+    pdf_ocr_merge.merge_run(
+        folder, apply=apply,
+        force_differs=bool((cfg.parameters or {}).get("OVERWRITE", False)))
     return 0
 
 

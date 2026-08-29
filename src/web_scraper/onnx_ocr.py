@@ -57,6 +57,24 @@ VIETOCR_ARCH = os.environ.get("CAFEF_ONNX_VIETOCR", "vgg_seq2seq")
 # returns any non-`http` value unchanged, so pointing this at a shipped file is the supported
 # way in. Empty = the URL, i.e. exactly the behaviour every run had before this existed.
 VIETOCR_WEIGHTS = os.environ.get("CAFEF_ONNX_VIETOCR_WEIGHTS", "")
+
+# ⚠️ **AND THE CONFIG IS A SECOND DOWNLOAD NOBODY HAD COUNTED.** `Cfg.load_config_from_name`
+# fetches `base.yml` AND `<arch>.yml` from `https://vocr.vn/data/vietocr/config/` on EVERY
+# `Predictor` construction — vietocr caches neither — so shipping the weights alone never made
+# the recogniser offline, and the "the payload ships both models so nothing is downloaded"
+# claim was incomplete for as long as it stood.
+#
+# ⚠️ **MEASURED 2026-08-29, WHEN THAT HOST'S TLS CERTIFICATE EXPIRED**: every `onnx@*` layer
+# raised `SSLError`, the cascade fell through to `tesseract@200`, and a filing that had read
+# `onnx@200` with 98 of 98 cells reproducing came back with 13 different columns — both gates
+# passing, because a tesseract parse of a real document is a real parse. **A degraded engine
+# does not look like a failure; it looks like a different answer.**
+#
+# Empty = the download, i.e. exactly what every run did before this existed. Point it at a
+# MERGED yaml (base + arch): `Cfg.load_config_from_file` starts from `{}` and will not fetch
+# `base.yml` for you.
+VIETOCR_CONFIG = os.environ.get(
+    "CAFEF_ONNX_VIETOCR_CONFIG", os.path.join(_MODELS_DIR, "vietocr_vgg_seq2seq.yml"))
 RENDER_DPI = 200
 MIN_SCORE = 0.25            # drop recognitions below this confidence (scan speckle detects as text)
 REC_BATCH = 24
@@ -233,7 +251,25 @@ class _BatchedVietOcr:
         from vietocr.tool.config import Cfg
         from vietocr.tool.predictor import Predictor
 
-        cfg = Cfg.load_config_from_name(arch)
+        # Read the module global rather than a default frozen at def-time, for the same
+        # reason `VIETOCR_WEIGHTS` is: `pdf_ocr_job.use_models` sets it after import.
+        local_cfg = VIETOCR_CONFIG
+        if local_cfg and os.path.isfile(local_cfg):
+            cfg = Cfg.load_config_from_file(local_cfg)
+        else:
+            try:
+                cfg = Cfg.load_config_from_name(arch)
+            except Exception as exc:            # noqa: BLE001 — say WHICH dependency failed
+                raise RuntimeError(
+                    f"vietocr could not fetch its config for {arch!r} from vocr.vn: "
+                    f"{type(exc).__name__}: {exc}\n"
+                    f"  This is the RECOGNISER's config, not its weights — vietocr downloads "
+                    f"it on every Predictor build and caches nothing, so an unreachable or "
+                    f"expired host takes the whole onnx engine down and the cascade falls "
+                    f"through to tesseract with DIFFERENT figures.\n"
+                    f"  Put a merged base+arch yaml at {local_cfg} (or point "
+                    f"CAFEF_ONNX_VIETOCR_CONFIG at one) and this stops being a dependency."
+                ) from exc
         cfg["cnn"]["pretrained"] = False       # the OCR checkpoint overwrites the backbone anyway
         cfg["predictor"]["beamsearch"] = False
         # Read the module global rather than binding it as a default: `pdf_ocr_job.use_models`

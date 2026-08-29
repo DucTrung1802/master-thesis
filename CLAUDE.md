@@ -4747,6 +4747,118 @@ its statements feed no silver ingest — parsing it changed no table.
 
 ---
 
+### ✅ 6-2-quinquatricies. ONE NOTEBOOK, TWO MACHINES — and the run now survives being stopped
+
+Shipped 2026-08-29. The OCR path had **two** entry notebooks and a write that happened only at
+the end; it now has one entry point and a write that happens per quarter. Nothing about the
+cascade, the gates or the 47 layers moved.
+
+| | before | after |
+|---|---|---|
+| the notebook you open | `RUN__pdf_ocr_control.ipynb` (Kaggle) **or** `RUN__pdf_ocr.ipynb` (local) | **`RUN__pdf_ocr_control.ipynb` only** — one uppercase parameter cell, `ENVIRONMENT = "LOCAL" \| "KAGGLE"` |
+| the batch filter's spelling | `2014-Q3` | `2014-Q3` **or** the zero-padded `2014-03`, folded at the edge |
+| a quarter already parsed | re-OCR'd, then refused at the merge | **dropped before any OCR** unless `OVERWRITE` |
+| the statement CSVs | written once, after the whole run | **upserted per quarter, as each finishes** |
+| `src/web_scraper/` tests | 258 | **283** |
+
+⚠️ **THE INTERRUPTION GUARANTEE IS THE POINT, AND IT IS A PROPERTY OF `_write`, NOT A NEW
+WRITER.** `pdf_ocr_job.run` calls `pdf_ocr_merge.merge_run(periods=[this quarter])` between
+documents, which calls `FinancialsBuilder._write(merge=True)` — the upsert `build()` itself
+uses, rendering to a `.tmp` and `os.replace`-ing it. So **a 12-hour run stopped at hour 6 keeps
+every quarter that finished** and can lose at most the one in flight. The backup is taken ONCE,
+by the first quarter that actually writes something; seventy timestamped copies of three CSVs
+answer *"what did this run change?"* worse than one.
+
+⚠️ **AND THE THREE REFUSALS ARE WHAT MAKES AN AUTOMATIC WRITE DEFENSIBLE, NOT THE PER-QUARTER
+SCHEDULE.** A cumulative income statement, an empty `sane` band and a figure that DIFFERS from a
+good `pdf` row are still skipped and SAID. §6-2-sexvicies' four measured silent downgrades are
+why the module's own default is still to write nothing: `--merge` is opt-in on the CLI and on in
+the notebook, where a person has read the plan first.
+
+⚠️ **`OVERWRITE` DECIDES AT BOTH ENDS, WHICH IS WHY IT IS ONE WORD.** `False` fills the GAPS —
+`partition_by_disk` drops a quarter already reading `pdf` in all three statements before any OCR
+**and before it is uploaded**, and the merge refuses to replace a `pdf` row that disagrees.
+`True` re-parses and lets the merge write. ⚠️ **It reaches the merge on the Kaggle side too**:
+without that, a re-parse asked for explicitly would come home and be refused, so the run would
+do the work and disk would keep the old figure — the worst of both answers. `config._validate`
+refuses a job whose `data.documents.overwrite` disagrees with `parameters.OVERWRITE`, the same
+way it already refuses a quarters mismatch.
+
+⚠️ **THE SKIP IS PER QUARTER HERE AND PER YEAR IN `build()`, AND THE DIFFERENCE IS MEASURED.**
+`_skippable_years` keeps a year whole because `_decumulate` needs THAT run's Q1..Q(q-1) — so
+dropping Q1..Q3 while keeping Q4 would delete the quarter the run exists to fix. **Nothing in
+`pdf_ocr_job` de-cumulates**, and both `seed_history` and `open_reference` read from DISK, so no
+quarter depends on another quarter of the same run. At 4-18 min a document, a year held whole
+for one missing cash flow costs three filings that had nothing left to win.
+
+⚠️ **A WORKER MAY NOT UPSERT, AND `run()` REFUSES RATHER THAN TRUSTING ITS CALLER.** On Kaggle
+`CAFEF_DATA_ROOT` is an unpacked payload that dies with the kernel, so the write would edit a
+copy and report success. `run()` compares the resolved root against the repo's own and turns the
+flag off with a line in the log — **so on KAGGLE the per-quarter guarantee is the PULL's, not
+the run's**, and that is stated in the notebook rather than implied.
+
+**Tidy, same session**: the two `Logger`-shaped sinks became one (`Progress(CollectingLogger)` —
+four `log_*` methods had two implementations, i.e. two places for one change); `plan_merge` now
+reads a disk row through `pdf_ocr_job._line_items`, the same rule `compare()` scored it with;
+`_documents(periods=…)` filters by FILENAME before parsing, so a 70-quarter run reads its own
+folder once per quarter instead of 70 times; one dead import; one f-string with no placeholder.
+**5.6 GB of `kgpu` staging deleted** — `.payload`, `.rehearsal`, `results`, `.build`, all four
+named in `src/kaggle_gpu/.gitignore` as *"rebuilt by a command"*, plus four
+`.tmp_dagster_home_*`, `.pytest_cache` and 107 `__pycache__`.
+
+#### ⚠️ AND THE FIRST REAL RUN THROUGH IT WROTE WRONG FIGURES — `VCR-1`, found and contained the same hour
+
+The verification run was chosen to be safe: VCB **Q1-2026**, the quarter §6-2-sexvicies measured
+at **98 of 98 cells reproducing** at `onnx@200`, re-parsed with `--overwrite --merge` so that a
+correct run would decide *"identical to the row already on disk"* and write nothing. It wrote
+**13 changed columns across all three statements** instead.
+
+⚠️ **THE CAUSE IS NOT IN THIS SESSION'S CODE AND IT IS NOT IN THE PARSER.**
+`vietocr.tool.config.Cfg.load_config_from_name` fetches `base.yml` and `<arch>.yml` from
+**`https://vocr.vn`** on EVERY `Predictor` construction and caches neither — a bare
+`requests.get` — and **that host's TLS certificate has expired.** So all three `onnx@*` layers
+raised `SSLError`, and the cascade did what a cascade does: it went on, and **`tesseract@200`
+won a document that has read `onnx@200` for as long as it has been parsed.**
+
+| | |
+|---|---|
+| what the log said | three `WARNING: … parse failed — SSLError` lines, then a normal-looking accept |
+| what the gates said | `reconcile` ✅ and `sane` ✅ — a tesseract parse of a real filing is a real parse |
+| what disk got | `i_cac_khoan_no_chinh_phu_va_nhnn` 198,629,540 mn → blank; `viii_1_a_von_dieu_le` 4,995,389 mn → 83,556,751 mn; 11 more |
+| what saved it | **the automatic pre-merge backup** — restored, and all three md5s match the pre-run hashes exactly |
+
+⚠️ **SO THE "OFFLINE" CLAIM WAS INCOMPLETE FOR AS LONG AS IT STOOD.** `use_models` ships the
+DET model and the VietOCR **weights**; the recogniser's **config** was never local, on this
+machine or in a Kaggle payload. Every onnx parse this repo has ever run depended on that host
+being reachable — it simply always was.
+
+✅ **CONTAINED TWO WAYS, AND THE FIRST IS THE GENERAL ONE.** `_parse_cascaded` now records every
+layer whose parse RAISED (`layer_errors`), `run_document` carries them into the run folder as
+`engine_errors`, and **`pdf_ocr_merge` refuses such a document WHOLE** — because **a refusal
+measures the DOCUMENT and an exception measures the MACHINE**, and whatever wins after an
+exception wins by default rather than on merit. Proven by re-running the exact command that did
+the damage: three `skip` lines, **0 writes, md5 unchanged**. Second, `onnx_ocr` will load a
+merged base+arch yaml from `CAFEF_ONNX_VIETOCR_CONFIG` when one exists and otherwise raises with
+the cause named. ⚠️ **That file is NOT in the repo**: obtaining it needs a working certificate on
+vocr.vn or a deliberate decision to fetch it once over unverified TLS, which is a judgement
+about trust rather than a code change. **Until it exists, no onnx layer can run on this machine
+at all** — the guard turns silent corruption into a loud stop, which is the right failure and
+not a fix.
+
+⚠️ **AND IT REPRICES `OVERWRITE`.** The knob is safe in the sense that every refusal still
+applies to it — `force_differs` was never meant to be, and now is not, a way past a broken
+engine. But the incident is the argument for `OVERWRITE = False` being the default and for
+reading the plan before setting it: the run did exactly what it was told.
+
+⚠️ **WHAT THIS DOES NOT CHANGE.** `BND-1` stands: `pdf_ocr_job` REPAIRS a ticker that already
+has history and cannot BOOTSTRAP one that does not — an empty `sane` band fails open, and the
+merge then refuses every statement it produced, so the loop closes on itself. `CRP-1` stands:
+nothing from a non-bank template may be quoted as a fundamental. And **no figure already on disk
+was re-measured or moved** — the one run that changed anything was reverted from its own backup,
+verified by md5.
+
+---
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -4865,7 +4977,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**34 open**, 38 resolved, codes permanent — ⚠️ **`MSO-1` and `SPL-1` opened-and-closed 2026-08-29, both found in ONE quarter of ONE non-bank filing, and both write WRONG FIGURES rather than refusing**: `MSO-1` is the VAS `Mã số` item-code column read as a period (3-4 digits, exactly the overlap `NOTE_MAX_DIGITS` cannot cover) — it is already on disk in VIC Q1-2011 — and `SPL-1` is one printed figure returned as TWO detector boxes 3.8pt apart, 60 of them in one statement, with both grand totals whole so every gate passed (§6-2-tretricies) — ⚠️ **`FXM-1` OPENED 2026-08-25 with a fix that is WRITTEN AND UNMEASURED**: the FX adjustment line cannot be mapped, and it is the single bottleneck behind **8 of the 11 probed BID cash-flow refusals** — the balances are already recovered and then discarded for want of a fourth term. TODO `P39` is the measurement and it is not optional (§6-2-quindecies) — ⚠️ **`TPL-1` OPENED 2026-08-25 and it is the one to read before any non-bank parse**: the non-bank wall is NOT a missing template — all four charts of accounts exist — it is seven hardcoded reconcile anchors, and on `corp` and `insurance` the cash-flow one **fuzzy-matches the OPENING balance and returns it as the closing one** (0.885 / 0.902 against a 0.85 threshold, first hit wins in statement order). A wrong figure, not a refusal; `securities` fails safely instead, below the threshold at both ends (§6-2-quaterdecies) — ⚠️ **`FIN-1` CLOSED 2026-08-24** — no financials row anywhere reads `source='cafef'`; ⚠️ **`GLB-1` and `BRZ-1` opened the same day**, both found by the carry-up: `GLB-1` is a star import rebinding `glob` from the function to the MODULE, breaking all 11 call sites in `preprocessor.py`; **`BRZ-1` is the sharper one — a row deleted at the SOURCE is never deleted from bronze**, because every `_ingest_bronze_*` upserts, and no freshness check can see it (§6-2-terdecies) — ⚠️ **`SAN-1` opened-and-closed 2026-08-24 and is the one to read**: the magnitude guard `sane` learns its baseline from the quarters accepted in its own run, so one 2-line statement became the whole reference population and silently rejected every correct quarter after it (§6-2-undecies) — ⚠️ **`FIN-1` OPENED 2026-08-24 and it is the one to read if you touch fundamentals**: 34 financial report-rows on disk were transcribed from CafeF's HTML tabs rather than parsed from the filing PDF — the fallback fires on any absent period without checking whether a PDF exists. ⚠️ **Only 4 can be retried, all VCB**: `documents()` keeps `consolidated == "True"` only and ACB filed no consolidated statement before 2010. §5 rule 24 now forbids the source outright; the code still defaults `use_api=True` (§6-2-octies) — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
+**Open issues live in [ISSUES.md](docs/ISSUES.md)** (**35 open**, 38 resolved, codes permanent — ⚠️ **`VCR-1` OPENED 2026-08-29 AND IT IS THE ONE TO READ BEFORE ANY OCR RUN**: `vietocr` fetches its CONFIG from `vocr.vn` on every `Predictor` build and caches nothing, so when that host's TLS certificate expired every `onnx@*` layer RAISED and the cascade fell through to `tesseract@200` — **VCB Q1-2026, which had read `onnx@200` with 98 of 98 cells reproducing, came back with 13 different columns and both gates passing**. A degraded engine does not look like a failure, it looks like a different answer. ✅ Contained the same day: a layer that RAISES is now recorded as an `engine_error` and `pdf_ocr_merge` refuses that document whole — but the local config file that would end the dependency is **not in the repo**, and putting it there is a decision about trust, not a code change — ⚠️ **`MSO-1` and `SPL-1` opened-and-closed 2026-08-29, both found in ONE quarter of ONE non-bank filing, and both write WRONG FIGURES rather than refusing**: `MSO-1` is the VAS `Mã số` item-code column read as a period (3-4 digits, exactly the overlap `NOTE_MAX_DIGITS` cannot cover) — it is already on disk in VIC Q1-2011 — and `SPL-1` is one printed figure returned as TWO detector boxes 3.8pt apart, 60 of them in one statement, with both grand totals whole so every gate passed (§6-2-tretricies) — ⚠️ **`FXM-1` OPENED 2026-08-25 with a fix that is WRITTEN AND UNMEASURED**: the FX adjustment line cannot be mapped, and it is the single bottleneck behind **8 of the 11 probed BID cash-flow refusals** — the balances are already recovered and then discarded for want of a fourth term. TODO `P39` is the measurement and it is not optional (§6-2-quindecies) — ⚠️ **`TPL-1` OPENED 2026-08-25 and it is the one to read before any non-bank parse**: the non-bank wall is NOT a missing template — all four charts of accounts exist — it is seven hardcoded reconcile anchors, and on `corp` and `insurance` the cash-flow one **fuzzy-matches the OPENING balance and returns it as the closing one** (0.885 / 0.902 against a 0.85 threshold, first hit wins in statement order). A wrong figure, not a refusal; `securities` fails safely instead, below the threshold at both ends (§6-2-quaterdecies) — ⚠️ **`FIN-1` CLOSED 2026-08-24** — no financials row anywhere reads `source='cafef'`; ⚠️ **`GLB-1` and `BRZ-1` opened the same day**, both found by the carry-up: `GLB-1` is a star import rebinding `glob` from the function to the MODULE, breaking all 11 call sites in `preprocessor.py`; **`BRZ-1` is the sharper one — a row deleted at the SOURCE is never deleted from bronze**, because every `_ingest_bronze_*` upserts, and no freshness check can see it (§6-2-terdecies) — ⚠️ **`SAN-1` opened-and-closed 2026-08-24 and is the one to read**: the magnitude guard `sane` learns its baseline from the quarters accepted in its own run, so one 2-line statement became the whole reference population and silently rejected every correct quarter after it (§6-2-undecies) — ⚠️ **`FIN-1` OPENED 2026-08-24 and it is the one to read if you touch fundamentals**: 34 financial report-rows on disk were transcribed from CafeF's HTML tabs rather than parsed from the filing PDF — the fallback fires on any absent period without checking whether a PDF exists. ⚠️ **Only 4 can be retried, all VCB**: `documents()` keeps `consolidated == "True"` only and ACB filed no consolidated statement before 2010. §5 rule 24 now forbids the source outright; the code still defaults `use_api=True` (§6-2-octies) — ⚠️ **`SCH-1` and `DEP-1` opened-and-closed 2026-08-23, both found by `pipeline.freshness` on its first run**: `SCH-1` is **28 of the 30 single-name unified schemas stale**, their dates a fossil record of every scoped re-scrape (§6-2-quinquies); **`DEP-1` is the sharper one — a MONITORING VIEW BLOCKED EVERY REPAIR IT RECOMMENDED**, because a PostgreSQL view records a dependency on its tables and every builder here opens with `DROP TABLE`. Fixed by making the health objects `plpgsql` FUNCTIONS, whose bodies are not parsed for dependencies. ⚠️ **`STA-1` CLOSED 2026-08-23**: `gold.stocks_ta` rebuilt, 0 of 13 legacy names left, matching silver exactly, and the `basic + ta` join no longer truncates — which also closed **`SKW-1`** (§6-2-quater); ⚠️ **`FRZ-1` CLOSED 2026-08-23**: the price universe is fresh again, 771 of 784 tickers at 2026-08-21 against 5, and the fix was an `incremental` scrape mode whose restatement guard fired on 304 of 780 price tickers (§6-2-bis); **`SCP-1` opened-and-closed 2026-08-22** (a log-only helper assumed one bound parameter and took down a build) and **`FRZ-1` re-measured the same day**: 757 of 781 tickers stale, the cross-section ending 2026-06-25 while `MAX(date)` reads 2026-08-19 from five names; `WFO-1` closed and `BOO-1` opened-and-closed 2026-08-21; `PNL-2`/`PRB-1` closed and `VRM-1`/`FRZ-1` opened 2026-08-19). ⚠️ Counts here are a SCAN of the tables, not a running decrement — the previous "36 resolved" was one ahead of the file. ⚠️ **Several FIXED rows deliberately sit inside the Open table rather than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, and now `SCH-1`/`DEP-1`), each marked `✅ FIXED <date>` in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is read from its text and never from damaged type.
 Short version: ⚠️ **`SHP-1`** the forex scraper writes two file shapes and only one was
 ever ingested — 71% of the folder was silently discarded until 2026-08-14, and **the
 same `value`-only filter sits unchecked on `bonds`/`funds`/`economy`/`indices`**;
@@ -4892,7 +5004,7 @@ what a session budgets against.
 |---|---|---|
 | [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | **47.0k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER" — screens, `filter_schema`, and why a screen is not point-in-time) |
 | [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | **25.8k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
-| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **34.4k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
+| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **39.7k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
 | [src/feature_selection/docs/RANKER_COMPARISON.md](src/feature_selection/docs/RANKER_COMPARISON.md) | **4.5k** | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | **6.8k** | building or rebuilding a `__final__` table |
@@ -4908,7 +5020,7 @@ what a session budgets against.
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | **44.0k** | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
 ⚠️ **[ISSUES.md](docs/ISSUES.md) (~27.1k) is the second file to open, not an afterthought.**
-**34** open issues — ⚠️ *(this line read "28" until 2026-08-29, "22" until 2026-08-28 and "(~4k)"/"Sixteen" until
+**35** open issues — ⚠️ *(this line read "34" and "28" earlier on 2026-08-29, "22" until 2026-08-28 and "(~4k)"/"Sixteen" until
 2026-08-25; a stale count is what a session budgets against)*. ⚠️ **CFB-1 IS THE ONE TO READ
 BEFORE QUOTING A BID FUNDAMENTAL** (opened 2026-08-28): a cash-flow anchor can hold the wrong
 ACCOUNT and every gate passes — **7 BID quarters carry the 1-Jan opening in the CLOSING slot**,

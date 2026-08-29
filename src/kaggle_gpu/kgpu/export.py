@@ -32,7 +32,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -379,6 +378,7 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
     # as None rather than as `[]`, because `[]` is falsy there too but only by accident.
     quarters = spec.get("quarters") or None
     allow_parent = bool(spec.get("allow_parent", False))
+    overwrite = bool(spec.get("overwrite", False))
     period_min = spec.get("period_min", "Q1-2008")
     with_statements = bool(spec.get("with_statements", True))
     with_models = bool(spec.get("with_models", True))
@@ -387,12 +387,26 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
     builder = FinancialsBuilder(logger=None)
     tasks = job.plan(builder, exchange, symbol, periods=periods, quarters=quarters,
                      allow_parent=allow_parent, period_min=period_min)
+    # ⚠️ **THE SKIP IS APPLIED TO THE PAYLOAD, NOT ONLY TO THE WORKER.** A filing that will not
+    # be opened is 1-14 MB of upload and ~1 min per 85 MB, so shipping it is pure cost; and the
+    # worker re-applies the identical rule against the identical statement CSVs, which travel
+    # in the same payload, so the two answers cannot disagree.
+    skipped = []
+    if not overwrite:
+        tasks, skipped = job.partition_by_disk(builder, tasks)
     if not tasks:
         raise ValueError(
             f"{exchange}_{symbol} has no filing to ship for periods={periods!r} "
             f"quarters={quarters!r} — an empty payload is a run that parses nothing and "
             f"reports success."
+            + (f"\n  All {len(skipped)} selected quarter(s) already read `pdf` in all three "
+               f"statements. Pass overwrite=True to re-parse them." if skipped else "")
         )
+    if skipped and not quiet:
+        print(f"  skipping {len(skipped)} quarter(s) already `pdf` in all three statements "
+              f"(overwrite=False): "
+              f"{', '.join(job.as_quarter(t.period) for t in skipped[:8])}"
+              f"{' …' if len(skipped) > 8 else ''}")
     template = tasks[0].template
     root = job.data_root()
 
@@ -477,6 +491,10 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
         "periods_requested": list(periods) if periods else None,
         "quarters_requested": list(quarters) if quarters else None,
         "quarters_shipped": sorted({job.as_quarter(t.period) for t in tasks}),
+        "overwrite": overwrite,
+        # §5 rule 2: "nothing was skipped" and "the skip was off" are different facts.
+        "quarters_skipped_already_parsed":
+            sorted({job.as_quarter(t.period) for t in skipped}),
         "filings": [
             {"period": t.period, "file": t.file, "consolidated": t.consolidated,
              "assurance": t.assurance, "cumulative": t.cumulative,

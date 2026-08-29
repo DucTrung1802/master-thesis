@@ -1,0 +1,40 @@
+symbol       : HOSE_VCB
+template     : bank   (templates.csv)
+documents    : 1  (Q1-2026)
+quarters     : ['2026-Q1']   selected ['2026-Q1']
+skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]
+cascade      : 47 of 47 layers
+data root    : D:\GIT\master-thesis\raw_data\cafef
+models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+vietocr cfg  : ⚠️ NONE — vietocr will FETCH base.yml from vocr.vn on every Predictor build, and a failure there falls the cascade through to tesseract
+upsert       : ON — each finished quarter is upserted into the statement CSVs
+
+[doc 1/1 100% of DOCUMENTS, not of time] HOSE_VCB__Q1-2026  Q1-2026_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2026.pdf  8.1 MB  bank/consolidated
+  band: balance 67, income 68, cash 68   open_ref=541688802000000
+  [layer 1/47   2% of POSITIONS] onnx@200
+    [ocr page 1/53   1% of PAGES — the only fraction here that predicts time]
+WARNING:     onnx@200: parse failed — RuntimeError: vietocr could not fetch its config for 'vgg_seq2seq' from vocr.vn: SSLError: HTTPSConnectionPool(host='vocr.vn', port=443): Max retries exceeded with url: /data/vietocr/config/base.yml (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired (_ssl.c:1010)')))
+  This is the RECOGNISER's config, not its weights — vietocr downloads it on every Predictor build and caches nothing, so an unreachable or expired host takes the whole onnx engine down and the cascade falls through to tesseract with DIFFERENT figures.
+  Put a merged base+arch yaml at D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml (or point CAFEF_ONNX_VIETOCR_CONFIG at one) and this stops being a dependency.
+  [layer 2/47   4% of POSITIONS] onnx@300
+    [ocr page 1/53   1% of PAGES — the only fraction here that predicts time]
+WARNING:     onnx@300: parse failed — RuntimeError: vietocr could not fetch its config for 'vgg_seq2seq' from vocr.vn: SSLError: HTTPSConnectionPool(host='vocr.vn', port=443): Max retries exceeded with url: /data/vietocr/config/base.yml (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired (_ssl.c:1010)')))
+  This is the RECOGNISER's config, not its weights — vietocr downloads it on every Predictor build and caches nothing, so an unreachable or expired host takes the whole onnx engine down and the cascade falls through to tesseract with DIFFERENT figures.
+  Put a merged base+arch yaml at D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml (or point CAFEF_ONNX_VIETOCR_CONFIG at one) and this stops being a dependency.
+  [layer 3/47   6% of POSITIONS] onnx@400
+    [ocr page 1/53   1% of PAGES — the only fraction here that predicts time]
+WARNING:     onnx@400: parse failed — RuntimeError: vietocr could not fetch its config for 'vgg_seq2seq' from vocr.vn: SSLError: HTTPSConnectionPool(host='vocr.vn', port=443): Max retries exceeded with url: /data/vietocr/config/base.yml (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired (_ssl.c:1010)')))
+  This is the RECOGNISER's config, not its weights — vietocr downloads it on every Predictor build and caches nothing, so an unreachable or expired host takes the whole onnx engine down and the cascade falls through to tesseract with DIFFERENT figures.
+  Put a merged base+arch yaml at D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml (or point CAFEF_ONNX_VIETOCR_CONFIG at one) and this stops being a dependency.
+  [layer 4/47   9% of POSITIONS] tesseract@200
+    [ocr page 1/53   1% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/53  11% of PAGES — the only fraction here that predicts time]  ~117 s left
+    [ocr page 12/53  22% of PAGES — the only fraction here that predicts time]  ~115 s left
+WARNING: Q1-2026: 3 layer(s) RAISED rather than refusing (onnx) — whatever won did so because those layers could not run. The upsert refuses this document; see `engine_errors` in its JSON.
+  Q1-2026: balance_sheet=61 items [tesseract@200]; income_statement=22 items [tesseract@200]; cash_flow=17 items [tesseract@200]  (3.5 min)
+  skip   Q1-2026   balance_sheet                                       3 layer(s) RAISED rather than refusing (onnx@200, onnx@300, onnx@400) — whatever won did so because those could not run
+  skip   Q1-2026   cash_flow                                           3 layer(s) RAISED rather than refusing (onnx@200, onnx@300, onnx@400) — whatever won did so because those could not run
+  skip   Q1-2026   income_statement                                    3 layer(s) RAISED rather than refusing (onnx@200, onnx@300, onnx@400) — whatever won did so because those could not run
+  DRY RUN — 0 statement(s) would be written. Pass apply=True to write them.
+
+run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260829-213152__hose_vcb__pdf_ocr

@@ -43,6 +43,15 @@ one is a `force_*` argument rather than a silent default:
 3. **A quarter that DIFFERS from a good row on disk is REFUSED.** `compare()` already scored
    it; a `DIFFERS` verdict means two runs disagree about a figure, and picking the newer one
    by default is a coin toss dressed as an upsert.
+4. ⚠️ **A document whose parse had an ENGINE ERROR is REFUSED WHOLE.** A layer that REFUSES has
+   measured the filing; a layer that RAISES has measured the machine. When the second happens
+   the cascade's answer comes from whichever layer the broken tool did not reach, and both
+   gates pass on it — so the result is not a worse parse, it is a parse of a different
+   procedure. **Measured 2026-08-29**: `vocr.vn`'s TLS certificate expired, and since
+   `Cfg.load_config_from_name` fetches `base.yml` from that host on EVERY predictor
+   construction, all three `onnx@*` layers raised and `tesseract@200` won VCB Q1-2026 — a
+   filing that had read `onnx@200` with 98 of 98 cells reproducing. With `force_differs` on it
+   rewrote 13 columns of three good statements before the backup put them back.
 
 ⚠️ **`apply=True` IS THE DEFAULT SINCE 2026-08-29, BY REQUEST — the refusals are what keeps it
 honest, not the extra command.** Every merge still prints each decision and each changed cell,
@@ -61,6 +70,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from web_scraper import cafef_financials as fin
+from web_scraper import pdf_ocr_job as job
 from web_scraper.cafef_financials import FinancialsBuilder, REPORTS, statement_path
 
 # Where a pre-merge backup goes: under `raw_data/_backup/`, timestamped so a second merge
@@ -122,7 +132,7 @@ class MergeReport:
             if len(d.changed) > 8:
                 out.append(f"           … and {len(d.changed) - 8} more columns")
         if self.applied:
-            out.append(f"  backup: {self.backup}")
+            out.append(f"  backup: {self.backup or '— (taken earlier in this run)'}")
             out.append(f"  written: {self.written}")
         else:
             out.append(f"  DRY RUN — {len(self.to_write)} statement(s) would be written. "
@@ -130,9 +140,19 @@ class MergeReport:
         return out
 
 
-def _documents(folder: Path) -> List[dict]:
-    """Every per-filing record in a run folder, oldest period first."""
+def _documents(folder: Path, periods: Optional[Sequence[str]] = None) -> List[dict]:
+    """Every per-filing record in a run folder, oldest period first.
+
+    ⚠️ **`periods` FILTERS BY FILENAME, BEFORE THE JSON IS PARSED**, and that is not a
+    micro-optimisation. Each record carries a `row_dump` — every row the OCR read, mapped or
+    not — so a document is 100-200 KB, and merging one quarter at a time as a 70-quarter run
+    proceeds would otherwise re-parse the whole folder 70 times. The name is
+    `<EXCHANGE>_<SYMBOL>__<period>.json`, built by `DocumentTask.key`.
+    """
     files = sorted((folder / "documents").glob("*.json"))
+    if periods is not None:
+        wanted = {f"__{p}.json" for p in periods}
+        files = [p for p in files if any(p.name.endswith(w) for w in wanted)]
     docs = [json.loads(p.read_text(encoding="utf-8")) for p in files]
     return sorted(docs, key=lambda d: fin._period_key(d["period"]))
 
@@ -159,13 +179,15 @@ def plan_merge(folder: os.PathLike | str,
                periods: Optional[Sequence[str]] = None,
                force_cumulative: bool = False,
                force_empty_band: bool = False,
-               force_differs: bool = False) -> MergeReport:
+               force_differs: bool = False,
+               force_engine_errors: bool = False) -> MergeReport:
     """Decide, without writing anything, what this run folder would put on disk."""
     folder = Path(folder)
-    meta = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
-    docs = _documents(folder)
+    docs = _documents(folder, periods)
     if not docs:
-        raise ValueError(f"{folder} holds no documents/*.json — nothing to merge")
+        raise ValueError(
+            f"{folder} holds no documents/*.json"
+            + (f" for {list(periods)}" if periods else "") + " — nothing to merge")
 
     exchange = docs[0]["exchange"]
     symbol = docs[0]["symbol"]
@@ -174,12 +196,9 @@ def plan_merge(folder: os.PathLike | str,
     report = MergeReport(folder=folder, exchange=exchange, symbol=symbol, template=template)
 
     wanted_reports = set(reports) if reports else set(REPORTS)
-    wanted_periods = set(periods) if periods else None
 
     for doc in docs:
         period = doc["period"]
-        if wanted_periods and period not in wanted_periods:
-            continue
         # ⚠️ A run that raised mid-document may still have written an `accepted` block for the
         # statements it got through. Refuse the whole filing rather than reasoning about which
         # half survived.
@@ -187,6 +206,21 @@ def plan_merge(folder: os.PathLike | str,
             for name in sorted(wanted_reports):
                 report.decisions.append(Decision(
                     period, name, "skip", f"the run errored: {doc['error']}"))
+            continue
+        # ⚠️ REFUSAL 4, and it is refused WHOLE. A raising layer did not judge the filing, so
+        # the layer that won did so by default — see the module docstring for the day this was
+        # measured. Not a per-statement decision: the broken tool was broken for all three.
+        # ⚠️ A run folder written before schema v2 has no such key, and absent is read as
+        # "none recorded" — the only reading available, and NOT the same claim as "none
+        # happened" (§5 rule 2). `metadata.json`'s `schema_version` is what tells them apart.
+        engine_errors = doc.get("engine_errors") or []
+        if engine_errors and not force_engine_errors:
+            names = ", ".join(sorted({str(e[0]) for e in engine_errors}))
+            for name in sorted(wanted_reports):
+                report.decisions.append(Decision(
+                    period, name, "skip",
+                    f"{len(engine_errors)} layer(s) RAISED rather than refusing ({names}) — "
+                    f"whatever won did so because those could not run"))
             continue
 
         bands = doc.get("history_sizes") or {}
@@ -224,16 +258,17 @@ def plan_merge(folder: os.PathLike | str,
             # ── refusal 3: two runs disagree about a figure already on disk ───────────
             values = {k: int(v) for k, v in (got.get("values") or {}).items()}
             if on_disk == "pdf":
-                changed: Dict[str, Tuple[Optional[int], Optional[int]]] = {}
-                for column in sorted(set(values) | {
-                        c for c, v in disk.items()
-                        if v not in ("", None) and c not in fin.DATA_COLS}):
-                    was = disk.get(column)
-                    was_int = int(float(was)) if was not in ("", None) else None
-                    now = values.get(column)
-                    if was_int != now:
-                        changed[column] = (was_int, now)
-                decision.changed = changed
+                # ⚠️ **THE LINE-ITEM RULE IS `pdf_ocr_job`'s, IMPORTED RATHER THAN RESTATED.**
+                # `compare()` scored this very quarter with it, so a merge reading the row by a
+                # slightly different rule could refuse what compare called REPRODUCED, or
+                # write what it called DIFFERS. It also refuses to `int()` a cell that is not a
+                # number instead of raising halfway through a decision.
+                disk_values = job._line_items(disk)
+                decision.changed = {
+                    column: (disk_values.get(column), values.get(column))
+                    for column in sorted(set(values) | set(disk_values))
+                    if disk_values.get(column) != values.get(column)}
+                changed = decision.changed
                 if not changed and disk.get("method") == got.get("layer"):
                     decision.action = "skip"
                     decision.reason = "identical to the row already on disk"
@@ -262,6 +297,8 @@ def merge_run(folder: os.PathLike | str,
               force_cumulative: bool = False,
               force_empty_band: bool = False,
               force_differs: bool = False,
+              force_engine_errors: bool = False,
+              backup: bool = True,
               quiet: bool = False) -> MergeReport:
     """Upsert a run folder's accepted statements into the ticker's CSVs.
 
@@ -270,20 +307,25 @@ def merge_run(folder: os.PathLike | str,
     changed is that a run which clears them is written without a second command. Pass
     `apply=False` for the dry run, or call `plan_merge` for the decisions alone.
 
-    ⚠️ **A BACKUP IS STILL TAKEN EVERY TIME.** It is the only thing that makes "what did this
-    change?" answerable afterwards, and `SAN-1` was found that way rather than from a log.
+    ⚠️ **A BACKUP IS TAKEN EVERY TIME BY DEFAULT.** It is the only thing that makes "what did
+    this change?" answerable afterwards, and `SAN-1` was found that way rather than from a log.
+    `backup=False` exists for ONE caller — `pdf_ocr_job.run`, which upserts quarter by quarter
+    as a long parse proceeds and takes its single backup before the first of them. Seventy
+    timestamped copies of three CSVs answer "what did this run change?" worse than one.
     """
     result = plan_merge(folder, reports=reports, periods=periods,
                         force_cumulative=force_cumulative,
                         force_empty_band=force_empty_band,
-                        force_differs=force_differs)
+                        force_differs=force_differs,
+                        force_engine_errors=force_engine_errors)
 
     if apply and result.to_write:
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        result.backup = _backup(result.exchange, result.symbol, result.template, stamp)
+        if backup:
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            result.backup = _backup(result.exchange, result.symbol, result.template, stamp)
 
         builder = FinancialsBuilder(logger=None)
-        docs = {d["period"]: d for d in _documents(Path(folder))}
+        docs = {d["period"]: d for d in _documents(Path(folder), periods)}
         writing = {(d.period, d.report) for d in result.to_write}
         periods_written = sorted({d.period for d in result.to_write}, key=fin._period_key)
 

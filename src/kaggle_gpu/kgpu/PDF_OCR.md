@@ -1,11 +1,15 @@
-# Running the filing OCR on a Kaggle T4 — the guide
+# Running the filing OCR — the guide
 
 > **Two notebooks, and you only ever open one.**
 >
 > | | |
 > |---|---|
-> | **[`src/kaggle_gpu/RUN__pdf_ocr_control.ipynb`](../RUN__pdf_ocr_control.ipynb)** | runs **HERE**. Edit one cell, run top to bottom. It builds the job, ships the filings, starts the kernel, waits, and pulls the run folder back |
+> | **[`src/kaggle_gpu/RUN__pdf_ocr_control.ipynb`](../RUN__pdf_ocr_control.ipynb)** | the one you open. **One parameter cell**, and `ENVIRONMENT` decides where the OCR happens: `"LOCAL"` parses on this machine, `"KAGGLE"` builds the job, ships the filings, starts the kernel, waits and pulls the run folder back |
 > | `src/web_scraper/RUN__pdf_ocr.ipynb` | runs **on Kaggle**. `kgpu` patches its parameter cell and uploads it — you do not open or edit it |
+>
+> ⚠️ **IT LIVES UNDER `kaggle_gpu/` AND DRIVES BOTH MACHINES** (since 2026-08-29). The folder
+> name is where its Kaggle half staged its payload from long before it had a LOCAL half; the
+> guide beside it is this file, which is why it was not moved.
 >
 > Nothing is written to `kaggle_config.json`: [`pdf_ocr.py`](pdf_ocr.py) computes the job from
 > your parameters and hands it to the **same** `config._validate` a file-borne job goes
@@ -18,8 +22,15 @@ folder under `reports/pdf_ocr/` that **scores itself** against the CSVs already 
 Since 2026-08-29 the *pull* **upserts that result into the statement CSVs automatically** —
 `MERGE_INTO_CSV = True` in the control notebook, `merge_statements=True` on the job, and
 `kgpu merge <job>` writes unless you pass `--dry-run`. Every merge takes a backup first, prints
-every changed cell, and refuses three things it cannot judge
+every changed cell, and refuses four things it cannot judge
 ([§6](#6-merging-a-recovered-quarter-into-raw_data)).
+
+⚠️ **A `LOCAL` RUN UPSERTS EACH QUARTER AS IT FINISHES, AND THAT IS THE INTERRUPTION
+GUARANTEE.** `FinancialsBuilder._write` renders to a `.tmp` and `os.replace`s it, and only the
+quarters a merge PRODUCED are rewritten — so stopping a 12-hour run at hour 6 keeps every
+quarter that finished and can lose at most the one in flight. **On Kaggle that guarantee is the
+PULL's**: a kernel writes `/kaggle/working` and exits, so nothing reaches this disk until the
+folder comes home.
 
 ⚠️ **THE REFUSALS ARE WHAT MAKES THAT SAFE, NOT THE EXTRA COMMAND.** This repo has measured
 **four** builds in which a `periods` run silently DOWNGRADED a quarter it was given only for
@@ -37,14 +48,35 @@ cases below.
 jupyter lab src\kaggle_gpu\RUN__pdf_ocr_control.ipynb
 ```
 
-Edit cell 1, run everything. That is the whole procedure.
+Edit cell 1, run everything. That is the whole procedure, and `ENVIRONMENT` is the only thing
+that decides which machine does the OCR.
 
 ```python
-SYMBOL   = "VIC"
+ENVIRONMENT = "LOCAL"        # "LOCAL" = parse here | "KAGGLE" = ship it to a T4
+EXCHANGE    = "HOSE"         # HOSE | HNX | UPCOM
+SYMBOL      = "VIC"
 QUARTERS = ["2014-Q3"]       # [] or None = every quarter the ticker files. YYYY-QQ.
+OVERWRITE = False            # False = fill the GAPS; True = re-parse and replace
+MERGE_INTO_CSV = True        # upsert into raw_data/.../statements/
 PERIODS  = None              # optional; the repo-native form; intersects with QUARTERS
 TEMPLATE = "corp"            # None = resolve it and record which route answered
 ```
+
+### ⚠️ `OVERWRITE` — one word, and it decides at BOTH ends
+
+| | `False` (the default) | `True` |
+|---|---|---|
+| a quarter already `pdf` in all three statements | **dropped before any OCR**, and before it is uploaded | re-parsed |
+| a figure that DIFFERS from a good `pdf` row | refused by the merge | written |
+
+⚠️ **A QUARTER IS "COMPLETE" ONLY WHEN ALL THREE STATEMENTS READ `pdf`.** One filing produces
+all three, so a quarter missing its cash flow re-opens the document; the two statements that
+come back with it are then judged on their own merits — identical is skipped, different is
+refused. A `cafef` or `missing` row is not evidence a quarter is done (§5 rule 24).
+
+⚠️ **The skip is per QUARTER here and per YEAR in `FinancialsBuilder.build()`**, because
+`_decumulate` needs that run's own Q1..Q(q-1) and nothing in this path de-cumulates. Do not
+carry the year rule across.
 
 Prefer a terminal? The same thing, four verbs — see [§7](#7-the-cli-instead-of-the-notebook).
 
@@ -58,25 +90,30 @@ success.
 
 | you want | write |
 |---|---|
-| one quarter | `PERIODS = ["Q3-2014"]`, `YEARS = None` |
-| one quarter | `QUARTERS = ["2014-Q3"]`, `PERIODS = None` |
+| one quarter | `QUARTERS = ["2014-Q3"]` — or `["2014-03"]`, the same quarter |
 | a batch, in any order | `QUARTERS = ["2013-Q4", "2014-Q1"]` |
-| one quarter, stated twice | `YEARS = [2014]` **and** `PERIODS = ["Q3-2014"]` → Q3-2014 |
+| the repo-native form | `PERIODS = ["Q3-2014"]`, `QUARTERS = None` |
+| one quarter, stated twice | `QUARTERS = ["2014-Q3"]` **and** `PERIODS = ["Q3-2014"]` → Q3-2014 |
 | **everything** ⚠️ | `QUARTERS = []` — 70+ documents, hours of GPU |
 
-⚠️ **AN EMPTY LIST MEANS EVERY YEAR, NEVER NONE.** `[]` and `None` build the identical job.
+⚠️ **AN EMPTY LIST MEANS EVERY QUARTER, NEVER NONE.** `[]` and `None` build the identical job.
 That is `plan()`'s contract, and it is why the default is the *absence* of a filter rather than
 a list anything recomputes.
 
-⚠️ **A YEAR IS AN INTEGER.** `["2014"]` filters nothing and would quietly ship the whole
-ticker; `config._validate` refuses it.
+⚠️ **TWO SPELLINGS, AND ONLY TWO.** `2014-Q3` and the zero-padded `2014-03` are folded onto the
+first before anything is named — the job name, the payload directory and the Kaggle kernel slug
+all come off this list, so two spellings reaching them would be two runs racing for one slug.
+Everything else RAISES: `2014-3` (one digit is a keystroke from a MONTH), `2014Q3`, `2014-Q5`,
+and the repo-native `Q3-2014`, which names the same quarter and is what `periods` takes.
 
-### Why a YEAR is the unit
+### Why a QUARTER is the unit
 
-`orchestration` §2a: the statement build skips whole **years**, never quarters, because
-`_decumulate` needs Q1..Q(q-1) of the same year and a partial skip deletes the very quarter a
-run exists to fix. This job de-cumulates nothing, so the argument does not bind it — but a
-batch is issued in quarters since 2026-08-29, so the two halves use one word. ⚠️ **It was `YEARS` until then**, on the argument that the statement BUILD skips whole years — a fact about the WRITE, which this path does not do, so the wider unit only bought extra OCR.
+`orchestration` §2a: the statement BUILD skips whole **years**, because `_decumulate` needs
+Q1..Q(q-1) of the same year and a partial skip deletes the very quarter a run exists to fix.
+⚠️ **That argument never bound this path** — nothing here de-cumulates — so the unit became a
+quarter on 2026-08-29, and asking for 17 quarters no longer opens the 27 filings of the seven
+years they fall in. The hazard still exists where the WRITE is, and the merge already refuses a
+cumulative income statement a one-document run cannot de-cumulate.
 
 ### `TEMPLATE`
 
@@ -215,13 +252,14 @@ one cell** even though `_write` rewrote all three files. ⚠️ That check also 
 landing under `src/kaggle_gpu/` — `BACKUP_ROOT` was relative to the CWD, so the one thing that
 makes a merge reversible went where nobody looks. It is anchored to the repo now.
 
-### ⚠️ The three refusals, and the measurement behind each
+### ⚠️ The four refusals, and the measurement behind each
 
 | refused | why | override |
 |---|---|---|
 | a **cumulative income statement** | an annual or half-year filing prints the year to date; the CSV column holds the standalone quarter, and this job cannot de-cumulate — a one-document run has no Q1..Q(q-1). Writing it puts a 9-month total in a 3-month column | `force_cumulative` |
 | a statement whose **`sane` band was empty** | with no band the magnitude guard fails open, so the figure passed no guard at all. A ticker with nothing on disk yet has no band by construction | `force_empty_band` |
 | a figure that **DIFFERS from a good `pdf` row** | `compare()` already scored it; two runs disagreeing about a number is not resolved by taking the newer one | `force_differs` |
+| a document whose parse **RAISED** | a layer that refuses has measured the FILING; one that raises has measured the MACHINE, so whatever won did so by default. Measured 2026-08-29: `vocr.vn`'s certificate expired, every `onnx@*` layer raised, and `tesseract@200` rewrote 13 columns of a filing that had reproduced 98 of 98 cells (`VCR-1`) | `force_engine_errors` |
 
 ⚠️ **AND THE FIRST RUN THIS WAS BUILT FOR IS WHY THE SECOND REFUSAL EXISTS.** On 2026-08-29 the
 worker ACCEPTED a VIC Q3-2014 income statement that the full local run had REFUSED
@@ -242,7 +280,21 @@ buys you. CLAUDE.md §6-2-quinvicies; RUNBOOK.md.
 
 ## 7. The CLI instead of the notebook
 
-The notebook is a wrapper over four verbs. To use them, a job has to exist in
+**LOCAL** needs no job and no `kgpu` at all — it is one module:
+
+```powershell
+cd src
+python -m web_scraper.pdf_ocr_job --symbol VIC --quarters 2014-Q3 --merge
+python -m web_scraper.pdf_ocr_job --symbol VIC --quarters 2014-Q3 --overwrite --merge
+python -m web_scraper.pdf_ocr_job --symbol VIC            # every quarter, write nothing
+```
+
+⚠️ **`--merge` IS OPT-IN HERE AND ON IN THE NOTEBOOK, DELIBERATELY.** The module's product is a
+run folder, and a run that writes nothing cannot silently downgrade a quarter; the notebook is
+where a person has read the plan and asked for the write. `--overwrite` re-parses quarters
+already `pdf` in all three statements and lets the merge replace what disk holds.
+
+**KAGGLE** is a wrapper over four verbs. To use them from the CLI a job has to exist in
 `kaggle_config.json` — that is the difference, and it is why the notebook exists.
 
 ```powershell
