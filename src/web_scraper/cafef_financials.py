@@ -623,6 +623,20 @@ class FinancialsBuilder:
         # half-right layer must never run first. `PGB-1` recorded this exact trap for
         # `+notes` vs `+notes+seam`; this is the second instance, so it is the rule and not
         # the anecdote: **when two new layers differ by a label repair, the repair goes first.**
+        # ⚠️ **AND A UNIT LAYER MUST NOT SKIP THE ARITHMETIC — measured on TCB Q3-2013.** At
+        # 200 dpi that filing's cash flow reads its two balances correctly (22,621,969 and
+        # 25,611,174 mn) and its NET MOVEMENT as **205** where the page prints 2,989,205: the
+        # detector box starts inside the figure, so the leading digits were never shown to the
+        # recogniser. `reconcile` cannot see it — `_closing_breakdown` proves the closing
+        # balance, which is right — and `sane` cannot either, since the probe is that same
+        # closing balance. Both gates passed, and the layer would have ENDED the cascade with a
+        # wrong cell while the identical document at 300 dpi reads the line correctly.
+        # `_cash_flow_identity` catches it in one line (22,621,969 + 205 != 25,611,174), which
+        # is why `run_cash_identity` rides with `unit_from_document` as well as with
+        # `relax_totals`: **a layer that multiplies every figure of a statement by a million
+        # may not also be the layer that skips its arithmetic.** §6-2-tervicies drew the same
+        # conclusion for `annual_tail` — *"only the `+relax` variant ships"* — and this is the
+        # same rule stated as a property of the layer rather than as a choice of which to ship.
         ParseLayer("onnx@200+unit+tail", "onnx", 200,
                    unit_from_document=True, tail_continuation=True, label_wrap=True),
         ParseLayer("onnx@200+unit+tail+relax", "onnx", 200,
@@ -630,6 +644,15 @@ class FinancialsBuilder:
                    relax_totals=True),
         # …and the unit fix WITHOUT the label repair, last of all, for a filing it hurts.
         ParseLayer("onnx@200+unit", "onnx", 200, unit_from_document=True),
+        # ⚠️ **THE SAME BLOCK AT 300 DPI, BECAUSE THE STATEMENT THAT NEEDS THE UNIT MAY ALSO
+        # NEED THE RESOLUTION, AND UNTIL NOW NO LAYER OFFERED BOTH.** TCB Q3-2013 needs exactly
+        # that pair twice over: its income statement returns **7 figures split across two boxes**
+        # at 200 dpi (`SPL-1`, refused as fragmented) and none at 300, and its cash flow is the
+        # misread above. Both are sound at 300 with the document's unit, and neither had any
+        # layer to land on — the unit block was 200-only.
+        ParseLayer("onnx@300+unit+tail", "onnx", 300,
+                   unit_from_document=True, tail_continuation=True, label_wrap=True),
+        ParseLayer("onnx@300+unit", "onnx", 300, unit_from_document=True),
         # ── SOMEBODY ELSE'S WORDS ARE STUCK TO THE FRONT OF THE LABEL (`annual_tail`) ──
         # `table_rows` keys a row on `carry + label`, so a previous item whose label wrapped
         # onto its own line — too far below its figures for the forward branch to reclaim —
@@ -834,7 +857,11 @@ class FinancialsBuilder:
                 # ⚠️ THE SHORT-CIRCUIT IS LOAD-BEARING AND IS PRESERVED EXACTLY: `sane` runs
                 # only when `reconcile` passed, as it always has. What is new is that the
                 # refusal is KEPT rather than discarded — see the report below the loop.
-                why = self.reconcile(st, row, verify_cash=layer.relax_totals,
+                # ⚠️ `unit_from_document` demands the cash identity for the same reason
+                # `relax_totals` does — see the unit block in LAYERS.
+                why = self.reconcile(st, row,
+                                     verify_cash=(layer.relax_totals
+                                                  or layer.unit_from_document),
                                      open_ref=open_ref,
                                      relax_components=layer.relax_components,
                                      cash_extra_terms=layer.cash_extra_terms)
@@ -1308,6 +1335,21 @@ class FinancialsBuilder:
         "tscd": "taisancodinh",
         "tndn": "thunhapdoanhnghiep",
         "bdsdt": "batdongsandautu",
+        # ⚠️ **"TỔNG CỘNG" AND "TỔNG" ARE ONE WORD IN A STATEMENT HEADING, and one inserted
+        # syllable was enough to lose a grand total and to hand EQUITY the wrong figure.**
+        # TCB files its 2013 balance sheet as "TỔNG CỘNG TÀI SẢN CÓ" against the chart of
+        # accounts' "TỔNG TÀI SẢN": no containment (the syllable is in the middle) and
+        # SequenceMatcher gives **0.769**, under SCHEMA_MATCH, so total assets simply did not
+        # map. Worse, its "TỔNG CỘNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU" scored **0.929** for its
+        # own anchor while merely CONTAINING "vốn chủ sở hữu" — a flat 0.95 by containment —
+        # so the EQUITY anchor took the grand total (165,878,786 mn against a real 13,857,834)
+        # and the grand total was left absent. Both gates passed: `reconcile` falls through to
+        # `Statement.find`, which reads the right rows out of the OCR text.
+        # Normalised on BOTH sides, that row scores **1.000** against its own account and the
+        # collision disappears — the anchors settle it themselves, with no new threshold.
+        # ⚠️ Verified to introduce **0 new account collisions** across all 12 charts (31 before,
+        # 31 after — the ordered walk already disambiguates those by position).
+        "tongcong": "tong",
     }
 
     @classmethod
@@ -1361,7 +1403,8 @@ class FinancialsBuilder:
             yield "_".join(parts[i:])
 
     def _label_score(self, account: str, key: str, relax: bool = False,
-                     annual_tail: bool = False) -> float:
+                     annual_tail: bool = False,
+                     edge_containment: bool = False) -> float:
         """How alike a schema account and a parsed row label are, both separator-stripped.
 
         One measure shared by the ordered walk and `_anchor`, so a line is scored the same way
@@ -1410,18 +1453,52 @@ class FinancialsBuilder:
                 bare_key = key.replace("_", "")
                 if other in bare_key and want not in bare_key:
                     return 0.0
-            return max(self._label_score(a, k, relax)
+            return max(self._label_score(a, k, relax,
+                                         edge_containment=edge_containment)
                        for a in accounts for k in self._prefix_trims(key))
 
         account, key = self._expand(account), self._expand(key)
         r = SequenceMatcher(None, account, key).ratio()
         if (len(account) >= self.MIN_CONTAINS
                 and min(len(account), len(key)) >= self.MIN_CONTAINS_FRAGMENT
-                and (account in key or key in account)):
+                and (account in key or key in account)
+                # ⚠️ ANCHORS ONLY. An account buried inside a merged row is a MENTION and
+                # not that row's line item — see `_contains_at_an_edge`. The ORDERED WALK
+                # keeps the flat score, because position already keeps it honest: gating
+                # the walk too was MEASURED at 23 of 228 statements changed, several of
+                # them sound cells lost, against 3 when it is confined to the anchors.
+                and (not edge_containment
+                     or self._contains_at_an_edge(account, key))):
             r = max(r, 0.95)
         if relax and account.startswith(self.CASH_TAIL) and key.startswith(self.CASH_TAIL):
             r = max(r, 0.95)
         return r
+
+    @staticmethod
+    def _contains_at_an_edge(account: str, key: str) -> bool:
+        """Is the account the BEGINNING or the END of the row's label, rather than buried in it?
+
+        ⚠️ **CONTAINMENT AWARDS A FLAT 0.95 TO ANY LINE THAT MERELY MENTIONS AN ACCOUNT, AND A
+        MERGED ROW IS `HEADER + LINE`.** `table_rows` glues a section header onto the item
+        beneath it when the header prints no figure of its own, so a balance sheet's
+        "B. NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU" arrives as the prefix of "II. Tiền gửi và vay các
+        TCTD khác" — and the EQUITY anchor, whose account text is eleven characters, scored that
+        row 0.95 and took **24,686,177 mn of interbank deposits as TCB's Q3-2013 equity**, while
+        `_claim` evicted the deposits line the ordered walk had placed correctly. Both gates
+        passed: the grand totals were sound, so `reconcile` and `sane` had nothing to see.
+        `PGB-1` is the same defect one filing over, and its seam split cannot reach this one —
+        the seam is the item's roman numeral, which THIS scan did not read (at 200 dpi it did,
+        and the row split correctly, which is how the two readings were told apart).
+
+        The discriminator is structural, not a threshold: **in `header + line` the header is a
+        PREFIX and the line is a SUFFIX**, so an account that is neither is a mention inside
+        somebody else's item. Measured over the 281 anchor containment hits in the corpus, every
+        harmful one sits strictly inside (head 11-44, tail 22-48) and every sound one reaches an
+        edge — VCB's "TỔNG TÀI SẢN CÓ" (prefix, tail 2), ACB's Q1-2022 "Dự phòng rủi ro khác |
+        TỔNG NỢ PHẢI TRẢ" (suffix, the case `_claim` exists to pin), and the equity line OCR
+        merged as "VỐN CHỦ SỞ HỮU | Vốn và các quỹ VIII" (prefix).
+        """
+        return key in account or key.startswith(account) or key.endswith(account)
 
     def map_to_schema(self, st: Statement, template: str,
                      relax_totals: bool = False,
@@ -2037,7 +2114,8 @@ class FinancialsBuilder:
                 # statement never printed on its own line (CLAUDE.md §5 rule 2).
                 k = self._split_merged(row.key, row.label,
                                        relax_merged_seam).replace("_", "")
-                r = self._label_score(a, k, relax, annual_tail)
+                r = self._label_score(a, k, relax, annual_tail,
+                                      edge_containment=True)
                 # Length ratio: how much of the target the OCR'd label actually spans (min/max
                 # so a too-long label is penalised too). It also ranks the ties containment
                 # creates, since 0.95 is awarded flat to the line itself AND to anything that
@@ -2083,7 +2161,8 @@ class FinancialsBuilder:
                 if other is not None and other in held_account:
                     k = self._split_merged(st.rows[ri].key, st.rows[ri].label,
                                            relax_merged_seam).replace("_", "")
-                    if self._label_score(held_account[other], k, relax, annual_tail) > r:
+                    if self._label_score(held_account[other], k, relax, annual_tail,
+                                         edge_containment=True) > r:
                         continue
             # through _claim, so winning an anchor also RELEASES whatever else this row had
             # been given by the alignment pass — one printed line, one line item

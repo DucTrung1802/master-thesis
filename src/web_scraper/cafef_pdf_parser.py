@@ -498,6 +498,31 @@ class PdfParser:
         s = re.sub(r"^(?:[ivxlc]+|\d+|[a-z])\s+", "", s)   # drop the leading numbering
         return re.sub(r"\s+", "_", s.strip())[:maxlen].strip("_")
 
+    # A separator followed by ONE OR TWO digits at the very end of a figure is a DECIMAL
+    # point, not a thousands separator — in either convention, because a thousands group is
+    # always three digits.
+    #
+    # ⚠️ **MEASURED ON TCB, WHOSE 2012 FILINGS PRINT `9,729,852.10` — COMMA THOUSANDS AND A
+    # DOT DECIMAL, THE INTERNATIONAL CONVENTION.** Stripping both separators read that as
+    # 972,985,210: every figure of the statement 100x too large, internally consistent, and
+    # therefore invisible to `reconcile`. Q2-2012's income statement went to disk with a
+    # PROFIT BEFORE TAX OF 163,042,899 MILLION — 163 tn for a bank with 180 tn of assets —
+    # and stayed there, because `sane` had no band when it was written. It then POISONED the
+    # band for every later quarter: TCB Q3-2013's own income statement, read correctly at
+    # 97,315 mn, was refused as a magnitude outlier against a median that one 100x row had
+    # dragged up (`sane: magnitude 9.73e+10 vs typical 2.25e+12`).
+    #
+    # ⚠️ **THE TAIL LENGTH IS THE WHOLE TEST, AND IT HAS TO BE: WHICH CHARACTER IS THE DECIMAL
+    # POINT CANNOT BE READ OFF THE CHARACTER.** OCR confuses `.` and `,` constantly, so
+    # "1,234.567" is an ordinary Vietnamese figure with one mangled separator and must stay
+    # 1,234,567 — three digits after the last separator, so it is a thousands group. Only a
+    # one- or two-digit tail is a decimal, which no thousands group can be.
+    #
+    # ⚠️ The fraction is ROUNDED away: every figure here is an integer of the statement's own
+    # unit, and a filing that prints hundredths of a million is stating đồng this scale does
+    # not carry. On the measured case that is 990,000 VND on 1.63 tn.
+    DECIMAL_TAIL_RE = re.compile(r"^(?P<int>-?[\d.,]*\d)[.,](?P<frac>\d{1,2})$")
+
     @classmethod
     def parse_num(cls, t: str) -> Optional[int]:
         t = (t or "").strip()
@@ -507,10 +532,15 @@ class PdfParser:
         t = t.strip("()")
         if not re.fullmatch(r"-?[\d.,]+", t):
             return None
+        frac = 0.0
+        m = cls.DECIMAL_TAIL_RE.match(t)
+        if m:
+            t, frac = m.group("int"), int(m.group("frac")) / 10 ** len(m.group("frac"))
         d = re.sub(r"[.,]", "", t)
         if not d.lstrip("-").isdigit() or not d.strip("-"):
             return None
-        return -int(d) if neg else int(d)
+        v = int(round(abs(int(d)) + frac))
+        return -v if (neg or d.startswith("-")) else v
 
     # ──────────────────────────────────────────────────────────────────────
     # Pages
@@ -823,6 +853,28 @@ class PdfParser:
                     or not any(c.isdigit() for c in txt)):
                 out.append(w)
                 continue
+            # ⚠️ **A BOX THE PARENTHESES SPAN IS ONE FIGURE, AND SPLITTING IT LEAVES BOTH HALVES
+            # UNBALANCED.** BID's FY-2016 cash flow returns `'(1.029 827)'` for a printed
+            # (1.029.827) — the thousands separator read as a space, inside a negative figure.
+            # Split, that becomes `'(1.029'` and `'827)'`, and the row keeps the RIGHT half as a
+            # positive number: **BID Q4-2016 is on disk with `hddt_mua_sam_tai_san_co_dinh` =
+            # 616 mn for a printed (2.298.616) and dividends of 383 mn for a printed
+            # (2.940.383)**, both positive, both three orders out. `_join_split_number` cannot
+            # reach it either — its head must be a BARE 1-3 digit group, and "(1.029" is not.
+            #
+            # Two figures boxed together each carry their OWN parentheses, so requiring the pair
+            # to span the whole box is what separates the cases: `'(135.272.610) (126.501.216)'`
+            # has a `)` before the end and is left to the splitter exactly as before.
+            # ⚠️ It is in the DEFAULT path and not behind a flag, because the split it prevents
+            # is what `split_figures` then refuses (`SPL-1`) — the two halves sit
+            # `box_width / len(text)` = 4.1pt apart, under `SPLIT_MAX_GAP` — so the alternative
+            # is not a wrong figure but a whole statement lost.
+            if (txt.startswith("(") and txt.endswith(")")
+                    and "(" not in txt[1:] and ")" not in txt[:-1]):
+                joined = ".".join(parts)
+                if cls.MERGE_JOIN_RE.match(joined):
+                    out.append((w[0], w[1], w[2], w[3], joined) + tuple(w[5:]))
+                    continue
             if join_split:
                 joined = cls._join_split_number(txt)
                 if joined is not None:
@@ -1029,13 +1081,35 @@ class PdfParser:
         matched its balance-sheet title on pages 6-7, two pages clear of the real statement on
         9-11, and pulled them in; they carry no "Triệu VNĐ" header, so the unit came out ×1
         instead of ×10⁶ — a uniform 10^6 error that still reconciles perfectly.
+
+        ⚠️ **THE GAP IS MEASURED ALONG THE STATEMENT'S OWN RUN, NOT IN A ±1 WINDOW AROUND THE
+        FORM-CODED PAGES — and it was the window until 2026-08-29.** A form code has to survive
+        OCR to count, and on an old scan usually only one of a statement's pages keeps it: TCB's
+        Q3-2013 balance sheet runs pages 2-4, all three classified `balance_sheet`, and only
+        page 4 kept its "B02a/TCTD-HN". Page 2 then measured TWO pages from the single anchor
+        and was discarded as an island — **while page 3, between them, was kept**, which is what
+        a gap cannot look like. What went with it was the FIRST page of the statement, and with
+        it the one place in the whole filing that prints `Đơn vị tính: triệu đồng`: every figure
+        of all three statements was then read as đồng, a uniform 10^6 error that reconciles
+        perfectly against itself and that only `sane` could refuse. The quarter had been
+        `missing` since the ticker was first parsed.
+
+        Walking outward through CONTIGUOUS pages the same report already owns keeps that page
+        and still drops VCB's Q2-2023 islands: page 8 there belongs to no report, so the walk
+        stops at 9 and pages 6-7 remain two pages clear. **The ±1 tolerance is unchanged** — it
+        is what admits a continuation page whose own header OCR destroyed.
         """
         for report in REPORTS:
             owned = sorted(i for i in pages if pages[i]["kind"] == report)
             anchors = [i for i in owned if pages[i]["from_form"]]
             if not anchors or not owned:
                 continue
+            run = set(owned)
             lo, hi = min(anchors), max(anchors)
+            while lo - 1 in run:                  # the statement's own contiguous run
+                lo -= 1
+            while hi + 1 in run:
+                hi += 1
             for i in owned:
                 if i < lo - 1 or i > hi + 1:      # not touching the form-coded run
                     pages[i]["kind"] = None

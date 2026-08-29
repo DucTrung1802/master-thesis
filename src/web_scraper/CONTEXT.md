@@ -1524,6 +1524,86 @@ count** — *"a period column's figures are 4-9 digits, a note reference 1-2"*.
 them the one `reconcile` tested. `test_cafef_code_column.py` (8) and `test_cafef_split_figures.py`
 (7) pin both without a PDF, a network or an engine.
 
+### ⚠️ ONE QUARTER, FOUR DEFECTS — `ISL-1`, `TCG-1`, `MEN-1`, `DEC-1` (TCB Q3-2013, 2026-08-29)
+
+All four were found by asking one question — *why is TCB Q3-2013 `missing`?* — and three of them
+put a wrong figure on disk rather than refusing. The recorded reason for that quarter was
+*"the filing declares no unit anywhere the parser can find"*; **the filing declares it on page 2,
+and page 2 was thrown away.**
+
+- ⚠️ **`ISL-1` — `_drop_islands` measured the gap in a ±1 WINDOW, not along the statement's own
+  run.** A form code has to survive OCR to anchor a statement, and on a 2013 scan usually only
+  one page keeps one: this balance sheet runs pages 2-4, all three classified `balance_sheet` by
+  title, and only page 4 kept `B02a/TCTD-HN` (page 2 OCRs as `B020/TCID-HN`, page 3 as
+  `B022/TCTD-HN`). Page 2 measured two pages from that single anchor and was dropped —
+  **while page 3, sitting between them, was kept**, which is not what a gap looks like. Page 2 is
+  the statement's FIRST page and the only place in the whole filing that prints
+  `Đơn vị tính: triệu đồng`: the income statement prints no unit line at all and the cash flow's
+  two pages do not repeat one, so `document_unit` had nothing to offer either and all three
+  statements were read in đồng. ✅ The walk now expands through pages the same report already
+  owns before the ±1 tolerance applies. VCB Q2-2023 — the case the pruner exists for — is still
+  pruned, because page 8 there belongs to no report and the walk stops.
+
+- ⚠️ **`TCG-1` — "TỔNG CỘNG" is "TỔNG", and one syllable cost two cells.** "TỔNG CỘNG TÀI SẢN CÓ"
+  scores **0.769** against the chart's "TỔNG TÀI SẢN" (no containment: the syllable is in the
+  middle), so **total assets did not map**; and "TỔNG CỘNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU" scored
+  0.929 for its own anchor against a flat **0.95** awarded to EQUITY by containment, so equity
+  took the grand total — 165,878,786 mn against a real 13,857,834. ✅ `ABBREV` normalises
+  `tongcong` → `tong` on both sides; the row then scores **1.000** for its own account and the
+  anchors settle it with no new threshold. **0 new account collisions** across all 12 charts.
+
+- ⚠️ **`MEN-1` — an anchor may not take a row where its account is only MENTIONED.** With the
+  grand total gone to its own anchor, equity fell to the row where `table_rows` had glued the
+  section header "B. NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU" onto "II. Tiền gửi và vay các TCTD khác", and
+  read 24,686,177 mn of interbank deposits — with `_claim` releasing the deposits line the walk
+  had placed correctly. ✅ In `header + line` the header is a PREFIX and the item a SUFFIX, so an
+  account that is neither is a mention; containment no longer awards the flat score there.
+  ⚠️ **ANCHORS ONLY**: gating the ordered walk the same way changed **23 of 228** archived
+  statements and lost sound cells, against **4** confined to `_anchor`, all repairs.
+
+- ⚠️ **`DEC-1` — `1,630,428.99` was read as 163,042,899.** TCB's 2012 filings print the
+  international convention (comma thousands, dot decimal) and `parse_num` stripped both. The
+  error is uniform, so the statement reconciles perfectly against itself: **TCB Q2-2012's PBT is
+  on disk as 163,042,899 mn** — 163 tn for a bank with 180 tn of assets — and Q1-2013's cash flow
+  closes at 2,144 tn. ⚠️ **AND ONE SUCH ROW REFUSED A CORRECT QUARTER**: `sane` bands on the
+  MEDIAN of the quarters already accepted, and Q3-2013's own income statement (97,315 mn, right)
+  came out 23× under a median one 100× row had dragged up. ✅ A separator followed by ONE OR TWO
+  digits at the end of a token is a decimal point in either convention — a thousands group is
+  always three digits — and the character itself cannot be trusted, because OCR confuses `.` and
+  `,` ("1,234.567" must stay 1,234,567).
+
+⚠️ **AND THE UNIT BLOCK WAS 200 dpi ONLY, WHICH IS NOT WHERE THIS FILING IS READABLE.** Its
+income statement returns **7 split figures** at 200 dpi (`SPL-1`, refused) and none at 300; its
+cash flow reads the net movement as **205** at 200 dpi where the page prints 2,989,205 — the
+crop defect, invisible to both gates because the two balances are right and the probe is the
+closing one. Two layers were added (`onnx@300+unit+tail`, `onnx@300+unit`) and
+`unit_from_document` now demands the cash identity the way `relax_totals` does: **a layer that
+multiplies every figure by a million may not also be the layer that skips the arithmetic**
+(§6-2-tervicies drew the same conclusion for `annual_tail`). The 200-dpi reading then fails
+`22,621,969 + 205 != 25,611,174` and the cascade escalates.
+
+### ⚠️ `PAR-1` — A NEGATIVE FIGURE CUT IN HALF, AND THE POSITIVE HALF WRITTEN (BID Q4-2016)
+
+Found by the regression for the four defects above, on the one filing in it that had not been
+re-parsed since `SPL-1` shipped. The detector boxes text LINES, and on some rows a thousands
+separator comes back as a SPACE **inside a parenthesised figure**: `'(1.029 827)'` for a printed
+(1.029.827). `_split_number_runs` cut it on the space and the row kept the RIGHT half as a
+POSITIVE number — **BID Q4-2016 is on disk with `hddt_mua_sam_tai_san_co_dinh` = 616 mn for a
+printed (2.298.616) and dividends paid of 383 mn for a printed (2.940.383)**.
+
+⚠️ Neither existing repair reaches it: `_merge_split_figures` needs TWO boxes and there is one,
+and `_join_split_number` wants a bare 1-3 digit head where this has "(1.029". ⚠️ **And since
+`SPL-1` shipped it costs the whole statement**: the splitter's own pieces sit
+`box_width / len(text)` = **4.1pt** apart, under `SPLIT_MAX_GAP`, so `split_figures` counts them
+and `reconcile` refuses the reading as fragmented — this is the case the *"MERGE FIRST, THEN
+SPLIT"* comment predicted, arriving through the guard instead of through the merge.
+
+✅ **A box the parentheses SPAN is one figure** — two figures boxed together each close their
+own, so `'(135.272.610) (126.501.216)'` is still split — and the pieces are re-joined before the
+split, **in the default path**, because the alternative is not a wrong figure but a lost
+statement. ⚠️ **Proven pre-existing, not caused by the four fixes**: the identical three pairs
+appear at the same gaps on stashed HEAD.
+
 ### GICS — `gics_scraper.py` (reference taxonomy; requests + openpyxl)
 - Downloads MSCI's published **"GICS structure & definitions eff. 17 Mar 2023"**
   `.xlsx` and parses it with `openpyxl` into a flat CSV. Independent of the other

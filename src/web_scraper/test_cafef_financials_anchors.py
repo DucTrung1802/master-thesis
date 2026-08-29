@@ -385,3 +385,83 @@ def test_the_probe_bands_sane_on_the_closing_balance_not_the_opening(builder):
     balance poisons the magnitude history of every quarter that follows (SAN-1)."""
     st = _cf(VIC_TAIL)
     assert builder._probe(CASH_FLOW, builder.map_to_schema(st, "corp"), st) == 54_750_360
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 5. "TỔNG CỘNG" is "TỔNG", and an account buried in a merged row is a MENTION
+#
+# TCB's Q3-2013 balance sheet, verbatim at onnx@300. Three anchors were wrong at once and
+# every gate passed, because `reconcile` falls through to `Statement.find`, which reads the
+# right rows out of the OCR text while the written ROW carries the wrong ones:
+#
+#   * "TỔNG CỘNG TÀI SẢN CÓ" scored 0.769 against the chart's "TỔNG TÀI SẢN" — one inserted
+#     syllable, no containment because it sits in the middle — so TOTAL ASSETS did not map;
+#   * "TỔNG CỘNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU" scored 0.929 for its own anchor while merely
+#     CONTAINING "vốn chủ sở hữu", which containment awards a flat 0.95, so the EQUITY anchor
+#     took the grand total — 165,878,786 mn against a real 13,857,834;
+#   * and once that row went to its own anchor, equity fell to the row where OCR had merged
+#     the section header "B. NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU" onto "II. Tiền gửi và vay các
+#     TCTD khác", so equity read 24,686,177 mn of interbank deposits and `_claim` evicted the
+#     deposits line the ordered walk had placed correctly.
+# ──────────────────────────────────────────────────────────────────────────────
+
+TCB_Q3_2013 = [
+    ("Tổng cộng tài sản Có", "tong_cong_tai_san_co", [165_878_786, 179_933_598]),
+    ("B. Nợ phải trả và vốn chủ sở hữu II. Tiền gửi và vay các TCTD khác",
+     "no_phai_tra_va_von_chu_so_huu_tien_gui_va_vay_cac_tctd_khac",
+     [24_686_177, 39_170_405]),
+    ("III. Tiền gửi của khách hàng", "tien_gui_cua_khach_hang_v_15",
+     [117_236_302, 111_462_288]),
+    ("TỔNG NỢ PHẢI TRẢ", "tong_no_phai_tra", [152_030_952, 166_644_022]),
+    ("Vốn và các quỹ VIII v.20", "von_va_cac_quy_v_20", [13_857_834, 13_289_576]),
+    ("TỔNG CỘNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU",
+     "tong_cong_no_phai_tra_va_von_chu_so_huu", [165_878_786, 179_933_598]),
+]
+
+
+def test_tong_cong_tai_san_co_is_total_assets(builder):
+    """"Tổng cộng" and "tổng" are one word in a statement heading, normalised on both sides."""
+    assert builder.map_to_schema(_bs(TCB_Q3_2013), "bank")["tong_tai_san"] == 165_878_786
+
+
+def test_the_grand_total_goes_to_its_own_anchor_not_to_equity(builder):
+    """With the wording normalised the grand-total row scores 1.000 for its own account and
+    0.95 for equity's, so the anchors settle it themselves — no new threshold."""
+    mapped = builder.map_to_schema(_bs(TCB_Q3_2013), "bank")
+    assert mapped["tong_no_phai_tra_va_von_chu_so_huu"] == 165_878_786
+    assert mapped["tong_no_phai_tra"] == 152_030_952
+
+
+def test_a_merged_section_header_does_not_feed_the_equity_anchor(builder):
+    """⚠️ THE ROW IS `HEADER + LINE`, so the header is a PREFIX and the item is the SUFFIX: an
+    account matched strictly INSIDE is a mention in somebody else's line. Equity is then
+    ABSENT — the correct answer for a figure this filing never printed under a name the chart
+    of accounts knows ("Vốn và các quỹ", not "Vốn chủ sở hữu") — and the deposits line keeps
+    the figure the ordered walk gave it."""
+    mapped = builder.map_to_schema(_bs(TCB_Q3_2013), "bank")
+    assert mapped.get("viii_von_chu_so_huu") != 24_686_177
+    assert mapped.get("viii_von_chu_so_huu") != 165_878_786
+    assert mapped["ii_tien_gui_va_vay_cac_tctd_khac"] == 24_686_177
+
+
+def test_the_edge_rule_is_confined_to_the_anchors(builder):
+    """⚠️ MEASURED: gating the ORDERED WALK the same way changed 23 of 228 archived statements
+    and lost sound cells; confined to `_anchor` it changes 4, all of them repairs. The walk has
+    position to keep a fuzzy match honest — `_anchor`, by its own docstring, has none."""
+    import inspect
+
+    source = inspect.getsource(FinancialsBuilder._anchor)
+    assert "edge_containment=True" in source
+    assert builder._label_score("vonchusohuu", "nophaitravavonchusohuutiengui") >= 0.95
+    assert builder._label_score("vonchusohuu", "nophaitravavonchusohuutiengui",
+                                edge_containment=True) < 0.95
+
+
+def test_a_statement_that_says_tong_tai_san_is_unchanged(builder):
+    """The normalisation may not disturb the wording 57 of the 59 archived TCB quarters use."""
+    st = _bs([("TỔNG TÀI SẢN", "tong_tai_san", [164_134_583, None]),
+              ("TỔNG NỢ PHẢI TRẢ", "tong_no_phai_tra", [149_685_836, None]),
+              ("TỔNG VỐN CHỦ SỞ HỮU", "tong_von_chu_so_huu", [14_448_747, None])])
+    mapped = builder.map_to_schema(st, "bank")
+    assert mapped["tong_tai_san"] == 164_134_583
+    assert mapped["viii_von_chu_so_huu"] == 14_448_747

@@ -263,3 +263,66 @@ def test_the_splitters_own_pieces_would_be_rejoined_at_a_narrow_enough_box(parse
     assert narrow[1][0] - narrow[0][2] < PdfParser.MERGE_MAX_GAP
     assert len(PdfParser._merge_split_figures(narrow, PdfParser.Y_TOL, LO)) == 1, \
         "at this width the splitter's pieces WOULD be re-joined — hence merge-then-split"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `PAR-1` — the splitter's own pieces, and the parentheses that say they are one figure
+#
+# BID's FY-2016 cash flow returns `'(1.029 827)'` as ONE box for a printed (1.029.827): the
+# thousands separator read as a space, inside a negative figure. `_split_number_runs` cut it
+# on the space, and the row kept the RIGHT half as a POSITIVE number — **BID Q4-2016 is on
+# disk with `hddt_mua_sam_tai_san_co_dinh` = 616 mn for a printed (2.298.616) and dividends of
+# 383 mn for a printed (2.940.383)**, both positive and three orders out.
+#
+# ⚠️ AND SINCE `SPL-1` SHIPPED, THAT ALSO COSTS THE WHOLE STATEMENT: the two pieces sit
+# `box_width / len(text)` = 4.1pt apart — under `SPLIT_MAX_GAP` — so `split_figures` counts
+# them and `reconcile` refuses the reading as fragmented. The quarter §6-2-quatervicies spent a
+# day recovering would go `missing` on the next authoritative run. This is the case the
+# "MERGE FIRST, THEN SPLIT" comment predicted from the other side.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _one(text, x0=505.8, x1=550.4):
+    """One word box, in the shape the detector returns."""
+    return (x0, 490.0, x1, 500.0, text, 0, 0, 0)
+
+
+def test_a_figure_the_parentheses_span_is_not_split():
+    """BID FY-2016, verbatim: the pair spans the whole box, so it is one printed figure."""
+    out = PdfParser._split_number_runs([_one("(1.029 827)")])
+
+    assert [w[4] for w in out] == ["(1.029.827)"]
+    assert PdfParser.parse_num(out[0][4]) == -1_029_827
+
+
+def test_two_figures_each_carrying_their_own_parentheses_are_still_split():
+    """The discriminator, and the reason the rule is safe: two negative period figures boxed
+    together close the first parenthesis before the end of the box."""
+    out = PdfParser._split_number_runs([_one("(135.272.610) (126.501.216)")])
+
+    assert [w[4] for w in out] == ["(135.272.610)", "(126.501.216)"]
+
+
+def test_an_unparenthesised_run_is_untouched():
+    """`ACB Q1-2025`'s two period figures, the case the splitter exists for."""
+    out = PdfParser._split_number_runs([_one("135.272.610 126.501.216")])
+
+    assert [w[4] for w in out] == ["135.272.610", "126.501.216"]
+
+
+def test_a_join_that_is_not_a_well_formed_figure_is_left_to_the_splitter():
+    """The rule claims a box only when the pieces really do join into one grouped figure —
+    `(1.029 82)` does not, and guessing there would invent a number."""
+    out = PdfParser._split_number_runs([_one("(1.029 82)")])
+
+    assert [w[4] for w in out] == ["(1.029", "82)"]
+
+
+def test_the_split_pair_the_guard_would_have_counted_is_gone():
+    """End to end through `SPL-1`'s guard: the box no longer produces a pair to count, so the
+    statement is not refused as fragmented."""
+    parser = PdfParser.__new__(PdfParser)
+    parser.Y_TOL = PdfParser.Y_TOL
+    words = PdfParser._split_number_runs([_one("(1.029 827)")])
+
+    assert PdfParser.split_figures(parser, {0: words}, 595.0) == 0
