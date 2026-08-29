@@ -1,0 +1,35 @@
+symbol       : HOSE_VIC
+template     : corp   (override)
+documents    : 1  (Q3-2014)
+years        : all   selected [2014]
+cascade      : 47 of 47 layers
+data root    : D:\GIT\master-thesis\raw_data\cafef
+models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+
+[doc 1/1 100% of DOCUMENTS, not of time] HOSE_VIC__Q3-2014  Q3-2014_bao_cao_tai_chinh_hop_nhat_quy_3_nam_2014.pdf  1.4 MB  corp/consolidated
+  band: balance 12, income 12, cash 15   open_ref=—
+  [layer 1/47   2% of POSITIONS] onnx@200
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~109 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~72 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~66 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~52 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~42 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~31 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~22 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~10 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 2/47   4% of POSITIONS] onnx@300
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~38 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~41 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~47 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~40 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~34 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~26 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~9 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  Q3-2014: balance_sheet=45 items [onnx@200]; income_statement=16 items [onnx@300]; cash_flow=19 items [onnx@200]  (3.5 min)
+
+run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260829-111138__hose_vic__pdf_ocr

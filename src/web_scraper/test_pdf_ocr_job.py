@@ -427,7 +427,12 @@ def test_the_log_file_is_written_as_the_run_goes_not_at_the_end(tmp_path):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# plan(years=...) — the batch filter
+# plan(quarters=...) — the batch filter, YYYY-QQ
+#
+# ⚠️ It was `years: list[int]` until 2026-08-29. The unit was a YEAR on the argument that the
+# statement BUILD skips whole years (`orchestration` §2a: `_decumulate` needs Q1..Q(q-1) of the
+# same year) — a fact about the WRITE, which this module does not do. The wider unit only ever
+# bought extra OCR, so the grain is a quarter and the form is the one that SORTS.
 # ──────────────────────────────────────────────────────────────────────────────
 
 _INDEX_COLS = ["symbol", "exchange", "year", "quarter", "period", "name", "consolidated",
@@ -460,59 +465,80 @@ def _periods(builder, **kwargs):
     return [t.period for t in job.plan(builder, "HOSE", "TST", template=TEMPLATE, **kwargs)]
 
 
-def test_no_years_is_every_year_the_ticker_files(filings):
+def test_no_quarters_is_every_quarter_the_ticker_files(filings):
     assert _periods(filings) == [f"Q{q}-{y}" for y in (2013, 2014) for q in (1, 2, 3, 4)] \
         + ["Q4-2015"]
 
 
 def test_an_empty_list_means_the_same_as_absent_and_is_not_an_empty_run(filings):
-    """⚠️ The whole point of the parameter's contract: `[]` is 'every year', never 'none'.
+    """⚠️ The whole point of the parameter's contract: `[]` is 'every quarter', never 'none'.
 
     A falsy filter that returned nothing would be a run that parses nothing and reports
     success — the failure `plan` already raises to prevent for `periods`.
     """
-    assert _periods(filings, years=[]) == _periods(filings)
-    assert _periods(filings, years=None) == _periods(filings)
+    assert _periods(filings, quarters=[]) == _periods(filings)
+    assert _periods(filings, quarters=None) == _periods(filings)
 
 
-def test_one_year_selects_that_years_quarters_only(filings):
-    assert _periods(filings, years=[2014]) == ["Q1-2014", "Q2-2014", "Q3-2014", "Q4-2014"]
+def test_one_quarter_selects_that_quarter_only(filings):
+    assert _periods(filings, quarters=["2014-Q3"]) == ["Q3-2014"]
 
 
-def test_several_years_come_back_in_calendar_order_not_the_order_asked_for(filings):
-    assert _periods(filings, years=[2014, 2013]) == [
-        f"Q{q}-{y}" for y in (2013, 2014) for q in (1, 2, 3, 4)]
+def test_a_batch_comes_back_in_calendar_order_not_the_order_asked_for(filings):
+    assert _periods(filings, quarters=["2014-Q1", "2013-Q4"]) == ["Q4-2013", "Q1-2014"]
 
 
-def test_years_and_periods_intersect_rather_than_contradict(filings):
-    assert _periods(filings, years=[2014], periods=["Q3-2014"]) == ["Q3-2014"]
+def test_quarters_and_periods_intersect_rather_than_contradict(filings):
+    assert _periods(filings, quarters=["2014-Q3"], periods=["Q3-2014"]) == ["Q3-2014"]
 
 
-def test_a_year_the_ticker_does_not_file_raises_rather_than_running_empty(filings):
+def test_a_quarter_the_ticker_does_not_file_raises_rather_than_running_empty(filings):
     with pytest.raises(ValueError) as excinfo:
-        _periods(filings, years=[1999])
-    assert "1999" in str(excinfo.value)
-    assert "Years available" in str(excinfo.value)
+        _periods(filings, quarters=["1999-Q1"])
+    assert "1999-Q1" in str(excinfo.value)
+    assert "Quarters available" in str(excinfo.value)
 
 
-def test_the_periods_error_names_the_years_filter_that_emptied_the_plan(filings):
+@pytest.mark.parametrize("bad", ["Q3-2014", "2014-3", "2014Q3", "2014-Q5", "14-Q3"])
+def test_the_repo_native_form_and_any_other_shape_is_refused(filings, bad):
+    """⚠️ `Q3-2014` names the same quarter and is REFUSED anyway.
+
+    A lenient parser would be easy — and then a caller who used the wrong form would never
+    find out, while a caller who made a typo would get "files no document for [...]" and go
+    looking at CafeF for a filing that is sitting there. The message names the right form.
+    """
+    with pytest.raises(ValueError) as excinfo:
+        _periods(filings, quarters=[bad])
+    assert "YYYY-QQ" in str(excinfo.value)
+
+
+def test_the_form_is_checked_before_the_corpus_is(filings):
+    """A malformed quarter must not be reported as a quarter the ticker does not file."""
+    with pytest.raises(ValueError) as excinfo:
+        _periods(filings, quarters=["Q3-2014"])
+    assert "Quarters available" not in str(excinfo.value)
+
+
+def test_the_periods_error_names_the_quarters_filter_that_emptied_the_plan(filings):
     """Both filters are live, so the message must say which one did the cutting."""
     with pytest.raises(ValueError) as excinfo:
-        _periods(filings, years=[2014], periods=["Q3-2013"])
-    assert "years=[2014]" in str(excinfo.value)
+        _periods(filings, quarters=["2014-Q3"], periods=["Q3-2013"])
+    assert "quarters=['2014-Q3']" in str(excinfo.value)
 
 
-def test_an_annual_report_is_filed_under_the_year_of_the_PERIOD_it_serves(filings):
+def test_an_annual_report_is_filed_under_the_quarter_of_the_PERIOD_it_serves(filings):
     """⚠️ CafeF files the annual under quarter 5 and `documents()` folds it onto that year's
-    Q4 — so the 2015 annual is year 2015 because its PERIOD is Q4-2015. Reading the raw index
+    Q4 — so the 2015 annual is `2015-Q4` because its PERIOD is Q4-2015. Reading the raw index
     column would agree here and disagree wherever CafeF's `Year` is `0`, `202` or `203`
     (10 of 84,076 documents, CLAUDE.md §6-2-septies)."""
-    assert _periods(filings, years=[2015]) == ["Q4-2015"]
+    assert _periods(filings, quarters=["2015-Q4"]) == ["Q4-2015"]
+    assert job.as_quarter("Q4-2015") == "2015-Q4"
 
 
 def test_the_filter_is_recorded_in_the_spec_so_the_artefact_says_what_was_asked(filings):
-    """§5 rule 2 at the manifest: 'every year' and 'nobody wrote it down' must be tellable
+    """§5 rule 2 at the manifest: 'every quarter' and 'nobody wrote it down' must be tellable
     apart by a reader who has only the run folder."""
-    assert job.JobSpec(symbol="TST", years=[2014]).to_json()["years"] == [2014]
-    assert job.JobSpec(symbol="TST").to_json()["years"] is None
-    assert job.JobSpec(symbol="TST", years=[]).to_json()["years"] is None
+    assert (job.JobSpec(symbol="TST", quarters=["2014-Q3"]).to_json()["quarters"]
+            == ["2014-Q3"])
+    assert job.JobSpec(symbol="TST").to_json()["quarters"] is None
+    assert job.JobSpec(symbol="TST", quarters=[]).to_json()["quarters"] is None

@@ -349,7 +349,7 @@ def _validate(cfg: JobConfig) -> JobConfig:
         if cfg.data.is_documents:
             spec = cfg.data.documents or {}
             unknown = set(spec) - {
-                "exchange", "symbol", "periods", "years", "allow_parent", "period_min",
+                "exchange", "symbol", "periods", "quarters", "allow_parent", "period_min",
                 "with_statements", "with_models",
             }
             if unknown:
@@ -361,27 +361,38 @@ def _validate(cfg: JobConfig) -> JobConfig:
                     f"job {cfg.name!r}: data.documents needs a 'symbol' — the payload is one "
                     f"ticker's filings, and there is no default worth guessing."
                 )
-            years = spec.get("years")
-            if years is not None:
-                if not isinstance(years, (list, tuple)):
+            quarters = spec.get("quarters")
+            if quarters is not None:
+                if not isinstance(quarters, (list, tuple)):
                     raise ValueError(
-                        f"job {cfg.name!r}: data.documents.years must be a list of years "
-                        f"(empty = every year), got {years!r}"
+                        f"job {cfg.name!r}: data.documents.quarters must be a list of "
+                        f"YYYY-QQ quarters (empty = every quarter), got {quarters!r}"
                     )
-                bad = [y for y in years if not isinstance(y, int) or isinstance(y, bool)]
+                # ⚠️ THE FORM IS CHECKED HERE TOO, NOT ONLY IN `plan`. A malformed quarter that
+                # reaches the worker is a Kaggle round trip spent to learn it, and the repo's
+                # own period key is written the other way round — so `Q3-2014` is the mistake a
+                # reader of this repo is most likely to make, and it matches NOTHING.
+                # ⚠️ IMPORTED, NEVER RE-WRITTEN, and imported LAZILY. `plan` owns the form;
+                # a second regex here is a second place for it to drift. The import is inside
+                # the function because `config` is read where `web_scraper`'s OCR dependencies
+                # are not necessarily installed.
+                repo_src_on_path()
+                from web_scraper.pdf_ocr_job import QUARTER_RE
+                bad = [q for q in quarters
+                       if not isinstance(q, str) or not QUARTER_RE.match(q.strip())]
                 if bad:
                     raise ValueError(
-                        f"job {cfg.name!r}: data.documents.years must hold integers, "
-                        f"got {bad!r} — a year written as a string filters nothing and the "
-                        f"payload would ship every filing the ticker has."
+                        f"job {cfg.name!r}: data.documents.quarters must be written YYYY-QQ "
+                        f"(e.g. '2014-Q3'), got {bad!r} — the repo-native period key is the "
+                        f"other way round ('Q3-2014') and is what `periods` takes."
                     )
             # ⚠️ **THE PAYLOAD AND THE PARAMETERS ARE TWO COPIES OF THE SAME FILTER.**
             # `data.documents` decides which filings are UPLOADED and `parameters` decides
-            # which the worker OPENS; a job naming different years in the two ships one set
+            # which the worker OPENS; a job naming different quarters in the two ships one set
             # and parses another, and the worker reports the shortfall as `missing` — which
             # is exactly what a genuinely unreadable filing reports. Checked here because it
             # is free, and because the run that discovers it costs a Kaggle round trip.
-            for key, param in (("years", "YEARS"), ("periods", "PERIODS")):
+            for key, param in (("quarters", "QUARTERS"), ("periods", "PERIODS")):
                 if param in (cfg.parameters or {}):
                     a = spec.get(key) or []
                     b = cfg.parameters[param] or []

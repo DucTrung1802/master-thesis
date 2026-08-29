@@ -1465,6 +1465,65 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
       de-cumulating (VCB Q2-2024 is the filing that prints PBT 20,835bn cumulative against a
       10,116bn quarter, so it MUST).
 
+### ⚠️ THE COLUMN SET IS TWO DEFECTS DEEP ON A CORPORATE FILING — `MSO-1` and `SPL-1` (2026-08-29)
+
+Both found in one quarter, VIC Q3-2014, and **both write wrong figures rather than refusing.**
+`value_columns` is the whole story: it clusters right edges in the right 60 % of the page, keeps
+a cluster holding ≥35 % of the biggest, and drops a "Thuyết minh" note column **by median digit
+count** — *"a period column's figures are 4-9 digits, a note reference 1-2"*.
+
+- ⚠️ **`MSO-1` — the VAS `Mã số` column is 3 digits and sits in the overlap that rule cannot
+  cover.** Form B01-DN prints `Chỉ tiêu | Mã số | Thuyết minh | Số cuối kỳ | Số đầu năm`, and the
+  item codes are 100, 110, 270, 300, 440, sometimes 4-digit (3131, 3161). On VIC Q3-2014 that
+  column clusters at **x=279.7 of a 595pt page — 47 %, inside the value zone** — 86 numbers, and
+  it became column 0, so `_first_value` returned every row's ITEM CODE as its figure: assets 270
+  against resources 440, refused *"assets != liabilities + equity"* on all 45 layers.
+  ⚠️ **A balance sheet is the only statement whose gates catch that**: an income statement only
+  has to present a PBT line and `50` is one, a cash flow only a closing balance and `70` is one,
+  and `sane` fails open on a ticker with no accepted history — which is every non-bank ticker on
+  its first run. VIC **Q1-2011** is on disk with `a_tai_san_ngan_han = 100` for exactly that
+  reason. ✅ **Fixed by `_code_column`, which reads the HEADING** — the same thing this file
+  already does for the quarter column instead of counting columns. Three conditions, each failing
+  SAFE: a whole word box normalising to *maso*, a detected column under it, and that column being
+  the **leftmost** (the form's layout, so a mis-read heading cannot take a figure column).
+  ✅ Blast radius measured from cached word boxes: **19 of 22 statements re-detect the identical
+  column set**, all 12 bank statements among them; the 3 that move are VIC balance sheets, and
+  every number in each dropped column is item numbering.
+
+- ⚠️ **`SPL-1` — one printed figure comes back as TWO detector boxes, and both halves are
+  plausible.** `'5.209.108'` ending at x=405.7 and `'954.978'` starting at x=409.5 is one printed
+  5.209.108.954.978, **3.8pt apart**. The left half lands on no column and is dropped, so the row
+  keeps `954.978`; where enough left halves line up they instead form a **spurious column**
+  (x=498.2, n=34) kept as a period of its own. **60 figures of that balance sheet and 27 of the
+  income statement**, while BOTH GRAND TOTALS survive whole — so `reconcile` passes and `sane`
+  probes a correct total. `SLD-1`'s shape a fourth time.
+  ⚠️ **It is resolution-dependent**: the identical document at **onnx@300 splits NOTHING**, two
+  clean columns, identical totals — so accepting at layer 1 is `PGB-1`'s *"a half-right layer that
+  passes the gates ends the cascade"* for the third time. ✅ **Fixed by REFUSING, not repairing**:
+  `split_figures` counts the pairs from geometry and text alone — deliberately **not** keyed on
+  the detected columns, since the fragments create their own — and `reconcile` escalates the
+  cascade. ⚠️ **The 4.5pt gap is measured, not chosen**: 0 hits across 12 statements of VCB
+  Q1-2021, VCB Q1-2026, ACB Q1-2024 and BID Q4-2016, all of which parse today; at 6pt it starts
+  picking up one or two per bank statement.
+  ✅ **AND THE REPAIR SHIPS BESIDE THE REFUSAL** — `_merge_split_figures`, at the OCR seam,
+  re-joining a pair when the gap is under 4.5pt, the right box begins with a FULL three-digit
+  group and the join is a well-formed figure, confined to the value zone. Held back for an hour
+  as too wide a change on four bank filings; the base was widened to **19 filings / 53
+  statements** and the argument did not survive it — **47 untouched**, the 6 that move all VIC,
+  and across **21 bank statements it fires once and changes no mapped cell**. ✅ Scored against
+  onnx@300 (which splits nothing) on VIC Q3-2014: agreement rises 29 → **43** of 45 balance-sheet
+  cells, **17 repaired and 0 broken** across the three statements. ⚠️ It does NOT retire the gate:
+  6 unmergeable three-way splits remain at 200 dpi, which is why that quarter still escalates.
+  ⚠️ **MERGE FIRST, THEN SPLIT** — `_split_number_runs` apportions by character offset, leaving a
+  gap of `width / len(text)`: 5.7pt on the measured box, **4.3pt at a 100pt box**, inside
+  `MERGE_MAX_GAP`, where a merge running afterwards would undo the splitter.
+
+**Result**: VIC Q3-2014 parses in **3m 42s** (against 23 min refusing), balance sheet at
+`onnx@300` with 45 items, and the income statement and cash flow already on disk **REPRODUCE**
+16/16 and 19/19 cells at their own layers. Five internal identities close to the đồng, none of
+them the one `reconcile` tested. `test_cafef_code_column.py` (8) and `test_cafef_split_figures.py`
+(7) pin both without a PDF, a network or an engine.
+
 ### GICS — `gics_scraper.py` (reference taxonomy; requests + openpyxl)
 - Downloads MSCI's published **"GICS structure & definitions eff. 17 Mar 2023"**
   `.xlsx` and parses it with `openpyxl` into a flat CSV. Independent of the other
@@ -1507,27 +1566,65 @@ silently DOWNGRADED a quarter it was given only for history, while the log said 
 — a run whose output is an artefact cannot do that. Merging a recovered quarter back stays a
 deliberate Dagster act with a pre-run backup and a diff of every column.
 
-### `years` — the batch filter, added 2026-08-29
+### `quarters` — the batch filter, `YYYY-QQ` (was `years` until 2026-08-29)
 
-`plan()`, `JobSpec`, the CLI (`--years 2014 2015`), `kgpu`'s `data.documents.years` and the
-notebook's `YEARS` all carry it. **Empty or absent means every year the ticker files**, and
-that answer is `documents()`'s own rather than a list any of the five computes — the default
-is the ABSENCE of a filter, not a re-derivation of one.
+`plan()`, `JobSpec`, the CLI (`--quarters 2014-Q3 2014-Q4`), `kgpu`'s
+`data.documents.quarters`, both notebooks' `QUARTERS` and the payload/parameter cross-check all
+carry it. **Empty or absent means every quarter the ticker files**, and that answer is
+`documents()`'s own rather than a list any of them computes — the default is the ABSENCE of a
+filter, not a re-derivation of one.
 
 | | |
 |---|---|
-| the unit | ⚠️ **a YEAR, because that is the unit the statement build already skips in** (`orchestration` §2a — `_decumulate` needs Q1..Q(q-1) of the same year, so a partial skip deletes the very quarter a run exists to fix). This module de-cumulates nothing, so the argument does not bind it; naming the same unit keeps the two halves speaking one language |
-| the year of a document | `_year_of` reads it from the **PERIOD**, never from the index's `year` column. `documents()` folds a quarter-5 annual onto that year's Q4 and rewrites `period`, so `period` is the normalised key everything else compares on — and CafeF files 10 of 84,076 documents with a `Year` of `0`, `202` or `203` |
-| with `periods` | they **INTERSECT**. `years=[2014]` + `periods=["Q3-2014"]` is Q3-2014, and each filter is checked against what survives the one before it, so the error names the filter that emptied the plan |
+| the unit | ⚠️ **a QUARTER since 2026-08-29; it was a YEAR before.** The year came from the unit the statement BUILD skips in (`orchestration` §2a — `_decumulate` needs Q1..Q(q-1) of the same year, so a partial skip deletes the very quarter a run exists to fix). ⚠️ **That argument never bound this module**: nothing here de-cumulates and nothing here writes, so the wider unit only ever bought extra OCR. The hazard still exists where the WRITE is, and `pdf_ocr_merge` already refuses a cumulative income statement a one-document run cannot de-cumulate |
+| the form | ⚠️ **`YYYY-QQ`, and the repo-native `QQ-YYYY` is REFUSED rather than accepted.** They name the same quarter and only one of them SORTS. A lenient parser would be easy — and then a caller who used the wrong form would never find out, while a caller who made a TYPO gets "files no document for [...]" and goes looking at CafeF for a filing that is sitting there. `as_quarter()` converts; the form is checked BEFORE the corpus is |
+| the quarter of a document | `_quarter_of` reads it from the **PERIOD**, never from the index's `year` column. `documents()` folds a quarter-5 annual onto that year's Q4 and rewrites `period`, so `period` is the normalised key everything else compares on — and CafeF files 10 of 84,076 documents with a `Year` of `0`, `202` or `203` |
+| with `periods` | they **INTERSECT**. `quarters=["2014-Q3"]` + `periods=["Q3-2014"]` is Q3-2014, and each filter is checked against what survives the one before it, so the error names the filter that emptied the plan |
 | matching nothing | **raises**, exactly as `periods` already did — a filter that matches nothing is a run that parses nothing and reports success |
 
 ⚠️ **`kgpu` VALIDATES THE TWO COPIES AGAINST EACH OTHER.** `data.documents` decides which
 filings are UPLOADED and `parameters` decides which the worker OPENS; a job naming different
-years in the two ships one set and parses another, and the worker reports the shortfall as
-`missing` — which is what a genuinely unreadable filing reports too. `config._validate`
-refuses the mismatch, and refuses a year written as a string (which would filter nothing and
-silently ship every filing the ticker has). Both are free here; the run that discovers them
-costs a Kaggle round trip.
+quarters in the two ships one set and parses another, and the worker reports the shortfall as
+`missing` — which is what a genuinely unreadable filing reports too. `config._validate` refuses
+the mismatch, and imports `QUARTER_RE` from `plan`'s own module rather than re-writing the form.
+Free here; the run that discovers it costs a Kaggle round trip.
+
+⚠️ **IT EARNED ITS KEEP TWICE ON ITS FIRST USE.** Asked for VIC's 17 quarters that still hold a
+`missing` cell, `plan` **refused 2008-Q3** — VIC files no document for it at all, so its three
+`missing` cells are the correct answer, where a year filter would silently have opened Q2 and Q4
+of 2008 instead. And the first rehearsal of the first `quarters` job exposed **`RHS-1`**:
+`rehearse._rehearse_documents` passed only `periods_requested` to `plan`, never the batch filter,
+so it compared a filtered shipment against an UNFILTERED `documents()` and tripped its own
+assertion. ⚠️ **`years` had the identical defect for as long as it existed** and nothing ever
+exercised it, because every documents job rehearsed until then was narrowed by `periods` alone.
+
+### ⚠️ WHICH TOOL STARTS A TICKER — `pdf_ocr_job` does NOT (`BND-1`, measured 2026-08-29)
+
+`seed_history` rebuilds `sane`'s magnitude band from the `pdf` rows **on disk** and `run()`
+re-seeds it **per document**; `build()` does the opposite, appending to `history` after every
+quarter it accepts. So on a ticker with no statement CSV the band is EMPTY for every document and
+**`sane` fails open for the whole run** — and `pdf_ocr_merge` then refuses every empty-band
+statement, so nothing is written and the band stays empty. The loop closes on itself.
+
+**TCB paid 5h 21m to demonstrate it.** 59 filings, **169 of 177 cells parsed = 95.5 %** — and two
+screens over the finished artefact, doing by hand what the band would have done, convicted
+**9 of the 169**:
+
+| screen | found |
+|---|---|
+| a statement whose `unit` is the MINORITY for its report | **8 statements at `unit=1`** against the ticker norm of 1,000,000 — TCB Q1-2014 PBT read 673,136 for a company that earned **673 tỷ** |
+| total assets, quarter on quarter | **Q1-2013 = 17,586,290,323 tr** against ~178,000 tr either side, the equity line holding the same figure |
+
+✅ **Five of the nine were repaired in 8m 58s** by restricting the cascade to the three layers
+carrying `unit_from_document` — each came back at **exactly ×10⁶**, asserted as a RATIO because a
+genuine re-read would not divide cleanly (`UNT-1`). The other four are `missing` on disk and that
+is the right answer.
+
+⚠️ **So: `pdf_ocr_job` REPAIRS a quarter on a ticker that already has history; a NEW ticker's
+authoritative path is a full Dagster `raw/cafef_financials` run.** A 95.5 % headline concealed a
+5.3 % wrong-figure rate, and every one of the nine was the shape `sane` exists to catch. TODO
+`P47` ships the two screens as code, which is worth more than the warning — they also run where
+`sane` is on.
 
 ### `pdf_ocr_merge` — the write the job refuses, made explicit (2026-08-29)
 

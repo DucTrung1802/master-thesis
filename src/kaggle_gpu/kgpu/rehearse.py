@@ -170,8 +170,14 @@ def _rehearse_documents(payload, work, manifest: dict) -> int:
     print(f"  models                       : OK ({', '.join(Path(p).name for p in models.values())})")
 
     builder = FinancialsBuilder(logger=None)
+    # ⚠️ **EVERY FILTER THE EXPORT APPLIED, OR THIS CHECK CANNOT PASS.** It read only
+    # `periods_requested` until 2026-08-29, so a payload narrowed by the BATCH filter compared
+    # a filtered shipment against an unfiltered `documents()` and always tripped the assertion
+    # below. That was latent for as long as the batch filter existed — `years` had the same
+    # defect — because every job rehearsed until then was narrowed by `periods` alone.
     tasks = job.plan(builder, spec["exchange"], spec["symbol"],
                      periods=spec.get("periods_requested"),
+                     quarters=spec.get("quarters_requested"),
                      allow_parent=spec.get("allow_parent", False),
                      period_min=spec.get("period_min"))
     shipped = {f["file"] for f in spec["filings"]}

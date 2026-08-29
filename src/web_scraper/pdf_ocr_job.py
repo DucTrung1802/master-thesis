@@ -104,6 +104,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -333,8 +334,11 @@ class DocumentTask:
         return f"{self.exchange}_{self.symbol}__{self.period}"
 
 
-def _year_of(doc: dict) -> int:
-    """The year of the PERIOD a document contributes — never the raw index `year` column.
+QUARTER_RE = re.compile(r"^(\d{4})-Q([1-4])$")
+
+
+def _quarter_of(doc: dict) -> str:
+    """The `YYYY-QQ` quarter a document contributes — from its PERIOD, never the index column.
 
     ⚠️ **THE TWO DISAGREE AND `documents()` IS WHY.** CafeF files an annual report under
     quarter 5; `documents()` folds it onto that year's Q4 and rewrites `period`, so `period`
@@ -342,13 +346,27 @@ def _year_of(doc: dict) -> int:
     `periods` filter). The raw column is also not always a year — CafeF files 10 of the 84,076
     documents with a `Year` of `0`, `202` or `203` (CLAUDE.md §6-2-septies) — and reading it
     would file those under whatever `int()` makes of them.
+
+    ⚠️ **`YYYY-QQ`, NOT THE REPO-NATIVE `QQ-YYYY`.** They name the same thing and only one of
+    them SORTS: `["Q1-2014", "Q3-2009"]` orders the 2014 quarter first, which is why every
+    ordering in this package goes through `_period_key` rather than through the string. A batch
+    filter is written and read by a person, so it takes the form that reads in order.
+    `as_quarter` converts, and `plan` refuses the other form outright rather than silently
+    matching nothing.
     """
-    return fin._period_key(doc["period"])[0]
+    y, q = fin._period_key(doc["period"])
+    return f"{y}-Q{q}"
+
+
+def as_quarter(period: str) -> str:
+    """`Q3-2014` -> `2014-Q3`. The repo-native period key, in the sortable form."""
+    y, q = fin._period_key(period)
+    return f"{y}-Q{q}"
 
 
 def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
          periods: Optional[Sequence[str]] = None,
-         years: Optional[Sequence[int]] = None,
+         quarters: Optional[Sequence[str]] = None,
          allow_parent: bool = False,
          period_min: Optional[str] = fin.FINANCIALS_PERIOD_MIN,
          template: Optional[str] = None) -> List[DocumentTask]:
@@ -359,35 +377,52 @@ def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
     guard against an annual changing the ENTITY of a Q4 row (86 of 13,912 periods moved before
     it existed), and a second copy of that logic is a second place for it to be wrong.
 
-    A `periods` or `years` filter matching NOTHING raises — a filter that matches nothing is a
-    run that parses nothing and reports success.
+    A `periods` or `quarters` filter matching NOTHING raises — a filter that matches nothing is
+    a run that parses nothing and reports success.
 
-    ⚠️ **`years` IS THE UNIT THE PARSE ACTUALLY HAS.** `orchestration` §2a records that the
-    statement build skips complete YEARS rather than quarters, because `_decumulate` needs
-    Q1..Q(q-1) of the same year and a partial skip deletes the very quarter a run exists to
-    fix. This module de-cumulates nothing, so that argument does not bind it — but a caller
-    batching an OCR run wants that unit, and naming it here keeps the two halves speaking one
-    language. **Empty or absent means every year the ticker files**, which is exactly what
-    `documents()` already returns: the default is not re-derived, it is the absence of a
-    filter.
+    ⚠️ **`quarters` IS THE BATCH FILTER, IN `YYYY-QQ`, AND IT WAS `years` UNTIL 2026-08-29.** The
+    unit was a YEAR on one argument: `orchestration` §2a records that the statement BUILD skips
+    complete years rather than quarters, because `_decumulate` needs Q1..Q(q-1) of the same year
+    and a partial skip deletes the very quarter a run exists to fix. ⚠️ **That argument never
+    bound THIS module, and the wider unit cost real GPU time.** Nothing here de-cumulates and
+    nothing here writes — the artefact is a run folder — so a quarter is the honest grain, and
+    asking for 17 quarters no longer opens the 27 filings of the six years they fall in.
+    ⚠️ **The de-cumulation hazard did not vanish; it sits where the WRITE is**, and
+    `pdf_ocr_merge` already refuses a cumulative income statement that a one-document run has no
+    priors to de-cumulate against.
 
-    `years` and `periods` INTERSECT — `years=[2014]` with `periods=["Q3-2014"]` is Q3-2014 and
-    not a contradiction. Each is checked against what survives the one before it, so the error
-    names the filter that emptied the plan rather than the first one written.
+    **Empty or absent means every quarter the ticker files**, which is exactly what
+    `documents()` already returns: the default is not re-derived, it is the absence of a filter.
+
+    `quarters` and `periods` INTERSECT — `quarters=["2014-Q3"]` with `periods=["Q3-2014"]` is
+    Q3-2014 and not a contradiction. Each is checked against what survives the one before it, so
+    the error names the filter that emptied the plan rather than the first one written.
     """
     docs = builder.documents(exchange, symbol, allow_parent=allow_parent,
                              period_min=period_min)
-    if years:
-        wanted_years = sorted({int(y) for y in years})
-        have_years = sorted({_year_of(d) for d in docs})
-        unknown_years = [y for y in wanted_years if y not in have_years]
-        if unknown_years:
+    if quarters:
+        # ⚠️ THE REPO-NATIVE `Q3-2014` IS REFUSED, NOT ACCEPTED QUIETLY. Both forms name the same
+        # quarter, so a lenient parser would be easy to write — and then a caller who used the
+        # wrong one would never find out, while a caller who made a TYPO gets "files no document
+        # for [...]" and goes looking at CafeF for a filing that is sitting there. The form is
+        # part of the contract, so it is checked before the corpus is.
+        bad = [q for q in quarters if not QUARTER_RE.match(str(q).strip())]
+        if bad:
             raise ValueError(
-                f"{exchange}_{symbol} files no document for year(s) {unknown_years} "
-                f"(allow_parent={allow_parent}, period_min={period_min!r}).\n"
-                f"  Years available: {have_years}"
+                f"quarters must be written YYYY-QQ (e.g. '2014-Q3'), got {bad}.\n"
+                f"  The repo-native period key is the other way round ('Q3-2014') and is what "
+                f"`periods` takes; `quarters` SORTS, which is why it is the batch form."
             )
-        docs = [d for d in docs if _year_of(d) in set(wanted_years)]
+        wanted_q = sorted({str(q).strip() for q in quarters})
+        have_q = sorted({_quarter_of(d) for d in docs})
+        unknown_q = [q for q in wanted_q if q not in have_q]
+        if unknown_q:
+            raise ValueError(
+                f"{exchange}_{symbol} files no document for quarter(s) {unknown_q} "
+                f"(allow_parent={allow_parent}, period_min={period_min!r}).\n"
+                f"  Quarters available: {have_q}"
+            )
+        docs = [d for d in docs if _quarter_of(d) in set(wanted_q)]
     if periods:
         wanted = list(dict.fromkeys(periods))
         have = {d["period"] for d in docs}
@@ -396,7 +431,7 @@ def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
             raise ValueError(
                 f"{exchange}_{symbol} files no document for {unknown} "
                 f"(allow_parent={allow_parent}, period_min={period_min!r}"
-                f"{', years=' + str(sorted({int(y) for y in years})) if years else ''}).\n"
+                f"{', quarters=' + str(sorted(set(quarters))) if quarters else ''}).\n"
                 f"  Periods available: {sorted(have)[:8]}"
                 f"{' …' if len(have) > 8 else ''}"
             )
@@ -882,11 +917,13 @@ class JobSpec:
     exchange: str = "HOSE"
     symbol: str = "VCB"
     periods: Optional[Sequence[str]] = None      # None = every period the ticker files
-    # ⚠️ EMPTY OR ABSENT = EVERY YEAR, and that answer is `documents()`'s rather than a list
-    # this class computes. Batching an OCR run by year is the unit `P6` is issued in
-    # (`orchestration` §2a: the statement build skips whole YEARS, never quarters), so the
-    # name is carried here even though this module de-cumulates nothing.
-    years: Optional[Sequence[int]] = None        # None/[] = every year the ticker files
+    # ⚠️ EMPTY OR ABSENT = EVERY QUARTER, and that answer is `documents()`'s rather than a list
+    # this class computes. ⚠️ **This was `years: Sequence[int]` until 2026-08-29**, on the
+    # argument that the statement BUILD skips whole years (`orchestration` §2a: `_decumulate`
+    # needs Q1..Q(q-1) of the same year). That is a fact about the WRITE, and this module does
+    # not write — so the wider unit only ever bought extra OCR. `plan` refuses anything that is
+    # not `YYYY-QQ`.
+    quarters: Optional[Sequence[str]] = None     # None/[] = every quarter the ticker files
     allow_parent: bool = False
     period_min: Optional[str] = fin.FINANCIALS_PERIOD_MIN
     # ⚠️ None means RESOLVE it (templates.csv, then CafeF's fingerprint), never "assume bank".
@@ -908,7 +945,7 @@ class JobSpec:
             (self.template, "override") if self.template
             else resolve_template(builder, self.symbol.upper()))
         tasks = plan(builder, self.exchange.upper(), self.symbol.upper(),
-                     periods=self.periods, years=self.years,
+                     periods=self.periods, quarters=self.quarters,
                      allow_parent=self.allow_parent,
                      period_min=self.period_min, template=template)
         if not tasks:
@@ -923,7 +960,8 @@ class JobSpec:
         return {
             "exchange": self.exchange, "symbol": self.symbol,
             "periods": list(self.periods) if self.periods else None,
-            "years": [int(y) for y in self.years] if self.years else None,
+            "quarters": sorted({str(q).strip() for q in self.quarters})
+                        if self.quarters else None,
             "allow_parent": self.allow_parent, "period_min": self.period_min,
             "template_requested": self.template,
             "layers_requested": list(self.layers) if self.layers else None,
@@ -952,9 +990,9 @@ class PreparedJob:
             f"documents    : {len(self.tasks)}  "
             f"({', '.join(t.period for t in self.tasks[:8])}"
             f"{' …' if len(self.tasks) > 8 else ''})",
-            f"years        : "
-            f"{sorted({int(y) for y in self.spec.years}) if self.spec.years else 'all'}"
-            f"   selected {sorted({int(t.period.split('-')[1]) for t in self.tasks})}",
+            f"quarters     : "
+            f"{sorted({str(q).strip() for q in self.spec.quarters}) if self.spec.quarters else 'all'}"
+            f"   selected {sorted(as_quarter(t.period) for t in self.tasks)}",
             f"cascade      : {len(self.layers)} of {len(FinancialsBuilder.LAYERS)} layers",
             f"data root    : {self.data_root}",
             f"models       : det={_name(self.models.get('det'))} "
@@ -1232,8 +1270,9 @@ def _git_commit() -> Optional[str]:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """`cd src && python -m web_scraper.pdf_ocr_job --symbol VCB --periods Q1-2026`
 
-    ⚠️ `--years 2014` is the batch form; `--years` with no value is every year, which is the
-    same as omitting it. Both filters may be given and they intersect.
+    ⚠️ `--quarters 2014-Q3 2014-Q4` is the batch form; `--quarters` with no value is every
+    quarter, which is the same as omitting it. Both filters may be given and they intersect.
+    ⚠️ **`YYYY-QQ`, and the repo-native `Q3-2014` is REFUSED rather than accepted** — see `plan`.
     """
     parser = argparse.ArgumentParser(
         description="OCR + parse CafeF filings into a run folder. Writes NO statement CSV.")
@@ -1241,9 +1280,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--periods", nargs="*", default=None,
                         help="e.g. Q1-2026. Omit for every period the ticker files.")
-    parser.add_argument("--years", nargs="*", type=int, default=None,
-                        help="e.g. --years 2014 2015. Omit or pass none for every year the "
-                             "ticker files. Intersects with --periods.")
+    parser.add_argument("--quarters", nargs="*", default=None,
+                        help="e.g. --quarters 2014-Q3 2014-Q4 (YYYY-QQ, the sortable form; "
+                             "the repo-native 'Q3-2014' is refused). Omit or pass none for "
+                             "every quarter the ticker files. Intersects with --periods.")
     parser.add_argument("--allow-parent", action="store_true",
                         help="fall back to the STANDALONE filing where no consolidated one "
                              "exists (documents(); consolidated still wins).")
@@ -1268,7 +1308,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # arguments and constructs it; it does not resolve anything itself.
     run(JobSpec(
         exchange=args.exchange, symbol=args.symbol, periods=args.periods,
-        years=args.years,
+        quarters=args.quarters,
         allow_parent=args.allow_parent, layers=args.layers, template=args.template,
         data_root=args.data_root, models_dir=args.models, out_root=args.out,
         compare_with_disk=not args.no_compare, notes=args.notes,

@@ -65,6 +65,11 @@ class Statement:
     # balances against itself perfectly) and `sane` fails open in a subset run, so nothing else
     # catches it. When this is True, `build` does NOT mark the period cumulative.
     quarter_column: bool = False
+    # ⚠️ HOW MANY FIGURES THIS READING SPLIT ACROSS TWO BOXES — see `PdfParser.split_figures`.
+    # A count, not a flag, because `reconcile` reports it and a reader of the log should see
+    # the size of what was refused. 0 on every reading that is not fragmented, which is every
+    # bank filing measured.
+    split_figures: int = 0
 
     @property
     def cash_flow_method(self) -> Optional[str]:
@@ -838,6 +843,72 @@ class PdfParser:
                            tuple(w[5:]))
         return out
 
+    # ⚠️ THE DETECTOR ALSO DOES THE OPPOSITE OF `_split_number_runs`: ONE FIGURE, TWO BOXES.
+    # `'5.209.108'` ending at x=405.7 and `'954.978'` starting at x=409.5 is one printed
+    # 5.209.108.954.978 (VIC Q3-2014 at onnx@200 — 60 figures on the balance sheet alone). Both
+    # halves parse as plausible numbers, so nothing downstream can tell: the left half lands on
+    # no column and is dropped, leaving the row holding `954.978`, or enough left halves line up
+    # and become a spurious period column. Either way BOTH GRAND TOTALS survive whole, so
+    # `reconcile` passes and `sane` probes a correct total — `SLD-1`'s shape, a wrong figure
+    # that passes every gate.
+    #
+    # ⚠️ **THIS RUNS BEFORE COLUMNS EXIST, AND IT HAS TO.** The obvious test — "the left box
+    # ends on no column" — is circular: the fragments cluster into a column of their own, so it
+    # answers YES for the very halves it is hunting. Geometry and text are all there is here.
+    #
+    # ⚠️ **AND IT IS CONFINED TO THE VALUE ZONE**, the same right-60 % `value_columns` reads.
+    # Not because a label cannot hold two adjacent numbers, but because that is the half of the
+    # page the measurement below covers, and shipping wider than the measurement is how a rule
+    # with 0 false positives acquires some.
+    MERGE_MAX_GAP = 4.5
+    # The join must be a well-formed thousands-grouped figure, and the tail must itself start
+    # with a FULL group of three — which a continuation of a split figure always does. Two
+    # adjacent PERIOD figures usually fail the join outright ("1.558.887.407" + "1.541.259.663"
+    # leaves a group of ONE digit); where they would not, the gap is what separates them.
+    MERGE_JOIN_RE = re.compile(r"^\(?-?\d{1,3}(\.\d{3})+\)?$")
+    MERGE_TAIL_RE = re.compile(r"^\d{3}(\.\d{3})*\)?$")
+
+    @classmethod
+    def _merge_split_figures(cls, words: list, y_tol: float, lo: float) -> list:
+        """Re-join figures the detector emitted as two boxes -> the same word list, repaired.
+
+        The merged box keeps the LEFT box's x0 and the RIGHT box's x1, so the right edge the
+        column clustering reads is the edge the printed figure actually has.
+
+        A pair is merged only when all five hold:
+          * both boxes end inside the value zone (`lo`);
+          * same line, within `y_tol`, the right box immediately after the left one;
+          * the gap is under `MERGE_MAX_GAP`;
+          * the right box begins with a FULL three-digit group;
+          * the two joined with a thousands separator form one well-formed figure.
+        """
+        by_line: dict = {}
+        for w in words:
+            if w[2] < lo:
+                continue
+            k = next((k for k in by_line if abs(k - w[1]) <= y_tol), w[1])
+            by_line.setdefault(k, []).append(w)
+        merged, replacements = set(), {}
+        for ws in by_line.values():
+            ws = sorted(ws, key=lambda w: w[0])
+            i = 0
+            while i < len(ws) - 1:
+                a, b = ws[i], ws[i + 1]
+                at, bt = str(a[4]).strip(), str(b[4]).strip()
+                joined = at.rstrip(")") + "." + bt
+                if (b[0] - a[2] < cls.MERGE_MAX_GAP
+                        and cls.MERGE_TAIL_RE.match(bt)
+                        and cls.MERGE_JOIN_RE.match(joined)):
+                    replacements[id(a)] = ((a[0], a[1], b[2], max(a[3], b[3]), joined)
+                                           + tuple(a[5:]))
+                    merged.add(id(b))
+                    i += 2
+                    continue
+                i += 1
+        if not replacements:
+            return words
+        return [replacements.get(id(w), w) for w in words if id(w) not in merged]
+
     def _ocr_page(self, page, native: str):
         """(text, words) for one page, words in VISUAL pdf-point space.
 
@@ -863,6 +934,17 @@ class PdfParser:
 
         if self.engine == "onnx":
             text, words = self._onnx.read_page(page)
+            # ⚠️ MERGE FIRST, THEN SPLIT, AND THE ORDER IS NOT COSMETIC. `_split_number_runs`
+            # apportions a multi-figure box by CHARACTER OFFSET, so the gap it leaves between
+            # two pieces is the width of the SEPARATOR CHARACTER — `box width / len(text)`.
+            # That is 5.7pt for the measured case ('135.272.610 126.501.216' across 130pt) and
+            # therefore wider than `MERGE_MAX_GAP` — but it is a ratio, not a constant, and a
+            # narrower box or a longer run puts it under 4.5pt, at which point a merge running
+            # afterwards would join the splitter's own pieces straight back together. Merging
+            # FIRST cannot make that mistake at any width: it only ever sees boxes the DETECTOR
+            # emitted separately, and the box it produces holds no separator to act on.
+            words = self._merge_split_figures(words, self.Y_TOL,
+                                              page.rect.width * self.VALUE_ZONE)
             return text, self._split_number_runs(words, self.join_split_digits)
         if self.engine == "easyocr":
             text, words = self._ocr_page_easyocr(page)
@@ -1137,11 +1219,132 @@ class PdfParser:
                             if abs(w[2] - c) <= self.EDGE_TOL)
             if digits and digits[len(digits) // 2] > self.NOTE_MAX_DIGITS:
                 kept.append(c)
-        return kept or cols          # never leave the caller with nothing to parse
+        kept = kept or cols          # never leave the caller with nothing to parse
+        # ⚠️ AND THE ITEM-CODE COLUMN IS THE ONE MAGNITUDE CANNOT REACH — see _code_column.
+        code = self._code_column(kept, words_by_page)
+        return [c for c in kept if c != code] if code is not None else kept
 
     # A note reference is 1-2 digits ("Thuyết minh 4", "…21"); a Triệu-VND figure is 4-9. The
     # median digit-count of a column's numbers separates them with room to spare.
     NOTE_MAX_DIGITS = 2
+
+    # ⚠️ THE DETECTOR SPLITS ONE FIGURE INTO TWO BOXES, AND THE HALVES ARE BOTH PLAUSIBLE
+    # NUMBERS. On VIC Q3-2014 at onnx@200 the balance sheet returns `'5.209.108'` ending at
+    # x=405.7 and `'954.978'` starting at x=409.5 — one printed figure, 5.209.108.954.978, in
+    # two boxes 3.8pt apart. The left half lands on no column and is dropped, so the row keeps
+    # `954.978`; where enough left halves line up they instead form a SPURIOUS COLUMN and are
+    # kept as a period of their own. 60 of that statement's figures are split this way.
+    #
+    # ⚠️ **AND NOTHING DOWNSTREAM CAN SEE IT.** The grand totals were not split, so `reconcile`
+    # passes on a statement whose detail lines read `i_1_tien = 158.154` against a printed
+    # 945.186.158.154, and `sane` probes a total that is correct. That is `SLD-1`'s shape a
+    # fourth time — a wrong figure that passes every gate — and it is why this is refused rather
+    # than repaired here: a refusal escalates the cascade, and `onnx@300` reads the same
+    # document with **0** split figures and two clean columns.
+    #
+    # ⚠️ **THE GAP IS MEASURED, NOT CHOSEN.** Across 12 statements of VCB Q1-2021, VCB Q1-2026,
+    # ACB Q1-2024 and BID Q4-2016 — every one of which parses today — this rule fires **0**
+    # times at 4.5pt. On VIC Q3-2014 it fires 60 times on the balance sheet and 27 on the income
+    # statement at onnx@200, and 0 times on either at onnx@300. Widening it to 6pt starts
+    # picking up one or two pairs per bank statement, so 4.5 is where the two populations are
+    # actually separated and not where a round number fell.
+    SPLIT_MAX_GAP = 4.5
+    # Joining the two halves with a thousands separator has to yield a well-formed figure. Two
+    # ADJACENT PERIOD figures usually fail this — "1.558.887.407" + "1.541.259.663" joins to a
+    # group of ONE digit — but not always, which is why the gap does the separating and this
+    # only stops the obvious nonsense.
+    SPLIT_JOIN_RE = re.compile(r"^\(?-?\d{1,3}(\.\d{3})*\)?$")
+
+    def split_figures(self, words_by_page: Dict[int, list], width: float) -> int:
+        """How many figures this reading split across two boxes.
+
+        Geometry and text only — deliberately NOT keyed on the detected columns, because the
+        left halves cluster into a column of their own and anything asking "is this box on a
+        column?" would then answer yes for the very fragments it is looking for.
+        """
+        lo = width * self.VALUE_ZONE
+        n = 0
+        for words in words_by_page.values():
+            lines: Dict[float, list] = {}
+            for w in sorted(words, key=lambda w: (w[1], w[0])):
+                k = next((k for k in lines if abs(k - w[1]) <= self.Y_TOL), w[1])
+                lines.setdefault(k, []).append(w)
+            for ws in lines.values():
+                nums = sorted([w for w in self._numbers(ws) if w[2] >= lo],
+                              key=lambda w: w[0])
+                for a, b in zip(nums, nums[1:]):
+                    if (b[0] - a[2] < self.SPLIT_MAX_GAP
+                            and self.SPLIT_JOIN_RE.match(
+                                a[4].strip("()") + "." + b[4].strip("()"))):
+                        n += 1
+        return n
+
+    # ⚠️ THE "Mã số" COLUMN IS WHERE THE MAGNITUDE RULE ABOVE RUNS OUT, AND IT IS THE STANDARD
+    # CORPORATE FORM — not a quirk of one filing. VAS form B01-DN prints
+    # `Chỉ tiêu | Mã số | Thuyết minh | Số cuối kỳ | Số đầu năm`, and that second column holds
+    # the filing's own item numbering: 100, 110, 111, 270, 300, 440 — THREE digits, sometimes
+    # four (3131, 3161). A note reference is 1-2 and a period figure is 4-14, so the code sits
+    # exactly in the overlap and `NOTE_MAX_DIGITS` cannot be moved to cover it without throwing
+    # away real figure columns. Measured on VIC Q3-2014: the code column clusters at x=279.7 of
+    # a 595pt page — 47%, INSIDE the right-60% value zone — 86 numbers, 79 of them 3-digit and
+    # 7 four-digit, and it became column 0.
+    #
+    # ⚠️ **AND IT PRODUCES WRONG VALUES, NOT A REFUSAL, WHICH IS WHY THIS IS THE DEFAULT PATH
+    # AND NOT A LATE CASCADE LAYER.** On a balance sheet the gates do catch it — assets read
+    # 270 and resources 440, so `reconcile` refuses with "assets != liabilities + equity" and
+    # the quarter is recorded `missing`. On the other two statements they do not: an income
+    # statement only has to present a PBT line, and `50` is a PBT line as far as `reconcile` is
+    # concerned; a cash flow only has to present a closing balance, and `70` is one. Both are
+    # then left to `sane`, which FAILS OPEN on a ticker with no accepted history — exactly the
+    # position every non-bank ticker is in on its first run. VIC Q1-2011 is the measured case
+    # and it is already on disk: both grand totals happened to read correctly so `reconcile`
+    # passed, and `a_tai_san_ngan_han = 100`, `b_tai_san_dai_han = 200`, `i_no_ngan_han = 310`
+    # and `ii_no_dai_han = 330` were written as figures. §6-2-untricies' rule applies — when
+    # the gates cannot see the defect, the repair cannot be an escalation.
+    #
+    # The discriminator is the COLUMN HEADING, which is what `parse` already reads rather than
+    # counting columns (`_prints_quarter_column`, "4 columns can equally be a note reference
+    # plus an over-segmented pair"). The heading is printed once, above the column, and OCR
+    # reads it cleanly: VIC Q3-2014 page 4 gives the box `'Mã số'` at x0=261.0 x1=286.2 with
+    # the column's right edge at 279.7, inside it.
+    CODE_HEADER_NS = "maso"
+    CODE_HEADER_MATCH = 0.80
+
+    def _code_column(self, cols: List[float],
+                     words_by_page: Dict[int, list]) -> Optional[float]:
+        """The right edge of the "Mã số" item-code column among `cols`, or None.
+
+        Three conditions, and every one of them fails SAFE — an unreadable heading, a heading
+        over nothing, or a heading over a column that is not the leftmost all return None and
+        leave the caller exactly as it was. A statement then fails the way it does today rather
+        than losing a column it needed.
+
+        1. A whole word box normalises to "mã số". Whole, not contained: `SequenceMatcher`
+           against the entire box is what keeps a label mentioning the phrase in prose from
+           answering, and it still tolerates the tone marks OCR drops.
+        2. A detected column's right edge lies under that box, within `EDGE_TOL` of its span.
+           This alone is most of the protection: where the codes are merged into the labels
+           instead of forming a column — VIC's own income statement reads "02 Các khoản giảm
+           trừ" — the heading sits at x≈261-286 and the leftmost figure column at x≈436, so
+           nothing is under it and nothing is dropped.
+        3. It is the LEFTMOST column. That is the form's layout, not a heuristic: `Mã số`
+           precedes `Thuyết minh` and both period columns. Requiring it means a mis-read
+           heading cannot reach past a real figure column to take one.
+        """
+        from difflib import SequenceMatcher
+
+        if len(cols) < 2:
+            return None                      # dropping the only column helps nobody
+        leftmost = min(cols)
+        for words in words_by_page.values():
+            for w in words:
+                ns = self.norm(w[4]).replace(" ", "")
+                if not ns or SequenceMatcher(
+                        None, self.CODE_HEADER_NS, ns).ratio() < self.CODE_HEADER_MATCH:
+                    continue
+                if w[0] - self.EDGE_TOL <= leftmost <= w[2] + self.EDGE_TOL:
+                    return leftmost
+        return None
 
     # How far a numeric box may be searched for its label, and how much better the shifted
     # pairing must be before it is believed. Both measured 2026-08-25 on four bank filings:
@@ -1586,6 +1789,7 @@ class PdfParser:
                 out[report] = Statement(report=report, pages=[i + 1 for i in on],
                                         unit=unit, n_columns=len(columns), rows=rows,
                                         quarter_column=qcol,
+                                        split_figures=self.split_figures(words_by_page, width),
                                         publish_date=published,
                                         shares_authorized=shares["shares_authorized"],
                                         shares_issued=shares["shares_issued"],

@@ -1,0 +1,49 @@
+period,report,layer,items,status,verdict,seconds
+Q2-2008,balance_sheet,,0,absent,absent in this run,121.99
+Q2-2008,income_statement,,0,absent,absent in this run,121.99
+Q2-2008,cash_flow,,0,absent,absent in this run,121.99
+Q1-2009,balance_sheet,,0,absent,absent in this run,52.92
+Q1-2009,income_statement,onnx@200,17,pdf,REPRODUCED,52.92
+Q1-2009,cash_flow,onnx@200,19,pdf,REPRODUCED,52.92
+Q3-2009,balance_sheet,,0,absent,absent in this run,52.4
+Q3-2009,income_statement,onnx@200,17,pdf,REPRODUCED,52.4
+Q3-2009,cash_flow,onnx@200,25,pdf,REPRODUCED,52.4
+Q1-2010,balance_sheet,,0,absent,absent in this run,50.97
+Q1-2010,income_statement,onnx@200,18,pdf,REPRODUCED,50.97
+Q1-2010,cash_flow,onnx@200,22,pdf,REPRODUCED,50.97
+Q3-2010,balance_sheet,,0,absent,absent in this run,1028.6
+Q3-2010,income_statement,onnx@200,15,pdf,REPRODUCED,1028.6
+Q3-2010,cash_flow,,0,absent,absent in this run,1028.6
+Q4-2010,balance_sheet,,0,absent,absent in this run,1552.92
+Q4-2010,income_statement,,0,absent,absent in this run,1552.92
+Q4-2010,cash_flow,,0,absent,absent in this run,1552.92
+Q1-2011,balance_sheet,onnx@300,44,pdf,DIFFERS,904.44
+Q1-2011,income_statement,onnx@300,14,pdf,DIFFERS,904.44
+Q1-2011,cash_flow,,0,absent,absent in this run,904.44
+Q3-2011,balance_sheet,onnx@300+notes+seam,47,pdf,no pdf row on disk to compare against,1086.08
+Q3-2011,income_statement,onnx@300,15,pdf,DIFFERS,1086.08
+Q3-2011,cash_flow,,0,absent,absent in this run,1086.08
+Q4-2011,balance_sheet,onnx@300,47,pdf,REPRODUCED,1819.4
+Q4-2011,income_statement,,0,absent,absent in this run,1819.4
+Q4-2011,cash_flow,,0,absent,absent in this run,1819.4
+Q1-2012,balance_sheet,onnx@300,45,pdf,no pdf row on disk to compare against,1183.69
+Q1-2012,income_statement,onnx@200,16,pdf,REPRODUCED,1183.69
+Q1-2012,cash_flow,,0,absent,absent in this run,1183.69
+Q3-2012,balance_sheet,onnx@300,45,pdf,no pdf row on disk to compare against,119.15
+Q3-2012,income_statement,onnx@200,16,pdf,REPRODUCED,119.15
+Q3-2012,cash_flow,onnx@200,18,pdf,REPRODUCED,119.15
+Q1-2013,balance_sheet,onnx@400,47,pdf,no pdf row on disk to compare against,183.6
+Q1-2013,income_statement,onnx@300,16,pdf,DIFFERS,183.6
+Q1-2013,cash_flow,onnx@200,18,pdf,REPRODUCED,183.6
+Q2-2013,balance_sheet,onnx@300,45,pdf,DIFFERS,2230.81
+Q2-2013,income_statement,,0,absent,absent in this run,2230.81
+Q2-2013,cash_flow,,0,absent,absent in this run,2230.81
+Q3-2013,balance_sheet,onnx@200,47,pdf,no pdf row on disk to compare against,59.17
+Q3-2013,income_statement,onnx@200,17,pdf,REPRODUCED,59.17
+Q3-2013,cash_flow,onnx@200,19,pdf,REPRODUCED,59.17
+Q4-2013,balance_sheet,onnx@200,45,pdf,REPRODUCED,2246.95
+Q4-2013,income_statement,,0,absent,absent in this run,2246.95
+Q4-2013,cash_flow,onnx@300,15,pdf,DIFFERS,2246.95
+Q1-2014,balance_sheet,onnx@200,44,pdf,no pdf row on disk to compare against,1230.94
+Q1-2014,income_statement,onnx@200,16,pdf,DIFFERS,1230.94
+Q1-2014,cash_flow,,0,absent,absent in this run,1230.94

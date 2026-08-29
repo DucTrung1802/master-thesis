@@ -2117,6 +2117,17 @@ class FinancialsBuilder:
         """
         if len(st.rows) < self.MIN_ROWS:
             return f"only {len(st.rows)} rows parsed"
+        # A FRAGMENTED READING IS REFUSED BEFORE ANY OF ITS FIGURES ARE BELIEVED. The detector
+        # splits one printed figure into two boxes on some scans, and both halves are plausible
+        # numbers — VIC Q3-2014's balance sheet at onnx@200 reads `i_1_tien` as 158.154 against
+        # a printed 945.186.158.154, 60 figures in all, while both grand totals survive whole
+        # and every gate below passes. Nothing downstream can see that, so the only place to
+        # stop it is here, and the only useful answer is to escalate: the same document at
+        # onnx@300 splits NOTHING. `PdfParser.split_figures` carries the measurement that fixes
+        # the gap, and it counts 0 on every bank filing checked.
+        if st.split_figures:
+            return (f"{st.split_figures} figure(s) split across two boxes — "
+                    f"this reading is fragmented")
 
         def get(canonical: Tuple[str, ...], *text: str,
                 reject: Tuple[str, ...] = ()) -> Optional[int]:

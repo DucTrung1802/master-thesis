@@ -458,18 +458,18 @@ even in the payload.
   "ticker": "VCB",
   "source_dirs": ["src/web_scraper", "src/utils"],
   "documents": { "exchange": "HOSE", "symbol": "VCB",
-                 "periods": ["Q1-2026"], "years": [2026] }
+                 "periods": ["Q1-2026"], "quarters": ["2026-Q1"] }
 }
 ```
 
-⚠️ **`periods` AND `years` ARE BOTH OPTIONAL AND THEY INTERSECT.** Omitting both ships every
+⚠️ **`periods` AND `quarters` ARE BOTH OPTIONAL AND THEY INTERSECT.** Omitting both ships every
 filing the ticker has; `years: [2014]` ships that year's four quarters; `years: [2014]` with
 `periods: ["Q3-2014"]` ships one. **An empty list means every year, never none** — it is the
 absence of a filter, not an empty selection.
 
 ⚠️ **AND `data.documents` IS CHECKED AGAINST `parameters`, because they are two copies of one
 filter.** `data.documents` decides which filings are UPLOADED; `parameters.PERIODS` /
-`parameters.YEARS` decide which the worker OPENS. A job naming different years in the two
+`parameters.QUARTERS` decide which the worker OPENS. A job naming different quarters in the two
 ships one set and parses another, and the worker reports the shortfall as `missing` — the same
 word a genuinely unreadable filing gets. `config._validate` refuses the mismatch, and refuses
 a year written as a string (`"2014"` filters nothing, so the payload would quietly grow to the

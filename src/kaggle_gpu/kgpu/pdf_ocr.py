@@ -75,7 +75,8 @@ def _slug(text: str) -> str:
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", text.lower())).strip("-")
 
 
-def scope_of(periods: Optional[Sequence[str]], years: Optional[Sequence[int]]) -> str:
+def scope_of(periods: Optional[Sequence[str]],
+             quarters: Optional[Sequence[str]] = None) -> str:
     """A short, PREDICTABLE name for the filter — the half of the job name that varies.
 
     Predictable matters more than short: a reader looking at `reports/pdf_ocr/` or at the
@@ -83,21 +84,23 @@ def scope_of(periods: Optional[Sequence[str]], years: Optional[Sequence[int]]) -
     make every one of those lookups a search.
 
         periods=["Q3-2014"]                  -> "q3-2014"
-        years=[2014]                         -> "2014"
-        years=[2013, 2014]                   -> "2013-2014"
-        years=[2010 … 2020]                  -> "2010-2020"      (a RANGE, not a list)
+        quarters=["2014-Q3"]                 -> "2014-q3"
+        quarters=["2013-Q4", "2014-Q1"]      -> "2013-q4-2014-q1"
+        quarters=[2010-Q1 … 2020-Q4]         -> "2010-q1-2020-q4"   (a RANGE, not a list)
         periods=["Q1-2014", "Q3-2014"]       -> "2p"
         neither                              -> "all"
+
+    ⚠️ **A SPARSE LIST STILL NAMES ITS ENDS AND THAT IS DELIBERATE.** 17 quarters cannot fit in
+    a Kaggle title, and a hash would make every lookup a search; the ends plus the count in the
+    job's own `NOTES` is what a reader actually needs. The manifest carries the exact list.
     """
     if periods and len(periods) == 1:
         return _slug(periods[0])
-    if years:
-        ys = sorted({int(y) for y in years})
-        if len(ys) == 1:
-            return str(ys[0])
-        if len(ys) == 2:
-            return f"{ys[0]}-{ys[1]}"
-        return f"{ys[0]}-{ys[-1]}"          # ⚠️ a RANGE even when the list is sparse
+    if quarters:
+        qs = sorted({str(q).strip() for q in quarters})
+        if len(qs) == 1:
+            return _slug(qs[0])
+        return _slug(f"{qs[0]}-{qs[-1]}")   # ⚠️ a RANGE even when the list is sparse
     if periods:
         return f"{len(periods)}p"
     return "all"
@@ -108,7 +111,7 @@ def job(
     *,
     exchange: str = "HOSE",
     periods: Optional[Sequence[str]] = None,
-    years: Optional[Sequence[int]] = None,
+    quarters: Optional[Sequence[str]] = None,
     allow_parent: bool = False,
     template: Optional[str] = None,
     layers: Optional[Sequence[str]] = None,
@@ -122,20 +125,20 @@ def job(
 ) -> JobConfig:
     """One PDF-OCR job, validated exactly as a `kaggle_config.json` job is.
 
-    ⚠️ **`periods` AND `years` ARE WRITTEN TWICE ON PURPOSE** — into `data.documents`, which
+    ⚠️ **`periods` AND `quarters` ARE WRITTEN TWICE ON PURPOSE** — into `data.documents`, which
     decides which filings are UPLOADED, and into `parameters`, which decides which the worker
     OPENS. They are built from the same arguments here, and `_validate` still checks the two
     against each other: this function is not the only way a job can be built, and the check
     costs nothing.
 
-    ⚠️ **AN EMPTY LIST MEANS EVERY YEAR, NEVER NONE.** That is `plan()`'s contract and it is
-    preserved here: `years=[]` and `years=None` produce the same job.
+    ⚠️ **AN EMPTY LIST MEANS EVERY QUARTER, NEVER NONE.** That is `plan()`'s contract and it is
+    preserved here: `quarters=[]` and `quarters=None` produce the same job.
     """
     symbol = symbol.upper()
     exchange = exchange.upper()
     periods = list(periods) if periods else None
-    years = [int(y) for y in years] if years else None
-    scope = scope or scope_of(periods, years)
+    quarters = sorted({str(q).strip() for q in quarters}) if quarters else None
+    scope = scope or scope_of(periods, quarters)
     user = user or kaggle_user()
 
     name = name or f"pdf-ocr-{_slug(symbol)}-{scope}"
@@ -155,8 +158,8 @@ def job(
     }
     if periods:
         documents["periods"] = periods
-    if years:
-        documents["years"] = years
+    if quarters:
+        documents["quarters"] = quarters
 
     parameters: Dict[str, Any] = {
         "ALIGN_TORCH": align_torch,
@@ -165,11 +168,11 @@ def job(
         "EXCHANGE": exchange,
         "SYMBOL": symbol,
         "PERIODS": periods,
-        "YEARS": years,
+        "QUARTERS": quarters,
         "ALLOW_PARENT": allow_parent,
         "LAYERS": list(layers) if layers else None,
         "COMPARE": compare,
-        "NOTES": notes or _default_notes(exchange, symbol, periods, years, template),
+        "NOTES": notes or _default_notes(exchange, symbol, periods, quarters, template),
     }
 
     return _validate(JobConfig(
@@ -195,7 +198,7 @@ def job(
     ))
 
 
-def _default_notes(exchange: str, symbol: str, periods, years, template) -> str:
+def _default_notes(exchange: str, symbol: str, periods, quarters, template) -> str:
     """What the run folder should say about itself when the caller wrote nothing.
 
     ⚠️ A blank `notes` is how a run folder becomes unreadable six months later, and the
@@ -205,8 +208,9 @@ def _default_notes(exchange: str, symbol: str, periods, years, template) -> str:
     which = []
     if periods:
         which.append(f"periods={periods}")
-    if years:
-        which.append(f"years={years}")
+    if quarters:
+        which.append(f"quarters={len(quarters)} ({quarters[0]}..{quarters[-1]})"
+                     if len(quarters) > 3 else f"quarters={quarters}")
     filt = ", ".join(which) if which else "every period this ticker files"
     tpl = f"template={template} (stated)" if template else "template resolved on the worker"
     return (
@@ -226,7 +230,7 @@ def describe(cfg: JobConfig) -> List[str]:
         f"kernel       : {cfg.id}",
         f"dataset      : {cfg.data.id}",
         f"filings      : {d['exchange']}_{d['symbol']}  "
-        f"periods={d.get('periods') or 'all'}  years={d.get('years') or 'all'}  "
+        f"periods={d.get('periods') or 'all'}  quarters={d.get('quarters') or 'all'}  "
         f"allow_parent={d['allow_parent']}",
         f"template     : {cfg.parameters['TEMPLATE'] or 'resolve on the worker'}",
         f"results into : {cfg.results_into}",

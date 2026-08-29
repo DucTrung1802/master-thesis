@@ -560,10 +560,10 @@
           "periods": [
             "Q3-2014"
           ],
-          "years": [
-            2014
-          ],
-          "allow_parent": false
+          "allow_parent": false,
+          "quarters": [
+            "2014-Q3"
+          ]
         }
       },
       "parameters": {
@@ -575,13 +575,13 @@
         "PERIODS": [
           "Q3-2014"
         ],
-        "YEARS": [
-          2014
-        ],
         "ALLOW_PARENT": false,
         "LAYERS": null,
         "COMPARE": true,
-        "NOTES": "VIC Q3-2014 on a T4 — the FIRST cross-machine check on a quarter that FAILS. Every comparison so far (VCB Q1-2026, BID Q4-2016, VIC Q1-2026) was a filing that ends with three accepted statements, so what was measured was reproduction of an ACCEPT. This quarter's balance sheet and income statement are `missing` on disk after all 47 layers and only its cash flow parsed (onnx@200), so the run reproduces a REFUSAL — every gate verdict, every escalation and the same two absences, or it does not. Locally it took 44m 33s inside the 27-quarter authoritative run (CLAUDE.md 6-2-duotricies). The filters are the new `years` parameter INTERSECTED with `periods`: years=[2014] and periods=[Q3-2014] select one filing, which is what exercises the new code path without paying for four documents. TEMPLATE is stated rather than resolved so both machines take the same route. `sane` gets a real magnitude band because the payload ships the statement CSVs and 26 earlier VIC quarters sit in them — this is NOT a subset run in the sense that flips the guard open, because pdf_ocr_job seeds the band from disk and writes no CSV. Nothing from this run may be quoted as a fundamental: CRP-1."
+        "NOTES": "VIC Q3-2014 on a T4 — the FIRST cross-machine check on a quarter that FAILS. Every comparison so far (VCB Q1-2026, BID Q4-2016, VIC Q1-2026) was a filing that ends with three accepted statements, so what was measured was reproduction of an ACCEPT. This quarter's balance sheet and income statement are `missing` on disk after all 47 layers and only its cash flow parsed (onnx@200), so the run reproduces a REFUSAL — every gate verdict, every escalation and the same two absences, or it does not. Locally it took 44m 33s inside the 27-quarter authoritative run (CLAUDE.md 6-2-duotricies). The filters are the `quarters` parameter INTERSECTED with `periods`: quarters=[2014-Q3] and periods=[Q3-2014] select one filing, which is what exercises the new code path without paying for four documents. TEMPLATE is stated rather than resolved so both machines take the same route. `sane` gets a real magnitude band because the payload ships the statement CSVs and 26 earlier VIC quarters sit in them — this is NOT a subset run in the sense that flips the guard open, because pdf_ocr_job seeds the band from disk and writes no CSV. Nothing from this run may be quoted as a fundamental: CRP-1.",
+        "QUARTERS": [
+          "2014-Q3"
+        ]
       }
     }
   }

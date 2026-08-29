@@ -377,7 +377,7 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
     periods = spec.get("periods") or None
     # ⚠️ EMPTY LIST AND ABSENT MEAN THE SAME THING — every year — and both must reach `plan`
     # as None rather than as `[]`, because `[]` is falsy there too but only by accident.
-    years = spec.get("years") or None
+    quarters = spec.get("quarters") or None
     allow_parent = bool(spec.get("allow_parent", False))
     period_min = spec.get("period_min", "Q1-2008")
     with_statements = bool(spec.get("with_statements", True))
@@ -385,12 +385,12 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
 
     job.use_data_root()                       # the repo's own raw_data/cafef
     builder = FinancialsBuilder(logger=None)
-    tasks = job.plan(builder, exchange, symbol, periods=periods, years=years,
+    tasks = job.plan(builder, exchange, symbol, periods=periods, quarters=quarters,
                      allow_parent=allow_parent, period_min=period_min)
     if not tasks:
         raise ValueError(
             f"{exchange}_{symbol} has no filing to ship for periods={periods!r} "
-            f"years={years!r} — an empty payload is a run that parses nothing and "
+            f"quarters={quarters!r} — an empty payload is a run that parses nothing and "
             f"reports success."
         )
     template = tasks[0].template
@@ -475,8 +475,8 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
         # ⚠️ Recorded even when the job named none, so a reader can tell "every period this
         # ticker files" from "nobody wrote it down" — §5 rule 2 at the manifest.
         "periods_requested": list(periods) if periods else None,
-        "years_requested": [int(y) for y in years] if years else None,
-        "years_shipped": sorted({int(t.period.split("-")[1]) for t in tasks}),
+        "quarters_requested": list(quarters) if quarters else None,
+        "quarters_shipped": sorted({job.as_quarter(t.period) for t in tasks}),
         "filings": [
             {"period": t.period, "file": t.file, "consolidated": t.consolidated,
              "assurance": t.assurance, "cumulative": t.cumulative,

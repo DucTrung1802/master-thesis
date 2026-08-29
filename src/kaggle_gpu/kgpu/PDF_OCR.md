@@ -41,8 +41,8 @@ Edit cell 1, run everything. That is the whole procedure.
 
 ```python
 SYMBOL   = "VIC"
-YEARS    = [2014]            # [] or None = every year the ticker files
-PERIODS  = ["Q3-2014"]       # optional; intersects with YEARS
+QUARTERS = ["2014-Q3"]       # [] or None = every quarter the ticker files. YYYY-QQ.
+PERIODS  = None              # optional; the repo-native form; intersects with QUARTERS
 TEMPLATE = "corp"            # None = resolve it and record which route answered
 ```
 
@@ -52,17 +52,17 @@ Prefer a terminal? The same thing, four verbs — see [§7](#7-the-cli-instead-o
 
 ## 2. Choosing the filings
 
-`YEARS` and `PERIODS` are both optional and they **INTERSECT**. Each one **raises** when it
+`QUARTERS` and `PERIODS` are both optional and they **INTERSECT**. Each one **raises** when it
 matches nothing, because a filter that matches nothing is a run that parses nothing and reports
 success.
 
 | you want | write |
 |---|---|
 | one quarter | `PERIODS = ["Q3-2014"]`, `YEARS = None` |
-| one year (4 documents) | `YEARS = [2014]`, `PERIODS = None` |
-| two years | `YEARS = [2013, 2014]` |
+| one quarter | `QUARTERS = ["2014-Q3"]`, `PERIODS = None` |
+| a batch, in any order | `QUARTERS = ["2013-Q4", "2014-Q1"]` |
 | one quarter, stated twice | `YEARS = [2014]` **and** `PERIODS = ["Q3-2014"]` → Q3-2014 |
-| **everything** ⚠️ | `YEARS = []` — 70+ documents, hours of GPU |
+| **everything** ⚠️ | `QUARTERS = []` — 70+ documents, hours of GPU |
 
 ⚠️ **AN EMPTY LIST MEANS EVERY YEAR, NEVER NONE.** `[]` and `None` build the identical job.
 That is `plan()`'s contract, and it is why the default is the *absence* of a filter rather than
@@ -76,7 +76,7 @@ ticker; `config._validate` refuses it.
 `orchestration` §2a: the statement build skips whole **years**, never quarters, because
 `_decumulate` needs Q1..Q(q-1) of the same year and a partial skip deletes the very quarter a
 run exists to fix. This job de-cumulates nothing, so the argument does not bind it — but a
-batch is issued in years, so the two halves use one word.
+batch is issued in quarters since 2026-08-29, so the two halves use one word. ⚠️ **It was `YEARS` until then**, on the argument that the statement BUILD skips whole years — a fact about the WRITE, which this path does not do, so the wider unit only bought extra OCR.
 
 ### `TEMPLATE`
 
@@ -172,7 +172,7 @@ result cell. **The two OCR halves fail independently** — detection is onnxrunt
 is torch — so *"the GPU was used"* is two questions.
 
 **⚠️ The payload and the parameters are two copies of one filter.** `data.documents` decides
-which filings are UPLOADED; `PERIODS`/`YEARS` decide which the worker OPENS. A mismatch ships
+which filings are UPLOADED; `PERIODS`/`QUARTERS` decide which the worker OPENS. A mismatch ships
 one set and parses another, and the worker reports the shortfall as `missing` — the same word a
 genuinely unreadable filing gets. `pdf_ocr.job()` builds both from your arguments and
 `_validate` still checks them against each other.
@@ -257,7 +257,7 @@ From Python, with no config file at all:
 
 ```python
 from kgpu import pdf_ocr, runner
-cfg = pdf_ocr.job("VIC", years=[2014], periods=["Q3-2014"], template="corp")
+cfg = pdf_ocr.job("VIC", quarters=["2014-Q3"], template="corp")
 runner.plan(cfg); runner.rehearse(cfg); runner.run(cfg, refresh_data=True)
 ```
 

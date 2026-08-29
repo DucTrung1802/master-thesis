@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "run_id": "20260829-193435__hose_tcb__pdf_ocr",
+  "stage": "web_scraper.pdf_ocr_job",
+  "created": "2026-08-29T19:43:35+07:00",
+  "git_commit": "bd15595",
+  "notes": "UNIT REPAIR: the five TCB income statements that read unit=1 against the ticker norm of 1,000,000 and are therefore off by exactly 10^6. Verified on Q1-2014 in an earlier probe: PBT 673,136 -> 673,136,000,000 = 673 ty, which is TCB's real Q1-2014 figure. Cascade restricted to the three layers carrying unit_from_document; the full run never reached them because these statements accept at layer 1 (PGB-1's half-right-layer trap, with sane failing open because TCB has no CSV on disk). Q3-2013 is NOT here - it declares no unit anywhere and the probe did not fix it.",
+  "inputs": {
+    "exchange": "HOSE",
+    "symbol": "TCB",
+    "periods": null,
+    "quarters": [
+      "2014-Q1",
+      "2014-Q3",
+      "2015-Q1",
+      "2015-Q3",
+      "2016-Q1"
+    ],
+    "allow_parent": false,
+    "period_min": "Q1-2008",
+    "template_requested": null,
+    "layers_requested": [
+      "onnx@200+unit+tail",
+      "onnx@200+unit+tail+relax",
+      "onnx@200+unit"
+    ],
+    "compare_with_disk": true,
+    "notes": "UNIT REPAIR: the five TCB income statements that read unit=1 against the ticker norm of 1,000,000 and are therefore off by exactly 10^6. Verified on Q1-2014 in an earlier probe: PBT 673,136 -> 673,136,000,000 = 673 ty, which is TCB's real Q1-2014 figure. Cascade restricted to the three layers carrying unit_from_document; the full run never reached them because these statements accept at layer 1 (PGB-1's half-right-layer trap, with sane failing open because TCB has no CSV on disk). Q3-2013 is NOT here - it declares no unit anywhere and the probe did not fix it.",
+    "template": "bank",
+    "template_how": "detect_template (CafeF fingerprint, over the network)",
+    "data_root": "D:\\GIT\\master-thesis\\raw_data\\cafef",
+    "models": {
+      "det": "D:\\GIT\\master-thesis\\src\\web_scraper\\models\\deepdoc_det.onnx",
+      "vietocr": "D:\\GIT\\master-thesis\\experiment\\experiment_9\\vendor\\deepdoc_vietocr\\vietocr\\weight\\vgg_seq2seq.pth"
+    },
+    "documents": [
+      "HOSE_TCB__Q1-2014",
+      "HOSE_TCB__Q3-2014",
+      "HOSE_TCB__Q1-2015",
+      "HOSE_TCB__Q3-2015",
+      "HOSE_TCB__Q1-2016"
+    ],
+    "layers": [
+      "onnx@200+unit+tail",
+      "onnx@200+unit+tail+relax",
+      "onnx@200+unit"
+    ],
+    "layers_are_the_full_cascade": false
+  },
+  "environment": {
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "count": 1,
+      "vram_total_mb": 4096,
+      "vram_free_mb": 1555,
+      "cuda": "12.1",
+      "torch": "2.5.1+cu121"
+    },
+    "host": "DESKTOP-TRDFIML",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "timezone": "GMT+7",
+    "ocr": {
+      "det_providers": [
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ],
+      "recognizer_device": "cuda",
+      "stack": {
+        "onnxruntime-gpu": "1.22.0",
+        "pymupdf": "1.28.0",
+        "vietocr": "0.3.13",
+        "opencv-python-headless": "4.13.0.92",
+        "opencv-python": "4.13.0.92",
+        "shapely": "2.1.2",
+        "pyclipper": "1.4.0",
+        "numpy": "2.2.6",
+        "einops": "0.2.0",
+        "torch": "2.5.1+cu121"
+      },
+      "stack_fingerprint": "e6b778e294b4",
+      "pin_violations": {},
+      "onnxruntime": "1.22.0",
+      "onnxruntime_advertises": [
+        "TensorrtExecutionProvider",
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ]
+    }
+  },
+  "execution": {
+    "started_at": "2026-08-29T19:34:38+07:00",
+    "finished_at": "2026-08-29T19:43:35+07:00",
+    "timezone": "GMT+7",
+    "runtime_seconds": 537.55,
+    "runtime": "8m 58s",
+    "device": "cuda",
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "count": 1,
+      "vram_total_mb": 4096,
+      "vram_free_mb": 1551,
+      "cuda": "12.1",
+      "torch": "2.5.1+cu121"
+    },
+    "host": "DESKTOP-TRDFIML",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "results": [
+    {
+      "period": "Q1-2014",
+      "report": "balance_sheet",
+      "layer": "onnx@200+unit+tail",
+      "items": 44,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 111.94
+    },
+    {
+      "period": "Q1-2014",
+      "report": "income_statement",
+      "layer": "onnx@200+unit+tail",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 111.94
+    },
+    {
+      "period": "Q1-2014",
+      "report": "cash_flow",
+      "layer": "onnx@200+unit+tail",
+      "items": 17,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 111.94
+    },
+    {
+      "period": "Q3-2014",
+      "report": "balance_sheet",
+      "layer": "onnx@200+unit+tail",
+      "items": 45,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 98.33
+    },
+    {
+      "period": "Q3-2014",
+      "report": "income_statement",
+      "layer": "onnx@200+unit+tail",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 98.33
+    },
+    {
+      "period": "Q3-2014",
+      "report": "cash_flow",
+      "layer": "onnx@200+unit+tail",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 98.33
+    },
+    {
+      "period": "Q1-2015",
+      "report": "balance_sheet",
+      "layer": "onnx@200+unit+tail",
+      "items": 45,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 115.68
+    },
+    {
+      "period": "Q1-2015",
+      "report": "income_statement",
+      "layer": "onnx@200+unit+tail",
+      "items": 17,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 115.68
+    },
+    {
+      "period": "Q1-2015",
+      "report": "cash_flow",
+      "layer": "onnx@200+unit+tail",
+      "items": 17,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 115.68
+    },
+    {
+      "period": "Q3-2015",
+      "report": "balance_sheet",
+      "layer": "onnx@200+unit+tail",
+      "items": 58,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 99.73
+    },
+    {
+      "period": "Q3-2015",
+      "report": "income_statement",
+      "layer": "onnx@200+unit+tail",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 99.73
+    },
+    {
+      "period": "Q3-2015",
+      "report": "cash_flow",
+      "layer": "onnx@200+unit+tail",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 99.73
+    },
+    {
+      "period": "Q1-2016",
+      "report": "balance_sheet",
+      "layer": "onnx@200+unit+tail",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 111.8
+    },
+    {
+      "period": "Q1-2016",
+      "report": "income_statement",
+      "layer": "onnx@200+unit+tail",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 111.8
+    },
+    {
+      "period": "Q1-2016",
+      "report": "cash_flow",
+      "layer": "onnx@200+unit+tail",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 111.8
+    }
+  ]
+}

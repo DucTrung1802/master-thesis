@@ -1,0 +1,608 @@
+{
+  "schema_version": 1,
+  "run_id": "20260829-122141__hose_vic__pdf_ocr",
+  "stage": "web_scraper.pdf_ocr_job",
+  "created": "2026-08-29T16:13:46+07:00",
+  "git_commit": "bd15595+dirty",
+  "notes": "VIC's 16 quarters that still hold at least one `missing` statement and for which CafeF has a filing (2008-Q3 has none — `plan` refused it, which is the filter working). 22 missing cells, 11 of them balance-sheet-only. First run after MSO-1 (the VAS `Ma so` item-code column read as a period, which is why a VIC balance sheet reported assets=270 against resources=440) and SPL-1 (one printed figure returned as two detector boxes — repaired by _merge_split_figures where the join is provable, refused by the fragmented-reading gate where it is not).",
+  "inputs": {
+    "exchange": "HOSE",
+    "symbol": "VIC",
+    "periods": null,
+    "quarters": [
+      "2008-Q2",
+      "2009-Q1",
+      "2009-Q3",
+      "2010-Q1",
+      "2010-Q3",
+      "2010-Q4",
+      "2011-Q1",
+      "2011-Q3",
+      "2011-Q4",
+      "2012-Q1",
+      "2012-Q3",
+      "2013-Q1",
+      "2013-Q2",
+      "2013-Q3",
+      "2013-Q4",
+      "2014-Q1"
+    ],
+    "allow_parent": false,
+    "period_min": "Q1-2008",
+    "template_requested": "corp",
+    "layers_requested": null,
+    "compare_with_disk": true,
+    "notes": "VIC's 16 quarters that still hold at least one `missing` statement and for which CafeF has a filing (2008-Q3 has none — `plan` refused it, which is the filter working). 22 missing cells, 11 of them balance-sheet-only. First run after MSO-1 (the VAS `Ma so` item-code column read as a period, which is why a VIC balance sheet reported assets=270 against resources=440) and SPL-1 (one printed figure returned as two detector boxes — repaired by _merge_split_figures where the join is provable, refused by the fragmented-reading gate where it is not).",
+    "template": "corp",
+    "template_how": "override",
+    "data_root": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-vic-missing-16/documents/data/cafef",
+    "models": {
+      "det": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-vic-missing-16/documents/models/deepdoc_det.onnx",
+      "vietocr": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-vic-missing-16/documents/models/vgg_seq2seq.pth"
+    },
+    "documents": [
+      "HOSE_VIC__Q2-2008",
+      "HOSE_VIC__Q1-2009",
+      "HOSE_VIC__Q3-2009",
+      "HOSE_VIC__Q1-2010",
+      "HOSE_VIC__Q3-2010",
+      "HOSE_VIC__Q4-2010",
+      "HOSE_VIC__Q1-2011",
+      "HOSE_VIC__Q3-2011",
+      "HOSE_VIC__Q4-2011",
+      "HOSE_VIC__Q1-2012",
+      "HOSE_VIC__Q3-2012",
+      "HOSE_VIC__Q1-2013",
+      "HOSE_VIC__Q2-2013",
+      "HOSE_VIC__Q3-2013",
+      "HOSE_VIC__Q4-2013",
+      "HOSE_VIC__Q1-2014"
+    ],
+    "layers": [
+      "onnx@200",
+      "onnx@300",
+      "onnx@400",
+      "tesseract@200",
+      "onnx@200+relax",
+      "onnx@300+relax",
+      "tesseract@400+relax",
+      "onnx@200+components",
+      "onnx@300+components",
+      "onnx@200+relax+components",
+      "onnx@200+pad6+components",
+      "onnx@200+pad6+relax+components",
+      "onnx@300+split",
+      "onnx@300+split+components",
+      "onnx@200+join+components",
+      "onnx@200+join+relax+components",
+      "onnx@200+title",
+      "onnx@200+title+relax",
+      "onnx@200+loose",
+      "onnx@200+loose+relax",
+      "onnx@400+loose",
+      "onnx@400+loose+relax",
+      "onnx@300+loose",
+      "onnx@300+loose+relax",
+      "onnx@200+title+loose",
+      "onnx@200+title+loose+relax",
+      "onnx@200+realign",
+      "onnx@200+realign+relax",
+      "onnx@300+realign",
+      "onnx@300+realign+relax",
+      "onnx@200+realign+relax+components",
+      "onnx@200+notes+seam",
+      "onnx@200+notes+seam+relax",
+      "onnx@300+notes+seam",
+      "onnx@200+notes+seam+realign",
+      "onnx@200+notes",
+      "onnx@200+tail",
+      "onnx@200+tail+relax",
+      "onnx@300+tail",
+      "onnx@200+tail+relax+components",
+      "onnx@200+unit+tail",
+      "onnx@200+unit+tail+relax",
+      "onnx@200+unit",
+      "onnx@200+annual+relax",
+      "onnx@200+pad6+annual+extra",
+      "onnx@200+pad6+extra",
+      "onnx@300+pad6+annual+extra"
+    ],
+    "layers_are_the_full_cascade": true
+  },
+  "environment": {
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "Tesla T4",
+      "count": 2,
+      "vram_total_mb": 14912,
+      "vram_free_mb": 12879,
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128"
+    },
+    "host": "721bf3b392f5",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "timezone": "GMT+7",
+    "ocr": {
+      "det_providers": [
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ],
+      "recognizer_device": "cuda",
+      "stack": {
+        "onnxruntime-gpu": "1.22.0",
+        "pymupdf": "1.28.0",
+        "vietocr": "0.3.13",
+        "opencv-python-headless": "4.13.0.92",
+        "opencv-python": "4.13.0.92",
+        "shapely": "2.1.2",
+        "pyclipper": "1.4.0",
+        "numpy": "2.2.6",
+        "einops": "0.2.0",
+        "torch": "2.10.0+cu128"
+      },
+      "stack_fingerprint": "88df8ef02c08",
+      "pin_violations": {},
+      "onnxruntime": "1.22.0",
+      "onnxruntime_advertises": [
+        "TensorrtExecutionProvider",
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ]
+    }
+  },
+  "execution": {
+    "started_at": "2026-08-29T12:21:41+07:00",
+    "finished_at": "2026-08-29T16:13:46+07:00",
+    "timezone": "GMT+7",
+    "runtime_seconds": 13924.63,
+    "runtime": "3h 52m 05s",
+    "device": "cuda",
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "Tesla T4",
+      "count": 2,
+      "vram_total_mb": 14912,
+      "vram_free_mb": 12875,
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128"
+    },
+    "host": "721bf3b392f5",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35"
+  },
+  "results": [
+    {
+      "period": "Q2-2008",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 121.99
+    },
+    {
+      "period": "Q2-2008",
+      "report": "income_statement",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 121.99
+    },
+    {
+      "period": "Q2-2008",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 121.99
+    },
+    {
+      "period": "Q1-2009",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 52.92
+    },
+    {
+      "period": "Q1-2009",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 17,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 52.92
+    },
+    {
+      "period": "Q1-2009",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 52.92
+    },
+    {
+      "period": "Q3-2009",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 52.4
+    },
+    {
+      "period": "Q3-2009",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 17,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 52.4
+    },
+    {
+      "period": "Q3-2009",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 25,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 52.4
+    },
+    {
+      "period": "Q1-2010",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 50.97
+    },
+    {
+      "period": "Q1-2010",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 50.97
+    },
+    {
+      "period": "Q1-2010",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 50.97
+    },
+    {
+      "period": "Q3-2010",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1028.6
+    },
+    {
+      "period": "Q3-2010",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 15,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 1028.6
+    },
+    {
+      "period": "Q3-2010",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1028.6
+    },
+    {
+      "period": "Q4-2010",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1552.92
+    },
+    {
+      "period": "Q4-2010",
+      "report": "income_statement",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1552.92
+    },
+    {
+      "period": "Q4-2010",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1552.92
+    },
+    {
+      "period": "Q1-2011",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 44,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 904.44
+    },
+    {
+      "period": "Q1-2011",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 14,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 904.44
+    },
+    {
+      "period": "Q1-2011",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 904.44
+    },
+    {
+      "period": "Q3-2011",
+      "report": "balance_sheet",
+      "layer": "onnx@300+notes+seam",
+      "items": 47,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1086.08
+    },
+    {
+      "period": "Q3-2011",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 15,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 1086.08
+    },
+    {
+      "period": "Q3-2011",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1086.08
+    },
+    {
+      "period": "Q4-2011",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 47,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 1819.4
+    },
+    {
+      "period": "Q4-2011",
+      "report": "income_statement",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1819.4
+    },
+    {
+      "period": "Q4-2011",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1819.4
+    },
+    {
+      "period": "Q1-2012",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 45,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1183.69
+    },
+    {
+      "period": "Q1-2012",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 16,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 1183.69
+    },
+    {
+      "period": "Q1-2012",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1183.69
+    },
+    {
+      "period": "Q3-2012",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 45,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 119.15
+    },
+    {
+      "period": "Q3-2012",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 16,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 119.15
+    },
+    {
+      "period": "Q3-2012",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 119.15
+    },
+    {
+      "period": "Q1-2013",
+      "report": "balance_sheet",
+      "layer": "onnx@400",
+      "items": 47,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 183.6
+    },
+    {
+      "period": "Q1-2013",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 16,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 183.6
+    },
+    {
+      "period": "Q1-2013",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 183.6
+    },
+    {
+      "period": "Q2-2013",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 45,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 2230.81
+    },
+    {
+      "period": "Q2-2013",
+      "report": "income_statement",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 2230.81
+    },
+    {
+      "period": "Q2-2013",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 2230.81
+    },
+    {
+      "period": "Q3-2013",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 47,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 59.17
+    },
+    {
+      "period": "Q3-2013",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 17,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 59.17
+    },
+    {
+      "period": "Q3-2013",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 59.17
+    },
+    {
+      "period": "Q4-2013",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 45,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 2246.95
+    },
+    {
+      "period": "Q4-2013",
+      "report": "income_statement",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 2246.95
+    },
+    {
+      "period": "Q4-2013",
+      "report": "cash_flow",
+      "layer": "onnx@300",
+      "items": 15,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 2246.95
+    },
+    {
+      "period": "Q1-2014",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 44,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1230.94
+    },
+    {
+      "period": "Q1-2014",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 16,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 1230.94
+    },
+    {
+      "period": "Q1-2014",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1230.94
+    }
+  ]
+}
