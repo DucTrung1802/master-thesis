@@ -1,0 +1,41 @@
+symbol       : HOSE_ACB
+template     : bank   (templates.csv)
+documents    : 1  (Q1-2024)
+quarters     : ['2024-Q1']   selected ['2024-Q1']
+skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]
+cascade      : 49 of 49 layers
+data root    : D:\GIT\master-thesis\raw_data\cafef
+models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+vietocr cfg  : D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml
+
+[doc 1/1 100% of DOCUMENTS, not of time] HOSE_ACB__Q1-2024  Q1-2024_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2024.pdf  7.2 MB  bank/consolidated
+  band: balance 56, income 56, cash 56   open_ref=136071738000000
+  [layer 1/49   2% of POSITIONS] onnx@200
+    [ocr page 1/30   3% of PAGES — the only fraction here that predicts time]
+    [ocr page 4/30  13% of PAGES — the only fraction here that predicts time]  ~70 s left
+    [ocr page 7/30  23% of PAGES — the only fraction here that predicts time]  ~61 s left
+  [layer 2/49   4% of POSITIONS] onnx@300
+    [ocr page 1/30   3% of PAGES — the only fraction here that predicts time]
+    [ocr page 4/30  13% of PAGES — the only fraction here that predicts time]  ~34 s left
+    [ocr page 7/30  23% of PAGES — the only fraction here that predicts time]  ~45 s left
+  [layer 3/49   6% of POSITIONS] onnx@400
+    [ocr page 1/30   3% of PAGES — the only fraction here that predicts time]
+    [ocr page 4/30  13% of PAGES — the only fraction here that predicts time]  ~36 s left
+    [ocr page 7/30  23% of PAGES — the only fraction here that predicts time]  ~46 s left
+  [layer 4/49   8% of POSITIONS] tesseract@200
+    [ocr page 1/30   3% of PAGES — the only fraction here that predicts time]
+    [ocr page 4/30  13% of PAGES — the only fraction here that predicts time]  ~61 s left
+    [ocr page 7/30  23% of PAGES — the only fraction here that predicts time]  ~86 s left
+    [ocr page 10/30  33% of PAGES — the only fraction here that predicts time]  ~84 s left
+    [ocr page 13/30  43% of PAGES — the only fraction here that predicts time]  ~82 s left
+    [ocr page 16/30  53% of PAGES — the only fraction here that predicts time]  ~69 s left
+    [ocr page 19/30  63% of PAGES — the only fraction here that predicts time]  ~51 s left
+    [ocr page 22/30  73% of PAGES — the only fraction here that predicts time]  ~36 s left
+    [ocr page 25/30  83% of PAGES — the only fraction here that predicts time]  ~22 s left
+    [ocr page 28/30  93% of PAGES — the only fraction here that predicts time]  ~9 s left
+    [ocr page 30/30 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 5/49  10% of POSITIONS] onnx@200+relax   (cached parse, re-map only)
+  [layer 6/49  12% of POSITIONS] onnx@300+relax   (cached parse, re-map only)
+  Q1-2024: balance_sheet=54 items [onnx@200]; income_statement=20 items [onnx@200]; cash_flow=28 items [onnx@300+relax]  (7.3 min)
+
+run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260830-033159__hose_acb__pdf_ocr

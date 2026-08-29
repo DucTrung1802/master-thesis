@@ -1,0 +1,1016 @@
+{
+  "exchange": "HOSE",
+  "symbol": "TCB",
+  "period": "Q2-2012",
+  "template": "bank",
+  "document": "Q2-2012_bao_cao_tai_chinh_hop_nhat_quy_2_nam_2012.pdf",
+  "consolidated": "True",
+  "assurance": "unaudited",
+  "cumulative": false,
+  "seconds": 2660.25,
+  "accepted": {
+    "income_statement": {
+      "layer": "onnx@300",
+      "items": 17,
+      "rows": 17,
+      "rows_sha": "bd04a2b735a9",
+      "row_dump": [
+        [
+          "",
+          "thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu_vi_24",
+          "Thu nhập lãi và các khoản thu nhập tương tự VI.24",
+          [
+            9729852000000,
+            9197470000000
+          ]
+        ],
+        [
+          "",
+          "chi_phi_lai_va_cac_chi_phi_tuong_tu_vi_25",
+          "Chi phí lãi và các chi phí tương tự VI.25",
+          [
+            6979233000000,
+            6879496000000
+          ]
+        ],
+        [
+          "I",
+          "thu_nhap_lai_thuan",
+          "I Thu nhập lãi thuần",
+          [
+            2750619000000,
+            2317974000000
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_dich_vu",
+          "Thu nhập từ hoạt động dịch vụ",
+          [
+            536782000000,
+            729116000000
+          ]
+        ],
+        [
+          "",
+          "chi_phi_tu_hoat_dong_dich_vu",
+          "Chi phí từ hoạt động dịch vụ",
+          [
+            161369000000,
+            142366000000
+          ]
+        ],
+        [
+          "II",
+          "lai_lo_thuan_tu_hoat_dong_dich_vu_vi_26",
+          "II Lãi/ Lỗ thuần từ hoạt động dịch vụ VI.26",
+          [
+            375413000000,
+            586750000000
+          ]
+        ],
+        [
+          "III",
+          "lai_lo_thuan_tu_hoat_dong_kinh_doanh_ngoai_hoi_vi_27",
+          "III Lãi/ Lỗ thuần từ hoạt động kinh doanh ngoại hối VI.27",
+          [
+            -11227000000,
+            -491947000000
+          ]
+        ],
+        [
+          "IV",
+          "lai_lo_thuan_tu_mua_ban_chung_khoan_kinh_doanh_vi_28",
+          "IV Lãi/ Lỗ thuần từ mua bán chứng khoán kinh doanh VI.28",
+          [
+            73796000000,
+            -21971000000
+          ]
+        ],
+        [
+          "V",
+          "lai_lo_thuan_tu_mua_ban_chung_khoan_dau_tu_vi_29",
+          "V Lãi/ Lỗ thuần từ mua bán chứng khoán đầu tư VI.29",
+          [
+            -87177000000,
+            206000000
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_khac",
+          "Thu nhập từ hoạt động khác",
+          [
+            202553000000,
+            619962000000
+          ]
+        ],
+        [
+          "",
+          "chi_phi_hoat_dong_khac",
+          "Chỉ phí hoạt động khác",
+          [
+            130430000000,
+            168573000000
+          ]
+        ],
+        [
+          "VI",
+          "lai_lo_thuan_tu_hoat_dong_khac_vi_31",
+          "VI Lãi/ Lỗ thuần từ hoạt động khác VI.31",
+          [
+            72123000000,
+            451389000000
+          ]
+        ],
+        [
+          "VII",
+          "thu_nhap_tu_gop_von_mua_co_phan_vi_30",
+          "VII Thu nhập từ góp vốn, mua cổ phần VI.30",
+          [
+            24746000000,
+            2456000000
+          ]
+        ],
+        [
+          "VIII",
+          "chi_phi_hoat_dong_vi_32",
+          "VIII Chi phí hoạt động VI.32",
+          [
+            1400112000000,
+            979742000000
+          ]
+        ],
+        [
+          "",
+          "loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truoc_chi_phi_du_ix",
+          "Lợi nhuận thuần từ hoạt động kinh doanh trước chi phí dự IX",
+          [
+            1798181000000,
+            1865115000000
+          ]
+        ],
+        [
+          "",
+          "phong_rui_ro_tin_dung_x_chi_phi_du_phong_rui_ro_tin_dung",
+          "phòng rủi ro tín dụng x Chi phí dự phòng rủi ro tín dụng",
+          [
+            167752000000,
+            431848000000
+          ]
+        ],
+        [
+          "XI",
+          "tong_loi_nhuan_truoc_thue",
+          "XI Tổng lợi nhuận trước thuế",
+          [
+            1630429000000,
+            1433267000000
+          ]
+        ]
+      ],
+      "pages": [
+        4
+      ],
+      "unit": 1000000,
+      "n_columns": 2,
+      "cash_flow_method": "",
+      "quarter_column": false,
+      "values": {
+        "xi_tong_loi_nhuan_truoc_thue": 1630429000000,
+        "x_chi_phi_du_phong_rui_ro_tin_dung": 167752000000,
+        "ix_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truoc_chi_phi_du_phong_rui_ro_tin_dung": 1798181000000,
+        "viii_chi_phi_hoat_dong": 1400112000000,
+        "vii_thu_nhap_tu_gop_von_mua_co_phan": 24746000000,
+        "vi_lai_lo_thuan_tu_hoat_dong_khac": 72123000000,
+        "6_chi_phi_hoat_dong_khac": 130430000000,
+        "5_thu_nhap_tu_hoat_dong_khac": 202553000000,
+        "v_lai_lo_thuan_tu_mua_ban_chung_khoan_dau_tu": -87177000000,
+        "iv_lai_lo_thuan_tu_mua_ban_chung_khoan_kinh_doanh": 73796000000,
+        "iii_lai_lo_thuan_tu_hoat_dong_kinh_doanh_ngoai_hoi_va_vang": -11227000000,
+        "ii_lai_lo_thuan_tu_hoat_dong_dich_vu": 375413000000,
+        "4_chi_phi_hoat_dong_dich_vu": 161369000000,
+        "3_thu_nhap_tu_hoat_dong_dich_vu": 536782000000,
+        "i_thu_nhap_lai_thuan": 2750619000000,
+        "2_chi_phi_lai_va_cac_chi_phi_tuong_tu": 6979233000000,
+        "1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu": 9729852000000
+      }
+    },
+    "cash_flow": {
+      "layer": "onnx@200",
+      "items": 21,
+      "rows": 37,
+      "rows_sha": "41384d3ea4fc",
+      "row_dump": [
+        [
+          "",
+          "luu_chuyen_tien_tu_hoat_dong_kinh_doanh",
+          "Lưu chuyển tiền từ hoạt động kinh doanh",
+          [
+            9003764000000,
+            7591350000000
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu_nhan_duoc",
+          "Thu nhập lãi và các khoản thu nhập tương tự nhận được",
+          [
+            -6385273000000,
+            -6139173000000
+          ]
+        ],
+        [
+          "",
+          "chi_phi_lai_va_cac_chi_phi_tuong_tu_da_tra",
+          "Chi phí lãi và các chi phí tượng tự đã trả(?)",
+          [
+            375413000000,
+            586750000000
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_dich_vu_nhan_duoc_chenh_lech_so_tien_t",
+          "Thu nhập từ hoạt động dịch vụ nhận được Chênh lệch số tiền thực thu/thực chi từ hoạt động kinh doanh (ngoại",
+          [
+            -24607000000,
+            -513712000000
+          ]
+        ],
+        [
+          "",
+          "te_vang_bac_chung_khoan",
+          "tệ, vàng bạc, chứng khoán)",
+          [
+            -492996000000,
+            118841000000
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_khac_tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap",
+          "Thu nhập khác Tiền thu các khoản nợ đã được xử lý xoá,bù đắp bằng nguồn rủi ro",
+          [
+            10498000000,
+            33613000000
+          ]
+        ],
+        [
+          "",
+          "tien_chi_tra_cho_nhan_vien_va_hoat_dong_quan_ly_cong_vu",
+          "Tiền chi trả cho nhân viên và hoạt động quản lý, công vụ (-)",
+          [
+            -811049000000,
+            -11781000000
+          ]
+        ],
+        [
+          "",
+          "tien_thue_thu_nhap_thuc_nop_trong_ky",
+          "Tiền thuế thu nhập thực nộp trong kỳ (?)",
+          [
+            -925375000000,
+            -206414000000
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_truoc_nhung_th",
+          "Lưu chuyển tiền thuần từ hoạt động kinh doanh trước những thay đổi về tài sản và vốn lưu động Những thay đối về tài sản hoạt động",
+          [
+            -290217000000,
+            -12587102000000
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_khoan_tien_vang_gui_va_cho_vay_cac_tctd_khac",
+          "(Tăng)/Giảm các khoản tiền, vàng gửi và cho vay các TCTD khác",
+          [
+            1132422000000,
+            -8122634000000
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_khoan_ve_kinh_doanh_chung_khoan_tang_giam_cac",
+          "(Tăng)/ Giảm các khoản về kinh doanh chứng khoán (Tăng)/Giảm các công cụ tài chính phái sinh và các tài sản tài chính",
+          [
+            54272000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "khac",
+          "khác",
+          [
+            802451000000,
+            -5666134000000
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_khoan_cho_vay_khach_hang",
+          "(Tăng)/Giảm các khoản cho vay khách hàng",
+          [
+            -92006000000,
+            -34601000000
+          ]
+        ],
+        [
+          "",
+          "giam_nguon_du_phong_de_bu_dap_ton_that_cac_khoan",
+          "Giảm nguồn dự phòng để bù đắp tổn thất các khoản",
+          [
+            -5379087000000,
+            4967284000000
+          ]
+        ],
+        [
+          "",
+          "tang_giam_khac_ve_tai_san_hoat_dong_nhung_thay_doi_ve_cong_n",
+          "(Tăng)/Giảm khác về tài sản hoạt động Những thay đổi về công nợ hoạt động",
+          [
+            -417602000000,
+            -7091316000000
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_khoan_no_chinh_phu_va_nhnn",
+          "Tăng/(Giàm) các khoản nợ chính phủ và NHNN",
+          [
+            -8134532000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_khoan_tien_gui_tien_vay_cac_to_chuc_tin_dung",
+          "Tăng/(Giảm) các khoản tiền gửi, tiền vay các tổ chức tín dụng",
+          [
+            null,
+            22150230000000
+          ]
+        ],
+        [
+          "",
+          "tang_giam_tien_gui_cua_khach_hang_bao_gom_ca_kho_bac_nha",
+          "Tăng/(Giảm) tiền gửi của khách hàng (bao gồm cả Kho bạc Nhà",
+          [
+            8091255000000,
+            10702047000000
+          ]
+        ],
+        [
+          "",
+          "nuoc_tang_giam_phat_hanh_giay_to_co_gia_ngoai_tru_giay_to_co",
+          "nước) Tăng/(Giảm) phát hành giấy tờ có giá (ngoại trừ giấy tờ có giá phát",
+          [
+            -2275439000000,
+            4668065000000
+          ]
+        ],
+        [
+          "",
+          "hanh_duoc_tinh_vao_hoat_dong_tai_chinh_tang_giam_von_tai_tro",
+          "hành được tính vào hoạt động tài chính) Tăng/(Giảm) vốn tài trợ, uỷ thác đầu tư-, cho vay mà TCTD chịu rủi",
+          [
+            null,
+            -4708548000000
+          ]
+        ],
+        [
+          "",
+          "ro",
+          "ro",
+          [
+            -54905000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_cong_cu_tai_chinh_phai_sinh_va_cac_khoan_no_ta",
+          "Tăng/(Giảm) các công cụ tài chính phái sinh và các khoản nợ tài",
+          [
+            37441000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "chinh_khac",
+          "chính khác",
+          [
+            null,
+            -20338000000
+          ]
+        ],
+        [
+          "",
+          "tang_giam_khac_ve_cong_no_hoat_dong",
+          "Tăng/(Giảm) khác về công nợ hoạt động",
+          [
+            -293178000000,
+            880482000000
+          ]
+        ],
+        [
+          "",
+          "chi_tu_cac_quy_cua_tctd",
+          "Chi từ các quỹ của TCTD (-)",
+          [
+            -3224000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh",
+          "Lưu chuyển tiền thuần từ hoạt động kinh doanh",
+          [
+            -6071976000000,
+            5683825000000
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_tu_hoat_dong_dau_tu",
+          "Lưu chuyển tiền từ hoạt động đầu tư",
+          [
+            -143265000000,
+            -107222000000
+          ]
+        ],
+        [
+          "",
+          "mua_sam_tai_san_co_dinh_tien_thu_tu_thanh_ly_nhuong_ban_tscd",
+          "Mua sắm tài sản cố định (-) Tiền thu từ thanh lý, nhượng bán TSCĐ/ Tiền chi từ thanh lý, nhượng bán TSCĐ (-)",
+          [
+            -2042000000,
+            -59000000
+          ]
+        ],
+        [
+          "",
+          "mua_sam_bat_dong_san_dau_tu_tien_thu_tu_ban_thanh_ly_bat_don",
+          "Mua săm bất động sản đầu tư (?) Tiền thu từ bán, thanh lý bất động sản đầu tư Tiền chi ra do bán, thanh lý bất động sản đầu tu/ (-) Tiền chi đầu tư, góp vốn vào các đơn vị khác (Chi đầu tư mua công",
+          [
+            -15198000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tycon_gop_von_lien_doanh_lien_ket_va_cac_khoan_dau_tu_dai_ha",
+          "tycon, góp vốn liên doanh, liên kết, và các khoản đầu tư dài hạn khác) Tiền thu đầu tư, góp vốn vào các đơn vị khác (Thunh lý",
+          [
+            null,
+            -5960000000
+          ]
+        ],
+        [
+          "",
+          "cong_ty_con_gop_von_lien_doanh_lien_ket_cac_khoan_dau_tu_dai",
+          "công ty con, góp vốn liên doanh, liên kết, các khoản đầu tư dài hạn khác) Tiền thu cổ tức và lợi nhuận được chia từ các khoản đầu tư, góp vốn",
+          [
+            24746000000,
+            2456000000
+          ]
+        ],
+        [
+          "",
+          "dai_han",
+          "dài hạn/",
+          [
+            null,
+            -110785000000
+          ]
+        ],
+        [
+          "II",
+          "luu_chuyen_tien_thuan_tu_hoat_dong_dau_tu",
+          "II Lưu chuyển tiền thuần từ hoạt động đầu tư",
+          [
+            -135758000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "von_tu_co_va_cac_khoan_von_vay_dai_han_khac_tien_chi_thanh_t",
+          "vốn tự có và các khoản vốn vay dài hạn khác Tiền chi thanh toán giấy tờ có giá dài hạn có đủ điều kiện tính vào vốn tự có và các khoản vốn vay dài hạn khác (?) Cổ tức trả cho cổ đông, lợi nhuận đã chia (?) Tiền chi ra mua cổ phiếu ngân quỹ (-) Tiền thu được do bán cổ phiếu ngân quỹ III Lưu chuyển tiền thuần từ hoạt động tài chính",
+          [
+            -6207735000000,
+            5573040000000
+          ]
+        ],
+        [
+          "IV",
+          "luu_chuyen_tien_thuan_trong_ky",
+          "IV Lưu chuyển tiền thuần trong kỳ",
+          [
+            null,
+            26148148000000
+          ]
+        ],
+        [
+          "v",
+          "tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky",
+          "v Tiền và các khoản tương đương tiền tại thời điểm đầu kỳ",
+          [
+            34298612000000,
+            null
+          ]
+        ],
+        [
+          "VI",
+          "dieu_chinh_anh_huong_cua_thay_doi_ty_gia_tien_va_cac_khoan_t",
+          "VI Điều chỉnh ảnh hưởng của thay đổi tỷ giá Tiền và các khoản tương đương tiền tại thời điểm cuối kỳ",
+          [
+            28090877000000,
+            31721188000000
+          ]
+        ]
+      ],
+      "pages": [
+        5,
+        6
+      ],
+      "unit": 1000000,
+      "n_columns": 2,
+      "cash_flow_method": "direct",
+      "quarter_column": false,
+      "values": {
+        "hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky": 34298612000000,
+        "hddt_ii_luu_chuyen_tien_thuan_tu_hd_dau_tu": -135758000000,
+        "hddt_mua_sam_tai_san_co_dinh": -2042000000,
+        "hdkd_i_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh": -6071976000000,
+        "hdkd_22_chi_tu_cac_quy_cua_tctd": -3224000000,
+        "hdkd_21_tang_giam_khac_ve_cong_no_hoat_dong": -293178000000,
+        "hdkd_20_tang_giam_cac_cong_cu_tc_phai_sinh_va_cac_khoan_no_tc_khac": 37441000000,
+        "hdkd_18_tang_giam_phat_hanh_giay_to_co_gia": -2275439000000,
+        "hdkd_17_tang_giam_tien_gui_cua_khach_hang": 8091255000000,
+        "hdkd_15_tang_giam_cac_khoan_no_chinh_phu_va_nhnn": -8134532000000,
+        "hdkd_14_tang_giam_khac_ve_tai_san_hoat_dong": -417602000000,
+        "hdkd_12_tang_giam_cac_khoan_cho_vay_khach_hang": -92006000000,
+        "hdkd_10_tang_giam_cac_khoan_ve_kinh_doanh_chung_khoan": 54272000000,
+        "hdkd_9_tang_giam_cac_khoan_tien_gui_va_cho_vay_cac_tctd_khac": 1132422000000,
+        "hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_truoc_nhung_thay_doi_ve_tai_san_va_von_luu_dong": -290217000000,
+        "hdkd_8_tien_thue_thu_nhap_thuc_nop_trong_ky": -925375000000,
+        "hdkd_7_tien_chi_tra_cho_nhan_vien_va_hoat_dong_quan_ly_cong_vu": -811049000000,
+        "hdkd_3_thu_nhap_tu_hoat_dong_dich_vu": -24607000000,
+        "hdkd_2_chi_phi_lai_va_cac_chi_phi_tuong_tu_da_tra": 375413000000,
+        "hdkd_1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu_nhan_duoc": -6385273000000,
+        "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky": 28090877000000
+      }
+    }
+  },
+  "absent": [
+    "balance_sheet"
+  ],
+  "engine_errors": [],
+  "facts": {
+    "publish_date": "",
+    "shares_authorized": null,
+    "shares_issued": null,
+    "shares_outstanding": null
+  },
+  "error": null,
+  "log": [
+    "symbol       : HOSE_TCB",
+    "template     : bank   (detect_template (CafeF fingerprint, over the network))",
+    "documents    : 2  (Q2-2012, Q1-2013)",
+    "quarters     : ['2012-Q2', '2013-Q1']   selected ['2012-Q2', '2013-Q1']",
+    "skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]",
+    "cascade      : 49 of 49 layers",
+    "data root    : D:\\GIT\\master-thesis\\raw_data\\cafef",
+    "models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth",
+    "vietocr cfg  : D:\\GIT\\master-thesis\\src\\web_scraper\\models\\vietocr_vgg_seq2seq.yml",
+    "",
+    "[doc 1/2  50% of DOCUMENTS, not of time] HOSE_TCB__Q2-2012  Q2-2012_bao_cao_tai_chinh_hop_nhat_quy_2_nam_2012.pdf  11.3 MB  bank/consolidated",
+    "  band: balance 3, income 3, cash 1   open_ref=34298612000000",
+    "  [layer 1/49   2% of POSITIONS] onnx@200",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~112 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~94 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~75 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~59 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~46 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~34 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~23 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~14 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~4 s left",
+    "WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 28,090,877,000,000 moved from `hdtc_vi_dieu_chinh_anh_huong_cua_thay_doi_ty_gia` to `hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky`, FX left empty",
+    "  [layer 2/49   4% of POSITIONS] onnx@300",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~82 s left",
+    "  [layer 3/49   6% of POSITIONS] onnx@400",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~91 s left",
+    "  [layer 4/49   8% of POSITIONS] tesseract@200",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/48  10% of PAGES — the only fraction here that predicts time]  ~142 s left",
+    "    [ocr page 8/48  16% of PAGES — the only fraction here that predicts time]  ~159 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~161 s left",
+    "    [ocr page 14/48  29% of PAGES — the only fraction here that predicts time]  ~161 s left",
+    "    [ocr page 17/48  35% of PAGES — the only fraction here that predicts time]  ~150 s left",
+    "    [ocr page 22/48  45% of PAGES — the only fraction here that predicts time]  ~117 s left",
+    "    [ocr page 27/48  56% of PAGES — the only fraction here that predicts time]  ~94 s left",
+    "    [ocr page 32/48  66% of PAGES — the only fraction here that predicts time]  ~67 s left",
+    "    [ocr page 37/48  77% of PAGES — the only fraction here that predicts time]  ~46 s left",
+    "    [ocr page 42/48  87% of PAGES — the only fraction here that predicts time]  ~24 s left",
+    "    [ocr page 45/48  93% of PAGES — the only fraction here that predicts time]  ~13 s left",
+    "  [layer 5/49  10% of POSITIONS] onnx@200+relax   (cached parse, re-map only)",
+    "  [layer 6/49  12% of POSITIONS] onnx@300+relax   (cached parse, re-map only)",
+    "  [layer 7/49  14% of POSITIONS] tesseract@400+relax",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/48  10% of PAGES — the only fraction here that predicts time]  ~164 s left",
+    "    [ocr page 9/48  18% of PAGES — the only fraction here that predicts time]  ~168 s left",
+    "    [ocr page 12/48  25% of PAGES — the only fraction here that predicts time]  ~163 s left",
+    "    [ocr page 15/48  31% of PAGES — the only fraction here that predicts time]  ~154 s left",
+    "    [ocr page 17/48  35% of PAGES — the only fraction here that predicts time]  ~163 s left",
+    "    [ocr page 20/48  41% of PAGES — the only fraction here that predicts time]  ~150 s left",
+    "    [ocr page 24/48  50% of PAGES — the only fraction here that predicts time]  ~125 s left",
+    "    [ocr page 27/48  56% of PAGES — the only fraction here that predicts time]  ~115 s left",
+    "    [ocr page 30/48  62% of PAGES — the only fraction here that predicts time]  ~99 s left",
+    "    [ocr page 34/48  70% of PAGES — the only fraction here that predicts time]  ~75 s left",
+    "    [ocr page 38/48  79% of PAGES — the only fraction here that predicts time]  ~52 s left",
+    "    [ocr page 42/48  87% of PAGES — the only fraction here that predicts time]  ~31 s left",
+    "    [ocr page 45/48  93% of PAGES — the only fraction here that predicts time]  ~16 s left",
+    "  [layer 8/49  16% of POSITIONS] onnx@200+components   (cached parse, re-map only)",
+    "  [layer 9/49  18% of POSITIONS] onnx@300+components   (cached parse, re-map only)",
+    "  [layer 10/49  20% of POSITIONS] onnx@200+relax+components   (cached parse, re-map only)",
+    "  [layer 11/49  22% of POSITIONS] onnx@200+pad6+components",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~59 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~62 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~66 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~56 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~43 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~33 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~22 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~13 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~3 s left",
+    "  [layer 12/49  24% of POSITIONS] onnx@200+pad6+relax+components   (cached parse, re-map only)",
+    "  [layer 13/49  27% of POSITIONS] onnx@300+split   (cached parse, re-map only)",
+    "  [layer 14/49  29% of POSITIONS] onnx@300+split+components   (cached parse, re-map only)",
+    "  [layer 15/49  31% of POSITIONS] onnx@200+join+components",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~74 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~76 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~63 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~50 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~40 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~30 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~21 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~12 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~3 s left",
+    "  [layer 16/49  33% of POSITIONS] onnx@200+join+relax+components   (cached parse, re-map only)",
+    "  [layer 17/49  35% of POSITIONS] onnx@200+title",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~74 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~75 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~63 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~51 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~40 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~32 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~22 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~13 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~3 s left",
+    "  [layer 18/49  37% of POSITIONS] onnx@200+title+relax   (cached parse, re-map only)",
+    "  [layer 19/49  39% of POSITIONS] onnx@200+loose",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~81 s left",
+    "  [layer 20/49  41% of POSITIONS] onnx@200+loose+relax   (cached parse, re-map only)",
+    "  [layer 21/49  43% of POSITIONS] onnx@400+loose",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~80 s left",
+    "  [layer 22/49  45% of POSITIONS] onnx@400+loose+relax   (cached parse, re-map only)",
+    "  [layer 23/49  47% of POSITIONS] onnx@300+loose",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~68 s left",
+    "  [layer 24/49  49% of POSITIONS] onnx@300+loose+relax   (cached parse, re-map only)",
+    "  [layer 25/49  51% of POSITIONS] onnx@200+title+loose",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~73 s left",
+    "  [layer 26/49  53% of POSITIONS] onnx@200+title+loose+relax   (cached parse, re-map only)",
+    "  [layer 27/49  55% of POSITIONS] onnx@200+realign",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~72 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~73 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~59 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~47 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~38 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~30 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~21 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~12 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~3 s left",
+    "  [layer 28/49  57% of POSITIONS] onnx@200+realign+relax   (cached parse, re-map only)",
+    "  [layer 29/49  59% of POSITIONS] onnx@300+realign",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~67 s left",
+    "  [layer 30/49  61% of POSITIONS] onnx@300+realign+relax   (cached parse, re-map only)",
+    "  [layer 31/49  63% of POSITIONS] onnx@200+realign+relax+components   (cached parse, re-map only)",
+    "  [layer 32/49  65% of POSITIONS] onnx@200+notes+seam",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~51 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~53 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~47 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~38 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~29 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~22 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~15 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~9 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~2 s left",
+    "  [layer 33/49  67% of POSITIONS] onnx@200+notes+seam+relax   (cached parse, re-map only)",
+    "  [layer 34/49  69% of POSITIONS] onnx@300+notes+seam",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~72 s left",
+    "  [layer 35/49  71% of POSITIONS] onnx@200+notes+seam+realign",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~69 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~71 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~58 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~46 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~37 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~19 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~11 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~3 s left",
+    "  [layer 36/49  73% of POSITIONS] onnx@200+notes   (cached parse, re-map only)",
+    "  [layer 37/49  76% of POSITIONS] onnx@200+tail",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~56 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~55 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~50 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~43 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~38 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~31 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~22 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~13 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~4 s left",
+    "  [layer 38/49  78% of POSITIONS] onnx@200+tail+relax   (cached parse, re-map only)",
+    "  [layer 39/49  80% of POSITIONS] onnx@300+tail",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~83 s left",
+    "  [layer 40/49  82% of POSITIONS] onnx@200+tail+relax+components   (cached parse, re-map only)",
+    "  [layer 41/49  84% of POSITIONS] onnx@200+unit+tail",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~95 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~94 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~80 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~64 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~51 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~39 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~16 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~4 s left",
+    "  [layer 42/49  86% of POSITIONS] onnx@200+unit+tail+relax   (cached parse, re-map only)",
+    "  [layer 43/49  88% of POSITIONS] onnx@200+unit",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~97 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~98 s left",
+    "    [ocr page 16/48  33% of PAGES — the only fraction here that predicts time]  ~81 s left",
+    "    [ocr page 21/48  43% of PAGES — the only fraction here that predicts time]  ~64 s left",
+    "    [ocr page 26/48  54% of PAGES — the only fraction here that predicts time]  ~51 s left",
+    "    [ocr page 31/48  64% of PAGES — the only fraction here that predicts time]  ~40 s left",
+    "    [ocr page 36/48  75% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "    [ocr page 41/48  85% of PAGES — the only fraction here that predicts time]  ~17 s left",
+    "    [ocr page 46/48  95% of PAGES — the only fraction here that predicts time]  ~5 s left",
+    "  [layer 44/49  90% of POSITIONS] onnx@300+unit+tail",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~118 s left",
+    "  [layer 45/49  92% of POSITIONS] onnx@300+unit",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~99 s left",
+    "  [layer 46/49  94% of POSITIONS] onnx@200+annual+relax   (cached parse, re-map only)",
+    "  [layer 47/49  96% of POSITIONS] onnx@200+pad6+annual+extra   (cached parse, re-map only)",
+    "  [layer 48/49  98% of POSITIONS] onnx@200+pad6+extra   (cached parse, re-map only)",
+    "  [layer 49/49 100% of POSITIONS] onnx@300+pad6+annual+extra",
+    "    [ocr page 1/48   2% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 6/48  12% of PAGES — the only fraction here that predicts time]  ~96 s left",
+    "    [ocr page 11/48  22% of PAGES — the only fraction here that predicts time]  ~101 s left",
+    "    [ocr page 15/48  31% of PAGES — the only fraction here that predicts time]  ~101 s left",
+    "    [ocr page 20/48  41% of PAGES — the only fraction here that predicts time]  ~85 s left",
+    "    [ocr page 25/48  52% of PAGES — the only fraction here that predicts time]  ~64 s left",
+    "    [ocr page 30/48  62% of PAGES — the only fraction here that predicts time]  ~48 s left",
+    "    [ocr page 35/48  72% of PAGES — the only fraction here that predicts time]  ~33 s left",
+    "    [ocr page 40/48  83% of PAGES — the only fraction here that predicts time]  ~20 s left",
+    "    [ocr page 45/48  93% of PAGES — the only fraction here that predicts time]  ~7 s left",
+    "WARNING:     balance_sheet absent after 49 layer(s):",
+    "WARNING:       [onnx@200] reconcile: no total assets",
+    "WARNING:       [tesseract@400+relax] reconcile: assets != liabilities + equity"
+  ],
+  "history_sizes": {
+    "balance_sheet": {
+      "True": 3,
+      "False": 0
+    },
+    "income_statement": {
+      "True": 3,
+      "False": 0
+    },
+    "cash_flow": {
+      "True": 1,
+      "False": 0
+    }
+  },
+  "open_ref": 34298612000000,
+  "template_how": "detect_template (CafeF fingerprint, over the network)",
+  "compare": {
+    "balance_sheet": {
+      "on_disk": "missing",
+      "disk_layer": "",
+      "run_layer": "",
+      "verdict": "absent in this run"
+    },
+    "income_statement": {
+      "on_disk": "pdf",
+      "disk_layer": "onnx@300",
+      "run_layer": "onnx@300",
+      "cells_disk": 17,
+      "cells_run": 17,
+      "identical": 0,
+      "changed": {
+        "xi_tong_loi_nhuan_truoc_thue": [
+          163042899000000,
+          1630429000000
+        ],
+        "x_chi_phi_du_phong_rui_ro_tin_dung": [
+          16775222000000,
+          167752000000
+        ],
+        "ix_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truoc_chi_phi_du_phong_rui_ro_tin_dung": [
+          179818121000000,
+          1798181000000
+        ],
+        "viii_chi_phi_hoat_dong": [
+          140011206000000,
+          1400112000000
+        ],
+        "vii_thu_nhap_tu_gop_von_mua_co_phan": [
+          2474609000000,
+          24746000000
+        ],
+        "vi_lai_lo_thuan_tu_hoat_dong_khac": [
+          7212312000000,
+          72123000000
+        ],
+        "6_chi_phi_hoat_dong_khac": [
+          13042978000000,
+          130430000000
+        ],
+        "5_thu_nhap_tu_hoat_dong_khac": [
+          20255290000000,
+          202553000000
+        ],
+        "v_lai_lo_thuan_tu_mua_ban_chung_khoan_dau_tu": [
+          -8717687000000,
+          -87177000000
+        ],
+        "iv_lai_lo_thuan_tu_mua_ban_chung_khoan_kinh_doanh": [
+          7379642000000,
+          73796000000
+        ],
+        "iii_lai_lo_thuan_tu_hoat_dong_kinh_doanh_ngoai_hoi_va_vang": [
+          -1122688000000,
+          -11227000000
+        ],
+        "ii_lai_lo_thuan_tu_hoat_dong_dich_vu": [
+          37541268000000,
+          375413000000
+        ],
+        "4_chi_phi_hoat_dong_dich_vu": [
+          16136907000000,
+          161369000000
+        ],
+        "3_thu_nhap_tu_hoat_dong_dich_vu": [
+          53678175000000,
+          536782000000
+        ],
+        "i_thu_nhap_lai_thuan": [
+          275061873000000,
+          2750619000000
+        ],
+        "2_chi_phi_lai_va_cac_chi_phi_tuong_tu": [
+          697923337000000,
+          6979233000000
+        ],
+        "1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu": [
+          972985210000000,
+          9729852000000
+        ]
+      },
+      "only_on_disk": [],
+      "only_in_run": [],
+      "same_layer": true,
+      "same_unit": true,
+      "same_publish_date": true,
+      "verdict": "DIFFERS"
+    },
+    "cash_flow": {
+      "on_disk": "pdf",
+      "disk_layer": "onnx@200",
+      "run_layer": "onnx@200",
+      "cells_disk": 21,
+      "cells_run": 21,
+      "identical": 0,
+      "changed": {
+        "hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky": [
+          3429861200000000,
+          34298612000000
+        ],
+        "hddt_ii_luu_chuyen_tien_thuan_tu_hd_dau_tu": [
+          -13575845000000,
+          -135758000000
+        ],
+        "hddt_mua_sam_tai_san_co_dinh": [
+          -204222000000,
+          -2042000000
+        ],
+        "hdkd_i_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh": [
+          -607197626000000,
+          -6071976000000
+        ],
+        "hdkd_22_chi_tu_cac_quy_cua_tctd": [
+          -322432000000,
+          -3224000000
+        ],
+        "hdkd_21_tang_giam_khac_ve_cong_no_hoat_dong": [
+          -29317837000000,
+          -293178000000
+        ],
+        "hdkd_20_tang_giam_cac_cong_cu_tc_phai_sinh_va_cac_khoan_no_tc_khac": [
+          3744070000000,
+          37441000000
+        ],
+        "hdkd_18_tang_giam_phat_hanh_giay_to_co_gia": [
+          -227543922000000,
+          -2275439000000
+        ],
+        "hdkd_17_tang_giam_tien_gui_cua_khach_hang": [
+          809125519000000,
+          8091255000000
+        ],
+        "hdkd_15_tang_giam_cac_khoan_no_chinh_phu_va_nhnn": [
+          -813453232000000,
+          -8134532000000
+        ],
+        "hdkd_14_tang_giam_khac_ve_tai_san_hoat_dong": [
+          -41760200000000,
+          -417602000000
+        ],
+        "hdkd_12_tang_giam_cac_khoan_cho_vay_khach_hang": [
+          -9200627000000,
+          -92006000000
+        ],
+        "hdkd_10_tang_giam_cac_khoan_ve_kinh_doanh_chung_khoan": [
+          5427200000000,
+          54272000000
+        ],
+        "hdkd_9_tang_giam_cac_khoan_tien_gui_va_cho_vay_cac_tctd_khac": [
+          113242157000000,
+          1132422000000
+        ],
+        "hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_truoc_nhung_thay_doi_ve_tai_san_va_von_luu_dong": [
+          -29021673000000,
+          -290217000000
+        ],
+        "hdkd_8_tien_thue_thu_nhap_thuc_nop_trong_ky": [
+          -92537524000000,
+          -925375000000
+        ],
+        "hdkd_7_tien_chi_tra_cho_nhan_vien_va_hoat_dong_quan_ly_cong_vu": [
+          -81104913000000,
+          -811049000000
+        ],
+        "hdkd_3_thu_nhap_tu_hoat_dong_dich_vu": [
+          -2460733000000,
+          -24607000000
+        ],
+        "hdkd_2_chi_phi_lai_va_cac_chi_phi_tuong_tu_da_tra": [
+          37541268000000,
+          375413000000
+        ],
+        "hdkd_1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu_nhan_duoc": [
+          -638527275000000,
+          -6385273000000
+        ],
+        "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky": [
+          2809087728000000,
+          28090877000000
+        ]
+      },
+      "only_on_disk": [],
+      "only_in_run": [],
+      "same_layer": true,
+      "same_unit": true,
+      "same_publish_date": true,
+      "verdict": "DIFFERS"
+    }
+  }
+}

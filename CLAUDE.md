@@ -4712,6 +4712,12 @@ Q1-2015  408,204 -> 408,204,000,000
 ⚠️ **Q3-2013 is NOT repairable that way and stays `missing`** — all three of its statements read
 `unit=1` and the unit layers did not move them, so the filing declares no unit anywhere the parser
 can find. With Q1-2013's balance sheet that is **4 cells deliberately withheld**.
+✅ **THE FIRST HALF OF THAT SENTENCE HELD AND THE SECOND WAS WRONG — SUPERSEDED 2026-08-30,
+§6-2-septtricies.** The unit layers indeed could not move it, because `document_unit` had nothing
+to offer: **the filing declares `Đơn vị tính: triệu đồng` on page 2, and `_drop_islands` was
+discarding page 2** (`ISL-1`). The quarter is on disk now, all three statements, at
+`onnx@200` / `onnx@300+unit+tail` / `onnx@300+unit`. *"The filing declares no unit"* was an
+inference from the parser's own output, and it read as a fact about the DOCUMENT.
 
 **Written to `statements/bank/` on request**, with `force_empty_band=True` (unavoidable) and the
 four convicted cells held back by a `periods`/`reports` filter rather than by editing the artefact:
@@ -4973,13 +4979,82 @@ number**: BID Q4-2016 is on disk with `hddt_mua_sam_tai_san_co_dinh` = **616 mn*
 (2.298.616) and dividends paid of **383 mn** for a printed (2.940.383).
 
 ✅ Fixed in the default path: **a box the parentheses SPAN is one figure**, and two figures boxed
-together each close their own. ⚠️ The repair is **written and not yet run in the field** — BID
-Q4-2016 has not been re-parsed since, so those two cells are still wrong on disk.
+together each close their own.
+
+⚠️ **AND THE REGRESSION FOR THAT FIX FOUND THE SAME DEFECT ON A THIRD FILING — one that had
+REPRODUCED an hour earlier.** ACB Q1-2024's income statement came back `DIFFERS` in exactly one
+cell, `6_chi_phi_hoat_dong_khac` **+907 mn → −109,907 mn**, and **the filing's own subtotal
+settles which is right**: other income 172,323 + (−109,907) = **62,416**, the "Lãi/lỗ thuần từ
+hoạt động khác" the statement prints. With the disk value it comes to 173,230. So the printed
+figure is (109.907), OCR boxed it as `'(109 907)'`, the splitter cut it, and the row kept
+**"907" as a positive expense**. ✅ Repaired on disk — one cell, one period, diffed.
+
+⚠️ **SO `PAR-1` IS NOT ONE FILING'S QUIRK: three statements across two tickers are measured, and
+the corpus has never been screened for it.** Any parenthesised figure whose thousands separator
+OCR read as a space is a candidate, and the reading is a positive number where the filing prints
+a negative one. ⚠️ **BID Q4-2016 ITSELF HAS NOT BEEN RE-PARSED, so its two cells are still wrong
+on disk**; a ~55 min run settles that one.
 
 ⚠️ **`SPL-1`'s own note — *"0 hits across 12 statements … BID Q4-2016"* — did not cover this
 layer.** That quarter wins at `onnx@200+pad6+annual+extra`, and `crop_pad` changes the
 recogniser's text; the measurement was taken at the default crop. **A guard measured at one
 layer is not measured at the layer the document actually wins on.**
+
+#### ⚠️ AND THE BAND HAD TO BE REPAIRED BEFORE THE QUARTER COULD BE WRITTEN — `DEC-1` ON DISK
+
+Fixing `parse_num` does not move a figure already written. `sane` bands the income statement on
+the MEDIAN of the quarters already accepted, and one of TCB's seven was the 163 tn row:
+
+```
+before   probes: [0.01, 0.397, 1.018, 2.253, 2.744, 4.221, 163.043] tn
+         median 2.253 -> band [0.113, 45.1]   probe 0.097 tn   REFUSED
+after    probes: [0.01, 0.397, 1.018, 1.630, 2.253, 2.744, 4.221] tn
+         median 1.630 -> band [0.082, 32.6]   probe 0.097 tn   PASS
+```
+
+So TCB Q2-2012 and Q1-2013 were re-parsed first (**88.8 min**, `--overwrite`, no merge) and
+inspected before anything was written. Q2-2012's income statement came back on the **same layer
+with the same 17 items**, every figure divided by exactly 100:
+`xi_tong_loi_nhuan_truoc_thue` **163,042,899 mn → 1,630,429 mn**. ⚠️ **The new figure is
+corroborated to the đồng by a DIFFERENT filing**: Q3-2013's income statement prints
+9M-2012 = 2,233,858 and Q3-2012 = 603,429, and 2,233,858 − 603,429 = **1,630,429**. That is
+what makes `force_differs` defensible here rather than "the newer run wins".
+
+✅ Merged and diffed column by column against the pre-merge backup: **exactly 3 periods changed**
+— Q2-2012's income statement (17 cells) and cash flow (21), and Q1-2013's cash flow (17) —
+**0 balance-sheet rows touched, 67 periods before and after, 0 columns lost**. ⚠️ Q1-2013's
+income statement came back **REPRODUCED** and was skipped by the merge, which is the check that
+the change is confined to figures printed with decimals.
+
+#### ✅ THE RESULT — TCB Q3-2013 IS ON DISK, AND EVERY LAYER IT USES IS ONE OF THE FIXES
+
+`python -m web_scraper.pdf_ocr_job --symbol TCB --quarters 2013-Q3 --merge`, **39.1 min**:
+
+| | layer | items | |
+|---|---|---|---|
+| balance sheet | **`onnx@200`** | 47 | ⚠️ the CHEAPEST layer — with page 2 back in the statement the filing declares its own unit and no repair is needed at all |
+| income statement | **`onnx@300+unit+tail`** | 15 | 7 split figures at 200 dpi (`SPL-1`), so it needs the resolution AND the document's unit — the pair no layer offered before |
+| cash flow | **`onnx@300+unit`** | 20 | the label repair HURTS this one (it puts the movement in the opening slot), which is why the bare variant ships last |
+
+**7 of 7 checks pass, and three of them are arithmetic the parser never tested:**
+
+```
+total assets            165,878,786 mn   = the figure printed on page 3
+assets == resources     165,878,786 mn   the filing's own identity
+total liabilities       152,030,952 mn
+PBT                          97,315 mn   the QUARTER column, not the 9M cumulative (749,886)
+cash identity           22,621,969 + 2,989,205 = 25,611,174   exactly
+the comparative column  179,933,598 mn   = Q4-2012's total assets as already stored
+```
+
+⚠️ **`viii_von_chu_so_huu` is deliberately ABSENT.** This filing prints "Vốn và các quỹ" where
+the chart of accounts says "VỐN CHỦ SỞ HỮU", and after `MEN-1` no anchor will take a row that
+merely mentions it. 13,857,834 mn is a figure the statement prints; it is not one this chart can
+name, and §5 rule 2 says absent beats a plausible wrong column.
+
+✅ Diffed column by column against the pre-merge backup: **exactly one quarter changed, in all
+three CSVs, `source missing -> pdf`**; 67 periods before and after, 0 columns lost. TCB's parsed
+counts go **balance sheet 56 → 57, income statement 58 → 59, cash flow 51 → 52**.
 
 ---
 

@@ -1,0 +1,121 @@
+symbol       : HOSE_TCB
+template     : bank   (detect_template (CafeF fingerprint, over the network))
+documents    : 1  (Q3-2013)
+quarters     : ['2013-Q3']   selected ['2013-Q3']
+skipped      : 0 quarter(s) already `pdf` in all three statements
+cascade      : 49 of 49 layers
+data root    : D:\GIT\master-thesis\raw_data\cafef
+models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+vietocr cfg  : D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml
+upsert       : ON — each finished quarter is upserted into the statement CSVs
+
+[doc 1/1 100% of DOCUMENTS, not of time] HOSE_TCB__Q3-2013  Q3-2013_bao_cao_tai_chinh_hop_nhat_quy_3_nam_2013.pdf  1.6 MB  bank/consolidated
+  band: balance 5, income 7, cash 5   open_ref=34298612000000
+  [layer 1/49   2% of POSITIONS] onnx@200
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~103 s left
+  [layer 2/49   4% of POSITIONS] onnx@300
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~57 s left
+  [layer 3/49   6% of POSITIONS] onnx@400
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~61 s left
+  [layer 4/49   8% of POSITIONS] tesseract@200
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~125 s left
+  [layer 5/49  10% of POSITIONS] onnx@200+relax   (cached parse, re-map only)
+  [layer 6/49  12% of POSITIONS] onnx@300+relax   (cached parse, re-map only)
+  [layer 7/49  14% of POSITIONS] tesseract@400+relax
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~139 s left
+    [ocr page 9/47  19% of PAGES — the only fraction here that predicts time]  ~155 s left
+  [layer 8/49  16% of POSITIONS] onnx@200+components   (cached parse, re-map only)
+  [layer 9/49  18% of POSITIONS] onnx@300+components   (cached parse, re-map only)
+  [layer 10/49  20% of POSITIONS] onnx@200+relax+components   (cached parse, re-map only)
+  [layer 11/49  22% of POSITIONS] onnx@200+pad6+components
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~46 s left
+    [ocr page 11/47  23% of PAGES — the only fraction here that predicts time]  ~52 s left
+    [ocr page 16/47  34% of PAGES — the only fraction here that predicts time]  ~54 s left
+    [ocr page 21/47  44% of PAGES — the only fraction here that predicts time]  ~49 s left
+    [ocr page 26/47  55% of PAGES — the only fraction here that predicts time]  ~41 s left
+    [ocr page 31/47  65% of PAGES — the only fraction here that predicts time]  ~30 s left
+    [ocr page 36/47  76% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 41/47  87% of PAGES — the only fraction here that predicts time]  ~10 s left
+    [ocr page 46/47  97% of PAGES — the only fraction here that predicts time]  ~2 s left
+  [layer 12/49  24% of POSITIONS] onnx@200+pad6+relax+components   (cached parse, re-map only)
+  [layer 13/49  27% of POSITIONS] onnx@300+split   (cached parse, re-map only)
+  [layer 14/49  29% of POSITIONS] onnx@300+split+components   (cached parse, re-map only)
+  [layer 15/49  31% of POSITIONS] onnx@200+join+components
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~50 s left
+  [layer 16/49  33% of POSITIONS] onnx@200+join+relax+components   (cached parse, re-map only)
+  [layer 17/49  35% of POSITIONS] onnx@200+title
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~49 s left
+  [layer 18/49  37% of POSITIONS] onnx@200+title+relax   (cached parse, re-map only)
+  [layer 19/49  39% of POSITIONS] onnx@200+loose
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~49 s left
+  [layer 20/49  41% of POSITIONS] onnx@200+loose+relax   (cached parse, re-map only)
+  [layer 21/49  43% of POSITIONS] onnx@400+loose
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~62 s left
+  [layer 22/49  45% of POSITIONS] onnx@400+loose+relax   (cached parse, re-map only)
+  [layer 23/49  47% of POSITIONS] onnx@300+loose
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~56 s left
+  [layer 24/49  49% of POSITIONS] onnx@300+loose+relax   (cached parse, re-map only)
+  [layer 25/49  51% of POSITIONS] onnx@200+title+loose
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~49 s left
+  [layer 26/49  53% of POSITIONS] onnx@200+title+loose+relax   (cached parse, re-map only)
+  [layer 27/49  55% of POSITIONS] onnx@200+realign
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~49 s left
+  [layer 28/49  57% of POSITIONS] onnx@200+realign+relax   (cached parse, re-map only)
+  [layer 29/49  59% of POSITIONS] onnx@300+realign
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~56 s left
+  [layer 30/49  61% of POSITIONS] onnx@300+realign+relax   (cached parse, re-map only)
+  [layer 31/49  63% of POSITIONS] onnx@200+realign+relax+components   (cached parse, re-map only)
+  [layer 32/49  65% of POSITIONS] onnx@200+notes+seam
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~50 s left
+  [layer 33/49  67% of POSITIONS] onnx@200+notes+seam+relax   (cached parse, re-map only)
+  [layer 34/49  69% of POSITIONS] onnx@300+notes+seam
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~56 s left
+  [layer 35/49  71% of POSITIONS] onnx@200+notes+seam+realign
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~49 s left
+  [layer 36/49  73% of POSITIONS] onnx@200+notes   (cached parse, re-map only)
+  [layer 37/49  76% of POSITIONS] onnx@200+tail
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~49 s left
+  [layer 38/49  78% of POSITIONS] onnx@200+tail+relax   (cached parse, re-map only)
+  [layer 39/49  80% of POSITIONS] onnx@300+tail
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~56 s left
+  [layer 40/49  82% of POSITIONS] onnx@200+tail+relax+components   (cached parse, re-map only)
+  [layer 41/49  84% of POSITIONS] onnx@200+unit+tail
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~49 s left
+  [layer 42/49  86% of POSITIONS] onnx@200+unit+tail+relax   (cached parse, re-map only)
+  [layer 43/49  88% of POSITIONS] onnx@200+unit
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~49 s left
+  [layer 44/49  90% of POSITIONS] onnx@300+unit+tail
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~57 s left
+  [layer 45/49  92% of POSITIONS] onnx@300+unit
+    [ocr page 1/47   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 6/47  12% of PAGES — the only fraction here that predicts time]  ~56 s left
+  Q3-2013: balance_sheet=47 items [onnx@200]; income_statement=15 items [onnx@300+unit+tail]; cash_flow=20 items [onnx@300+unit]  (39.1 min)
+  WRITE  Q3-2013   balance_sheet      [onnx@200] 47 items              recovers a quarter disk records as `missing`
+  WRITE  Q3-2013   cash_flow          [onnx@300+unit] 20 items         recovers a quarter disk records as `missing`
+  WRITE  Q3-2013   income_statement   [onnx@300+unit+tail] 15 items    recovers a quarter disk records as `missing`
+  backup: D:\GIT\master-thesis\raw_data\_backup\statements\20260830-032935__HOSE_TCB
+  written: {'balance_sheet': 57, 'income_statement': 59, 'cash_flow': 52}
+
+run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260830-025025__hose_tcb__pdf_ocr

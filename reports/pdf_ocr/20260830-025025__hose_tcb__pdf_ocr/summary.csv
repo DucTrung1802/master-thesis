@@ -1,0 +1,4 @@
+period,report,layer,items,status,verdict,seconds
+Q3-2013,balance_sheet,onnx@200,47,pdf,no pdf row on disk to compare against,2347.55
+Q3-2013,income_statement,onnx@300+unit+tail,15,pdf,no pdf row on disk to compare against,2347.55
+Q3-2013,cash_flow,onnx@300+unit,20,pdf,no pdf row on disk to compare against,2347.55

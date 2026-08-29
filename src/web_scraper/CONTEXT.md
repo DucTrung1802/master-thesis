@@ -1572,6 +1572,23 @@ and page 2 was thrown away.**
   always three digits — and the character itself cannot be trusted, because OCR confuses `.` and
   `,` ("1,234.567" must stay 1,234,567).
 
+✅ **THE QUARTER IS ON DISK, 2026-08-30** — `--symbol TCB --quarters 2013-Q3 --merge`, 39.1 min,
+and every layer it uses is one of the fixes: balance sheet at **`onnx@200`** (with page 2 back,
+the filing declares its own unit and nothing has to be repaired), income statement at
+**`onnx@300+unit+tail`**, cash flow at **`onnx@300+unit`**. Seven independent checks pass,
+three of them arithmetic the parser never tested: `assets == resources` = 165,878,786 mn, the
+cash identity `22,621,969 + 2,989,205 = 25,611,174` to the đồng, and the comparative column
+reproducing Q4-2012's stored total assets (179,933,598 mn). PBT is the QUARTER column
+(97,315 mn), not the 9M cumulative (749,886). ⚠️ `viii_von_chu_so_huu` is deliberately absent:
+the filing prints "Vốn và các quỹ", which this chart cannot name.
+
+⚠️ **AND THE BAND HAD TO BE REPAIRED FIRST — fixing `parse_num` does not move a figure already
+written.** `sane` bands on the median of the accepted quarters, and one of TCB's seven was the
+163 tn row: `[0.01, 0.397, 1.018, 2.253, 2.744, 4.221, 163.043]` gives a floor of 0.113 tn
+against a probe of 0.097. Q2-2012 and Q1-2013 were re-parsed (88.8 min) and merged first —
+**3 periods changed, every figure ÷100, and Q1-2013's income statement REPRODUCED and was
+skipped** — after which the median is 1.630 tn, the floor 0.082, and the quarter passes.
+
 ⚠️ **AND THE UNIT BLOCK WAS 200 dpi ONLY, WHICH IS NOT WHERE THIS FILING IS READABLE.** Its
 income statement returns **7 split figures** at 200 dpi (`SPL-1`, refused) and none at 300; its
 cash flow reads the net movement as **205** at 200 dpi where the page prints 2,989,205 — the

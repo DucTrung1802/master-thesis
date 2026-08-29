@@ -1,0 +1,7 @@
+period,report,layer,items,status,verdict,seconds
+Q2-2012,balance_sheet,,0,absent,absent in this run,2660.25
+Q2-2012,income_statement,onnx@300,17,pdf,DIFFERS,2660.25
+Q2-2012,cash_flow,onnx@200,21,pdf,DIFFERS,2660.25
+Q1-2013,balance_sheet,,0,absent,absent in this run,2670.18
+Q1-2013,income_statement,onnx@400,14,pdf,REPRODUCED,2670.18
+Q1-2013,cash_flow,onnx@200,17,pdf,DIFFERS,2670.18
