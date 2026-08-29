@@ -93,6 +93,66 @@ def test_a_root_without_a_schema_directory_is_refused_before_any_ocr(tmp_path):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# use_models / MODEL_FILES
+#
+# ⚠️ **THE OCR NEEDS THREE LOCAL FILES AND FOR A DAY IT SHIPPED TWO.** The recogniser's CONFIG
+# joined `use_models` on 2026-08-29 (`VCR-1`: vietocr fetches base.yml + the arch yaml from
+# vocr.vn on EVERY `Predictor` build, caches neither, and when that host's certificate expired
+# every `onnx@*` layer RAISED and the cascade fell through to tesseract with different figures)
+# — and `kgpu.export._export_documents`, a second hand-written list, was never told. Every
+# documents payload built that day was one file short of what the worker reads.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_use_models_resolves_exactly_the_files_MODEL_FILES_names(tmp_path, monkeypatch):
+    """One constant names them; `use_models` may not look for anything else, and may not
+    silently return fewer than it names."""
+    # ⚠️ `use_models` writes these three by hand, so `monkeypatch.setenv` is what restores them:
+    # it records the ORIGINAL at this call and puts it back at teardown, whatever happens in
+    # between. Without it a test would leak this tmp path into every later one.
+    for var in ("CAFEF_ONNX_DET", "CAFEF_ONNX_VIETOCR_WEIGHTS", "CAFEF_ONNX_VIETOCR_CONFIG",
+                job.MODELS_DIR_ENV):
+        monkeypatch.setenv(var, "")
+    for name in job.MODEL_FILES.values():
+        (tmp_path / name).write_bytes(b"x")
+
+    chosen = job.use_models(tmp_path)
+
+    assert set(chosen) == set(job.MODEL_FILES)
+    assert {k: Path(v).name for k, v in chosen.items()} == dict(job.MODEL_FILES)
+
+
+def test_the_vietocr_config_is_in_the_repo_and_is_a_COMPLETE_config():
+    """⚠️ `Cfg.load_config_from_file` starts from an EMPTY dict — it does NOT fetch base.yml for
+    you — so a file carrying only the arch half would load, run, and recognise with no vocab.
+    Unlike the two model binaries this one is TRACKED (3 KB), which is what closes `VCR-1`: a
+    fresh checkout parses without reaching vocr.vn at all."""
+    import yaml
+
+    path = job.DEFAULT_MODELS_DIR / job.MODEL_FILES["vietocr_config"]
+    assert path.is_file(), f"{path} is tracked and must be in the checkout (VCR-1)"
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    # base.yml gives the first three, vgg-seq2seq.yml the last three. Both halves or neither.
+    for key in ("vocab", "dataset", "predictor", "backbone", "cnn", "transformer"):
+        assert key in cfg, f"{key} missing — this is not a merged base+arch config"
+    assert cfg["seq_modeling"] == "seq2seq" and cfg["backbone"] == "vgg19_bn"
+    assert "ạ" in cfg["vocab"] and len(cfg["vocab"]) > 200
+
+
+def test_the_kgpu_payload_stages_every_model_file_from_the_one_constant():
+    """⚠️ STRUCTURAL, because the failure was never a wrong value: a key added to
+    `MODEL_FILES` and not to the exporter ships a payload that is one file short, and the only
+    thing that says so is the rehearsal's own assertion. `_export_documents` reads the name
+    from this constant for every key, so a fourth file cannot be forgotten."""
+    exporter = job.REPO_ROOT / "src" / "kaggle_gpu" / "kgpu" / "export.py"
+    source = exporter.read_text(encoding="utf-8")
+
+    for key in job.MODEL_FILES:
+        assert f'job.MODEL_FILES["{key}"]' in source, key
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # select_layers
 # ──────────────────────────────────────────────────────────────────────────────
 

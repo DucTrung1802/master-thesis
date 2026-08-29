@@ -361,10 +361,13 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
         writes a wrong figure (§6-2-octodecies), and the run comes home with nothing to be read
         against.
 
-    ⚠️ **AND THE TWO OCR MODELS**, because otherwise the engine downloads them — `det.onnx`
-    from HuggingFace and `vgg_seq2seq.pth` from vocr.vn — which a kernel with
-    `enable_internet: false` cannot do at all, and a kernel with internet does on every cold
-    start.
+    ⚠️ **AND THE THREE OCR MODEL FILES** (`pdf_ocr_job.MODEL_FILES`), because otherwise the
+    engine downloads them — `det.onnx` from HuggingFace, and `vgg_seq2seq.pth` AND the
+    recogniser's CONFIG from vocr.vn — which a kernel with `enable_internet: false` cannot do at
+    all, and a kernel with internet does on every cold start. ⚠️ **The config was the one nobody
+    counted**: it is fetched on every `Predictor` build and cached nowhere, so when vocr.vn's
+    certificate expired every `onnx@*` layer raised (`VCR-1`). Two files travelled here and
+    `use_models` looked for three, which is why the list is now named in ONE place.
     """
     from web_scraper import pdf_ocr_job as job
     from web_scraper.cafef_financials import FinancialsBuilder
@@ -456,17 +459,17 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
                     },
                 }
 
-        models: Dict[str, Optional[str]] = {"det": None, "vietocr": None}
+        models: Dict[str, Optional[str]] = {k: None for k in job.MODEL_FILES}
         if with_models:
             det = Path(os.environ.get("CAFEF_ONNX_DET", "")) if os.environ.get(
-                "CAFEF_ONNX_DET") else job.DEFAULT_MODELS_DIR / "deepdoc_det.onnx"
+                "CAFEF_ONNX_DET") else job.DEFAULT_MODELS_DIR / job.MODEL_FILES["det"]
             if not det.is_file():
                 raise FileNotFoundError(
                     f"no DeepDoc detector at {det}. It is gitignored, so a fresh checkout has "
                     f"none: run the parse once locally (it fetches the model), or set "
                     f"CAFEF_ONNX_DET."
                 )
-            _add(det, "models/deepdoc_det.onnx")
+            _add(det, "models/" + job.MODEL_FILES["det"])
             models["det"] = det.name
 
             weights = job.find_vietocr_weights()
@@ -477,8 +480,37 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
                     + "\n  Any local run of the onnx engine leaves one in the temp dir; "
                       "otherwise set CAFEF_ONNX_VIETOCR_WEIGHTS."
                 )
-            _add(weights, "models/vgg_seq2seq.pth")
+            _add(weights, "models/" + job.MODEL_FILES["vietocr"])
             models["vietocr"] = weights.name
+
+            # ⚠️ **THE RECOGNISER CONFIG IS THE THIRD FILE, AND WITHOUT IT THE WORKER
+            # GOES TO THE NETWORK.** `Cfg.load_config_from_name` fetches base.yml + the arch
+            # yaml from vocr.vn on every Predictor build and caches neither; when that host
+            # certificate expired every `onnx@*` layer RAISED and the cascade fell through to
+            # tesseract, which a Kaggle image does not even have, so the run returns nothing
+            # (`VCR-1`, 2026-08-29). It travels for the same reason the two binaries do.
+            config = Path(os.environ["CAFEF_ONNX_VIETOCR_CONFIG"]) if os.environ.get(
+                "CAFEF_ONNX_VIETOCR_CONFIG"
+            ) else job.DEFAULT_MODELS_DIR / job.MODEL_FILES["vietocr_config"]
+            if not config.is_file():
+                raise FileNotFoundError(
+                    f"no VietOCR config at {config}. Unlike the two model binaries this one is "
+                    f"TRACKED and 3 KB, so a checkout has it: regenerate it by merging "
+                    f"vietocr base.yml and vgg-seq2seq.yml, or point "
+                    f"CAFEF_ONNX_VIETOCR_CONFIG at one."
+                )
+            _add(config, "models/" + job.MODEL_FILES["vietocr_config"])
+            models["vietocr_config"] = config.name
+
+            # ⚠️ **EVERY FILE `use_models` LOOKS FOR, OR THE WORKER DOWNLOADS THE REST.** The
+            # rehearsal asserts this from the other side; asserting it here is what makes a
+            # fourth model file a build error instead of a silent shortfall.
+            absent = [k for k, v in models.items() if v is None]
+            if absent:
+                raise RuntimeError(
+                    f"the payload would ship no {', '.join(absent)} — pdf_ocr_job.MODEL_FILES "
+                    f"names it and this exporter does not stage it."
+                )
 
     manifest["documents"] = {
         "exchange": exchange,

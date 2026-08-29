@@ -16,6 +16,11 @@ raw_data/cafef/*
 # HuggingFace (InfiniFlow/deepdoc) by onnx_ocr.ensure_det_model; the vendored *.py detection code
 # in src/web_scraper/_deepdoc/ IS tracked, only the model binary is not.
 src/web_scraper/models/*.onnx
+# and the VietOCR checkpoint (90 MB), which `find_vietocr_weights` also looks for here.
+# ⚠️ The recogniser's CONFIG in the same directory (vietocr_vgg_seq2seq.yml, 3 KB) IS
+# tracked on purpose: without it every onnx layer fetches it from vocr.vn on every
+# Predictor build, and an unreachable host turns the cascade into tesseract (`VCR-1`).
+src/web_scraper/models/*.pth
 
 bronze_data/
 

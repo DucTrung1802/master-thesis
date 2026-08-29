@@ -140,7 +140,7 @@ diverge from the worker's own choice.
 | the chosen filings | ~1-14 MB each |
 | the twelve charts of accounts | `schema_of` raises without them — **after** the OCR |
 | **the statement CSVs already on disk** | twice over: `seed_history` rebuilds the magnitude band `sane` needs, and `compare()` scores the run against them |
-| `deepdoc_det.onnx` + `vgg_seq2seq.pth` | otherwise the engine downloads them from HuggingFace and vocr.vn |
+| `deepdoc_det.onnx`, `vgg_seq2seq.pth` **and `vietocr_vgg_seq2seq.yml`** | otherwise the engine downloads them from HuggingFace and vocr.vn. ⚠️ **The third one is the recogniser's CONFIG, and it was the one nobody counted**: vietocr re-fetches it on every `Predictor` build and caches nothing, so when vocr.vn's certificate expired every `onnx@*` layer RAISED (`VCR-1`). The three names live once, in `pdf_ocr_job.MODEL_FILES`, and the export raises rather than shipping fewer |
 
 **Measured costs** — and read the caveat under the table before budgeting on any of them:
 
@@ -308,10 +308,19 @@ python -m kgpu run      <job>    # push, wait, download, merge
 From Python, with no config file at all:
 
 ```python
-from kgpu import pdf_ocr, runner
+from kgpu import export, pdf_ocr, runner
 cfg = pdf_ocr.job("VIC", quarters=["2014-Q3"], template="corp")
-runner.plan(cfg); runner.rehearse(cfg); runner.run(cfg, refresh_data=True)
+runner.plan(cfg)                       # touches nothing
+export.export(cfg)                     # -> .payload/<job>/   ⚠️ REQUIRED before a rehearsal
+runner.rehearse(cfg)                   # the worker side, against that payload
+runner.run(cfg, refresh_data=True)     # re-exports, uploads, pushes, waits, pulls, merges
 ```
+
+⚠️ **`export` IS NOT OPTIONAL AND THIS SNIPPET OMITTED IT UNTIL 2026-08-29.** `rehearse` runs
+the worker against `.payload/<job>/`, so without it the FIRST run of any job raises
+`no staged payload` — and the fix that error names, `python -m kgpu data <job>`, cannot resolve
+a job that was COMPUTED here rather than written into `kaggle_config.json`. Exporting is local
+and free; only `data`/`run` upload. CLAUDE.md §6-2-sextricies.
 
 ---
 

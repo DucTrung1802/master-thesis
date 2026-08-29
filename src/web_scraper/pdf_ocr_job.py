@@ -130,6 +130,18 @@ DEFAULT_DATA_ROOT = REPO_ROOT / "raw_data" / "cafef"
 DEFAULT_MODELS_DIR = Path(__file__).resolve().parent / "models"
 DEFAULT_OUT_ROOT = REPO_ROOT / "reports" / "pdf_ocr"
 
+# ⚠️ **THE FILES A MODELS DIRECTORY MUST HOLD, NAMED ONCE.** `use_models` looks these up and
+# `kgpu.export._export_documents` ships them into the payload under exactly these names — two
+# readers of one fact, and they were two hand-written lists until 2026-08-29, when the
+# recogniser's CONFIG was added to the first and not the second. Every documents payload built
+# that day was one file short of what the worker needs, and the only thing that said so was the
+# rehearsal's own assertion (`VCR-1`).
+MODEL_FILES = {
+    "det": "deepdoc_det.onnx",              # the DeepDoc DB detector, gitignored (4.7 MB)
+    "vietocr": "vgg_seq2seq.pth",           # the recogniser's checkpoint, gitignored (90 MB)
+    "vietocr_config": "vietocr_vgg_seq2seq.yml",   # its config — TRACKED, 3 KB, see VCR-1
+}
+
 # The columns of a statement CSV that describe the ROW rather than the statement. Taken from
 # `cafef_financials.DATA_COLS` rather than re-listed, so a new provenance column cannot start
 # reading as a line item here while the writer treats it as metadata.
@@ -194,10 +206,9 @@ def use_models(models_dir: Optional[os.PathLike] = None) -> Dict[str, Optional[s
     """
     models = Path(models_dir) if models_dir is not None else Path(
         os.environ.get(MODELS_DIR_ENV, DEFAULT_MODELS_DIR))
-    chosen: Dict[str, Optional[str]] = {"det": None, "vietocr": None,
-                                        "vietocr_config": None}
+    chosen: Dict[str, Optional[str]] = {k: None for k in MODEL_FILES}
 
-    det = models / "deepdoc_det.onnx"
+    det = models / MODEL_FILES["det"]
     if det.is_file():
         os.environ["CAFEF_ONNX_DET"] = str(det)
         chosen["det"] = str(det)
@@ -205,7 +216,7 @@ def use_models(models_dir: Optional[os.PathLike] = None) -> Dict[str, Optional[s
     # LOCAL file, which is the whole point — vietocr's fall-through is a 90 MB download, and
     # reporting "no checkpoint" on a machine that has had one cached since the first parse
     # would be a warning that is simply untrue.
-    weights = models / "vgg_seq2seq.pth"
+    weights = models / MODEL_FILES["vietocr"]
     weights = weights if weights.is_file() else find_vietocr_weights()
     if weights is not None:
         os.environ["CAFEF_ONNX_VIETOCR_WEIGHTS"] = str(weights)
@@ -216,7 +227,7 @@ def use_models(models_dir: Optional[os.PathLike] = None) -> Dict[str, Optional[s
     # build and caches neither, so the two model files alone never made the engine offline —
     # measured 2026-08-29, when that host's certificate expired and the cascade fell silently
     # through to tesseract.
-    config = models / "vietocr_vgg_seq2seq.yml"
+    config = models / MODEL_FILES["vietocr_config"]
     if config.is_file():
         os.environ["CAFEF_ONNX_VIETOCR_CONFIG"] = str(config)
         chosen["vietocr_config"] = str(config)
