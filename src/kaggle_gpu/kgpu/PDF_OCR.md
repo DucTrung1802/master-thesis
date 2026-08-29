@@ -58,6 +58,8 @@ SYMBOL      = "VIC"
 QUARTERS = ["2014-Q3"]       # [] or None = every quarter the ticker files. YYYY-QQ.
 OVERWRITE = False            # False = fill the GAPS; True = re-parse and replace
 MERGE_INTO_CSV = True        # upsert into raw_data/.../statements/
+FORCE_EMPTY_BAND = True      # write even when `sane` had no band — the only way a
+                             # NEW ticker is ever bootstrapped. See below.
 PERIODS  = None              # optional; the repo-native form; intersects with QUARTERS
 TEMPLATE = "corp"            # None = resolve it and record which route answered
 ```
@@ -257,7 +259,7 @@ makes a merge reversible went where nobody looks. It is anchored to the repo now
 | refused | why | override |
 |---|---|---|
 | a **cumulative income statement** | an annual or half-year filing prints the year to date; the CSV column holds the standalone quarter, and this job cannot de-cumulate — a one-document run has no Q1..Q(q-1). Writing it puts a 9-month total in a 3-month column | `force_cumulative` |
-| a statement whose **`sane` band was empty** | with no band the magnitude guard fails open, so the figure passed no guard at all. A ticker with nothing on disk yet has no band by construction | `force_empty_band` |
+| a statement whose **`sane` band was empty** | with no band the magnitude guard fails open, so the figure passed no guard at all. A ticker with nothing on disk yet has no band by construction — ⚠️ **so a green run on a NEW ticker writes NOTHING until this is overridden**, and the band then stays empty for the next run too (`BND-1`). Measured on HOSE_BSR, 2026-08-30: 14 documents, 0 of 42 statements written | `force_empty_band` — `FORCE_EMPTY_BAND` in the notebook, `--force-empty-band` on either CLI. ⚠️ It lifts the guard, so screen the artefact (unit per report, total assets quarter on quarter) before quoting anything |
 | a figure that **DIFFERS from a good `pdf` row** | `compare()` already scored it; two runs disagreeing about a number is not resolved by taking the newer one | `force_differs` |
 | a document whose parse **RAISED** | a layer that refuses has measured the FILING; one that raises has measured the MACHINE, so whatever won did so by default. Measured 2026-08-29: `vocr.vn`'s certificate expired, every `onnx@*` layer raised, and `tesseract@200` rewrote 13 columns of a filing that had reproduced 98 of 98 cells (`VCR-1`) | `force_engine_errors` |
 

@@ -1063,6 +1063,18 @@ class JobSpec:
     # cumulative income statement, an empty `sane` band, and a figure that DIFFERS from a good
     # `pdf` row are skipped and SAID, not written.
     merge_into_csv: bool = False
+    # ⚠️ **BOOTSTRAP A TICKER THAT HAS NO HISTORY — OFF BY DEFAULT, AND IT LIFTS A REAL
+    # GUARD.** `seed_history` rebuilds `sane`'s magnitude band from the `pdf` rows ALREADY ON
+    # DISK, so a ticker with no statement CSV has no band, `sane` fails open, and
+    # `pdf_ocr_merge` then refuses every statement the run produced — nothing is written, so
+    # the band stays empty and the next run refuses again. That is `BND-1`, and it closes on
+    # itself: the module cannot bootstrap a ticker, only repair one.
+    # This breaks the loop for the FIRST run of a ticker and nothing else. It does not touch
+    # the other three refusals — a cumulative income statement, a figure that DIFFERS from a
+    # good `pdf` row and a document whose engine RAISED are still skipped. ⚠️ What it costs
+    # is the guard: those figures passed no magnitude check, so screen the artefact (unit per
+    # report, total assets quarter on quarter) before quoting anything from a bootstrap run.
+    force_empty_band: bool = False
     notes: str = ""
     run_id: Optional[str] = None
 
@@ -1107,6 +1119,7 @@ class JobSpec:
             "quarters": canonical_quarters(self.quarters),
             "allow_parent": self.allow_parent, "period_min": self.period_min,
             "overwrite": self.overwrite, "merge_into_csv": self.merge_into_csv,
+            "force_empty_band": self.force_empty_band,
             "template_requested": self.template,
             "layers_requested": list(self.layers) if self.layers else None,
             "compare_with_disk": self.compare_with_disk, "notes": self.notes,
@@ -1163,7 +1176,8 @@ def _name(path: Optional[str]) -> str:
 
 
 def _upsert_period(folder: Path, task: DocumentTask, *, overwrite: bool,
-                   log: "Progress", backup: bool) -> Optional[Path]:
+                   log: "Progress", backup: bool,
+                   force_empty_band: bool = False) -> Optional[Path]:
     """Upsert ONE finished quarter into the statement CSVs, through `pdf_ocr_merge`.
 
     ⚠️ **IT IS THE SAME MODULE `kgpu pull` USES, SCOPED TO ONE PERIOD** — so the three
@@ -1178,7 +1192,9 @@ def _upsert_period(folder: Path, task: DocumentTask, *, overwrite: bool,
     from web_scraper import pdf_ocr_merge
 
     result = pdf_ocr_merge.merge_run(folder, apply=True, periods=[task.period],
-                                     force_differs=overwrite, backup=backup, quiet=True)
+                                     force_differs=overwrite,
+                                     force_empty_band=force_empty_band,
+                                     backup=backup, quiet=True)
     for line in result.lines()[1:]:            # [0] repeats the ticker header
         log.line("  " + line.strip() if line.strip() else line)
     return result.backup
@@ -1226,6 +1242,8 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
         if spec.merge_into_csv:
             log.line("upsert       : " + (
                 "ON — each finished quarter is upserted into the statement CSVs"
+                + ("   (force_empty_band: a ticker with no history on disk is "
+                   "bootstrapped, UNGUARDED by `sane`)" if spec.force_empty_band else "")
                 if merge_into_csv else
                 "REFUSED — this data root is a payload, not the repo's own raw_data/. A "
                 "worker writes a copy that dies with the kernel; `kgpu pull` writes here."))
@@ -1291,7 +1309,8 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
             if merge_into_csv:
                 merge_backup = _upsert_period(
                     folder, task, overwrite=spec.overwrite, log=log,
-                    backup=merge_backup is None) or merge_backup
+                    backup=merge_backup is None,
+                    force_empty_band=spec.force_empty_band) or merge_backup
     finally:
         timer.stop(ok=True)
 
@@ -1503,6 +1522,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="upsert each quarter into raw_data/.../statements/ AS IT "
                              "FINISHES, through pdf_ocr_merge and its three refusals. Off by "
                              "default: the run folder is this module's product.")
+    parser.add_argument("--force-empty-band", action="store_true",
+                        help="with --merge: write a statement whose `sane` band was EMPTY. "
+                             "This is how a ticker with no statement CSV is bootstrapped at "
+                             "all (BND-1) — and those figures passed no magnitude guard, so "
+                             "screen the artefact before quoting them.")
     parser.add_argument("--allow-parent", action="store_true",
                         help="fall back to the STANDALONE filing where no consolidated one "
                              "exists (documents(); consolidated still wins).")
@@ -1530,7 +1554,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         quarters=args.quarters, overwrite=args.overwrite,
         allow_parent=args.allow_parent, layers=args.layers, template=args.template,
         data_root=args.data_root, models_dir=args.models, out_root=args.out,
-        compare_with_disk=not args.no_compare, merge_into_csv=args.merge, notes=args.notes,
+        compare_with_disk=not args.no_compare, merge_into_csv=args.merge,
+        force_empty_band=args.force_empty_band, notes=args.notes,
     ))
     return 0
 

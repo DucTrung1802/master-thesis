@@ -185,6 +185,15 @@ class JobConfig:
     # disk). `web_scraper/pdf_ocr_merge.py` carries the measurement each refusal exists for.
     # ⚠️ The merge happens HERE, never on the worker: a Kaggle kernel has no path to this disk.
     merge_statements: bool = False
+    # ⚠️ **A MERGE KNOB, NOT A WORKER PARAMETER, AND THE DISTINCTION IS THE POINT.** It is
+    # read by `runner.merge_statements` on THIS machine; the worker never sees it and must
+    # not, because the worker does not merge. Putting it in `parameters` would also make
+    # `notebook.patch_parameters` raise — that patcher refuses a parameter the worker
+    # notebook does not declare, on the grounds that one it cannot find changes nothing.
+    # What it does: write a statement whose `sane` band was EMPTY. That is the only way a
+    # ticker with no statement CSV is ever bootstrapped (`BND-1`), and it lifts a real guard
+    # — see `JobSpec.force_empty_band`.
+    merge_force_empty_band: bool = False
     dataset_sources: List[str] = field(default_factory=list)
     competition_sources: List[str] = field(default_factory=list)
     model_sources: List[str] = field(default_factory=list)

@@ -199,6 +199,40 @@ def test_a_statement_whose_magnitude_band_was_empty_is_refused(root, tmp_path):
     assert "EMPTY" in _reason(report, fin.BALANCE_SHEET).reason
 
 
+def test_force_empty_band_is_how_a_NEW_TICKER_is_bootstrapped_at_all(root, tmp_path):
+    """⚠️ `BND-1` CLOSES ON ITSELF WITHOUT THIS, and that is the whole reason it exists.
+
+    `seed_history` rebuilds the band from the `pdf` rows ALREADY ON DISK, so a ticker parsed
+    for the first time has none; the refusal above then skips every statement the run
+    produced; nothing is written; the band stays empty; the next run refuses again. Measured
+    on HOSE_BSR, 2026-08-30: a green 14-document Kaggle run created no CSV at all.
+
+    ⚠️ It lifts a real guard — those figures passed no magnitude check — so it is a
+    named argument and never a default. The test pins both halves.
+    """
+    folder = _run_folder(tmp_path, bands={r: {"True": 0, "False": 0} for r in fin.REPORTS},
+                         accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 1_000})})
+
+    assert merge.merge_run(folder, quiet=True).to_write == []       # the default still refuses
+
+    report = merge.merge_run(folder, apply=True, force_empty_band=True, quiet=True)
+
+    assert [d.report for d in report.to_write] == [fin.BALANCE_SHEET]
+
+
+def test_force_empty_band_does_not_lift_the_OTHER_refusals(root, tmp_path):
+    """One escape, one refusal. A cumulative income statement is refused for a reason that
+    has nothing to do with the band, and bootstrapping a ticker must not smuggle it in."""
+    folder = _run_folder(tmp_path, cumulative=True,
+                         bands={r: {"True": 0, "False": 0} for r in fin.REPORTS},
+                         accepted={fin.INCOME_STATEMENT: _statement(**{PBT: 5_000})})
+
+    report = merge.merge_run(folder, force_empty_band=True, quiet=True)
+
+    assert report.to_write == []
+    assert "cumulative" in _reason(report, fin.INCOME_STATEMENT).reason
+
+
 def test_the_band_is_read_for_the_ENTITY_the_filing_actually_used(root, tmp_path):
     """⚠️ `sane` bands per entity — a standalone company is not the consolidated group — so a
     consolidated band says nothing about a standalone filing."""

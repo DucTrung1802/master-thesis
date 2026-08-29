@@ -913,3 +913,72 @@ def test_a_layer_that_raised_is_recorded_as_an_engine_error_not_as_a_refusal(
     doc = json.loads((folder / "documents" / "HOSE_TST__Q2-2013.json").read_text("utf-8"))
     assert doc["engine_errors"] == [["onnx@200", "SSLError: certificate has expired"]]
     assert "RAISED rather than refusing" in (folder / "run.log").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------- the bootstrap knob
+# WHY THIS EXISTS: `seed_history` rebuilds `sane`'s magnitude band from the `pdf` rows ALREADY
+# ON DISK, so a ticker parsed for the FIRST time has none. `pdf_ocr_merge` then refuses every
+# statement the run produced, nothing is written, and the band is still empty for the next run
+# — `BND-1` closes on itself. Measured on HOSE_BSR, 2026-08-30: a green 14-document Kaggle run
+# created no CSV at all. These pin the one escape, and pin that it is OFF unless asked for.
+
+
+class _QuietLog:
+    """`_upsert_period` only ever calls `.line`; the run's own Progress does the rest."""
+
+    def line(self, text):
+        pass
+
+
+def test_force_empty_band_is_off_by_default_and_travels_in_the_artefact():
+    spec = job.JobSpec(exchange="HOSE", symbol="VCB")
+
+    assert spec.force_empty_band is False
+    assert spec.to_json()["force_empty_band"] is False
+    assert job.JobSpec(exchange="HOSE", symbol="VCB",
+                       force_empty_band=True).to_json()["force_empty_band"] is True
+
+
+def test_the_upsert_hands_the_knob_to_the_merge_rather_than_stopping_at_the_dataclass(
+        monkeypatch):
+    """A JobSpec field that never reaches `pdf_ocr_merge` is a knob that silently does
+    nothing — which is exactly how a run reports success and writes no CSV."""
+    seen = {}
+
+    class _Result:
+        backup = None
+
+        def lines(self):
+            return ["ticker header", "  WRITE  Q1-2019"]
+
+    def _fake(folder, **kw):
+        seen.clear()
+        seen.update(kw)
+        return _Result()
+
+    monkeypatch.setattr(pdf_ocr_merge, "merge_run", _fake)
+    task = _task("Q1-2019")
+
+    job._upsert_period(Path("."), task, overwrite=False, log=_QuietLog(), backup=True,
+                       force_empty_band=True)
+    assert seen["force_empty_band"] is True
+
+    job._upsert_period(Path("."), task, overwrite=False, log=_QuietLog(), backup=True)
+    assert seen["force_empty_band"] is False
+
+
+def test_kgpu_carries_the_knob_as_a_JOB_field_and_never_as_a_worker_parameter():
+    """The worker does not merge — it writes /kaggle/working and exits — so this belongs to
+    the PULL. Putting it in `parameters` would also make `notebook.patch_parameters` RAISE:
+    that patcher refuses a parameter the worker notebook does not declare, on the grounds
+    that one it cannot find changes nothing."""
+    import sys as _sys
+
+    _sys.path.insert(0, str(job.REPO_ROOT / "src" / "kaggle_gpu"))
+    from kgpu import pdf_ocr
+
+    cfg = pdf_ocr.job("BSR", quarters=["2019-Q1"], force_empty_band=True)
+
+    assert cfg.merge_force_empty_band is True
+    assert "FORCE_EMPTY_BAND" not in cfg.parameters
+    assert pdf_ocr.job("BSR", quarters=["2019-Q1"]).merge_force_empty_band is False

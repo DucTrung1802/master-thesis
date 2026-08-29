@@ -19,6 +19,8 @@ import argparse
 import sys
 
 from . import runner
+from dataclasses import replace
+
 from .config import JobConfig, job_names, load_job, repo_src_on_path
 
 # ⚠️ **`python -m kgpu` RUNS FROM `src/kaggle_gpu/`, so the repo's `src` IS NOT ON THE
@@ -104,6 +106,13 @@ def main(argv: list[str] | None = None) -> int:
              "what keeps it honest is the three refusals and the pre-merge backup, not a "
              "second command.",
     )
+    parser.add_argument(
+        "--force-empty-band",
+        action="store_true",
+        help="merge: write a statement whose `sane` band was EMPTY. That is the only way a "
+             "ticker with no statement CSV is ever bootstrapped (BND-1) — and those figures "
+             "passed no magnitude guard, so screen the run folder before quoting any.",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "quota":
@@ -134,6 +143,11 @@ def _dispatch(args, cfg: JobConfig) -> int:
     if args.command == "rehearse":
         return runner.rehearse(cfg)
     if args.command == "merge":
+        # ⚠️ The flag WIDENS the job's own setting and never narrows it: a job built with
+        # `force_empty_band=True` already means it, and a merge that silently dropped that
+        # would refuse the very statements the run was launched to obtain.
+        if args.force_empty_band:
+            cfg = replace(cfg, merge_force_empty_band=True)
         return runner.merge_latest(cfg, apply=not args.dry_run)
     if args.command == "wait":
         return 0 if runner.wait(cfg) == "COMPLETE" else 1

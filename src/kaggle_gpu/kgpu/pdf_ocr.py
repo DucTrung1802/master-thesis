@@ -120,6 +120,7 @@ def job(
     align_torch: bool = False,
     notes: str = "",
     merge_statements: bool = True,
+    force_empty_band: bool = False,
     scope: Optional[str] = None,
     user: Optional[str] = None,
     name: Optional[str] = None,
@@ -197,6 +198,10 @@ def job(
         # cell printed, and the three refusals `pdf_ocr_merge` documents still in force. The
         # merge runs on THIS machine; a Kaggle worker has no path to this disk.
         merge_statements=merge_statements,
+        # ⚠️ NOT in `parameters`: the worker does not merge, so this is the PULL's knob. It
+        # writes statements whose `sane` band was empty, which is the only route by which a
+        # ticker with no CSV on disk is bootstrapped at all (`BND-1`).
+        merge_force_empty_band=force_empty_band,
         id=f"{user}/{_slug(kernel_title)}",
         title=kernel_title,
         notebook=NOTEBOOK,

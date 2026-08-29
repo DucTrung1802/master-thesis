@@ -4983,6 +4983,71 @@ layer is not measured at the layer the document actually wins on.**
 
 ---
 
+### ✅ 6-2-duodequadragies. `BND-1`'s LOOP HAS AN ESCAPE NOW — and a green 14-document run had created NO CSV
+
+Found 2026-08-30 from a user report that two cloned control notebooks *"ran on Kaggle and did
+not create or write the .csv"*. ⚠️ **Neither notebook was at fault, and neither was `kgpu`.**
+Both had `MERGE_INTO_CSV = True`, both pulled a complete run folder, and both wrote nothing —
+because both were parsing a ticker that had never been parsed before.
+
+**The loop, measured on `HOSE_BSR`** (14 documents, Q4-2016 .. Q4-2020, template `corp`,
+run folder `20260829-230930__hose_bsr__pdf_ocr`):
+
+| | |
+|---|---|
+| `seed_history` rebuilds `sane`'s band from | the `pdf` rows **already on disk** |
+| BSR's rows on disk | **none** — no statement CSV existed |
+| so the band was | **EMPTY on all 14 documents**, and the run WARNed each time |
+| `pdf_ocr_merge`'s second refusal | an empty-band statement is not written |
+| statements written | **0 of 42** |
+| and the band next time | **still empty** |
+
+⚠️ **THE ARTEFACT SAID SO AND NOTHING ELSE DID.** `metadata.json` recorded
+`"merge_into_csv": false` — correct, and not the cause: `run()` turns the upsert off on a
+worker because the payload root is not the repo's `raw_data/`. The merge was supposed to
+happen at the PULL, it did, and it refused every statement silently enough that a green run
+and a run that wrote nothing look identical from the notebook's output.
+
+✅ **`FORCE_EMPTY_BAND` breaks the loop, and it is one knob that lifts one guard.**
+`JobSpec.force_empty_band` (LOCAL, per quarter) and `JobConfig.merge_force_empty_band`
+(KAGGLE, at the pull) both reach `pdf_ocr_merge.merge_run`'s existing escape;
+`RUN__pdf_ocr_control.ipynb` carries it, and so do `--force-empty-band` on the CLI and on
+`kgpu merge`. ⚠️ **It is a JobConfig field and deliberately NOT a worker parameter** — the
+worker does not merge, and `notebook.patch_parameters` RAISES on a parameter the worker
+notebook does not declare, so putting it there would have broken every push.
+
+⚠️ **The other three refusals are untouched** — a cumulative income statement, a figure that
+DIFFERS from a good `pdf` row, and a document whose engine RAISED (`VCR-1`) are still skipped
+and SAID. On BSR that mattered: **7 income statements (every Q2 and Q4) were refused as
+cumulative** and stay `missing`, which is correct — this module has no Q1..Q(q-1) to
+de-cumulate with.
+
+#### ⚠️ AND THE PRICE IS THE GUARD, SO THE SCREENS WERE RUN BY HAND FIRST
+
+`BND-1`'s whole lesson is that TCB's **95.5 %** concealed a **5.3 % wrong-figure rate**, and
+every one of those nine cells was the shape `sane` catches. So before BSR was written, the two
+screens that convicted TCB were run over the artefact — no PDF, no OCR, no network:
+
+| screen | BSR |
+|---|---|
+| **unit**, per report, minority is the suspect | `{1: 10}` / `{1: 13}` / `{1: 13}` — **uniform, no outlier** |
+| **continuity**, total assets quarter on quarter | 62.7 → 61.9 → 53.2 → … → 42.9 → 55.9 tn VND, **no step above 1.7×** |
+
+**Written**: `corp/{bs,is,cf}_HOSE_BSR.csv`, **28 `pdf` / 23 `missing` / 0 `cafef`** — rule 24
+holds with no special handling. Backup at `raw_data/_backup/statements/20260830-015130__HOSE_BSR`.
+
+⚠️ **NOTHING FROM IT MAY BE QUOTED AS A FUNDAMENTAL.** BSR is a `corp` filing, so `CRP-1`
+stands: `C_LIABILITIES` misses on that chart and the balance sheet reconciles on the TRIVIAL
+`assets == resources`, true by construction on any page that reads both. And these 28 rows
+passed no magnitude guard at all — that is what the knob costs, and it is why the two screens
+above are a procedure and not a courtesy.
+
+⚠️ **`P47` IS NOT CLOSED BY THIS.** It asks for two other things, and the second is worth more
+than anything here: **ship those screens as CODE.** They were an ad-hoc script this time, they
+are free, they need no OCR, and they also run on tickers that DO have history — where `sane` is
+on but sees only its own entity's band. `P47`(a) — `plan()` warning ONCE, up front, before any
+GPU is spent, rather than per document after the cost — is also untouched.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

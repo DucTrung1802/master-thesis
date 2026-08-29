@@ -438,11 +438,15 @@ def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True) ->
     # and the disk would keep the old figure, which is the worst of both answers.
     overwrite = bool((cfg.parameters or {}).get("OVERWRITE", False))
     print("\nmerging into raw_data/.../statements/"
-          + ("   (overwrite=True — a `pdf` row that DIFFERS is replaced)" if overwrite else ""))
+          + ("   (overwrite=True — a `pdf` row that DIFFERS is replaced)" if overwrite else "")
+          + ("\n  force_empty_band=True: a ticker with no history on disk is bootstrapped;"
+             "\n  those figures passed NO magnitude guard (`BND-1`), so screen them"
+             " before quoting any." if cfg.merge_force_empty_band else ""))
     for folder in folders:
         if not (folder / "documents").is_dir():
             continue                     # not a pdf_ocr run folder
-        pdf_ocr_merge.merge_run(folder, apply=apply, force_differs=overwrite)
+        pdf_ocr_merge.merge_run(folder, apply=apply, force_differs=overwrite,
+                                force_empty_band=cfg.merge_force_empty_band)
 
 
 def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
@@ -473,7 +477,8 @@ def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
     print(f"merging {folder.name}")
     pdf_ocr_merge.merge_run(
         folder, apply=apply,
-        force_differs=bool((cfg.parameters or {}).get("OVERWRITE", False)))
+        force_differs=bool((cfg.parameters or {}).get("OVERWRITE", False)),
+        force_empty_band=cfg.merge_force_empty_band)
     return 0
 
 
