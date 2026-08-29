@@ -1,0 +1,260 @@
+symbol       : HOSE_VIC
+template     : corp   (override)
+documents    : 1  (Q3-2014)
+years        : [2014]   selected [2014]
+cascade      : 47 of 47 layers
+data root    : /kaggle/input/datasets/lyductrung/mt-cafef-filings-vic-2014/documents/data/cafef
+models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+
+[doc 1/1 100% of DOCUMENTS, not of time] HOSE_VIC__Q3-2014  Q3-2014_bao_cao_tai_chinh_hop_nhat_quy_3_nam_2014.pdf  1.4 MB  corp/consolidated
+  band: balance 12, income 12, cash 15   open_ref=—
+  [layer 1/47   2% of POSITIONS] onnx@200
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 3/41   7% of PAGES — the only fraction here that predicts time]  ~201 s left
+    [ocr page 7/41  17% of PAGES — the only fraction here that predicts time]  ~101 s left
+    [ocr page 12/41  29% of PAGES — the only fraction here that predicts time]  ~66 s left
+    [ocr page 16/41  39% of PAGES — the only fraction here that predicts time]  ~52 s left
+    [ocr page 21/41  51% of PAGES — the only fraction here that predicts time]  ~38 s left
+    [ocr page 26/41  63% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 30/41  73% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 35/41  85% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 39/41  95% of PAGES — the only fraction here that predicts time]  ~3 s left
+  [layer 2/47   4% of POSITIONS] onnx@300
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~31 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~31 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~33 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~23 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~18 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~13 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~6 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 3/47   6% of POSITIONS] onnx@400
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~38 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~37 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~39 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~34 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~21 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~15 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~7 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 5/47  11% of POSITIONS] onnx@200+relax   (cached parse, re-map only)
+  [layer 6/47  13% of POSITIONS] onnx@300+relax   (cached parse, re-map only)
+  [layer 8/47  17% of POSITIONS] onnx@200+components   (cached parse, re-map only)
+  [layer 9/47  19% of POSITIONS] onnx@300+components   (cached parse, re-map only)
+  [layer 10/47  21% of POSITIONS] onnx@200+relax+components   (cached parse, re-map only)
+  [layer 11/47  23% of POSITIONS] onnx@200+pad6+components
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~38 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~32 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~34 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~29 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~19 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~14 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~7 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 12/47  26% of POSITIONS] onnx@200+pad6+relax+components   (cached parse, re-map only)
+  [layer 13/47  28% of POSITIONS] onnx@300+split   (cached parse, re-map only)
+  [layer 14/47  30% of POSITIONS] onnx@300+split+components   (cached parse, re-map only)
+  [layer 15/47  32% of POSITIONS] onnx@200+join+components
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~26 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~25 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~21 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~16 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~12 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 16/47  34% of POSITIONS] onnx@200+join+relax+components   (cached parse, re-map only)
+  [layer 17/47  36% of POSITIONS] onnx@200+title
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~26 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~15 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 18/47  38% of POSITIONS] onnx@200+title+relax   (cached parse, re-map only)
+  [layer 19/47  40% of POSITIONS] onnx@200+loose
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~25 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~15 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 20/47  43% of POSITIONS] onnx@200+loose+relax   (cached parse, re-map only)
+  [layer 21/47  45% of POSITIONS] onnx@400+loose
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~37 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~37 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~39 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~33 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~21 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~15 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~7 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 22/47  47% of POSITIONS] onnx@400+loose+relax   (cached parse, re-map only)
+  [layer 23/47  49% of POSITIONS] onnx@300+loose
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~30 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~30 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~32 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~23 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~17 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~13 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~6 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 24/47  51% of POSITIONS] onnx@300+loose+relax   (cached parse, re-map only)
+  [layer 25/47  53% of POSITIONS] onnx@200+title+loose
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~26 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~25 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~15 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 26/47  55% of POSITIONS] onnx@200+title+loose+relax   (cached parse, re-map only)
+  [layer 27/47  57% of POSITIONS] onnx@200+realign
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~26 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~15 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 28/47  60% of POSITIONS] onnx@200+realign+relax   (cached parse, re-map only)
+  [layer 29/47  62% of POSITIONS] onnx@300+realign
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~31 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~31 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~33 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~18 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~13 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~6 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 30/47  64% of POSITIONS] onnx@300+realign+relax   (cached parse, re-map only)
+  [layer 31/47  66% of POSITIONS] onnx@200+realign+relax+components   (cached parse, re-map only)
+  [layer 32/47  68% of POSITIONS] onnx@200+notes+seam
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~26 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~16 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 33/47  70% of POSITIONS] onnx@200+notes+seam+relax   (cached parse, re-map only)
+  [layer 34/47  72% of POSITIONS] onnx@300+notes+seam
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~31 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~30 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~33 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~23 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~18 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~13 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~6 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 35/47  74% of POSITIONS] onnx@200+notes+seam+realign
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~25 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~16 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 36/47  77% of POSITIONS] onnx@200+notes   (cached parse, re-map only)
+  [layer 37/47  79% of POSITIONS] onnx@200+tail
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~25 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~15 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 38/47  81% of POSITIONS] onnx@200+tail+relax   (cached parse, re-map only)
+  [layer 39/47  83% of POSITIONS] onnx@300+tail
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~31 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~30 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~32 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~23 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~18 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~13 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~6 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 40/47  85% of POSITIONS] onnx@200+tail+relax+components   (cached parse, re-map only)
+  [layer 41/47  87% of POSITIONS] onnx@200+unit+tail
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~25 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~15 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 42/47  89% of POSITIONS] onnx@200+unit+tail+relax   (cached parse, re-map only)
+  [layer 43/47  91% of POSITIONS] onnx@200+unit
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~27 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~25 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~24 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~20 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~16 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~11 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~5 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+  [layer 44/47  94% of POSITIONS] onnx@200+annual+relax   (cached parse, re-map only)
+  [layer 45/47  96% of POSITIONS] onnx@200+pad6+annual+extra   (cached parse, re-map only)
+  [layer 46/47  98% of POSITIONS] onnx@200+pad6+extra   (cached parse, re-map only)
+  [layer 47/47 100% of POSITIONS] onnx@300+pad6+annual+extra
+    [ocr page 1/41   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/41  12% of PAGES — the only fraction here that predicts time]  ~42 s left
+    [ocr page 10/41  24% of PAGES — the only fraction here that predicts time]  ~36 s left
+    [ocr page 14/41  34% of PAGES — the only fraction here that predicts time]  ~38 s left
+    [ocr page 19/41  46% of PAGES — the only fraction here that predicts time]  ~33 s left
+    [ocr page 23/41  56% of PAGES — the only fraction here that predicts time]  ~28 s left
+    [ocr page 28/41  68% of PAGES — the only fraction here that predicts time]  ~21 s left
+    [ocr page 32/41  78% of PAGES — the only fraction here that predicts time]  ~15 s left
+    [ocr page 37/41  90% of PAGES — the only fraction here that predicts time]  ~7 s left
+    [ocr page 41/41 100% of PAGES — the only fraction here that predicts time]  ~0 s left
+WARNING:     balance_sheet absent after 45 layer(s):
+WARNING:       [onnx@200] reconcile: assets != liabilities + equity
+  Q3-2014: income_statement=16 items [onnx@300]; cash_flow=19 items [onnx@200]; absent ['balance_sheet']  (23.4 min)
+
+run folder -> /kaggle/working/reports/pdf_ocr/20260829-100920__hose_vic__pdf_ocr

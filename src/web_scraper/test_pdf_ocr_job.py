@@ -424,3 +424,95 @@ def test_the_log_file_is_written_as_the_run_goes_not_at_the_end(tmp_path):
 
     assert "first" in path.read_text(encoding="utf-8")
     log.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# plan(years=...) — the batch filter
+# ──────────────────────────────────────────────────────────────────────────────
+
+_INDEX_COLS = ["symbol", "exchange", "year", "quarter", "period", "name", "consolidated",
+               "assurance", "half_year", "file_date", "bytes", "file", "path", "url"]
+
+
+def _index_row(year, quarter, consolidated="True", assurance="unaudited"):
+    period = f"FY-{year}" if quarter == 5 else f"Q{quarter}-{year}"
+    name = f"{period}-{consolidated}"
+    return {"symbol": "TST", "exchange": "HOSE", "year": str(year), "quarter": str(quarter),
+            "period": period, "name": name, "consolidated": consolidated,
+            "assurance": assurance, "half_year": "False", "file_date": "", "bytes": "1",
+            "file": name + ".pdf", "path": f"files/HOSE_TST/{name}.pdf", "url": ""}
+
+
+@pytest.fixture()
+def filings(data_root):
+    """A PDF index for HOSE_TST: 2013 and 2014 in full, plus a 2015 audited annual."""
+    rows = [_index_row(y, q) for y in (2013, 2014) for q in (1, 2, 3, 4)]
+    rows.append(_index_row(2015, 5, assurance="audited"))
+    path = data_root / "pdfs" / "index" / "HOSE_TST.csv"
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_INDEX_COLS)
+        writer.writeheader()
+        writer.writerows(rows)
+    return FinancialsBuilder(logger=None)
+
+
+def _periods(builder, **kwargs):
+    return [t.period for t in job.plan(builder, "HOSE", "TST", template=TEMPLATE, **kwargs)]
+
+
+def test_no_years_is_every_year_the_ticker_files(filings):
+    assert _periods(filings) == [f"Q{q}-{y}" for y in (2013, 2014) for q in (1, 2, 3, 4)] \
+        + ["Q4-2015"]
+
+
+def test_an_empty_list_means_the_same_as_absent_and_is_not_an_empty_run(filings):
+    """⚠️ The whole point of the parameter's contract: `[]` is 'every year', never 'none'.
+
+    A falsy filter that returned nothing would be a run that parses nothing and reports
+    success — the failure `plan` already raises to prevent for `periods`.
+    """
+    assert _periods(filings, years=[]) == _periods(filings)
+    assert _periods(filings, years=None) == _periods(filings)
+
+
+def test_one_year_selects_that_years_quarters_only(filings):
+    assert _periods(filings, years=[2014]) == ["Q1-2014", "Q2-2014", "Q3-2014", "Q4-2014"]
+
+
+def test_several_years_come_back_in_calendar_order_not_the_order_asked_for(filings):
+    assert _periods(filings, years=[2014, 2013]) == [
+        f"Q{q}-{y}" for y in (2013, 2014) for q in (1, 2, 3, 4)]
+
+
+def test_years_and_periods_intersect_rather_than_contradict(filings):
+    assert _periods(filings, years=[2014], periods=["Q3-2014"]) == ["Q3-2014"]
+
+
+def test_a_year_the_ticker_does_not_file_raises_rather_than_running_empty(filings):
+    with pytest.raises(ValueError) as excinfo:
+        _periods(filings, years=[1999])
+    assert "1999" in str(excinfo.value)
+    assert "Years available" in str(excinfo.value)
+
+
+def test_the_periods_error_names_the_years_filter_that_emptied_the_plan(filings):
+    """Both filters are live, so the message must say which one did the cutting."""
+    with pytest.raises(ValueError) as excinfo:
+        _periods(filings, years=[2014], periods=["Q3-2013"])
+    assert "years=[2014]" in str(excinfo.value)
+
+
+def test_an_annual_report_is_filed_under_the_year_of_the_PERIOD_it_serves(filings):
+    """⚠️ CafeF files the annual under quarter 5 and `documents()` folds it onto that year's
+    Q4 — so the 2015 annual is year 2015 because its PERIOD is Q4-2015. Reading the raw index
+    column would agree here and disagree wherever CafeF's `Year` is `0`, `202` or `203`
+    (10 of 84,076 documents, CLAUDE.md §6-2-septies)."""
+    assert _periods(filings, years=[2015]) == ["Q4-2015"]
+
+
+def test_the_filter_is_recorded_in_the_spec_so_the_artefact_says_what_was_asked(filings):
+    """§5 rule 2 at the manifest: 'every year' and 'nobody wrote it down' must be tellable
+    apart by a reader who has only the run folder."""
+    assert job.JobSpec(symbol="TST", years=[2014]).to_json()["years"] == [2014]
+    assert job.JobSpec(symbol="TST").to_json()["years"] is None
+    assert job.JobSpec(symbol="TST", years=[]).to_json()["years"] is None

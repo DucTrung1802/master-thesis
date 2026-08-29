@@ -17,6 +17,7 @@ read, not a file to replace.
 from __future__ import annotations
 
 import json
+import contextlib
 import shutil
 import sys
 import time
@@ -276,6 +277,43 @@ def _record_duration(cfg: JobConfig, seconds: float) -> None:
     )
 
 
+@contextlib.contextmanager
+def _utf8_text_files():
+    """Force `open()` to UTF-8 for the duration of a call into the Kaggle client.
+
+    ⚠️ **MEASURED 2026-08-29, AND IT COST A COMPLETED RUN ITS RESULT.** The Kaggle client
+    writes the kernel log with a bare `open(outfile, "w")`
+    (`kaggle_api_extended.py:kernels_output`), which on Windows resolves to **cp1252** — and
+    this repo's own logs carry `⚠️` and Vietnamese account names by design. A VIC run that had
+    already COMPLETED on Kaggle died in `pull` with `UnicodeEncodeError: 'charmap' codec`, so
+    the kernel's 24 minutes of GPU were spent and the run folder never reached the repo.
+
+    §5 rule 18 is written for our own scripts; this is the same defect in a dependency, where
+    the file mode is not ours to pass. `PYTHONUTF8=1` fixes it too but only from the *next*
+    process — a running interpreter cannot change `locale.getpreferredencoding`, and this has
+    to work when `kgpu` is called from a notebook that is already up.
+
+    ⚠️ **SCOPED TO ONE CALL, and deliberately.** A process-wide `open` is not something to
+    rewrite for the life of a session; every write outside this block keeps whatever encoding
+    its caller chose.
+    """
+    import builtins
+
+    original = builtins.open
+
+    def utf8_open(file, mode="r", *args, **kwargs):
+        if "b" not in mode and kwargs.get("encoding") is None and len(args) < 2:
+            kwargs["encoding"] = "utf-8"
+            kwargs.setdefault("errors", "replace")
+        return original(file, mode, *args, **kwargs)
+
+    builtins.open = utf8_open
+    try:
+        yield
+    finally:
+        builtins.open = original
+
+
 def download(cfg: JobConfig) -> List[str]:
     """Raw download of /kaggle/working into `results/`. ⚠️ Wipes it first."""
     api = _api()
@@ -284,7 +322,8 @@ def download(cfg: JobConfig) -> List[str]:
         shutil.rmtree(RESULTS_DIR)
     RESULTS_DIR.mkdir(parents=True)
 
-    files, _ = api.kernels_output(cfg.id, str(RESULTS_DIR), force=True, quiet=True)
+    with _utf8_text_files():
+        files, _ = api.kernels_output(cfg.id, str(RESULTS_DIR), force=True, quiet=True)
 
     if not files:
         print("no output files (the run may have written nothing to /kaggle/working)")
@@ -369,10 +408,77 @@ def merge_results(cfg: JobConfig, force: bool = False) -> List[Path]:
     return merged
 
 
+def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True) -> None:
+    """Upsert the pulled run folders' accepted statements into `raw_data/`.
+
+    ⚠️ **THE WORKER CANNOT DO THIS AND NEVER COULD.** A Kaggle kernel writes
+    `/kaggle/working` and exits; the statement CSVs live on this disk. So "the Kaggle run
+    upserts the CSV" is necessarily "the pull does", and doing it here is what makes a
+    pre-merge backup and a printed diff possible at all.
+
+    ⚠️ **IT IS NOT A BLANKET WRITE.** `pdf_ocr_merge` refuses a cumulative income statement, a
+    statement whose `sane` band was empty, and any figure that DIFFERS from a good `pdf` row
+    already on disk. Each refusal is a measurement, not caution — the first run this was built
+    for had a worker ACCEPT an income statement the full local run REFUSED, because
+    `seed_history` reconstructs the magnitude band from disk while a full run accumulates it
+    in the run. Same machine result, different populations, different verdict.
+    """
+    if not folders:
+        return
+    import sys
+
+    src = str(REPO_ROOT / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from web_scraper import pdf_ocr_job, pdf_ocr_merge
+
+    pdf_ocr_job.use_data_root()
+    print("\nmerging into raw_data/.../statements/")
+    for folder in folders:
+        if not (folder / "documents").is_dir():
+            continue                     # not a pdf_ocr run folder
+        pdf_ocr_merge.merge_run(folder, apply=apply)
+
+
+def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
+    """`kgpu merge <job>` — merge the newest run folder already in the repo.
+
+    ⚠️ **THE NEWEST, NOT THE ONE THIS JOB LAST PUSHED**, and the two can differ: a run folder
+    is named by the WORKER's clock, and a ticker may have folders from several jobs. It prints
+    which one it chose before deciding anything.
+    """
+    import sys
+
+    if not cfg.data or not cfg.data.is_documents:
+        print(f"job {cfg.name!r} ships no documents — nothing to merge into raw_data/")
+        return 1
+    src = str(REPO_ROOT / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from web_scraper import pdf_ocr_job, pdf_ocr_merge
+
+    pdf_ocr_job.use_data_root()
+    spec = cfg.data.documents or {}
+    folder = pdf_ocr_merge.latest_run(
+        REPO_ROOT / (cfg.results_into or "reports/pdf_ocr"),
+        spec.get("exchange", "HOSE"), spec["symbol"])
+    if folder is None:
+        print(f"no run folder for {spec.get('exchange')}_{spec['symbol']} — pull one first")
+        return 1
+    print(f"merging {folder.name}")
+    pdf_ocr_merge.merge_run(folder, apply=apply)
+    return 0
+
+
 def pull(cfg: JobConfig, force: bool = False) -> List[str]:
     files = download(cfg)
     if files:
-        merge_results(cfg, force=force)
+        merged = merge_results(cfg, force=force)
+        # ⚠️ Only what THIS pull merged. A job whose folder already existed was skipped by
+        # `merge_results`, and re-merging it into the CSVs would upsert a run the user did not
+        # just fetch — the same class of surprise `--force` exists to make explicit.
+        if cfg.merge_statements:
+            merge_statements(cfg, merged)
     return files
 
 

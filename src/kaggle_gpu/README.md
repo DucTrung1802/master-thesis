@@ -457,9 +457,23 @@ even in the payload.
   "title": "MT CafeF filings payload VCB",
   "ticker": "VCB",
   "source_dirs": ["src/web_scraper", "src/utils"],
-  "documents": { "exchange": "HOSE", "symbol": "VCB", "periods": ["Q1-2026"] }
+  "documents": { "exchange": "HOSE", "symbol": "VCB",
+                 "periods": ["Q1-2026"], "years": [2026] }
 }
 ```
+
+⚠️ **`periods` AND `years` ARE BOTH OPTIONAL AND THEY INTERSECT.** Omitting both ships every
+filing the ticker has; `years: [2014]` ships that year's four quarters; `years: [2014]` with
+`periods: ["Q3-2014"]` ships one. **An empty list means every year, never none** — it is the
+absence of a filter, not an empty selection.
+
+⚠️ **AND `data.documents` IS CHECKED AGAINST `parameters`, because they are two copies of one
+filter.** `data.documents` decides which filings are UPLOADED; `parameters.PERIODS` /
+`parameters.YEARS` decide which the worker OPENS. A job naming different years in the two
+ships one set and parses another, and the worker reports the shortfall as `missing` — the same
+word a genuinely unreadable filing gets. `config._validate` refuses the mismatch, and refuses
+a year written as a string (`"2014"` filters nothing, so the payload would quietly grow to the
+whole ticker). Both checks are free; the run that finds them costs a round trip.
 
 ⚠️ **`manifest["mode"]` IS NOW WRITTEN FOR EVERY MODE, INCLUDING THE TWO THAT PREDATE IT.**
 The worker's branch used to be `if manifest.get("panel")` — a mode INFERRED from the presence

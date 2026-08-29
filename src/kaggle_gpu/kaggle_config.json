@@ -539,6 +539,50 @@
         "COMPARE": true,
         "NOTES": "VIC Q1-2026 on a T4, INTERLEAVED with a local run of the same document started the same minute. The previous local-vs-T4 comparisons were taken hours apart and were withdrawn when two further local runs of one document came in 2.25x faster with nothing recorded to explain it (CLAUDE.md 6-2-sexvicies) - interleaving is the fix. This document is the WORST case for a GPU: 47 of 47 layers entered, 22 fresh OCR passes over 71 pages and 25 cached re-maps, because the income statement is never found and `_parse_cascaded` only breaks when all three are accepted. TEMPLATE is stated rather than resolved so both machines take the same route. Nothing here may be quoted as a fundamental: CRP-1."
       }
+    },
+    "pdf-ocr-vic-q3-2014": {
+      "id": "lyductrung/mt-pdf-ocr-vic-q3-2014",
+      "title": "MT pdf ocr VIC Q3 2014",
+      "notebook": "src/web_scraper/RUN__pdf_ocr.ipynb",
+      "results_into": "reports/pdf_ocr",
+      "enable_internet": true,
+      "data": {
+        "id": "lyductrung/mt-cafef-filings-vic-2014",
+        "title": "MT CafeF filings VIC 2014",
+        "ticker": "VIC",
+        "source_dirs": [
+          "src/web_scraper",
+          "src/utils"
+        ],
+        "documents": {
+          "exchange": "HOSE",
+          "symbol": "VIC",
+          "periods": [
+            "Q3-2014"
+          ],
+          "years": [
+            2014
+          ],
+          "allow_parent": false
+        }
+      },
+      "parameters": {
+        "ALIGN_TORCH": false,
+        "MODE": "kgpu",
+        "TEMPLATE": "corp",
+        "EXCHANGE": "HOSE",
+        "SYMBOL": "VIC",
+        "PERIODS": [
+          "Q3-2014"
+        ],
+        "YEARS": [
+          2014
+        ],
+        "ALLOW_PARENT": false,
+        "LAYERS": null,
+        "COMPARE": true,
+        "NOTES": "VIC Q3-2014 on a T4 — the FIRST cross-machine check on a quarter that FAILS. Every comparison so far (VCB Q1-2026, BID Q4-2016, VIC Q1-2026) was a filing that ends with three accepted statements, so what was measured was reproduction of an ACCEPT. This quarter's balance sheet and income statement are `missing` on disk after all 47 layers and only its cash flow parsed (onnx@200), so the run reproduces a REFUSAL — every gate verdict, every escalation and the same two absences, or it does not. Locally it took 44m 33s inside the 27-quarter authoritative run (CLAUDE.md 6-2-duotricies). The filters are the new `years` parameter INTERSECTED with `periods`: years=[2014] and periods=[Q3-2014] select one filing, which is what exercises the new code path without paying for four documents. TEMPLATE is stated rather than resolved so both machines take the same route. `sane` gets a real magnitude band because the payload ships the statement CSVs and 26 earlier VIC quarters sit in them — this is NOT a subset run in the sense that flips the guard open, because pdf_ocr_job seeds the band from disk and writes no CSV. Nothing from this run may be quoted as a fundamental: CRP-1."
+      }
     }
   }
 }

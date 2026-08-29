@@ -375,6 +375,9 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
     exchange = str(spec.get("exchange", "HOSE")).upper()
     symbol = str(spec["symbol"]).upper()
     periods = spec.get("periods") or None
+    # ⚠️ EMPTY LIST AND ABSENT MEAN THE SAME THING — every year — and both must reach `plan`
+    # as None rather than as `[]`, because `[]` is falsy there too but only by accident.
+    years = spec.get("years") or None
     allow_parent = bool(spec.get("allow_parent", False))
     period_min = spec.get("period_min", "Q1-2008")
     with_statements = bool(spec.get("with_statements", True))
@@ -382,12 +385,13 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
 
     job.use_data_root()                       # the repo's own raw_data/cafef
     builder = FinancialsBuilder(logger=None)
-    tasks = job.plan(builder, exchange, symbol, periods=periods,
+    tasks = job.plan(builder, exchange, symbol, periods=periods, years=years,
                      allow_parent=allow_parent, period_min=period_min)
     if not tasks:
         raise ValueError(
-            f"{exchange}_{symbol} has no filing to ship for periods={periods!r} — "
-            f"an empty payload is a run that parses nothing and reports success."
+            f"{exchange}_{symbol} has no filing to ship for periods={periods!r} "
+            f"years={years!r} — an empty payload is a run that parses nothing and "
+            f"reports success."
         )
     template = tasks[0].template
     root = job.data_root()
@@ -471,6 +475,8 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
         # ⚠️ Recorded even when the job named none, so a reader can tell "every period this
         # ticker files" from "nobody wrote it down" — §5 rule 2 at the manifest.
         "periods_requested": list(periods) if periods else None,
+        "years_requested": [int(y) for y in years] if years else None,
+        "years_shipped": sorted({int(t.period.split("-")[1]) for t in tasks}),
         "filings": [
             {"period": t.period, "file": t.file, "consolidated": t.consolidated,
              "assurance": t.assurance, "cumulative": t.cumulative,
@@ -663,11 +669,22 @@ def payload_hash(cfg: JobConfig) -> str:
 
 
 def upload_record(cfg: JobConfig) -> dict | None:
-    """What `kgpu data` recorded about the last upload, if there was one."""
+    """What `kgpu data` recorded about the last upload of THIS job to THIS dataset.
+
+    ⚠️ **THE RECORD IS KEYED BY JOB NAME AND THE DATASET IS NOT** — so a job that keeps its
+    name and changes `data.id` would read the previous dataset's record and believe itself
+    uploaded. `ensure_uploaded` then passes (the payload hash matches, because the payload
+    really is the same files) and the kernel mounts a dataset that does not exist, which
+    surfaces on Kaggle rather than here. Found 2026-08-29 when `kgpu.pdf_ocr` began deriving
+    both names from the filter: the two moved independently for the first time.
+    """
     path = cfg.payload_dir / "uploaded.json"
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    record = json.loads(path.read_text(encoding="utf-8"))
+    if cfg.data is not None and record.get("dataset") != cfg.data.id:
+        return None                       # a record for a different dataset is not a record
+    return record
 
 
 def write_upload_record(cfg: JobConfig, version: str | int | None) -> dict:

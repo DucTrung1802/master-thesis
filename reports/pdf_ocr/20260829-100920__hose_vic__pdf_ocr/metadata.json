@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "run_id": "20260829-100920__hose_vic__pdf_ocr",
+  "stage": "web_scraper.pdf_ocr_job",
+  "created": "2026-08-29T10:32:46+07:00",
+  "git_commit": "50d8781+dirty",
+  "notes": "VIC Q3-2014 on a T4 — the FIRST cross-machine check on a quarter that FAILS. Every comparison so far (VCB Q1-2026, BID Q4-2016, VIC Q1-2026) was a filing that ends with three accepted statements, so what was measured was reproduction of an ACCEPT. This quarter's balance sheet and income statement are `missing` on disk after all 47 layers and only its cash flow parsed (onnx@200), so the run reproduces a REFUSAL — every gate verdict, every escalation and the same two absences, or it does not. Locally it took 44m 33s inside the 27-quarter authoritative run (CLAUDE.md 6-2-duotricies). The filters are the new `years` parameter INTERSECTED with `periods`: years=[2014] and periods=[Q3-2014] select one filing, which is what exercises the new code path without paying for four documents. TEMPLATE is stated rather than resolved so both machines take the same route. `sane` gets a real magnitude band because the payload ships the statement CSVs and 26 earlier VIC quarters sit in them — this is NOT a subset run in the sense that flips the guard open, because pdf_ocr_job seeds the band from disk and writes no CSV. Nothing from this run may be quoted as a fundamental: CRP-1.",
+  "inputs": {
+    "exchange": "HOSE",
+    "symbol": "VIC",
+    "periods": [
+      "Q3-2014"
+    ],
+    "years": [
+      2014
+    ],
+    "allow_parent": false,
+    "period_min": "Q1-2008",
+    "template_requested": "corp",
+    "layers_requested": null,
+    "compare_with_disk": true,
+    "notes": "VIC Q3-2014 on a T4 — the FIRST cross-machine check on a quarter that FAILS. Every comparison so far (VCB Q1-2026, BID Q4-2016, VIC Q1-2026) was a filing that ends with three accepted statements, so what was measured was reproduction of an ACCEPT. This quarter's balance sheet and income statement are `missing` on disk after all 47 layers and only its cash flow parsed (onnx@200), so the run reproduces a REFUSAL — every gate verdict, every escalation and the same two absences, or it does not. Locally it took 44m 33s inside the 27-quarter authoritative run (CLAUDE.md 6-2-duotricies). The filters are the new `years` parameter INTERSECTED with `periods`: years=[2014] and periods=[Q3-2014] select one filing, which is what exercises the new code path without paying for four documents. TEMPLATE is stated rather than resolved so both machines take the same route. `sane` gets a real magnitude band because the payload ships the statement CSVs and 26 earlier VIC quarters sit in them — this is NOT a subset run in the sense that flips the guard open, because pdf_ocr_job seeds the band from disk and writes no CSV. Nothing from this run may be quoted as a fundamental: CRP-1.",
+    "template": "corp",
+    "template_how": "override",
+    "data_root": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-vic-2014/documents/data/cafef",
+    "models": {
+      "det": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-vic-2014/documents/models/deepdoc_det.onnx",
+      "vietocr": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-vic-2014/documents/models/vgg_seq2seq.pth"
+    },
+    "documents": [
+      "HOSE_VIC__Q3-2014"
+    ],
+    "layers": [
+      "onnx@200",
+      "onnx@300",
+      "onnx@400",
+      "tesseract@200",
+      "onnx@200+relax",
+      "onnx@300+relax",
+      "tesseract@400+relax",
+      "onnx@200+components",
+      "onnx@300+components",
+      "onnx@200+relax+components",
+      "onnx@200+pad6+components",
+      "onnx@200+pad6+relax+components",
+      "onnx@300+split",
+      "onnx@300+split+components",
+      "onnx@200+join+components",
+      "onnx@200+join+relax+components",
+      "onnx@200+title",
+      "onnx@200+title+relax",
+      "onnx@200+loose",
+      "onnx@200+loose+relax",
+      "onnx@400+loose",
+      "onnx@400+loose+relax",
+      "onnx@300+loose",
+      "onnx@300+loose+relax",
+      "onnx@200+title+loose",
+      "onnx@200+title+loose+relax",
+      "onnx@200+realign",
+      "onnx@200+realign+relax",
+      "onnx@300+realign",
+      "onnx@300+realign+relax",
+      "onnx@200+realign+relax+components",
+      "onnx@200+notes+seam",
+      "onnx@200+notes+seam+relax",
+      "onnx@300+notes+seam",
+      "onnx@200+notes+seam+realign",
+      "onnx@200+notes",
+      "onnx@200+tail",
+      "onnx@200+tail+relax",
+      "onnx@300+tail",
+      "onnx@200+tail+relax+components",
+      "onnx@200+unit+tail",
+      "onnx@200+unit+tail+relax",
+      "onnx@200+unit",
+      "onnx@200+annual+relax",
+      "onnx@200+pad6+annual+extra",
+      "onnx@200+pad6+extra",
+      "onnx@300+pad6+annual+extra"
+    ],
+    "layers_are_the_full_cascade": true
+  },
+  "environment": {
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "Tesla T4",
+      "count": 2,
+      "vram_total_mb": 14912,
+      "vram_free_mb": 12327,
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128"
+    },
+    "host": "d0a097748990",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "timezone": "GMT+7",
+    "ocr": {
+      "det_providers": [
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ],
+      "recognizer_device": "cuda",
+      "stack": {
+        "onnxruntime-gpu": "1.22.0",
+        "pymupdf": "1.28.0",
+        "vietocr": "0.3.13",
+        "opencv-python-headless": "4.13.0.92",
+        "opencv-python": "4.13.0.92",
+        "shapely": "2.1.2",
+        "pyclipper": "1.4.0",
+        "numpy": "2.2.6",
+        "einops": "0.2.0",
+        "torch": "2.10.0+cu128"
+      },
+      "stack_fingerprint": "88df8ef02c08",
+      "pin_violations": {},
+      "onnxruntime": "1.22.0",
+      "onnxruntime_advertises": [
+        "TensorrtExecutionProvider",
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ]
+    }
+  },
+  "execution": {
+    "started_at": "2026-08-29T10:09:20+07:00",
+    "finished_at": "2026-08-29T10:32:46+07:00",
+    "timezone": "GMT+7",
+    "runtime_seconds": 1405.24,
+    "runtime": "23m 25s",
+    "device": "cuda",
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "Tesla T4",
+      "count": 2,
+      "vram_total_mb": 14912,
+      "vram_free_mb": 12323,
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128"
+    },
+    "host": "d0a097748990",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35"
+  },
+  "results": [
+    {
+      "period": "Q3-2014",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1405.17
+    },
+    {
+      "period": "Q3-2014",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 16,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1405.17
+    },
+    {
+      "period": "Q3-2014",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "REPRODUCED",
+      "seconds": 1405.17
+    }
+  ]
+}

@@ -3840,6 +3840,26 @@ reports nothing fails exactly like a fast run.**
 spec, `template_how`, `environment.ocr`), `summary.csv`, `documents/<key>.json`, and **`run.log`
 written line-buffered as the run goes** (§5 rule 20). **25 tests**, no PDF and no network.
 
+### ⚠️ AND THE FILTER GAINED A `years` FORM — 2026-08-29
+
+`plan()`, `JobSpec`, the CLI (`--years 2014 2015`), `kgpu`'s `data.documents.years` and the
+notebook's `YEARS` all carry it, and **empty or absent means every year the ticker files** —
+which is `documents()`'s own answer rather than a list any of the five recomputes. The unit is
+a YEAR because that is the unit the statement build already skips in (`orchestration` §2a:
+`_decumulate` needs Q1..Q(q-1) of the same year, so a partial skip deletes the very quarter a
+run exists to fix). ⚠️ **The year of a document is read from its PERIOD, never from the index's
+`year` column** — `documents()` folds a quarter-5 annual onto that year's Q4 and rewrites
+`period`, and CafeF files 10 of 84,076 documents with a `Year` of `0`, `202` or `203`.
+`years` and `periods` INTERSECT and each raises when it matches nothing.
+
+⚠️ **AND `kgpu` NOW CHECKS THE TWO COPIES OF THE FILTER AGAINST EACH OTHER.**
+`data.documents` decides which filings are UPLOADED and `parameters` decides which the worker
+OPENS — a job naming different years in the two ships one set and parses another, and the
+worker reports the shortfall as `missing`, the same word a genuinely unreadable filing gets.
+`config._validate` refuses that, and refuses a year written as a string (`"2014"` filters
+nothing, so the payload would quietly grow to the whole ticker). Free here; a round trip to
+find. **9 tests**, no PDF and no network.
+
 ⚠️ **The notebook has TWO MODES and states which**: `MODE = "auto" | "local" | "kgpu"`. `auto`
 resolves from `$CAFEF_DATA_ROOT` — the variable the bootstrap sets — and prints what it chose;
 an explicit `"kgpu"` with no payload mounted **raises**, because falling back would parse the
@@ -3869,6 +3889,90 @@ published for Kaggle's cp312 Linux (the index offers 1.20.0 and 1.20.2), so an e
 the INSTALL. ⚠️ **The two OCR halves fail independently** — detection is onnxruntime,
 recognition is torch — so *"the GPU is being used"* is two questions, and
 `runtime.gpu_report()` answers neither.
+
+### ⚠️ VIC Q3-2014 ON A T4 — the first cross-machine check on a quarter that FAILS
+
+Run 2026-08-29, and it is the first time this repo has scored a T4 against a quarter where the
+cascade REFUSES most of what it opens. Every earlier comparison (VCB Q1-2026, BID Q4-2016, VIC
+Q1-2026) ended with three accepted statements, so what they measured was reproduction of an
+ACCEPT. On disk this quarter reads `missing` for its balance sheet and income statement and
+`pdf` for its cash flow.
+
+| statement | on disk | the T4 | verdict |
+|---|---|---|---|
+| cash flow | `pdf` `onnx@200` | `pdf` `onnx@200`, 19 items | ✅ **REPRODUCED** — 19/19 cells, same layer, unit and `publish_date` |
+| balance sheet | `missing` | absent after 45 layers, first reason `assets != liabilities + equity` | ✅ **the REFUSAL reproduces**, same reason as local |
+| **income statement** | `missing` | **`pdf` `onnx@300`, 16 items** | ⚠️ **RECOVERED — and nothing scored it** |
+
+⚠️ **THE WORKER IS DETERMINISTIC, MEASURED BY RE-RUNNING IT.** The identical job was pushed a
+second time against the identical payload: **every statement, every layer, every value and the
+`rows_sha` over EVERY parsed row — mapped or not — match** (24.4 min vs 23.4 min, same stack
+fingerprint `88df8ef02c08`). So the recovery is not a coin that came up heads. ⚠️ `rows_sha` is
+the stronger comparison than §6-2-sexvicies' 98 cells, which covered only the MAPPED minority.
+
+✅ **AND THE RECOVERED FIGURE PASSES AN INDEPENDENT ARITHMETIC CHECK.** The filing prints three
+columns; the run took the first as Q3-2014. Against the ONE 2014 quarter already on disk, using
+the cumulative identity `P43` proposes: `2,821,804,892,483 + (−1,225,516,938,300) +
+3,210,714,392,300 = 4,807,002,346,483`, which is the filing's own 9-month column **to the
+đồng**. Q2-2014 is not this run's data, so the check is genuinely external.
+
+⚠️ **AND IT STILL MAY NOT BE MERGED WITHOUT READING THE FILING, BECAUSE THE GATE SAW A
+DIFFERENT POPULATION.** The full local run REFUSED `onnx@300` here with *"sane: probe exactly
+equals an already-accepted quarter"*. **Nothing about the machine differed** — the cash flow
+reproduced bit for bit and the balance sheet was refused identically. What differed is the
+magnitude band: `seed_history` rebuilds it from the `pdf` rows on DISK (**12** income-statement
+probes for VIC — only 13 of 27 quarters map a PBT anchor at all) while a full run accumulates
+it IN THE RUN, over more quarters and over pre-de-cumulation figures. ⚠️ **Which quarter caused
+the local collision is NOT established** — resolving it needs the same document run locally
+against the disk-seeded band, and that has not been done.
+
+⚠️ **`kgpu run` REPORTED `FAILED` ON A KERNEL THAT HAD COMPLETED, AND 24 MINUTES OF GPU NEARLY
+WENT WITH IT.** The Kaggle client writes the kernel log with a bare `open(outfile, "w")`, which
+resolves to **cp1252** on Windows against a log carrying `⚠️` — `UnicodeEncodeError` inside
+`pull`, after the compute was spent. §5 rule 18 in a dependency, where the file mode is not
+ours to pass; `PYTHONUTF8=1` fixes it only from the NEXT process, which is no use to a notebook
+already running. `runner._utf8_text_files()` scopes a UTF-8 `open` to that one call.
+
+### ⚠️ AND THE MERGE INTO `raw_data/` IS A SECOND MODULE NOW — 2026-08-29
+
+`pdf_ocr_job` still writes no statement CSV. `web_scraper/pdf_ocr_merge.py` takes a finished
+run folder and upserts it — and **since the same day, by request, it WRITES BY DEFAULT**:
+`MERGE_INTO_CSV = True` in the control notebook, `merge_statements=True` on the job, and
+`kgpu merge <job>` writes unless given `--dry-run`. ⚠️ **The refusals are what makes an
+automatic write defensible, not the extra command**, and the merge touches only the quarters
+the run produced.
+
+⚠️ **THE MERGE RUNS ON THIS MACHINE AND COULD NOT RUN ANYWHERE ELSE.** A Kaggle kernel writes
+`/kaggle/working` and exits; the CSVs are here. *"The Kaggle run upserts the CSV"* is
+necessarily *"the pull does"* — which is what makes a pre-merge backup and a printed diff
+possible. It calls `FinancialsBuilder._write(merge=True)`, the same upsert `build()` uses, so
+only the quarters the run PRODUCED are rewritten.
+
+**Three refusals, each a measurement, each with a `force_*` escape**: a **cumulative income
+statement** (the filing prints the year to date, the column holds the quarter, and a
+one-document run has no priors to de-cumulate with); an **empty `sane` band** (the guard failed
+open, so nothing judged the figure); and a figure that **DIFFERS from a good `pdf` row**
+(`compare()` scored it already — two runs disagreeing is not settled by preferring the newer).
+
+⚠️ **AND THE SECOND REFUSAL HAD A FIELD CASE THE SAME DAY.** VIC Q3-2014: the T4 ACCEPTED an
+income statement at `onnx@300` that the full local run had REFUSED with *"probe exactly equals
+an already-accepted quarter"*. **Nothing about the machine differed** — the cash flow reproduced
+bit for bit at the same layer, the balance sheet was refused for the same reason on both. What
+differed is the POPULATION the gate compares against: `seed_history` rebuilds the band from the
+`pdf` rows on DISK (12 income-statement probes for VIC) while a full run accumulates it IN THE
+RUN, over more quarters and over pre-de-cumulation figures. **A statement a worker accepts is
+not a statement a full run would accept**, and no code can tell the two apart — which is why
+`apply=False` is now the explicit look rather than the default. `SAN-1` from a fifth side.
+**15 tests.**
+
+✅ **FIRST REAL MERGE, 2026-08-29 — one period, one statement, and the other two files did not
+move.** VIC Q3-2014's income statement went in (21 → 22 parsed); diffed against the pre-merge
+backup **column by column across all three CSVs**, exactly 22 columns of one period changed and
+the balance sheet and cash flow moved **not one cell**, even though `_write` rewrote all three.
+⚠️ **And that diff found a defect in the merge itself**: `BACKUP_ROOT` was a RELATIVE path, so
+the backup landed under `src/kaggle_gpu/` — `kgpu merge` runs from there — and the one thing
+that makes a merge reversible went where nobody looks. Anchored to the repo root. *A safety net
+placed by the caller's working directory is a safety net you cannot find when you need it.*
 
 ### ⚠️ What the module deliberately does NOT do
 

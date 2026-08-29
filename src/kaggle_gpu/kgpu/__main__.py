@@ -42,6 +42,8 @@ COMMANDS = {
     "data": "export the pools to parquet and (re)upload the payload dataset",
     "export": "export the pools to parquet only — no upload",
     "rehearse": "run the worker side locally against the staged payload — no quota",
+    "merge": "upsert the newest pulled run folder's statements into raw_data/ "
+             "(--dry-run to look first)",
     "jobs": "list the configured jobs",
     "quota": "show remaining weekly GPU/TPU hours",
 }
@@ -95,6 +97,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="pull/run: overwrite a run folder that already exists in the repo",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="merge: print every decision and touch nothing. The merge WRITES by default; "
+             "what keeps it honest is the three refusals and the pre-merge backup, not a "
+             "second command.",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "quota":
@@ -124,6 +133,8 @@ def _dispatch(args, cfg: JobConfig) -> int:
         return runner.run(cfg, refresh_data=args.data, force=args.force)
     if args.command == "rehearse":
         return runner.rehearse(cfg)
+    if args.command == "merge":
+        return runner.merge_latest(cfg, apply=not args.dry_run)
     if args.command == "wait":
         return 0 if runner.wait(cfg) == "COMPLETE" else 1
     if args.command == "push":

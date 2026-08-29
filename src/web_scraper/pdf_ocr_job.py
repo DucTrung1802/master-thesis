@@ -333,8 +333,22 @@ class DocumentTask:
         return f"{self.exchange}_{self.symbol}__{self.period}"
 
 
+def _year_of(doc: dict) -> int:
+    """The year of the PERIOD a document contributes — never the raw index `year` column.
+
+    ⚠️ **THE TWO DISAGREE AND `documents()` IS WHY.** CafeF files an annual report under
+    quarter 5; `documents()` folds it onto that year's Q4 and rewrites `period`, so `period`
+    is the normalised key every other comparison here uses (`_period_key`, `period_min`, the
+    `periods` filter). The raw column is also not always a year — CafeF files 10 of the 84,076
+    documents with a `Year` of `0`, `202` or `203` (CLAUDE.md §6-2-septies) — and reading it
+    would file those under whatever `int()` makes of them.
+    """
+    return fin._period_key(doc["period"])[0]
+
+
 def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
          periods: Optional[Sequence[str]] = None,
+         years: Optional[Sequence[int]] = None,
          allow_parent: bool = False,
          period_min: Optional[str] = fin.FINANCIALS_PERIOD_MIN,
          template: Optional[str] = None) -> List[DocumentTask]:
@@ -345,11 +359,35 @@ def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
     guard against an annual changing the ENTITY of a Q4 row (86 of 13,912 periods moved before
     it existed), and a second copy of that logic is a second place for it to be wrong.
 
-    A `periods` filter naming a period the ticker does not file RAISES — a filter that matches
-    nothing is a run that parses nothing and reports success.
+    A `periods` or `years` filter matching NOTHING raises — a filter that matches nothing is a
+    run that parses nothing and reports success.
+
+    ⚠️ **`years` IS THE UNIT THE PARSE ACTUALLY HAS.** `orchestration` §2a records that the
+    statement build skips complete YEARS rather than quarters, because `_decumulate` needs
+    Q1..Q(q-1) of the same year and a partial skip deletes the very quarter a run exists to
+    fix. This module de-cumulates nothing, so that argument does not bind it — but a caller
+    batching an OCR run wants that unit, and naming it here keeps the two halves speaking one
+    language. **Empty or absent means every year the ticker files**, which is exactly what
+    `documents()` already returns: the default is not re-derived, it is the absence of a
+    filter.
+
+    `years` and `periods` INTERSECT — `years=[2014]` with `periods=["Q3-2014"]` is Q3-2014 and
+    not a contradiction. Each is checked against what survives the one before it, so the error
+    names the filter that emptied the plan rather than the first one written.
     """
     docs = builder.documents(exchange, symbol, allow_parent=allow_parent,
                              period_min=period_min)
+    if years:
+        wanted_years = sorted({int(y) for y in years})
+        have_years = sorted({_year_of(d) for d in docs})
+        unknown_years = [y for y in wanted_years if y not in have_years]
+        if unknown_years:
+            raise ValueError(
+                f"{exchange}_{symbol} files no document for year(s) {unknown_years} "
+                f"(allow_parent={allow_parent}, period_min={period_min!r}).\n"
+                f"  Years available: {have_years}"
+            )
+        docs = [d for d in docs if _year_of(d) in set(wanted_years)]
     if periods:
         wanted = list(dict.fromkeys(periods))
         have = {d["period"] for d in docs}
@@ -357,7 +395,8 @@ def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
         if unknown:
             raise ValueError(
                 f"{exchange}_{symbol} files no document for {unknown} "
-                f"(allow_parent={allow_parent}, period_min={period_min!r}).\n"
+                f"(allow_parent={allow_parent}, period_min={period_min!r}"
+                f"{', years=' + str(sorted({int(y) for y in years})) if years else ''}).\n"
                 f"  Periods available: {sorted(have)[:8]}"
                 f"{' …' if len(have) > 8 else ''}"
             )
@@ -843,6 +882,11 @@ class JobSpec:
     exchange: str = "HOSE"
     symbol: str = "VCB"
     periods: Optional[Sequence[str]] = None      # None = every period the ticker files
+    # ⚠️ EMPTY OR ABSENT = EVERY YEAR, and that answer is `documents()`'s rather than a list
+    # this class computes. Batching an OCR run by year is the unit `P6` is issued in
+    # (`orchestration` §2a: the statement build skips whole YEARS, never quarters), so the
+    # name is carried here even though this module de-cumulates nothing.
+    years: Optional[Sequence[int]] = None        # None/[] = every year the ticker files
     allow_parent: bool = False
     period_min: Optional[str] = fin.FINANCIALS_PERIOD_MIN
     # ⚠️ None means RESOLVE it (templates.csv, then CafeF's fingerprint), never "assume bank".
@@ -864,7 +908,8 @@ class JobSpec:
             (self.template, "override") if self.template
             else resolve_template(builder, self.symbol.upper()))
         tasks = plan(builder, self.exchange.upper(), self.symbol.upper(),
-                     periods=self.periods, allow_parent=self.allow_parent,
+                     periods=self.periods, years=self.years,
+                     allow_parent=self.allow_parent,
                      period_min=self.period_min, template=template)
         if not tasks:
             raise ValueError(
@@ -878,6 +923,7 @@ class JobSpec:
         return {
             "exchange": self.exchange, "symbol": self.symbol,
             "periods": list(self.periods) if self.periods else None,
+            "years": [int(y) for y in self.years] if self.years else None,
             "allow_parent": self.allow_parent, "period_min": self.period_min,
             "template_requested": self.template,
             "layers_requested": list(self.layers) if self.layers else None,
@@ -906,6 +952,9 @@ class PreparedJob:
             f"documents    : {len(self.tasks)}  "
             f"({', '.join(t.period for t in self.tasks[:8])}"
             f"{' …' if len(self.tasks) > 8 else ''})",
+            f"years        : "
+            f"{sorted({int(y) for y in self.spec.years}) if self.spec.years else 'all'}"
+            f"   selected {sorted({int(t.period.split('-')[1]) for t in self.tasks})}",
             f"cascade      : {len(self.layers)} of {len(FinancialsBuilder.LAYERS)} layers",
             f"data root    : {self.data_root}",
             f"models       : det={_name(self.models.get('det'))} "
@@ -1181,13 +1230,20 @@ def _git_commit() -> Optional[str]:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """`cd src && python -m web_scraper.pdf_ocr_job --symbol VCB --periods Q1-2026`"""
+    """`cd src && python -m web_scraper.pdf_ocr_job --symbol VCB --periods Q1-2026`
+
+    ⚠️ `--years 2014` is the batch form; `--years` with no value is every year, which is the
+    same as omitting it. Both filters may be given and they intersect.
+    """
     parser = argparse.ArgumentParser(
         description="OCR + parse CafeF filings into a run folder. Writes NO statement CSV.")
     parser.add_argument("--exchange", default="HOSE")
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--periods", nargs="*", default=None,
                         help="e.g. Q1-2026. Omit for every period the ticker files.")
+    parser.add_argument("--years", nargs="*", type=int, default=None,
+                        help="e.g. --years 2014 2015. Omit or pass none for every year the "
+                             "ticker files. Intersects with --periods.")
     parser.add_argument("--allow-parent", action="store_true",
                         help="fall back to the STANDALONE filing where no consolidated one "
                              "exists (documents(); consolidated still wins).")
@@ -1212,6 +1268,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # arguments and constructs it; it does not resolve anything itself.
     run(JobSpec(
         exchange=args.exchange, symbol=args.symbol, periods=args.periods,
+        years=args.years,
         allow_parent=args.allow_parent, layers=args.layers, template=args.template,
         data_root=args.data_root, models_dir=args.models, out_root=args.out,
         compare_with_disk=not args.no_compare, notes=args.notes,

@@ -178,6 +178,13 @@ class JobConfig:
     parameters: Dict[str, Any] = field(default_factory=dict)
     data: Optional[DataConfig] = None
     results_into: Optional[str] = None  # repo-relative dir to merge run folders into
+    # ⚠️ **DOCUMENTS MODE ONLY, AND OFF BY DEFAULT.** With this set, `kgpu run`/`pull` upserts
+    # the run's accepted statements into `raw_data/.../statements/` after the folder lands —
+    # a backup first, a printed diff after, and three refusals that cannot be reached from
+    # here (a cumulative P&L, an empty `sane` band, a figure that DIFFERS from a good row on
+    # disk). `web_scraper/pdf_ocr_merge.py` carries the measurement each refusal exists for.
+    # ⚠️ The merge happens HERE, never on the worker: a Kaggle kernel has no path to this disk.
+    merge_statements: bool = False
     dataset_sources: List[str] = field(default_factory=list)
     competition_sources: List[str] = field(default_factory=list)
     model_sources: List[str] = field(default_factory=list)
@@ -342,7 +349,7 @@ def _validate(cfg: JobConfig) -> JobConfig:
         if cfg.data.is_documents:
             spec = cfg.data.documents or {}
             unknown = set(spec) - {
-                "exchange", "symbol", "periods", "allow_parent", "period_min",
+                "exchange", "symbol", "periods", "years", "allow_parent", "period_min",
                 "with_statements", "with_models",
             }
             if unknown:
@@ -354,6 +361,41 @@ def _validate(cfg: JobConfig) -> JobConfig:
                     f"job {cfg.name!r}: data.documents needs a 'symbol' — the payload is one "
                     f"ticker's filings, and there is no default worth guessing."
                 )
+            years = spec.get("years")
+            if years is not None:
+                if not isinstance(years, (list, tuple)):
+                    raise ValueError(
+                        f"job {cfg.name!r}: data.documents.years must be a list of years "
+                        f"(empty = every year), got {years!r}"
+                    )
+                bad = [y for y in years if not isinstance(y, int) or isinstance(y, bool)]
+                if bad:
+                    raise ValueError(
+                        f"job {cfg.name!r}: data.documents.years must hold integers, "
+                        f"got {bad!r} — a year written as a string filters nothing and the "
+                        f"payload would ship every filing the ticker has."
+                    )
+            # ⚠️ **THE PAYLOAD AND THE PARAMETERS ARE TWO COPIES OF THE SAME FILTER.**
+            # `data.documents` decides which filings are UPLOADED and `parameters` decides
+            # which the worker OPENS; a job naming different years in the two ships one set
+            # and parses another, and the worker reports the shortfall as `missing` — which
+            # is exactly what a genuinely unreadable filing reports. Checked here because it
+            # is free, and because the run that discovers it costs a Kaggle round trip.
+            for key, param in (("years", "YEARS"), ("periods", "PERIODS")):
+                if param in (cfg.parameters or {}):
+                    a = spec.get(key) or []
+                    b = cfg.parameters[param] or []
+                    if sorted(map(str, a)) != sorted(map(str, b)):
+                        raise ValueError(
+                            f"job {cfg.name!r}: data.documents.{key}={a!r} but "
+                            f"parameters.{param}={b!r} — the payload would ship one set of "
+                            f"filings and the worker would ask for another."
+                        )
+        if cfg.merge_statements and not cfg.data.is_documents:
+            raise ValueError(
+                f"job {cfg.name!r}: merge_statements is for a documents payload — there are "
+                f"no statement CSVs for a tables or panel job to merge."
+            )
         for rel in cfg.data.source_dirs:
             if not (REPO_ROOT / rel).is_dir():
                 raise FileNotFoundError(

@@ -1494,7 +1494,7 @@ cd src\kaggle_gpu ; python -m kgpu rehearse pdf-ocr ; python -m kgpu run pdf-ocr
 | function | what it is |
 |---|---|
 | `use_data_root()` / `use_models()` | re-point `cafef_financials`' path globals and the two model env vars. ⚠️ The globals are read at CALL time precisely so a harness can do this — `statement_path`'s docstring has said so since the experiment harnesses needed it |
-| `plan()` | the filings, from `FinancialsBuilder.documents()`. ⚠️ **The choice is never re-implemented**: it carries a measured guard against an annual report changing the ENTITY of a Q4 row |
+| `plan()` | the filings, from `FinancialsBuilder.documents()`, filtered by `periods` and/or `years`. ⚠️ **The choice is never re-implemented**: it carries a measured guard against an annual report changing the ENTITY of a Q4 row |
 | `seed_history()` | the magnitude band `sane` compares against, rebuilt from the `pdf` rows on disk |
 | `run_document()` | ONE filing through **`FinancialsBuilder._parse_cascaded`** — the real 47-layer cascade, its parse cache, its `reconcile`-then-`sane` short-circuit and its refusal report |
 | `compare()` | every parsed cell against the statement CSV on disk |
@@ -1506,6 +1506,75 @@ BEFORE the next one starts). CLAUDE.md records **four** builds in which a `perio
 silently DOWNGRADED a quarter it was given only for history, while the log said `RUN_SUCCESS`
 — a run whose output is an artefact cannot do that. Merging a recovered quarter back stays a
 deliberate Dagster act with a pre-run backup and a diff of every column.
+
+### `years` — the batch filter, added 2026-08-29
+
+`plan()`, `JobSpec`, the CLI (`--years 2014 2015`), `kgpu`'s `data.documents.years` and the
+notebook's `YEARS` all carry it. **Empty or absent means every year the ticker files**, and
+that answer is `documents()`'s own rather than a list any of the five computes — the default
+is the ABSENCE of a filter, not a re-derivation of one.
+
+| | |
+|---|---|
+| the unit | ⚠️ **a YEAR, because that is the unit the statement build already skips in** (`orchestration` §2a — `_decumulate` needs Q1..Q(q-1) of the same year, so a partial skip deletes the very quarter a run exists to fix). This module de-cumulates nothing, so the argument does not bind it; naming the same unit keeps the two halves speaking one language |
+| the year of a document | `_year_of` reads it from the **PERIOD**, never from the index's `year` column. `documents()` folds a quarter-5 annual onto that year's Q4 and rewrites `period`, so `period` is the normalised key everything else compares on — and CafeF files 10 of 84,076 documents with a `Year` of `0`, `202` or `203` |
+| with `periods` | they **INTERSECT**. `years=[2014]` + `periods=["Q3-2014"]` is Q3-2014, and each filter is checked against what survives the one before it, so the error names the filter that emptied the plan |
+| matching nothing | **raises**, exactly as `periods` already did — a filter that matches nothing is a run that parses nothing and reports success |
+
+⚠️ **`kgpu` VALIDATES THE TWO COPIES AGAINST EACH OTHER.** `data.documents` decides which
+filings are UPLOADED and `parameters` decides which the worker OPENS; a job naming different
+years in the two ships one set and parses another, and the worker reports the shortfall as
+`missing` — which is what a genuinely unreadable filing reports too. `config._validate`
+refuses the mismatch, and refuses a year written as a string (which would filter nothing and
+silently ship every filing the ticker has). Both are free here; the run that discovers them
+costs a Kaggle round trip.
+
+### `pdf_ocr_merge` — the write the job refuses, made explicit (2026-08-29)
+
+`pdf_ocr_job` still writes no statement CSV. What was added is a SECOND module that takes a
+finished run folder and upserts it, so the two decisions stay separate: parsing is one act,
+putting a figure into `raw_data/` is another.
+
+```powershell
+cd src\kaggle_gpu
+python -m kgpu merge <job>              # WRITES, after a backup
+python -m kgpu merge <job> --dry-run    # every decision printed, nothing touched
+```
+
+⚠️ **WRITING IS THE DEFAULT since 2026-08-29, by request** — in the library (`merge_run`), on
+the job (`merge_statements`), in the notebook (`MERGE_INTO_CSV`) and in the CLI. What keeps it
+honest is the three refusals and the pre-merge backup, not a second command.
+
+⚠️ **THE MERGE RUNS HERE AND COULD NOT RUN ANYWHERE ELSE.** A Kaggle kernel writes
+`/kaggle/working` and exits; the statement CSVs are on this disk. "The Kaggle run upserts the
+CSV" is necessarily "the pull does" — which is what makes a pre-merge backup and a printed diff
+possible at all.
+
+⚠️ **IT DOES NOT WRITE THE CSV ITSELF** — it calls `FinancialsBuilder._write(merge=True)`, the
+same upsert `build()` uses, so only the quarters this run PRODUCED are rewritten and every
+other row keeps what the file holds. A second CSV writer would be a second place for the column
+contract to be wrong.
+
+**Three refusals, each from a measurement, each with a `force_*` escape:**
+
+| refused | the measurement |
+|---|---|
+| a **cumulative income statement** | an annual filing prints the year to date; the column holds the quarter, and a one-document run has no Q1..Q(q-1) to de-cumulate with |
+| an **empty `sane` band** | with no band the magnitude guard fails open — the documented way a subset run writes a wrong figure (§6-2-octodecies) |
+| a figure that **DIFFERS from a good `pdf` row** | `compare()` already scored it; two runs disagreeing is not resolved by preferring the newer |
+
+⚠️ **AND THE SECOND REFUSAL HAS A FIELD CASE FROM THE DAY IT SHIPPED.** VIC Q3-2014,
+2026-08-29: the Kaggle worker ACCEPTED an income statement at `onnx@300` that the full local run
+had REFUSED with `sane: probe exactly equals an already-accepted quarter`. **Nothing about the
+machine differed** — the cash flow reproduced bit for bit at the same layer and the balance
+sheet was refused for the same reason on both. What differed is the population the gate compares
+against: `seed_history` rebuilds the band from the `pdf` rows on DISK (12 income-statement
+probes for VIC) while a full run accumulates it IN THE RUN, over more quarters and over
+pre-de-cumulation figures. **A statement a worker accepts is not a statement a full run would
+accept**, and no code here can tell the difference — which is why `apply=False` is the default
+and the diff is printed rather than summarised.
+
+**15 tests**, no PDF, no network, no OCR engine.
 
 ⚠️ **`seed_history` IS A RECONSTRUCTION OF A FULL RUN'S BAND, NOT THE RUN'S OWN.** It applies
 three of `build()`'s rules — `source == 'pdf'` only, `MIN_ITEMS_FOR_HISTORY` withheld, split

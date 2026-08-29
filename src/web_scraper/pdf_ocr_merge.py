@@ -1,0 +1,344 @@
+"""Merge a `pdf_ocr_job` run folder INTO the statement CSVs — the write `pdf_ocr_job` refuses.
+
+⚠️ **THIS IS THE ONE PLACE A KAGGLE RUN CAN REACH `raw_data/`, AND IT RUNS HERE.** A worker
+executes on Kaggle, writes `/kaggle/working` and exits; there is no path from it to this disk
+except `kgpu pull`. So "the Kaggle run upserts the CSV" is necessarily "the pull does", and
+that is what this module implements — after the artefact is on disk, where a backup and a diff
+are possible.
+
+⚠️ **IT DOES NOT WRITE THE CSV ITSELF.** It calls `FinancialsBuilder._write(merge=True)`, the
+same upsert `build()` uses: only the quarters this run PRODUCED are rewritten, every other row
+keeps what the file already holds, and columns the file already carries survive. A second CSV
+writer would be a second place for the column contract to be wrong.
+
+---
+
+## ⚠️ Why the refusals below exist, and why they are ON by default
+
+`pdf_ocr_job` was built to write no CSV, on four measured occasions where a `periods` run
+silently DOWNGRADED a quarter it was given only for history (CLAUDE.md §6-2-vicies,
+§6-2-unvicies, §6-2-quatervicies, §6-2-quinvicies). Merging automatically gives that risk back,
+in a NEW shape, and the shape is not hypothetical — it was measured on the first run this
+module was written for:
+
+**VIC Q3-2014, 2026-08-29.** The worker ACCEPTED an income statement at `onnx@300` that the
+full local run had REFUSED, and the refusal was `sane: probe exactly equals an already-accepted
+quarter`. Nothing about the machine differed — the cash flow reproduced bit for bit at the same
+layer, and the balance sheet was refused for the same reason on both. What differed is the
+MAGNITUDE BAND: `seed_history` reconstructs it from the `pdf` rows on DISK (12 income-statement
+probes for VIC), while a full run accumulates it IN THE RUN, over more quarters and over
+pre-de-cumulation figures. **The gate that decides is looking at two different populations.**
+
+So a statement accepted on a worker is not a statement a full run would accept, and a merge
+that ignores that is `SAN-1` with the guard removed. Three refusals follow from it, and each
+one is a `force_*` argument rather than a silent default:
+
+1. **A cumulative income statement is REFUSED.** An annual or half-year filing prints the year
+   to date; the CSV column holds the standalone quarter. `pdf_ocr_job` does not de-cumulate —
+   it cannot, a one-document run has no Q1..Q(q-1) — so writing its figures would put a
+   9-month total in a 3-month column, and nothing downstream could tell.
+2. **A statement whose magnitude band was EMPTY is REFUSED.** With no band `sane` fails open,
+   which is the documented way a run writes a wrong figure. A ticker with nothing on disk yet
+   has no band at all, so its first run is unguarded by construction.
+3. **A quarter that DIFFERS from a good row on disk is REFUSED.** `compare()` already scored
+   it; a `DIFFERS` verdict means two runs disagree about a figure, and picking the newer one
+   by default is a coin toss dressed as an upsert.
+
+⚠️ **`apply=True` IS THE DEFAULT SINCE 2026-08-29, BY REQUEST — the refusals are what keeps it
+honest, not the extra command.** Every merge still prints each decision and each changed cell,
+and still backs the three CSVs up first, so a merge remains reversible and readable. What is
+gone is the second step, not the checks: `apply=False` gives the dry run, `plan_merge` gives
+the decisions with no I/O at all.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple
+
+from web_scraper import cafef_financials as fin
+from web_scraper.cafef_financials import FinancialsBuilder, REPORTS, statement_path
+
+# Where a pre-merge backup goes: under `raw_data/_backup/`, timestamped so a second merge
+# cannot overwrite the evidence of the first.
+#
+# ⚠️ **ANCHORED TO THE REPO, NOT TO THE CWD.** A relative path put the backup wherever the
+# caller happened to be standing — `kgpu merge` runs from `src/kaggle_gpu`, so the one thing
+# that makes a merge reversible would have landed in a directory nobody looks in. Found
+# 2026-08-29 on the first real merge, by looking for the backup and not finding it where the
+# tool said it was.
+BACKUP_ROOT = Path(__file__).resolve().parents[2] / "raw_data" / "_backup" / "statements"
+
+
+@dataclass
+class Decision:
+    """What this module decided about one (period, report), and why."""
+
+    period: str
+    report: str
+    action: str                  # "write" | "skip"
+    reason: str
+    layer: str = ""
+    items: int = 0
+    on_disk: str = ""            # the row's `source` before the merge
+    changed: Dict[str, Tuple[Optional[int], Optional[int]]] = field(default_factory=dict)
+
+    @property
+    def writing(self) -> bool:
+        return self.action == "write"
+
+
+@dataclass
+class MergeReport:
+    folder: Path
+    exchange: str
+    symbol: str
+    template: str
+    decisions: List[Decision] = field(default_factory=list)
+    applied: bool = False
+    backup: Optional[Path] = None
+    written: Dict[str, int] = field(default_factory=dict)
+
+    @property
+    def to_write(self) -> List[Decision]:
+        return [d for d in self.decisions if d.writing]
+
+    def lines(self) -> List[str]:
+        out = [f"{self.exchange}_{self.symbol}  template={self.template}  "
+               f"run={self.folder.name}"]
+        if not self.decisions:
+            out.append("  nothing accepted in this run — nothing to merge")
+            return out
+        for d in sorted(self.decisions, key=lambda d: (d.period, d.report)):
+            mark = "WRITE " if d.writing else "skip  "
+            detail = f"[{d.layer}] {d.items} items" if d.layer else ""
+            out.append(f"  {mark} {d.period:9} {d.report:18} {detail:32} {d.reason}")
+            for column, (was, now) in sorted(d.changed.items())[:8]:
+                out.append(f"           {column:56} {was} -> {now}")
+            if len(d.changed) > 8:
+                out.append(f"           … and {len(d.changed) - 8} more columns")
+        if self.applied:
+            out.append(f"  backup: {self.backup}")
+            out.append(f"  written: {self.written}")
+        else:
+            out.append(f"  DRY RUN — {len(self.to_write)} statement(s) would be written. "
+                       f"Pass apply=True to write them.")
+        return out
+
+
+def _documents(folder: Path) -> List[dict]:
+    """Every per-filing record in a run folder, oldest period first."""
+    files = sorted((folder / "documents").glob("*.json"))
+    docs = [json.loads(p.read_text(encoding="utf-8")) for p in files]
+    return sorted(docs, key=lambda d: fin._period_key(d["period"]))
+
+
+def _backup(exchange: str, symbol: str, template: str, stamp: str) -> Path:
+    """Copy the three CSVs somewhere a diff can reach them, BEFORE anything is written.
+
+    ⚠️ `SAN-1` was found by diffing a run against a backup, not by reading a log — the log said
+    `RUN_SUCCESS` and named a layer while a quarter had been silently downgraded. A backup is
+    the only thing that makes "what did this change?" answerable afterwards.
+    """
+    target = BACKUP_ROOT / f"{stamp}__{exchange}_{symbol}"
+    target.mkdir(parents=True, exist_ok=True)
+    for report in REPORTS:
+        path = Path(statement_path(template, report, exchange, symbol))
+        if path.is_file():
+            shutil.copy2(path, target / path.name)
+    return target
+
+
+def plan_merge(folder: os.PathLike | str,
+               *,
+               reports: Optional[Sequence[str]] = None,
+               periods: Optional[Sequence[str]] = None,
+               force_cumulative: bool = False,
+               force_empty_band: bool = False,
+               force_differs: bool = False) -> MergeReport:
+    """Decide, without writing anything, what this run folder would put on disk."""
+    folder = Path(folder)
+    meta = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
+    docs = _documents(folder)
+    if not docs:
+        raise ValueError(f"{folder} holds no documents/*.json — nothing to merge")
+
+    exchange = docs[0]["exchange"]
+    symbol = docs[0]["symbol"]
+    template = docs[0]["template"]
+    builder = FinancialsBuilder(logger=None)
+    report = MergeReport(folder=folder, exchange=exchange, symbol=symbol, template=template)
+
+    wanted_reports = set(reports) if reports else set(REPORTS)
+    wanted_periods = set(periods) if periods else None
+
+    for doc in docs:
+        period = doc["period"]
+        if wanted_periods and period not in wanted_periods:
+            continue
+        # ⚠️ A run that raised mid-document may still have written an `accepted` block for the
+        # statements it got through. Refuse the whole filing rather than reasoning about which
+        # half survived.
+        if doc.get("error"):
+            for name in sorted(wanted_reports):
+                report.decisions.append(Decision(
+                    period, name, "skip", f"the run errored: {doc['error']}"))
+            continue
+
+        bands = doc.get("history_sizes") or {}
+        for name in REPORTS:
+            if name not in wanted_reports:
+                continue
+            got = (doc.get("accepted") or {}).get(name)
+            if got is None:
+                report.decisions.append(Decision(
+                    period, name, "skip", "absent in this run"))
+                continue
+
+            disk = builder._existing(exchange, symbol, template, name).get(period) or {}
+            on_disk = disk.get("source", "absent")
+            decision = Decision(period, name, "write", "", layer=got.get("layer", ""),
+                                items=got.get("items", 0), on_disk=on_disk)
+
+            # ── refusal 1: a cumulative P&L is not a quarter ──────────────────────────
+            if name == fin.INCOME_STATEMENT and doc.get("cumulative") and not force_cumulative:
+                decision.action = "skip"
+                decision.reason = ("cumulative income statement — the filing prints the year "
+                                   "to date and this module does not de-cumulate")
+                report.decisions.append(decision)
+                continue
+
+            # ── refusal 2: `sane` had no band, so it could not have refused anything ──
+            band = (bands.get(name) or {}).get(doc.get("consolidated", "True"), 0)
+            if not band and not force_empty_band:
+                decision.action = "skip"
+                decision.reason = ("the magnitude band was EMPTY — `sane` failed open, so "
+                                   "this figure passed no guard")
+                report.decisions.append(decision)
+                continue
+
+            # ── refusal 3: two runs disagree about a figure already on disk ───────────
+            values = {k: int(v) for k, v in (got.get("values") or {}).items()}
+            if on_disk == "pdf":
+                changed: Dict[str, Tuple[Optional[int], Optional[int]]] = {}
+                for column in sorted(set(values) | {
+                        c for c, v in disk.items()
+                        if v not in ("", None) and c not in fin.DATA_COLS}):
+                    was = disk.get(column)
+                    was_int = int(float(was)) if was not in ("", None) else None
+                    now = values.get(column)
+                    if was_int != now:
+                        changed[column] = (was_int, now)
+                decision.changed = changed
+                if not changed and disk.get("method") == got.get("layer"):
+                    decision.action = "skip"
+                    decision.reason = "identical to the row already on disk"
+                    report.decisions.append(decision)
+                    continue
+                if changed and not force_differs:
+                    decision.action = "skip"
+                    decision.reason = (f"DIFFERS from a `pdf` row on disk in "
+                                       f"{len(changed)} column(s) — two runs disagree, and "
+                                       f"the newer one is not automatically the right one")
+                    report.decisions.append(decision)
+                    continue
+
+            decision.reason = ("recovers a quarter disk records as "
+                               f"`{on_disk}`" if on_disk != "pdf" else "re-writes a `pdf` row")
+            report.decisions.append(decision)
+
+    return report
+
+
+def merge_run(folder: os.PathLike | str,
+              *,
+              apply: bool = True,
+              reports: Optional[Sequence[str]] = None,
+              periods: Optional[Sequence[str]] = None,
+              force_cumulative: bool = False,
+              force_empty_band: bool = False,
+              force_differs: bool = False,
+              quiet: bool = False) -> MergeReport:
+    """Upsert a run folder's accepted statements into the ticker's CSVs.
+
+    ⚠️ **`apply=True` BY DEFAULT since 2026-08-29, by request.** The three refusals below are
+    what stands between an automatic merge and a wrong figure on disk, so they stay on; what
+    changed is that a run which clears them is written without a second command. Pass
+    `apply=False` for the dry run, or call `plan_merge` for the decisions alone.
+
+    ⚠️ **A BACKUP IS STILL TAKEN EVERY TIME.** It is the only thing that makes "what did this
+    change?" answerable afterwards, and `SAN-1` was found that way rather than from a log.
+    """
+    result = plan_merge(folder, reports=reports, periods=periods,
+                        force_cumulative=force_cumulative,
+                        force_empty_band=force_empty_band,
+                        force_differs=force_differs)
+
+    if apply and result.to_write:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        result.backup = _backup(result.exchange, result.symbol, result.template, stamp)
+
+        builder = FinancialsBuilder(logger=None)
+        docs = {d["period"]: d for d in _documents(Path(folder))}
+        writing = {(d.period, d.report) for d in result.to_write}
+        periods_written = sorted({d.period for d in result.to_write}, key=fin._period_key)
+
+        data: Dict[str, Dict[str, dict]] = {r: {} for r in REPORTS}
+        items: Dict[str, List[str]] = {r: [] for r in REPORTS}
+        meta: Dict[str, Dict[str, dict]] = {r: {} for r in REPORTS}
+        published: Dict[str, str] = {}
+        assurance: Dict[str, str] = {}
+        shares: Dict[str, Dict[str, Optional[int]]] = {}
+
+        for period in periods_written:
+            doc = docs[period]
+            facts = doc.get("facts") or {}
+            published[period] = facts.get("publish_date", "") or ""
+            assurance[period] = doc.get("assurance", "") or ""
+            shares[period] = {k: facts.get(k) for k in
+                              ("shares_authorized", "shares_issued", "shares_outstanding")}
+            for name in REPORTS:
+                if (period, name) not in writing:
+                    continue
+                got = doc["accepted"][name]
+                values = {k: int(v) for k, v in (got.get("values") or {}).items()}
+                data[name][period] = values
+                items[name] += [c for c in values if c not in items[name]]
+                # ⚠️ The provenance `_write` reads. `source` is `pdf` and nothing else: rule 24
+                # forbids any other origin, and this module has no other origin to offer.
+                meta[name][period] = {
+                    "ocr_config": got.get("layer", ""),
+                    "source": "pdf",
+                    "consolidated": doc.get("consolidated", ""),
+                    "cash_flow_method": got.get("cash_flow_method", "") or "",
+                    "unit": got.get("unit", ""),
+                    "n_columns": got.get("n_columns", ""),
+                    "document": doc.get("document", ""),
+                    "assurance": doc.get("assurance", "") or "",
+                }
+
+        # ⚠️ `attempted` is EXACTLY the periods being written. `_write` builds its quarter grid
+        # from `attempted ∪ rows`, and a wider grid would manufacture blank `missing` rows for
+        # quarters this run never opened — which `merge=True` would then keep out of the file,
+        # but only by accident of ordering. Keeping it narrow makes the intent explicit.
+        attempted = [(int(p.split("-")[1]), int(p[1])) for p in periods_written]
+        result.written = builder._write(
+            result.exchange, result.symbol, data, items, meta, attempted,
+            result.template, published, assurance, shares, merge=True)
+        result.applied = True
+
+    if not quiet:
+        print("\n".join(result.lines()))
+    return result
+
+
+def latest_run(reports_root: os.PathLike | str, exchange: str, symbol: str) -> Optional[Path]:
+    """The newest run folder for this ticker — run ids sort chronologically by construction."""
+    root = Path(reports_root)
+    folders = sorted(root.glob(f"*__{exchange.lower()}_{symbol.lower()}__pdf_ocr"),
+                     key=lambda p: p.name)
+    return folders[-1] if folders else None
