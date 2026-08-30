@@ -1,0 +1,19 @@
+symbol       : HOSE_BSR
+template     : corp   (detect_template (CafeF fingerprint, over the network))
+documents    : 1  (Q4-2016)
+quarters     : ['2016-Q4']   selected ['2016-Q4']
+skipped      : 0 quarter(s) already `pdf` in all three statements
+cascade      : 49 of 49 layers
+data root    : /kaggle/input/datasets/lyductrung/mt-cafef-filings-bsr-2016-q4/documents/data/cafef
+models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+vietocr cfg  : /kaggle/input/datasets/lyductrung/mt-cafef-filings-bsr-2016-q4/documents/models/vietocr_vgg_seq2seq.yml
+
+[doc 1/1 100% of DOCUMENTS, not of time] HOSE_BSR__Q4-2016  FY-2016_bao_cao_tai_chinh_hop_nhat_nam_2016_da_kiem_toan.pdf  10.7 MB  corp/consolidated  CUMULATIVE
+WARNING: Q4-2016: the magnitude band is EMPTY, so `sane` will FAIL OPEN — this ticker has no accepted quarters on disk to reconstruct one from.
+  [layer 1/49   2% of POSITIONS] onnx@200
+    [ocr page 1/43   2% of PAGES — the only fraction here that predicts time]
+    [ocr page 5/43  11% of PAGES — the only fraction here that predicts time]  ~115 s left
+    [ocr page 10/43  23% of PAGES — the only fraction here that predicts time]  ~77 s left
+  Q4-2016: balance_sheet=52 items [onnx@200]; income_statement=16 items [onnx@200]; cash_flow=23 items [onnx@200]  (1.1 min)
+
+run folder -> /kaggle/working/reports/pdf_ocr/20260830-024024__hose_bsr__pdf_ocr

@@ -1,0 +1,2109 @@
+{
+  "schema_version": 2,
+  "run_id": "20260829-232042__hose_ctg__pdf_ocr",
+  "stage": "web_scraper.pdf_ocr_job",
+  "created": "2026-08-30T08:01:14+07:00",
+  "git_commit": "c6de49a+dirty",
+  "notes": "HOSE_CTG PDF parse on a Kaggle T4 — every period this ticker files; template resolved on the worker. Writes a run folder and NO statement CSV: compare() scores every parsed cell against the CSVs on disk, and merging a recovered quarter stays a deliberate Dagster act with a pre-run backup. Nothing from a non-bank template may be quoted as a fundamental (CRP-1).",
+  "inputs": {
+    "exchange": "HOSE",
+    "symbol": "CTG",
+    "periods": null,
+    "quarters": null,
+    "allow_parent": false,
+    "period_min": "Q1-2008",
+    "overwrite": false,
+    "merge_into_csv": false,
+    "template_requested": null,
+    "layers_requested": null,
+    "compare_with_disk": true,
+    "notes": "HOSE_CTG PDF parse on a Kaggle T4 — every period this ticker files; template resolved on the worker. Writes a run folder and NO statement CSV: compare() scores every parsed cell against the CSVs on disk, and merging a recovered quarter stays a deliberate Dagster act with a pre-run backup. Nothing from a non-bank template may be quoted as a fundamental (CRP-1).",
+    "template": "bank",
+    "template_how": "detect_template (CafeF fingerprint, over the network)",
+    "data_root": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-ctg-all/documents/data/cafef",
+    "models": {
+      "det": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-ctg-all/documents/models/deepdoc_det.onnx",
+      "vietocr": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-ctg-all/documents/models/vgg_seq2seq.pth",
+      "vietocr_config": "/kaggle/input/datasets/lyductrung/mt-cafef-filings-ctg-all/documents/models/vietocr_vgg_seq2seq.yml"
+    },
+    "documents": [
+      "HOSE_CTG__Q4-2008",
+      "HOSE_CTG__Q1-2009",
+      "HOSE_CTG__Q2-2009",
+      "HOSE_CTG__Q3-2009",
+      "HOSE_CTG__Q4-2009",
+      "HOSE_CTG__Q1-2010",
+      "HOSE_CTG__Q2-2010",
+      "HOSE_CTG__Q3-2010",
+      "HOSE_CTG__Q4-2010",
+      "HOSE_CTG__Q1-2011",
+      "HOSE_CTG__Q2-2011",
+      "HOSE_CTG__Q3-2011",
+      "HOSE_CTG__Q4-2011",
+      "HOSE_CTG__Q1-2012",
+      "HOSE_CTG__Q2-2012",
+      "HOSE_CTG__Q3-2012",
+      "HOSE_CTG__Q4-2012",
+      "HOSE_CTG__Q1-2013",
+      "HOSE_CTG__Q2-2013",
+      "HOSE_CTG__Q3-2013",
+      "HOSE_CTG__Q4-2013",
+      "HOSE_CTG__Q1-2014",
+      "HOSE_CTG__Q2-2014",
+      "HOSE_CTG__Q3-2014",
+      "HOSE_CTG__Q4-2014",
+      "HOSE_CTG__Q1-2015",
+      "HOSE_CTG__Q2-2015",
+      "HOSE_CTG__Q3-2015",
+      "HOSE_CTG__Q4-2015",
+      "HOSE_CTG__Q1-2016",
+      "HOSE_CTG__Q2-2016",
+      "HOSE_CTG__Q3-2016",
+      "HOSE_CTG__Q4-2016",
+      "HOSE_CTG__Q1-2017",
+      "HOSE_CTG__Q2-2017",
+      "HOSE_CTG__Q3-2017",
+      "HOSE_CTG__Q4-2017",
+      "HOSE_CTG__Q1-2018",
+      "HOSE_CTG__Q2-2018",
+      "HOSE_CTG__Q3-2018",
+      "HOSE_CTG__Q4-2018",
+      "HOSE_CTG__Q1-2019",
+      "HOSE_CTG__Q2-2019",
+      "HOSE_CTG__Q3-2019",
+      "HOSE_CTG__Q4-2019",
+      "HOSE_CTG__Q1-2020",
+      "HOSE_CTG__Q2-2020",
+      "HOSE_CTG__Q3-2020",
+      "HOSE_CTG__Q4-2020",
+      "HOSE_CTG__Q1-2021",
+      "HOSE_CTG__Q2-2021",
+      "HOSE_CTG__Q3-2021",
+      "HOSE_CTG__Q4-2021",
+      "HOSE_CTG__Q1-2022",
+      "HOSE_CTG__Q2-2022",
+      "HOSE_CTG__Q3-2022",
+      "HOSE_CTG__Q4-2022",
+      "HOSE_CTG__Q1-2023",
+      "HOSE_CTG__Q2-2023",
+      "HOSE_CTG__Q3-2023",
+      "HOSE_CTG__Q4-2023",
+      "HOSE_CTG__Q1-2024",
+      "HOSE_CTG__Q2-2024",
+      "HOSE_CTG__Q3-2024",
+      "HOSE_CTG__Q4-2024",
+      "HOSE_CTG__Q1-2025",
+      "HOSE_CTG__Q2-2025",
+      "HOSE_CTG__Q3-2025",
+      "HOSE_CTG__Q4-2025",
+      "HOSE_CTG__Q1-2026"
+    ],
+    "layers": [
+      "onnx@200",
+      "onnx@300",
+      "onnx@400",
+      "tesseract@200",
+      "onnx@200+relax",
+      "onnx@300+relax",
+      "tesseract@400+relax",
+      "onnx@200+components",
+      "onnx@300+components",
+      "onnx@200+relax+components",
+      "onnx@200+pad6+components",
+      "onnx@200+pad6+relax+components",
+      "onnx@300+split",
+      "onnx@300+split+components",
+      "onnx@200+join+components",
+      "onnx@200+join+relax+components",
+      "onnx@200+title",
+      "onnx@200+title+relax",
+      "onnx@200+loose",
+      "onnx@200+loose+relax",
+      "onnx@400+loose",
+      "onnx@400+loose+relax",
+      "onnx@300+loose",
+      "onnx@300+loose+relax",
+      "onnx@200+title+loose",
+      "onnx@200+title+loose+relax",
+      "onnx@200+realign",
+      "onnx@200+realign+relax",
+      "onnx@300+realign",
+      "onnx@300+realign+relax",
+      "onnx@200+realign+relax+components",
+      "onnx@200+notes+seam",
+      "onnx@200+notes+seam+relax",
+      "onnx@300+notes+seam",
+      "onnx@200+notes+seam+realign",
+      "onnx@200+notes",
+      "onnx@200+tail",
+      "onnx@200+tail+relax",
+      "onnx@300+tail",
+      "onnx@200+tail+relax+components",
+      "onnx@200+unit+tail",
+      "onnx@200+unit+tail+relax",
+      "onnx@200+unit",
+      "onnx@200+annual+relax",
+      "onnx@200+pad6+annual+extra",
+      "onnx@200+pad6+extra",
+      "onnx@300+pad6+annual+extra"
+    ],
+    "layers_are_the_full_cascade": true,
+    "skipped_already_parsed": [],
+    "merged_into_csv": false,
+    "merge_backup": null
+  },
+  "environment": {
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "Tesla T4",
+      "count": 2,
+      "vram_total_mb": 14912,
+      "vram_free_mb": 12939,
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128"
+    },
+    "host": "b921d3541f99",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "timezone": "GMT+7",
+    "ocr": {
+      "det_providers": [
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ],
+      "recognizer_device": "cuda",
+      "stack": {
+        "onnxruntime-gpu": "1.22.0",
+        "pymupdf": "1.28.0",
+        "vietocr": "0.3.13",
+        "opencv-python-headless": "4.13.0.92",
+        "opencv-python": "4.13.0.92",
+        "shapely": "2.1.2",
+        "pyclipper": "1.4.0",
+        "numpy": "2.2.6",
+        "einops": "0.2.0",
+        "torch": "2.10.0+cu128"
+      },
+      "stack_fingerprint": "88df8ef02c08",
+      "pin_violations": {},
+      "onnxruntime": "1.22.0",
+      "onnxruntime_advertises": [
+        "TensorrtExecutionProvider",
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ]
+    }
+  },
+  "execution": {
+    "started_at": "2026-08-29T23:20:42+07:00",
+    "finished_at": "2026-08-30T08:01:14+07:00",
+    "timezone": "GMT+7",
+    "runtime_seconds": 31231.54,
+    "runtime": "8h 40m 32s",
+    "device": "cuda",
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "Tesla T4",
+      "count": 2,
+      "vram_total_mb": 14912,
+      "vram_free_mb": 12935,
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128"
+    },
+    "host": "b921d3541f99",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35"
+  },
+  "results": [
+    {
+      "period": "Q4-2008",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 45,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 184.33
+    },
+    {
+      "period": "Q4-2008",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 16,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 184.33
+    },
+    {
+      "period": "Q4-2008",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 26,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 184.33
+    },
+    {
+      "period": "Q1-2009",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1022.8
+    },
+    {
+      "period": "Q1-2009",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1022.8
+    },
+    {
+      "period": "Q1-2009",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 27,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1022.8
+    },
+    {
+      "period": "Q2-2009",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 45,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 179.89
+    },
+    {
+      "period": "Q2-2009",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 16,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 179.89
+    },
+    {
+      "period": "Q2-2009",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 25,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 179.89
+    },
+    {
+      "period": "Q3-2009",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 47,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 826.69
+    },
+    {
+      "period": "Q3-2009",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 826.69
+    },
+    {
+      "period": "Q3-2009",
+      "report": "cash_flow",
+      "layer": "onnx@200+tail",
+      "items": 17,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 826.69
+    },
+    {
+      "period": "Q4-2009",
+      "report": "balance_sheet",
+      "layer": "onnx@200+notes+seam+realign",
+      "items": 52,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1946.33
+    },
+    {
+      "period": "Q4-2009",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1946.33
+    },
+    {
+      "period": "Q4-2009",
+      "report": "cash_flow",
+      "layer": "onnx@200+join+components",
+      "items": 25,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1946.33
+    },
+    {
+      "period": "Q1-2010",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 55,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 935.45
+    },
+    {
+      "period": "Q1-2010",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 11,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 935.45
+    },
+    {
+      "period": "Q1-2010",
+      "report": "cash_flow",
+      "layer": "onnx@200+tail",
+      "items": 28,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 935.45
+    },
+    {
+      "period": "Q2-2010",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 53,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 382.41
+    },
+    {
+      "period": "Q2-2010",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 382.41
+    },
+    {
+      "period": "Q2-2010",
+      "report": "cash_flow",
+      "layer": "onnx@300",
+      "items": 29,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 382.41
+    },
+    {
+      "period": "Q3-2010",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1648.46
+    },
+    {
+      "period": "Q3-2010",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1648.46
+    },
+    {
+      "period": "Q3-2010",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 28,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1648.46
+    },
+    {
+      "period": "Q4-2010",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 55,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 194.08
+    },
+    {
+      "period": "Q4-2010",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 24,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 194.08
+    },
+    {
+      "period": "Q4-2010",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 31,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 194.08
+    },
+    {
+      "period": "Q1-2011",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 52,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 92.88
+    },
+    {
+      "period": "Q1-2011",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 92.88
+    },
+    {
+      "period": "Q1-2011",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 28,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 92.88
+    },
+    {
+      "period": "Q2-2011",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 4019.03
+    },
+    {
+      "period": "Q2-2011",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 4019.03
+    },
+    {
+      "period": "Q2-2011",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 4019.03
+    },
+    {
+      "period": "Q3-2011",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 93.89
+    },
+    {
+      "period": "Q3-2011",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 93.89
+    },
+    {
+      "period": "Q3-2011",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 27,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 93.89
+    },
+    {
+      "period": "Q4-2011",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 122.61
+    },
+    {
+      "period": "Q4-2011",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 122.61
+    },
+    {
+      "period": "Q4-2011",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 31,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 122.61
+    },
+    {
+      "period": "Q1-2012",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 56,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 198.23
+    },
+    {
+      "period": "Q1-2012",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 17,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 198.23
+    },
+    {
+      "period": "Q1-2012",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 27,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 198.23
+    },
+    {
+      "period": "Q2-2012",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 56,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 101.88
+    },
+    {
+      "period": "Q2-2012",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 101.88
+    },
+    {
+      "period": "Q2-2012",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 26,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 101.88
+    },
+    {
+      "period": "Q3-2012",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 10.43
+    },
+    {
+      "period": "Q3-2012",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 10.43
+    },
+    {
+      "period": "Q3-2012",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 27,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 10.43
+    },
+    {
+      "period": "Q4-2012",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 59,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 98.34
+    },
+    {
+      "period": "Q4-2012",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 98.34
+    },
+    {
+      "period": "Q4-2012",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 29,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 98.34
+    },
+    {
+      "period": "Q1-2013",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 56,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 49.95
+    },
+    {
+      "period": "Q1-2013",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 49.95
+    },
+    {
+      "period": "Q1-2013",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 27,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 49.95
+    },
+    {
+      "period": "Q2-2013",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 56,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 91.24
+    },
+    {
+      "period": "Q2-2013",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 91.24
+    },
+    {
+      "period": "Q2-2013",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 30,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 91.24
+    },
+    {
+      "period": "Q3-2013",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 53,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 131.79
+    },
+    {
+      "period": "Q3-2013",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 131.79
+    },
+    {
+      "period": "Q3-2013",
+      "report": "cash_flow",
+      "layer": "onnx@300",
+      "items": 29,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 131.79
+    },
+    {
+      "period": "Q4-2013",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 52,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 212.03
+    },
+    {
+      "period": "Q4-2013",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 212.03
+    },
+    {
+      "period": "Q4-2013",
+      "report": "cash_flow",
+      "layer": "onnx@300",
+      "items": 26,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 212.03
+    },
+    {
+      "period": "Q1-2014",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 53,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 2593.1
+    },
+    {
+      "period": "Q1-2014",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 2593.1
+    },
+    {
+      "period": "Q1-2014",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 2593.1
+    },
+    {
+      "period": "Q2-2014",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 53,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 323.66
+    },
+    {
+      "period": "Q2-2014",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 323.66
+    },
+    {
+      "period": "Q2-2014",
+      "report": "cash_flow",
+      "layer": "onnx@200+relax",
+      "items": 29,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 323.66
+    },
+    {
+      "period": "Q3-2014",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 52,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 238.06
+    },
+    {
+      "period": "Q3-2014",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 16,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 238.06
+    },
+    {
+      "period": "Q3-2014",
+      "report": "cash_flow",
+      "layer": "onnx@300",
+      "items": 27,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 238.06
+    },
+    {
+      "period": "Q4-2014",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 55,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 348.76
+    },
+    {
+      "period": "Q4-2014",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 348.76
+    },
+    {
+      "period": "Q4-2014",
+      "report": "cash_flow",
+      "layer": "onnx@200+relax",
+      "items": 30,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 348.76
+    },
+    {
+      "period": "Q1-2015",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 58,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 103.05
+    },
+    {
+      "period": "Q1-2015",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 103.05
+    },
+    {
+      "period": "Q1-2015",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 103.05
+    },
+    {
+      "period": "Q2-2015",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 173.82
+    },
+    {
+      "period": "Q2-2015",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 173.82
+    },
+    {
+      "period": "Q2-2015",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 29,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 173.82
+    },
+    {
+      "period": "Q3-2015",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 105.34
+    },
+    {
+      "period": "Q3-2015",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 105.34
+    },
+    {
+      "period": "Q3-2015",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 28,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 105.34
+    },
+    {
+      "period": "Q4-2015",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 49,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 70.52
+    },
+    {
+      "period": "Q4-2015",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 70.52
+    },
+    {
+      "period": "Q4-2015",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 32,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 70.52
+    },
+    {
+      "period": "Q1-2016",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 98.29
+    },
+    {
+      "period": "Q1-2016",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 17,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 98.29
+    },
+    {
+      "period": "Q1-2016",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 98.29
+    },
+    {
+      "period": "Q2-2016",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 108.07
+    },
+    {
+      "period": "Q2-2016",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 108.07
+    },
+    {
+      "period": "Q2-2016",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 30,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 108.07
+    },
+    {
+      "period": "Q3-2016",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 110.23
+    },
+    {
+      "period": "Q3-2016",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 110.23
+    },
+    {
+      "period": "Q3-2016",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 110.23
+    },
+    {
+      "period": "Q4-2016",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 56.52
+    },
+    {
+      "period": "Q4-2016",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 56.52
+    },
+    {
+      "period": "Q4-2016",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 24,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 56.52
+    },
+    {
+      "period": "Q1-2017",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 49,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 224.46
+    },
+    {
+      "period": "Q1-2017",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 224.46
+    },
+    {
+      "period": "Q1-2017",
+      "report": "cash_flow",
+      "layer": "onnx@300",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 224.46
+    },
+    {
+      "period": "Q2-2017",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 48,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 80.63
+    },
+    {
+      "period": "Q2-2017",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 80.63
+    },
+    {
+      "period": "Q2-2017",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 30,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 80.63
+    },
+    {
+      "period": "Q3-2017",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 58,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 233.95
+    },
+    {
+      "period": "Q3-2017",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 233.95
+    },
+    {
+      "period": "Q3-2017",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 233.95
+    },
+    {
+      "period": "Q4-2017",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 88.48
+    },
+    {
+      "period": "Q4-2017",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 88.48
+    },
+    {
+      "period": "Q4-2017",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 25,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 88.48
+    },
+    {
+      "period": "Q1-2018",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 49,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 219.65
+    },
+    {
+      "period": "Q1-2018",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 219.65
+    },
+    {
+      "period": "Q1-2018",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 219.65
+    },
+    {
+      "period": "Q2-2018",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 173.63
+    },
+    {
+      "period": "Q2-2018",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 173.63
+    },
+    {
+      "period": "Q2-2018",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 27,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 173.63
+    },
+    {
+      "period": "Q3-2018",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 55,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 110.16
+    },
+    {
+      "period": "Q3-2018",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 110.16
+    },
+    {
+      "period": "Q3-2018",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 110.16
+    },
+    {
+      "period": "Q4-2018",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 58,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 179.62
+    },
+    {
+      "period": "Q4-2018",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 179.62
+    },
+    {
+      "period": "Q4-2018",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 25,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 179.62
+    },
+    {
+      "period": "Q1-2019",
+      "report": "balance_sheet",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 2547.79
+    },
+    {
+      "period": "Q1-2019",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 2547.79
+    },
+    {
+      "period": "Q1-2019",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 2547.79
+    },
+    {
+      "period": "Q2-2019",
+      "report": "balance_sheet",
+      "layer": "onnx@200+tail",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1404.1
+    },
+    {
+      "period": "Q2-2019",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1404.1
+    },
+    {
+      "period": "Q2-2019",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 24,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1404.1
+    },
+    {
+      "period": "Q3-2019",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 59,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 111.28
+    },
+    {
+      "period": "Q3-2019",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 111.28
+    },
+    {
+      "period": "Q3-2019",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 25,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 111.28
+    },
+    {
+      "period": "Q4-2019",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 55,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 84.36
+    },
+    {
+      "period": "Q4-2019",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 84.36
+    },
+    {
+      "period": "Q4-2019",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 30,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 84.36
+    },
+    {
+      "period": "Q1-2020",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 99.86
+    },
+    {
+      "period": "Q1-2020",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 99.86
+    },
+    {
+      "period": "Q1-2020",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 99.86
+    },
+    {
+      "period": "Q2-2020",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 54,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 160.28
+    },
+    {
+      "period": "Q2-2020",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 160.28
+    },
+    {
+      "period": "Q2-2020",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 28,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 160.28
+    },
+    {
+      "period": "Q3-2020",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 56,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 225.92
+    },
+    {
+      "period": "Q3-2020",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 225.92
+    },
+    {
+      "period": "Q3-2020",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 225.92
+    },
+    {
+      "period": "Q4-2020",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 56,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 83.0
+    },
+    {
+      "period": "Q4-2020",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 83.0
+    },
+    {
+      "period": "Q4-2020",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 27,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 83.0
+    },
+    {
+      "period": "Q1-2021",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 59,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 99.41
+    },
+    {
+      "period": "Q1-2021",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 99.41
+    },
+    {
+      "period": "Q1-2021",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 99.41
+    },
+    {
+      "period": "Q2-2021",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 56,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 176.48
+    },
+    {
+      "period": "Q2-2021",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 176.48
+    },
+    {
+      "period": "Q2-2021",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 28,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 176.48
+    },
+    {
+      "period": "Q3-2021",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 109.76
+    },
+    {
+      "period": "Q3-2021",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 109.76
+    },
+    {
+      "period": "Q3-2021",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 109.76
+    },
+    {
+      "period": "Q4-2021",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 57,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 78.53
+    },
+    {
+      "period": "Q4-2021",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 78.53
+    },
+    {
+      "period": "Q4-2021",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 26,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 78.53
+    },
+    {
+      "period": "Q1-2022",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 56,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 230.22
+    },
+    {
+      "period": "Q1-2022",
+      "report": "income_statement",
+      "layer": "onnx@300",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 230.22
+    },
+    {
+      "period": "Q1-2022",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 230.22
+    },
+    {
+      "period": "Q2-2022",
+      "report": "balance_sheet",
+      "layer": "onnx@400+loose",
+      "items": 62,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 623.33
+    },
+    {
+      "period": "Q2-2022",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 623.33
+    },
+    {
+      "period": "Q2-2022",
+      "report": "cash_flow",
+      "layer": "onnx@300",
+      "items": 31,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 623.33
+    },
+    {
+      "period": "Q3-2022",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 62,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 73.56
+    },
+    {
+      "period": "Q3-2022",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 15,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 73.56
+    },
+    {
+      "period": "Q3-2022",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 73.56
+    },
+    {
+      "period": "Q4-2022",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 61,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 224.76
+    },
+    {
+      "period": "Q4-2022",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 224.76
+    },
+    {
+      "period": "Q4-2022",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 29,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 224.76
+    },
+    {
+      "period": "Q1-2023",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 62,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 73.78
+    },
+    {
+      "period": "Q1-2023",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 73.78
+    },
+    {
+      "period": "Q1-2023",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 28,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 73.78
+    },
+    {
+      "period": "Q2-2023",
+      "report": "balance_sheet",
+      "layer": "onnx@300",
+      "items": 61,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 185.51
+    },
+    {
+      "period": "Q2-2023",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 185.51
+    },
+    {
+      "period": "Q2-2023",
+      "report": "cash_flow",
+      "layer": "onnx@300",
+      "items": 26,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 185.51
+    },
+    {
+      "period": "Q3-2023",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 61,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 258.21
+    },
+    {
+      "period": "Q3-2023",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 258.21
+    },
+    {
+      "period": "Q3-2023",
+      "report": "cash_flow",
+      "layer": "onnx@200+relax",
+      "items": 29,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 258.21
+    },
+    {
+      "period": "Q4-2023",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 60,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1801.03
+    },
+    {
+      "period": "Q4-2023",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1801.03
+    },
+    {
+      "period": "Q4-2023",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1801.03
+    },
+    {
+      "period": "Q1-2024",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 60,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1790.0
+    },
+    {
+      "period": "Q1-2024",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1790.0
+    },
+    {
+      "period": "Q1-2024",
+      "report": "cash_flow",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1790.0
+    },
+    {
+      "period": "Q2-2024",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 62,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 77.75
+    },
+    {
+      "period": "Q2-2024",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 77.75
+    },
+    {
+      "period": "Q2-2024",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 30,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 77.75
+    },
+    {
+      "period": "Q3-2024",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 63,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 82.65
+    },
+    {
+      "period": "Q3-2024",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 82.65
+    },
+    {
+      "period": "Q3-2024",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 29,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 82.65
+    },
+    {
+      "period": "Q4-2024",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 62,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 404.6
+    },
+    {
+      "period": "Q4-2024",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 19,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 404.6
+    },
+    {
+      "period": "Q4-2024",
+      "report": "cash_flow",
+      "layer": "onnx@300+relax",
+      "items": 25,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 404.6
+    },
+    {
+      "period": "Q1-2025",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 64,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 72.73
+    },
+    {
+      "period": "Q1-2025",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 21,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 72.73
+    },
+    {
+      "period": "Q1-2025",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 24,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 72.73
+    },
+    {
+      "period": "Q2-2025",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 60,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 72.68
+    },
+    {
+      "period": "Q2-2025",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 72.68
+    },
+    {
+      "period": "Q2-2025",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 28,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 72.68
+    },
+    {
+      "period": "Q3-2025",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 66,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1577.66
+    },
+    {
+      "period": "Q3-2025",
+      "report": "income_statement",
+      "layer": "",
+      "items": 0,
+      "status": "absent",
+      "verdict": "absent in this run",
+      "seconds": 1577.66
+    },
+    {
+      "period": "Q3-2025",
+      "report": "cash_flow",
+      "layer": "onnx@200+join+relax+components",
+      "items": 24,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 1577.66
+    },
+    {
+      "period": "Q4-2025",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 60,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 70.76
+    },
+    {
+      "period": "Q4-2025",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 22,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 70.76
+    },
+    {
+      "period": "Q4-2025",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 28,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 70.76
+    },
+    {
+      "period": "Q1-2026",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 65,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 247.87
+    },
+    {
+      "period": "Q1-2026",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 247.87
+    },
+    {
+      "period": "Q1-2026",
+      "report": "cash_flow",
+      "layer": "onnx@200+relax",
+      "items": 23,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 247.87
+    }
+  ]
+}

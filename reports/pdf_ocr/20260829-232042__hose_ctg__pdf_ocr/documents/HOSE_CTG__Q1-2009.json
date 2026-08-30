@@ -1,0 +1,775 @@
+{
+  "exchange": "HOSE",
+  "symbol": "CTG",
+  "period": "Q1-2009",
+  "template": "bank",
+  "document": "Q1-2009_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2009.pdf",
+  "consolidated": "True",
+  "assurance": "unaudited",
+  "cumulative": false,
+  "seconds": 1022.8,
+  "accepted": {
+    "income_statement": {
+      "layer": "onnx@200",
+      "items": 18,
+      "rows": 18,
+      "rows_sha": "890e8bf10b6f",
+      "row_dump": [
+        [
+          "",
+          "thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu_vi_14",
+          "1.Thu nhap lai va cac khoan thu nhap tuong tu VI.14",
+          [
+            4705822057058,
+            3952850024689,
+            4705822057058,
+            3952850024689
+          ]
+        ],
+        [
+          "",
+          "chi_phi_lai_va_cac_chi_phi_tuong_tu_vi_15",
+          "2.Chi phi lai va cac chi phi tuong tu VI.15",
+          [
+            3055312211728,
+            2437961716392,
+            3055312211728,
+            null
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_lai_thuan",
+          "I-Thu nhap lai thuan",
+          [
+            1650509845330,
+            1514888308297,
+            1650509845330,
+            1514888308297
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_dich_vu",
+          "3.Thu nhap tu hoat dong dich vu",
+          [
+            147384228604,
+            129210824319,
+            147384228604,
+            129210824319
+          ]
+        ],
+        [
+          "",
+          "chi_phi_hoat_dong_dich_vu",
+          "4.Chi phi hoat dong dich vu",
+          [
+            34325059699,
+            28403965567,
+            34325059699,
+            28403965567
+          ]
+        ],
+        [
+          "",
+          "lai_lo_thuan_tu_hoat_dong_dich_vu",
+          "II-Lai lo thuan tu hoat dong dich vu",
+          [
+            113059168905,
+            100806858752,
+            113059168905,
+            100806858752
+          ]
+        ],
+        [
+          "",
+          "lai_lo_thuan_tu_hoat_dong_kinh_doanh_ngoai_ho",
+          "III-Lai lo thuan tu hoat dong kinh doanh ngoai ho",
+          [
+            38913973371,
+            19201125848,
+            38913973371,
+            19201125848
+          ]
+        ],
+        [
+          "",
+          "lai_lo_thuan_tu_mua_ban_chung_khoan_kinh_doa_v_16_v_lai_lo_t",
+          "IV-Lai lo thuan tu mua ban chung khoan kinh doa V.16 V-Lai lo thuan tu mua ban chung khoan dau tu v.17",
+          [
+            -8698965215,
+            6698000933,
+            -8698965215,
+            6698000933
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_khac",
+          "5.Thu nhap tu hoat dong khac",
+          [
+            370689500300,
+            3377777443335,
+            370689500300,
+            317774443335
+          ]
+        ],
+        [
+          "",
+          "chi_phi_hoat_dong_khac",
+          "6.Chi phi hoat dong khac",
+          [
+            233296027734,
+            148154982460,
+            233296027734,
+            148154982460
+          ]
+        ],
+        [
+          "",
+          "lai_lo_thuan_tu_hoat_dong_khac",
+          "VI-Lai lo thuan tu hoat dong khac",
+          [
+            137393472566,
+            169619460875,
+            137393472566,
+            169619460875
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_gop_von_mua_co_phan_vi_18",
+          "VII-Thu nhap tu gop von mua co phan VI.18",
+          [
+            56492900,
+            2196514700,
+            56492900,
+            2196514700
+          ]
+        ],
+        [
+          "",
+          "chi_phi_hoat_dong_vi_19",
+          "VIII-Chi phi hoat dong VI.19",
+          [
+            724944263514,
+            510043107551,
+            724944263514,
+            510043107551
+          ]
+        ],
+        [
+          "",
+          "loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_tru",
+          "IX-Loi nhuan thuan tu hoat dong kinh doanh tru",
+          [
+            1206289724343,
+            1303367161854,
+            1206289724343,
+            1303367161854
+          ]
+        ],
+        [
+          "",
+          "chi_phi_du_phong_rui_ro_tin_dung",
+          "X-Chi phi du phong rui ro tin dung",
+          [
+            null,
+            1243000000,
+            null,
+            1243000000
+          ]
+        ],
+        [
+          "",
+          "tong_loi_nhuan_truoc_thue",
+          "XI-Tong loi nhuan truoc thue",
+          [
+            1206289724343,
+            1302124161854,
+            1206289724343,
+            1302124161854
+          ]
+        ],
+        [
+          "",
+          "chi_phi_thue_thu_nhap_hien_hanh",
+          "7.Chi phi thue thu nhap hien hanh",
+          [
+            1692954630,
+            null,
+            1692954630,
+            null
+          ]
+        ],
+        [
+          "",
+          "chi_phi_thue_thu_nhap_hoan_lai_xii_chi_phi_thue_tndn",
+          "8.Chi phi thue thu nhap hoan lai XII-Chi phi thue TNDN",
+          [
+            1692954630,
+            null,
+            1692954630,
+            null
+          ]
+        ]
+      ],
+      "pages": [
+        5
+      ],
+      "unit": 1,
+      "n_columns": 4,
+      "cash_flow_method": "",
+      "quarter_column": true,
+      "values": {
+        "xii_chi_phi_thue_tndn": 1692954630,
+        "7_chi_phi_thue_tndn_hien_hanh": 1692954630,
+        "xi_tong_loi_nhuan_truoc_thue": 1206289724343,
+        "x_chi_phi_du_phong_rui_ro_tin_dung": 1243000000,
+        "ix_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truoc_chi_phi_du_phong_rui_ro_tin_dung": 1206289724343,
+        "viii_chi_phi_hoat_dong": 724944263514,
+        "vii_thu_nhap_tu_gop_von_mua_co_phan": 56492900,
+        "vi_lai_lo_thuan_tu_hoat_dong_khac": 137393472566,
+        "6_chi_phi_hoat_dong_khac": 233296027734,
+        "5_thu_nhap_tu_hoat_dong_khac": 370689500300,
+        "v_lai_lo_thuan_tu_mua_ban_chung_khoan_dau_tu": -8698965215,
+        "iii_lai_lo_thuan_tu_hoat_dong_kinh_doanh_ngoai_hoi_va_vang": 38913973371,
+        "ii_lai_lo_thuan_tu_hoat_dong_dich_vu": 113059168905,
+        "4_chi_phi_hoat_dong_dich_vu": 34325059699,
+        "3_thu_nhap_tu_hoat_dong_dich_vu": 147384228604,
+        "i_thu_nhap_lai_thuan": 1650509845330,
+        "2_chi_phi_lai_va_cac_chi_phi_tuong_tu": 3055312211728,
+        "1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu": 4705822057058
+      }
+    },
+    "cash_flow": {
+      "layer": "onnx@200",
+      "items": 27,
+      "rows": 34,
+      "rows_sha": "45139856b40b",
+      "row_dump": [
+        [
+          "",
+          "luu_chuyen_tien_te_tu_hoat_dong_kinh_doanh_01_thu_nhap_lai_v",
+          "Luu chuyen tien te tu hoat dong kinh doanh 01 - Thu nhap lai va cac khoan thu nhap tuong tu nhan duoc",
+          [
+            6218318401211,
+            5270844671461
+          ]
+        ],
+        [
+          "",
+          "chi_phi_lai_va_cac_chi_phi_tuong_tu_da_tra",
+          "02 - Chi phi lai va cac chi phi tuong tu da tra (?)",
+          [
+            -4872909759274,
+            -3934471639337
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_dich_vu_nhan_duoc",
+          "03 - Thu nhap tu hoat dong dich vu nhan duoc",
+          [
+            113286179421,
+            100829944930
+          ]
+        ],
+        [
+          "",
+          "chenh_lech_so_tien_thuc_thu_thuc_chi_tu_hoat_dong_kinh_do",
+          "04 - Chenh lech so tien thuc thu/thuc chi tu hoat dong kinh do",
+          [
+            30215008156,
+            25899126781
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_khac",
+          "05 - Thu nhap khac",
+          [
+            17422949128,
+            -5886339857
+          ]
+        ],
+        [
+          "",
+          "tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap_bang_ng",
+          "06 - Tien thu cac khoan no da duoc xu ly xoa, bu dap bang ng",
+          [
+            119970523438,
+            17550580072
+          ]
+        ],
+        [
+          "",
+          "tien_chi_tra_cho_nhan_vien_va_hoat_dong_quan_ly_cong_vu",
+          "07 - Tien chi tra cho nhan vien va hoat dong quan ly, cong vu",
+          [
+            -1105322752112,
+            null
+          ]
+        ],
+        [
+          "",
+          "tien_thue_thu_nhap_thuc_nop_trong_ky",
+          "08 - Tien thue thu nhap thuc nop trong ky (?)",
+          [
+            -468608243390,
+            0
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_truoc_nh",
+          "Luu chuyen tien thuan tu hoat dong kinh doanh truoc nh",
+          [
+            52372306578,
+            805594433771
+          ]
+        ],
+        [
+          "",
+          "nhung_thay_doi_ve_tai_san_hoat_dong_09_tang_giam_cac_khoan_t",
+          "Nhung thay doi ve tai san hoat dong 09 - (Tang)/giam cac khoan tien, vang gui va cho vay cac TC:",
+          [
+            null,
+            -1983085000000
+          ]
+        ],
+        [
+          "",
+          "tang_giam_ve_cac_khoan_kinh_doanh_chung_khoan",
+          "10 - (Tang)/Giam ve cac khoan kinh doanh chung khoan",
+          [
+            -952025396369,
+            2295194473211
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_cong_cu_tai_chinh_va_cac_tai_sa",
+          "11 - (Tang)/giam cac cong cu tai chinh va cac tai sa",
+          [
+            26822507119,
+            24886800861
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_khoan_cho_vay_khach_hang",
+          "12 - (Tang)/giam cac khoan cho vay khach hang",
+          [
+            4043558466407,
+            -13944544371189
+          ]
+        ],
+        [
+          "",
+          "giam_nguon_du_phong_de_bu_dap_ton_that",
+          "13 - Giam nguon du phong de bu dap ton that",
+          [
+            34412286846,
+            null
+          ]
+        ],
+        [
+          "",
+          "tang_giam_ve_tsan_hd",
+          "14 - (Tang)/giam ve tsan HD",
+          [
+            2478469867569,
+            2043435351961
+          ]
+        ],
+        [
+          "",
+          "nhung_thay_doi_ve_cong_no_hoat_dong_15_tang_giam_cac_khoan_n",
+          "Nhung thay doi ve cong no hoat dong 15 - Tang/(giam) cac khoan no chinh phu va NHNN",
+          [
+            32189577764,
+            14958961699
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_khoan_tien_gui_tien_vay_cac_tctd",
+          "16 - Tang/giam cac khoan tien gui tien vay cac TCTD",
+          [
+            -4552511986828,
+            1545517341749
+          ]
+        ],
+        [
+          "",
+          "tang_giam_tien_gui_khach_hang_bao_gom_ca_kbnn",
+          "17 - Tang/giam) tien gui khach hang (bao gom ca KBNN)",
+          [
+            6805700113350,
+            1886495580032
+          ]
+        ],
+        [
+          "",
+          "tang_giam_phat_hanh_giay_to_co_gia_ngoai_tru_gtcg_p",
+          "18 - Tang/(giam) phat hanh giay to co gia (ngoai tru GTCG p",
+          [
+            2434465623103,
+            2024416289174
+          ]
+        ],
+        [
+          "",
+          "tang_giam_von_tai_tro_uy_thac_dau_tu_cho_vay_tctd_can",
+          "19 - Tang/(giam) von tai tro, uy thac dau tu, cho vay TCTD can",
+          [
+            -3870264807340,
+            -312841231081
+          ]
+        ],
+        [
+          "",
+          "tang_giam_cac_cong_cu_tai_chinh_pa_cac_khoa_21_tang_giam_4_v",
+          "20 - Tang/(giam) cac cong cu tai chinh pa cac khoa 21 - Tang/(giam) 4 ve cong no hoat dong",
+          [
+            1770322868658,
+            -306850660021
+          ]
+        ],
+        [
+          "",
+          "chi_tu_cac_quy_cua_tctd",
+          "22 - Chi tu cac quy cua TCTD(?)",
+          [
+            null,
+            -163829946995
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh",
+          "I Luu chuyen tien thuan tu hoat dong kinh doanh",
+          [
+            44300634926947,
+            207296282472
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_tu_hoat_dong_dau_tu_01_mua_sam_tscd",
+          "Luu chuyen tien tu hoat dong dau tu 01 - Mua sam TSCD (-)",
+          [
+            -69770713739,
+            -10090494367
+          ]
+        ],
+        [
+          "",
+          "tien_thu_tu_thanh_ly_nhuong_ban_tscd",
+          "02 - Tien thu tu thanh ly, nhuong ban TSCD",
+          [
+            309175772,
+            214064908
+          ]
+        ],
+        [
+          "",
+          "tien_chi_tu_thanh_ly_nhuong_ban_tscd",
+          "03 - Tien chi tu thanh ly, nhuong ban TSCD (?)",
+          [
+            -349970890,
+            -8535853
+          ]
+        ],
+        [
+          "",
+          "mua_sam_bat_dong_san_dau_tu_05_tien_thu_tu_ban_thanh_ly_bat",
+          "04 - Mua sam bat dong san dau tu (?) 05 - Tien thu tu ban,thanh ly bat dong san dau tu 06 - Tien chi do ban, thanh ly bat dong san dau tu (?) 07 - Tien chi dau tu, gop von vao don vi + (Chi dau tu mu CT Nam)",
+          [
+            22461130000,
+            22083120000
+          ]
+        ],
+        [
+          "",
+          "tien_thu_dau_tu_gop_von_vao_don_vi_h",
+          "08 - Tien thu dau tu, gop von vao don vi h",
+          [
+            100583600000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tien_thu_co_tuc_va_loi_nhuan_chia_tu_cac_khoan_dau_tu_go",
+          "09 - Tien thu co tuc va loi nhuan chia tu cac khoan dau tu, go",
+          [
+            56492900,
+            922962200
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_thuan_tu_hoat_dong_dau_tu",
+          "II - Luu chuyen tien thuan tu hoat dong dau tu",
+          [
+            null,
+            -31045123112
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_thuan_tu_hoat_dong_tai_chinh_01_tang_von_co",
+          "Luu chuyen tien thuan tu hoat dong tai chinh 01 - Tang von co phan tu gop von hoac phat hanh co phieu",
+          [
+            7341637519,
+            null
+          ]
+        ],
+        [
+          "",
+          "tien_thu_tu_phat_hanh_gtcg_dai_han_du_dieu_kien_tinh_va_03_t",
+          "02 - Tien thu tu phat hanh GTCG dai han du dieu kien tinh va 03 - Tien chi thanh toan GTCG dai han du dieu kien tinh vao 04 - Co tuc tra cho co dong, loi nhuan da chia (?) 05 - Tien chi ra mua co phieu quy(?) 06 - Tien thu duoc do ban co phieu quy III - Luu chuyen tien tu hoat dong tai chinh",
+          [
+            7341637519,
+            null
+          ]
+        ],
+        [
+          "",
+          "vi_vi_luu_chuyen_tien_thuan_trong_ky",
+          "I Vi Vi - Luu chuyen tien thuan trong ky",
+          [
+            -14387925835385,
+            null
+          ]
+        ],
+        [
+          "",
+          "t_ei_nian_va_cac_khoan_tuong_duong_tien_tai_thoi_dien_dau_kh",
+          "V T ei nian va cac khoan tuong duong tien tai thoi dien dau kho",
+          [
+            30893129312886,
+            32181805369481
+          ]
+        ]
+      ],
+      "pages": [
+        7,
+        8
+      ],
+      "unit": 1,
+      "n_columns": 2,
+      "cash_flow_method": "direct",
+      "quarter_column": false,
+      "values": {
+        "hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky": 30893129312886,
+        "hdtc_iv_luu_chuyen_tien_thuan_trong_ky": -14387925835385,
+        "hdtc_4_co_tuc_tra_cho_co_dong_loi_nhuan_da_chia": 7341637519,
+        "hdtc_1_tang_von_co_phan_tu_phat_hanh_co_phieu": 7341637519,
+        "hddt_tien_thu_co_tuc_va_loi_nhuan_duoc_chia_tu_cac_khoan_dau_tu_gop_von_dai_han": 56492900,
+        "hddt_tien_thu_dau_tu_gop_von_vao_cac_don_vi_khac": 100583600000,
+        "hddt_tien_thu_tu_ban_thanh_ly_bat_dong_san_dau_tu": 22461130000,
+        "hddt_tien_chi_ve_thanh_ly_nhuong_ban_tscd": -349970890,
+        "hddt_tien_thu_tu_thanh_ly_nhuong_ban_tscd": 309175772,
+        "hddt_mua_sam_tai_san_co_dinh": -69770713739,
+        "hdkd_i_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh": 44300634926947,
+        "hdkd_21_tang_giam_khac_ve_cong_no_hoat_dong": 1770322868658,
+        "hdkd_19_tang_giam_von_tai_tro_uy_thac_dau_tu_cho_vay_ma_tctd_chiu_rui_ro": -3870264807340,
+        "hdkd_18_tang_giam_phat_hanh_giay_to_co_gia": 2434465623103,
+        "hdkd_16_tang_giam_cac_khoan_tien_gui_tien_vay_cac_tctd": -4552511986828,
+        "hdkd_15_tang_giam_cac_khoan_no_chinh_phu_va_nhnn": 32189577764,
+        "hdkd_12_tang_giam_cac_khoan_cho_vay_khach_hang": 4043558466407,
+        "hdkd_11_tang_giam_cac_cong_cu_tc_phai_sinh_va_cac_tai_san_tc_khac": 26822507119,
+        "hdkd_10_tang_giam_cac_khoan_ve_kinh_doanh_chung_khoan": -952025396369,
+        "hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_truoc_nhung_thay_doi_ve_tai_san_va_von_luu_dong": 52372306578,
+        "hdkd_8_tien_thue_thu_nhap_thuc_nop_trong_ky": -468608243390,
+        "hdkd_7_tien_chi_tra_cho_nhan_vien_va_hoat_dong_quan_ly_cong_vu": -1105322752112,
+        "hdkd_6_tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap_bang_nguon_du_phong_rui_ro": 119970523438,
+        "hdkd_4_chenh_lech_so_tien_thuc_thu_thuc_chi_tu_hoat_dong_kinh_doanh_chung_khoan_vang_bac_ngoai_te": 30215008156,
+        "hdkd_3_thu_nhap_tu_hoat_dong_dich_vu": 113286179421,
+        "hdkd_2_chi_phi_lai_va_cac_chi_phi_tuong_tu_da_tra": -4872909759274,
+        "hdkd_1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu_nhan_duoc": 6218318401211
+      }
+    }
+  },
+  "absent": [
+    "balance_sheet"
+  ],
+  "engine_errors": [],
+  "facts": {
+    "publish_date": "",
+    "shares_authorized": null,
+    "shares_issued": null,
+    "shares_outstanding": null
+  },
+  "error": null,
+  "log": [
+    "  Q4-2008: balance_sheet=45 items [onnx@200]; income_statement=16 items [onnx@200]; cash_flow=26 items [onnx@200]  (3.1 min)",
+    "[doc 2/70   3% of DOCUMENTS, not of time] HOSE_CTG__Q1-2009  Q1-2009_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2009.pdf  7.4 MB  bank/consolidated",
+    "WARNING: Q1-2009: the magnitude band is EMPTY, so `sane` will FAIL OPEN — this ticker has no accepted quarters on disk to reconstruct one from.",
+    "  [layer 1/47   2% of POSITIONS] onnx@200",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~29 s left",
+    "  [layer 2/47   4% of POSITIONS] onnx@300",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~31 s left",
+    "  [layer 3/47   6% of POSITIONS] onnx@400",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~31 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~33 s left",
+    "    [ocr page 12/32  37% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "    [ocr page 16/32  50% of PAGES — the only fraction here that predicts time]  ~23 s left",
+    "    [ocr page 20/32  62% of PAGES — the only fraction here that predicts time]  ~17 s left",
+    "    [ocr page 24/32  75% of PAGES — the only fraction here that predicts time]  ~12 s left",
+    "    [ocr page 28/32  87% of PAGES — the only fraction here that predicts time]  ~6 s left",
+    "    [ocr page 32/32 100% of PAGES — the only fraction here that predicts time]  ~0 s left",
+    "  [layer 5/47  11% of POSITIONS] onnx@200+relax   (cached parse, re-map only)",
+    "  [layer 6/47  13% of POSITIONS] onnx@300+relax   (cached parse, re-map only)",
+    "  [layer 8/47  17% of POSITIONS] onnx@200+components   (cached parse, re-map only)",
+    "  [layer 9/47  19% of POSITIONS] onnx@300+components   (cached parse, re-map only)",
+    "  [layer 10/47  21% of POSITIONS] onnx@200+relax+components   (cached parse, re-map only)",
+    "  [layer 11/47  23% of POSITIONS] onnx@200+pad6+components",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "    [ocr page 12/32  37% of PAGES — the only fraction here that predicts time]  ~24 s left",
+    "    [ocr page 16/32  50% of PAGES — the only fraction here that predicts time]  ~20 s left",
+    "    [ocr page 20/32  62% of PAGES — the only fraction here that predicts time]  ~16 s left",
+    "    [ocr page 24/32  75% of PAGES — the only fraction here that predicts time]  ~10 s left",
+    "    [ocr page 28/32  87% of PAGES — the only fraction here that predicts time]  ~5 s left",
+    "    [ocr page 32/32 100% of PAGES — the only fraction here that predicts time]  ~0 s left",
+    "  [layer 12/47  26% of POSITIONS] onnx@200+pad6+relax+components   (cached parse, re-map only)",
+    "  [layer 13/47  28% of POSITIONS] onnx@300+split   (cached parse, re-map only)",
+    "  [layer 14/47  30% of POSITIONS] onnx@300+split+components   (cached parse, re-map only)",
+    "  [layer 15/47  32% of POSITIONS] onnx@200+join+components",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "  [layer 16/47  34% of POSITIONS] onnx@200+join+relax+components   (cached parse, re-map only)",
+    "  [layer 17/47  36% of POSITIONS] onnx@200+title",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~29 s left",
+    "  [layer 18/47  38% of POSITIONS] onnx@200+title+relax   (cached parse, re-map only)",
+    "  [layer 19/47  40% of POSITIONS] onnx@200+loose",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "  [layer 20/47  43% of POSITIONS] onnx@200+loose+relax   (cached parse, re-map only)",
+    "  [layer 21/47  45% of POSITIONS] onnx@400+loose",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~31 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~33 s left",
+    "  [layer 22/47  47% of POSITIONS] onnx@400+loose+relax   (cached parse, re-map only)",
+    "  [layer 23/47  49% of POSITIONS] onnx@300+loose",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~27 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~30 s left",
+    "  [layer 24/47  51% of POSITIONS] onnx@300+loose+relax   (cached parse, re-map only)",
+    "  [layer 25/47  53% of POSITIONS] onnx@200+title+loose",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~27 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~29 s left",
+    "  [layer 26/47  55% of POSITIONS] onnx@200+title+loose+relax   (cached parse, re-map only)",
+    "  [layer 27/47  57% of POSITIONS] onnx@200+realign",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "  [layer 28/47  60% of POSITIONS] onnx@200+realign+relax   (cached parse, re-map only)",
+    "  [layer 29/47  62% of POSITIONS] onnx@300+realign",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~30 s left",
+    "  [layer 30/47  64% of POSITIONS] onnx@300+realign+relax   (cached parse, re-map only)",
+    "  [layer 31/47  66% of POSITIONS] onnx@200+realign+relax+components   (cached parse, re-map only)",
+    "  [layer 32/47  68% of POSITIONS] onnx@200+notes+seam",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "  [layer 33/47  70% of POSITIONS] onnx@200+notes+seam+relax   (cached parse, re-map only)",
+    "  [layer 34/47  72% of POSITIONS] onnx@300+notes+seam",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~27 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~30 s left",
+    "  [layer 35/47  74% of POSITIONS] onnx@200+notes+seam+realign",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "  [layer 36/47  77% of POSITIONS] onnx@200+notes   (cached parse, re-map only)",
+    "  [layer 37/47  79% of POSITIONS] onnx@200+tail",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~29 s left",
+    "  [layer 38/47  81% of POSITIONS] onnx@200+tail+relax   (cached parse, re-map only)",
+    "  [layer 39/47  83% of POSITIONS] onnx@300+tail",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~30 s left",
+    "  [layer 40/47  85% of POSITIONS] onnx@200+tail+relax+components   (cached parse, re-map only)",
+    "  [layer 41/47  87% of POSITIONS] onnx@200+unit+tail",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~29 s left",
+    "  [layer 42/47  89% of POSITIONS] onnx@200+unit+tail+relax   (cached parse, re-map only)",
+    "  [layer 43/47  91% of POSITIONS] onnx@200+unit",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~26 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~29 s left",
+    "  [layer 44/47  94% of POSITIONS] onnx@200+annual+relax   (cached parse, re-map only)",
+    "  [layer 45/47  96% of POSITIONS] onnx@200+pad6+annual+extra   (cached parse, re-map only)",
+    "  [layer 46/47  98% of POSITIONS] onnx@200+pad6+extra   (cached parse, re-map only)",
+    "  [layer 47/47 100% of POSITIONS] onnx@300+pad6+annual+extra",
+    "    [ocr page 1/32   3% of PAGES — the only fraction here that predicts time]",
+    "    [ocr page 5/32  15% of PAGES — the only fraction here that predicts time]  ~28 s left",
+    "    [ocr page 8/32  25% of PAGES — the only fraction here that predicts time]  ~31 s left",
+    "    [ocr page 12/32  37% of PAGES — the only fraction here that predicts time]  ~27 s left",
+    "    [ocr page 16/32  50% of PAGES — the only fraction here that predicts time]  ~22 s left",
+    "    [ocr page 20/32  62% of PAGES — the only fraction here that predicts time]  ~17 s left",
+    "    [ocr page 24/32  75% of PAGES — the only fraction here that predicts time]  ~11 s left",
+    "    [ocr page 28/32  87% of PAGES — the only fraction here that predicts time]  ~5 s left",
+    "    [ocr page 32/32 100% of PAGES — the only fraction here that predicts time]  ~0 s left",
+    "WARNING:     balance_sheet absent after 45 layer(s):",
+    "WARNING:       [onnx@200] reconcile: no total assets",
+    "WARNING:       [onnx@200+pad6+components] no such statement on any page of this filing"
+  ],
+  "history_sizes": {
+    "balance_sheet": {
+      "True": 0,
+      "False": 0
+    },
+    "income_statement": {
+      "True": 0,
+      "False": 0
+    },
+    "cash_flow": {
+      "True": 0,
+      "False": 0
+    }
+  },
+  "open_ref": null,
+  "template_how": "detect_template (CafeF fingerprint, over the network)",
+  "compare": {
+    "balance_sheet": {
+      "on_disk": "absent",
+      "disk_layer": "",
+      "run_layer": "",
+      "verdict": "absent in this run"
+    },
+    "income_statement": {
+      "on_disk": "absent",
+      "disk_layer": "",
+      "run_layer": "onnx@200",
+      "verdict": "no pdf row on disk to compare against"
+    },
+    "cash_flow": {
+      "on_disk": "absent",
+      "disk_layer": "",
+      "run_layer": "onnx@200",
+      "verdict": "no pdf row on disk to compare against"
+    }
+  }
+}

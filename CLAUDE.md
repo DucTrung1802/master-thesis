@@ -5463,6 +5463,89 @@ it can never match (**0 of 91 `corp` rows on disk carry a share count against 20
 divided by 6.8** — the multiplier applies to the failing tail and not to the 83 % of statements
 that win at layer 1. `web_scraper/CONTEXT.md` §3c.
 
+### ⚠️ 6-2-trequadragies. CTG — 8h 40m ON A T4, 201 CELLS, AND THE FREE SCREENS CONVICTED 43
+
+Merged 2026-08-30 from `20260829-232042__hose_ctg__pdf_ocr` — a Kaggle T4 run of **every**
+quarter CTG files, 70 periods Q4-2008 … Q1-2026, **8 h 40 m**, template `bank`, 0 engine
+errors, **201 of 210 cells accepted**. It is the second bootstrap ticker after BSR, the first
+BANK one, and unlike BSR it did **not** come out clean.
+
+⚠️ **THE PULL WROTE NOTHING, AND `BND-1` IS EXACTLY WHY.** CTG had no statement CSV, so
+`seed_history` built an EMPTY magnitude band for all 70 documents, `sane` failed open from
+start to finish, and `pdf_ocr_merge` then refused **every** statement it produced. The plan
+was `0 writes` from **168 empty-band refusals + 33 cumulative income statements + 9 absent**.
+A green 8-hour run and a run that wrote nothing look identical from the notebook's output —
+the artefact's `history_sizes` is the only place that says so.
+
+#### ⚠️ SO THE SCREENS DID THE WORK `sane` COULD NOT — and 43 of 201 did not survive
+
+| screen · no PDF, no OCR, no network | held |
+|---|---|
+| **`A = L + E` to 0.5 %**, and `E/A` inside 3-12 % | **31 balance sheets** |
+| total assets continuity vs the verified spine (±15 %/quarter) | 5 more balance sheets |
+| PAT ≤ PBT · PBT/assets inside 0.05-2 %/quarter | 2 income statements |
+| cash: one opening per year, positive balances, `opening + net + fx = closing` | 5 cash flows |
+
+⚠️ **THE EQUITY ANCHOR IS THE DOMINANT FAILURE AND IT IS `MEN-1`/`TCG-1` AT SCALE.** Twenty
+quarters spread across 2012-2024 read `viii_von_chu_so_huu` at **0.03 – 1.7 % of assets** with
+a residual of **+5 … +9 %** — a small sub-line claimed as total equity, `A` and `L` both
+correct beside it. Q4-2013 is the clean specimen: A **576.4 tn**, L **522.1 tn**, and equity
+read **0.147 tn** where the filing's own arithmetic gives **54.3 tn**. Five more go the other
+way and take the GRAND TOTAL — Q3-2011's equity is **414.99 tn** against liabilities of 390.5.
+
+⚠️ **AND THE `unit` SCREEN THAT CONVICTED TCB IS A RED HERRING HERE — the correction is worth
+more than the merge.** §6-2-quattuortricies convicted 8 TCB statements by taking the MINORITY
+`unit` for a report. The same screen flags **32** CTG statements (`unit=1` against a norm of
+1,000,000, every one a Q1 or Q3 of 2009-2014) and **every one of them is correct**: those
+interim filings genuinely print đồng, and Q3-2014's balance sheet reads **621.0 tn** between
+neighbours of 597.6 and 661.1. ⚠️ **`accepted.values` are ALREADY scaled** — the parser applies
+`unit` before writing them — so the minority unit is a *fact about the filing*, never evidence
+about the figure. **What convicts is the MAGNITUDE**, and on CTG the two disagree 32 times out
+of 32. TCB's nine were caught because their figures were 10⁶ small, not because their unit was
+odd; the screen was reading the right cases for the wrong reason.
+
+#### What went to disk, and what did not
+
+Three `merge_run` calls, one per report, each carrying only the periods that survived —
+**held back by a `periods`/`reports` filter and never by editing the artefact**, which is
+§6-2-quattuortricies' procedure.
+
+| | quarters | `pdf` | `missing` |
+|---|---|---|---|
+| balance sheet | 70 | **30** | 40 |
+| income statement | 70 | **35** | 35 |
+| cash flow | 70 | **61** | 9 |
+
+✅ **126 `pdf` / 84 `missing` / 0 `cafef`** — rule 24 holds with no special handling. The
+30 written balance sheets close `A = L + E` to the đồng at a median **E/A of 6.2 %**, and the
+series runs 193.6 tn (Q4-2008) → **2,924.2 tn (Q1-2026)** with no step above 1.15×/quarter.
+
+⚠️ **32 Q4 INCOME STATEMENTS WERE REFUSED AS CUMULATIVE AND THAT REFUSAL WAS NOT OVERRIDDEN.**
+CTG filed Q1..Q3 of every one of those years, so a full `build()` can subtract them — this is
+precisely the case §6-2-unquadragies says must DROP rather than be written as a 12-month figure
+in a 3-month column. `force_cumulative` was not passed and must not be.
+
+⚠️ **`months` IS BLANK ON ALL 126 ROWS, AND THAT IS THE HONEST READING.** The run folder was
+written before the field shipped (§6-2-unquadragies, the same day), so it records no span and
+`_write` defaults nothing — §5 rule 2 at the column.
+
+#### ⚠️ What this does NOT establish
+
+1. ⚠️ **NOT ONE OF THE 126 ROWS PASSED `sane`.** `force_empty_band=True` is unavoidable for a
+   bootstrap ticker and the screens are what replaced the guard — they are four identities and
+   a continuity test, not the run's own accumulated magnitude band. **The authoritative path
+   for a new ticker is still a full Dagster `raw/cafef_financials` run** (`BND-1`), which
+   accumulates history as it goes and would decide these 43 itself.
+2. ⚠️ **The screens are still an ad-hoc script, which is `P47`(b)** — and this run is the
+   argument for shipping them as code: they cost seconds, need no OCR, and here they stood
+   between 43 wrong figures and a CSV.
+3. ⚠️ **The 36 held balance sheets are not lost, they are unparsed.** Recovering them means
+   fixing the equity anchor on CTG's chart wording, not re-running the OCR: `A` and `L` are
+   already correct in 20 of them.
+4. ⚠️ **CTG is registered in `CAFEF_FINANCIALS_TICKERS` and NOT in `config.json`**, so its
+   Dagster asset cannot be materialised (§6-2-untricies' two-registration rule) — and
+   `templates.csv` still does not name it (`TPX-1`).
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
