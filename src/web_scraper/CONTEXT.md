@@ -2182,6 +2182,65 @@ two the bar can show: a repeated `parse_key` returns in milliseconds, a new `par
 
 **`test_cafef_ocr_cache.py` — 15 tests, no PDF, no network, no OCR engine.**
 
+### ⚠️ 3d. THE CONDENSED DISCLOSURE FORM — a pre-Unicode unit and a four-line P&L (2026-08-30)
+
+Two changes, both driven by ACB's 2009 quarterlies, which are **`BÁO CÁO TÀI CHÍNH TÓM TẮT`
+(Mẫu CBTT-03)** — a three-page condensed disclosure form carrying a balance sheet and a
+four-line profit-and-loss and **no cash flow at all**. Full record in CLAUDE.md
+§6-2-sesquadragies; what belongs here is how each one decides.
+
+#### `_declares_millions` gained a third spelling — `LGU-1`
+
+`PdfParser.norm` strips accents; it does not know **VNI-Times**, where a tone mark is a separate
+character after the base vowel and `đ` is the codepoint `ñ`. So a filing printing
+`ÑVT : Trieäu ñoàng` normalises to **`trieaunoang`**, and the needle set (`trieudong`,
+`trieuvnd`) could not see it — every figure read as đồng, a uniform 10⁶ error that **reconciles
+perfectly against itself**.
+
+⚠️ **IT IS IN THE DEFAULT PATH BECAUSE THE STATEMENT IS ACCEPTED AT LAYER 1**, so no escalation
+can reach it — §6-2-untricies' rule, *when the gates cannot see the defect the repair cannot be
+an escalation*. ⚠️ **Blast radius measured in both directions before shipping**: over the 1,196
+filings of the seven parsed tickers, **366 carry a text layer and exactly 4 carry this
+spelling**, all ACB, two of them before `FINANCIALS_PERIOD_MIN`. ⚠️ **TCVN3/ABC (`TriÖu ®ång`
+-> `triouang`) is deliberately absent — 0 hits**, and a test records that so it is not "fixed".
+
+#### `condensed_income` — the row floor, admitted on evidence
+
+`MIN_ROWS = 12` keeps a page that is not a statement out, and threw away a P&L that HAS four
+lines. `MIN_ROWS_CONDENSED = 4` is reached only when **the layer permits it AND the statement
+carries the evidence** — the flag alone is a slackened threshold, the evidence alone would widen
+acceptance at layer 1 where nothing has yet failed.
+
+⚠️ **THE EVIDENCE IS THE P&L'S OWN WORDING AND NOT THE "Mẫu CBTT-03" MARKER, AND THE CHOICE IS A
+MEASUREMENT.** That marker is boilerplate quoting the circular, and **VIC carries it on the
+statement pages of eleven 24-32 page FULL filings** — Q3-2008 among them, which classifies 8
+rows as its income statement and **2 as its cash flow**. Keyed on the marker the floor would
+have been lowered for exactly that. `PdfParser.CONDENSED_PL` is `("tongthunhap", "tongchiphi")`
+— the two summary lines a condensed P&L prints and a full one never does, **scoped to the
+statement's own pages**: 2 hits of 1,196, both genuine. ⚠️ Searched over whole documents instead
+it also hits VCB's 44-page Q4-2009 filings, where the words sit in a note — **the scope is half
+the measurement**. ⚠️ And `parse()` sets the field for `INCOME_STATEMENT` only, so a cash flow
+cannot carry it however its pages read.
+
+⚠️ **THERE IS NO BARE `+condensed` LAYER, AND THAT IS THE SAFETY PROPERTY.** The form prints its
+unit once in the page-1 header while the P&L is on page 3, so the statement declares nothing
+itself and a bare layer accepts at ×1. `onnx@200+unit+condensed` is the only one, last in the
+cascade — the `annual_tail` rule again: *a layer that widens acceptance may not also be the
+layer that reads the wrong unit.*
+
+#### ⚠️ AND `OVERWRITE` IS NOT A REPAIR TOOL — `seed_history` makes the runs differ
+
+`pdf_ocr_job` rebuilds `sane`'s band from the `pdf` rows ON DISK; `build()` accumulates one as
+it goes. **The two therefore escalate differently and the seeded run can win on an earlier,
+poorer layer.** Measured: ACB Q2-2009's balance sheet is **33 items at `onnx@200+relax`** on
+disk and **19 at `onnx@200`** in a seeded run — the thinner band lets layer 1 pass where the
+full run's band refused it. So `OVERWRITE = True`, which sets `force_differs` for the WHOLE run,
+would have overwritten that row while repairing a different one. Both control notebooks carry a
+scoped `REPAIR` list instead: explicit `(quarter, statement)` pairs through `merge_run`'s own
+`periods`/`reports` filter.
+
+**`test_cafef_condensed_form.py` — 23 tests, no PDF, no network, no OCR engine.**
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

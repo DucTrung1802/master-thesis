@@ -85,6 +85,18 @@ refused. A `cafef` or `missing` row is not evidence a quarter is done (§5 rule 
 `_decumulate` needs that run's own Q1..Q(q-1) and nothing in this path de-cumulates. Do not
 carry the year rule across.
 
+⚠️ **`OVERWRITE = True` IS NOT HOW YOU REPAIR ONE WRONG ROW — use `REPAIR`.** It lifts the
+DIFFERS refusal for **every statement of every quarter in the run**, and a `pdf_ocr_job` run is
+not the run that wrote those rows: its `sane` band is rebuilt from disk (`seed_history`) where
+`build()` accumulates one as it goes, so **the two escalate differently and the seeded run can
+win on an earlier, poorer layer.** Measured on ACB 2026-08-30 — Q2-2009's balance sheet is
+**33 items at `onnx@200+relax`** on disk and **19 at `onnx@200`** in a seeded run, because the
+thinner band lets layer 1 pass where the full run's band refused it. Repairing that filing's
+income statement with the global knob would have overwritten the balance sheet in the same run,
+saying only *"DIFFERS in 2 columns"*. The last cell of the notebook takes explicit
+`(quarter, statement)` pairs and scopes the write through `merge_run`'s own `periods`/`reports`
+filter, so nothing outside the list can move.
+
 Prefer a terminal? The same thing, four verbs — see [§7](#7-the-cli-instead-of-the-notebook).
 
 ---
@@ -255,6 +267,19 @@ cascade's FINAL refusal names the hardest path tried, not the blocking defect.**
 `fx not mapped` sent this repo down a wrong diagnosis for two days that way, and six of the
 seven quarters it was blamed for then parsed at a **strict** layer with no FX change at all
 (CLAUDE.md §6-2-duovicies).
+
+⚠️ **AND ONE REFUSAL IS NOT A DEFECT AT ALL: `no such statement on any page of this filing`.**
+It means what it says — the filing does not CONTAIN that statement, and no layer can conjure
+one. A **`BÁO CÁO TÀI CHÍNH TÓM TẮT` (Mẫu CBTT-03)** is a condensed disclosure form carrying a
+balance sheet and a four-line P&L and **no cash flow**; ACB's 2009 quarterlies are three pages
+and are exactly this. `missing` is then the correct and permanent answer (§5 rule 24). ⚠️ It
+reads identically to a scan the OCR could not handle, which is what makes it worth naming: those
+two quarters were re-run twice before anyone opened the PDF (§6-2-sesquadragies).
+
+⚠️ **`only N rows parsed` on such a form is the OTHER half of the same story.** `MIN_ROWS` = 12
+keeps a page that is not a statement out, and a condensed P&L has four lines. That is what
+`onnx@200+unit+condensed` — last in the cascade — is for, and it fires only when the statement's
+own pages carry the P&L's summary wording. It cannot license a cash flow at all.
 
 ---
 
@@ -437,6 +462,20 @@ that was stopped half way, and BID has 2026-Q2, published after the parse finish
    Touching a quarter with no filing ends it; an isolated old filing opens no chain. Anchored at
    the ticker's own newest filing, not the calendar quarter — a delisted name still has a chain,
    and the calendar anchor would break every ticker at step one.
+3. **"The ticker filed a QUARTERLY report" is read off the index's own `quarter` column**
+   (2026-08-30). `documents()` returns ONE filing per quarter and prefers the audited **annual**
+   at Q4, so its `annual` flag answers *"is the CHOSEN document a quarterly one"* — not *"did the
+   company file one"*. **ACB 2009-Q4 is the counter-example sitting in this corpus**: the index
+   carries both `Báo cáo tài chính quý 4 năm 2009` (`quarter=4`) and the audited annual
+   (`quarter=5`), the annual wins, and the old column answered `False` for a quarter ACB **did**
+   file quarterly. Measured over the 7 parsed tickers: **98 quarters flip `False` → `True`, none
+   the other way, and NOT ONE `first_report` moves** — every chain today starts at a non-Q4
+   quarter, so this is a **latent** defect: it bites only when a ticker's chain opens on such a
+   Q4, and then it pushes the mark a quarter late and takes three cells out of the denominator
+   in silence. The converse (`documents()` says quarterly ⇒ the index holds a `quarter` 1..4 row)
+   is **asserted** in the notebook, 0 violations. ⚠️ The test does **not** filter `consolidated`,
+   because the denominator is `allow_parent=True` and a narrower test would drop ACB 2009-Q4,
+   which is a standalone filing.
 
 | ticker | the PDF index says | before | **after** | cells leaving the denominator |
 |---|---|---|---|---|
@@ -452,6 +491,19 @@ back to 2008-Q4 — a year that filed nothing but its annual — and hands VCB o
 cell, the cumulative Q4-2008 income statement that can never be split
 ([§6](#6-merging-a-recovered-quarter-into-raw_data), CLAUDE.md §6-2-unquadragies). **Filter for
 contiguity first, then take the earliest QUARTERLY filing still inside the chain.**
+
+⚠️ **THIS TABLE COUNTS QUARTERS `pdf_ocr_job` REFUSES TO OPEN AT ITS DEFAULT — read the
+listing under the table before you launch a parse.** The denominator here is `allow_parent=True`
+(the widest set on disk); `pdf_ocr_job.plan()` defaults to `allow_parent=False`. A quarter whose
+only filing is a **standalone** report is therefore reported missing here *and* answered with
+`"HOSE_ACB files no document for quarter(s) ['2009-Q2', '2009-Q3', '2009-Q4']"` there — two
+opposite answers about a quarter whose PDF is sitting in `raw_data/cafef/pdfs/files/`. Measured
+2026-08-30: **ACB 4 quarters (2008-Q1, 2009-Q2, 2009-Q3, 2009-Q4 — every one of ACB's outstanding
+quarters), TCB 2, VIC 1, BID/CTG/VCB/BSR 0.** The `parent_only` column measures it and the
+per-statement listing printed under the table names the quarters and the knob
+(`ALLOW_PARENT = True`). ⚠️ That listing had been **commented out from the day it was written**
+while the notebook's own prose promised it — a document promising an output that does not exist;
+it prints as of 2026-08-30, in full, in the `--quarters` spelling.
 
 ⚠️ **`complete = False` means *not proved continuous*, never *the parser is broken*.** A filing
 may not contain that statement at all, and a cumulative income statement with no Q1..Q(q-1) to

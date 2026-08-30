@@ -1,0 +1,10 @@
+period,report,layer,items,status,verdict,seconds
+Q2-2009,balance_sheet,onnx@200,19,pdf,DIFFERS,69.88
+Q2-2009,income_statement,,0,absent,absent in this run,69.88
+Q2-2009,cash_flow,,0,absent,absent in this run,69.88
+Q3-2009,balance_sheet,,0,absent,absent in this run,14.44
+Q3-2009,income_statement,onnx@200,2,pdf,REPRODUCED,14.44
+Q3-2009,cash_flow,,0,absent,absent in this run,14.44
+Q4-2009,balance_sheet,onnx@200,30,pdf,DIFFERS,2.07
+Q4-2009,income_statement,onnx@200,21,pdf,no pdf row on disk to compare against,2.07
+Q4-2009,cash_flow,onnx@200,23,pdf,REPRODUCED,2.07

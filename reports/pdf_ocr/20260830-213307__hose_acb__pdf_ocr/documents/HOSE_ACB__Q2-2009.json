@@ -1,0 +1,671 @@
+{
+  "exchange": "HOSE",
+  "symbol": "ACB",
+  "period": "Q2-2009",
+  "template": "bank",
+  "document": "Q2-2009_bao_cao_tai_chinh_quy_2_nam_2009.pdf",
+  "consolidated": "False",
+  "assurance": "unaudited",
+  "cumulative": false,
+  "seconds": 69.88,
+  "accepted": {
+    "balance_sheet": {
+      "layer": "onnx@200",
+      "items": 19,
+      "rows": 38,
+      "rows_sha": "79218c3d630e",
+      "row_dump": [
+        [
+          "",
+          "stt_chi_tieu_su_dung_von_tien_mat_chung_tu_co_gia_tri_ngoai",
+          "Stt Chỉ tiêu Sử dụng vốn Tiền mặt, chứng từ có giá trị ngoại tệ, kim loại quý, đá quý",
+          [
+            null,
+            6166227000000,
+            null,
+            5848095000000
+          ]
+        ],
+        [
+          "I",
+          "i",
+          "I",
+          [
+            null,
+            2224043000000,
+            null,
+            1916987000000
+          ]
+        ],
+        [
+          "II",
+          "tien_gui_tai_nhnn_tin_phieu_kho_bac_va_cac_giay_to_co_gia_ng",
+          "II Tiền gửi tại NHNN Tín phiếu kho bạc và các giấy tờ có giá ngắn hạn đủ tiêu III chuẩn khác Tiền gửi tại các TCTD trong nước và ở nước ngoài",
+          [
+            null,
+            22431328000000,
+            null,
+            24920857000000
+          ]
+        ],
+        [
+          "IV",
+          "iv",
+          "IV",
+          [
+            null,
+            151158000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "v",
+          "cho_vay_cac_tctd_khac_1_cho_vay_cac_tctd_khac",
+          "v Cho vay các TCTD khác 1 Cho vay các TCTD khác",
+          [
+            null,
+            152300000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "du_phong_rui_ro",
+          "2 Dự phòng rủi ro",
+          [
+            null,
+            -1142000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "VI",
+          "cho_vay_cac_tckt_ca_nhan_trong_nuoc",
+          "VI Cho vay các TCKT, cá nhân trong nước",
+          [
+            null,
+            50604176000000,
+            null,
+            37085761000000
+          ]
+        ],
+        [
+          "",
+          "cho_vay_cac_tckt_ca_nhan_trong_nuoc",
+          "1 Cho vay các TCKT, cá nhân trong nước",
+          [
+            null,
+            51025630000000,
+            null,
+            37447223000000
+          ]
+        ],
+        [
+          "",
+          "du_phong_rui_ro",
+          "2 Dự phòng rủi ro",
+          [
+            null,
+            -421454000000,
+            null,
+            -361461000000
+          ]
+        ],
+        [
+          "VII",
+          "cac_khoan_dau_tu",
+          "VII Các khoản đầu tư",
+          [
+            null,
+            36151934000000,
+            null,
+            24078842000000
+          ]
+        ],
+        [
+          "",
+          "dau_tu_vao_chung_khoan",
+          "1 Đầu tư vào chứng khoán",
+          [
+            null,
+            34788651000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "gop_von_lien_doanh_mua_co_phan",
+          "2 Góp vốn liên doanh, mua cổ phần",
+          [
+            null,
+            1363283000000,
+            null,
+            1296424000000
+          ]
+        ],
+        [
+          "VIII",
+          "tai_san",
+          "VIII Tài sản",
+          [
+            null,
+            816527000000,
+            null,
+            840199000000
+          ]
+        ],
+        [
+          "",
+          "tai_san_co_dinh",
+          "1 Tài sản cố định:",
+          [
+            null,
+            816527000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "nguyen_gia_tscd",
+          "- Nguyên giá TSCĐ",
+          [
+            null,
+            1202175000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "hao_mon_tscd",
+          "- Hao mòn TSCĐ",
+          [
+            null,
+            -385648000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "tai_san_khac",
+          "2 Tài sản khác",
+          [
+            null,
+            11242757000000,
+            null,
+            41870839000000
+          ]
+        ],
+        [
+          "IX",
+          "tai_san_co_khac",
+          "IX Tài sản ?Có? khác",
+          [
+            null,
+            null,
+            null,
+            39272281000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_phai_thu",
+          "Các khoản phải thu",
+          [
+            null,
+            8015435000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_lai_cong_don_du_thu",
+          "Các khoản lãi cộng dồn dự thu",
+          [
+            null,
+            2147372000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "tai_san_co_khac",
+          "3 Tài sản ? Có ? khác",
+          [
+            null,
+            1079950000000,
+            null,
+            964983000000
+          ]
+        ],
+        [
+          "",
+          "tong_cong_tai_san",
+          "TỔNG CỘNG TÀI SẢN",
+          [
+            null,
+            129788150000000,
+            null,
+            136561581000000
+          ]
+        ],
+        [
+          "",
+          "stt_chi_tieu_nguon_von_i_tien_gui_cua_kbnn_va_tctd_khac",
+          "Stt Chí tiêu Nguồn vốn I Tiền gửi của KBNN và TCTD khác",
+          [
+            2708170000000,
+            null,
+            1706254000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tien_gui_cua_kbnn_2_tien_gui_cua_tctd_khac",
+          "1 Tiền gửi của KBNN 2 Tiền gửi của TCTD khác",
+          [
+            2708170000000,
+            null,
+            1706254000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "vay_tctd_trong_nuoc_3_vay_tctd_o_nuoc_ngoai_4_nhan_von_cho_v",
+          "2 Vay TCTD trong nước 3 Vay TCTD ở nước ngoài 4 Nhận vốn cho vay đồng tài trợ III Tiền gửi của TCKT, dân cư",
+          [
+            90612959000000,
+            null,
+            74787641000000,
+            null
+          ]
+        ],
+        [
+          "IV",
+          "von_tai_tro_uy_thac_dau_tu_ma_ngan_hang_chiu_rui_ro",
+          "IV Vốn tài trợ, uỷ thác đầu tư mà ngân hàng chịu rúi ro",
+          [
+            267258000000,
+            null,
+            269455000000,
+            null
+          ]
+        ],
+        [
+          "V",
+          "phat_hanh_giay_to_co_gia",
+          "V Phát hành giấy tờ có giá",
+          [
+            16912693000000,
+            null,
+            15551791000000,
+            null
+          ]
+        ],
+        [
+          "VI",
+          "tai_san_no_khac",
+          "VI Tài sản ?Nợ? khác:",
+          [
+            11706260000000,
+            null,
+            36714240000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_phai_tra",
+          "1 Các khoản phải trả",
+          [
+            10378679000000,
+            null,
+            35768281000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_lai_cong_don_du_tra",
+          "2 Các khoản lãi cộng đồn dự trả",
+          [
+            1087849000000,
+            null,
+            898284000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tai_san_no_khac",
+          "3 Tài sản \"Nợ? khác",
+          [
+            239732000000,
+            null,
+            47675000000,
+            null
+          ]
+        ],
+        [
+          "VII",
+          "von_va_cac_quy",
+          "VII Vốn và các quỹ",
+          [
+            7580810000000,
+            null,
+            7532199000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "von_cua_tctd",
+          "1 Vốn của TCTD:",
+          [
+            6355813000000,
+            null,
+            6355813000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "von_dieu_le",
+          "Vốn điều lệ",
+          [
+            6355813000000,
+            null,
+            6355813000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "von_dau_tu_xdcb_von_khac_2_quy_cua_tctd",
+          "- Vốn đầu tư XDCB Vốn khác 2 Quỹ của TCTD",
+          [
+            765887000000,
+            null,
+            668316000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "chenh_lech_ty_gia",
+          "3 Chênh lệch tỷ giá",
+          [
+            -36122000000,
+            null,
+            10393000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "lai_oo",
+          "4 Lãi / ỗỗ",
+          [
+            495232000000,
+            null,
+            497677000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tong_cong_nguon_von",
+          "TỔNG CỘNG NGUỒN VỐN",
+          [
+            129788150000000,
+            null,
+            136561581000000,
+            null
+          ]
+        ]
+      ],
+      "pages": [
+        1,
+        2
+      ],
+      "unit": 1000000,
+      "n_columns": 4,
+      "cash_flow_method": "",
+      "quarter_column": false,
+      "months": null,
+      "values": {
+        "viii_3_chenh_lech_ty_gia_hoi_doai": -36122000000,
+        "viii_2_quy_cua_tctd": 765887000000,
+        "viii_1_a_von_dieu_le": 6355813000000,
+        "viii_1_von_cua_tctd": 6355813000000,
+        "vii_2_cac_khoan_phai_tra_va_cong_no_khac": 10378679000000,
+        "vi_phat_hanh_giay_to_co_gia": 16912693000000,
+        "ii_1_tien_gui_cua_cac_to_chuc_tin_dung_khac": 2708170000000,
+        "tong_tai_san": 129788150000000,
+        "xii_4_tai_san_co_khac": 1079950000000,
+        "xii_1_cac_khoan_phai_thu": 8015435000000,
+        "xii_tai_san_co_khac": 39272281000000,
+        "x_1_b_hao_mon_tai_san_co_dinh": -385648000000,
+        "x_1_a_nguyen_gia_tai_san_co_dinh": 1202175000000,
+        "x_tai_san_co_dinh": 816527000000,
+        "v_cac_cong_cu_tai_chinh_phai_sinh_va_cac_tai_san_tai_chinh_khac": 816527000000,
+        "iv_2_du_phong_rui_ro_chung_khoan_kinh_doanh": -421454000000,
+        "iii_3_du_phong_rui_ro_cho_vay_cac_tctd_khac": -1142000000,
+        "iii_2_cho_vay_cac_tctd_khac": 152300000000,
+        "ii_tien_gui_tai_nhnn": 22431328000000
+      }
+    }
+  },
+  "absent": [
+    "income_statement",
+    "cash_flow"
+  ],
+  "engine_errors": [],
+  "facts": {
+    "publish_date": "2009-07-20",
+    "shares_authorized": null,
+    "shares_issued": null,
+    "shares_outstanding": null
+  },
+  "error": null,
+  "log": [
+    "  0.0% - HOSE_ACB - plan - overall %    : documents finished + OCR passes done of the 7 this 49-layer cascade can cost, over 3 document(s) — a POSITION IN THE PLAN, never a fraction of the time",
+    "  0.0% - HOSE_ACB - plan - symbol       : HOSE_ACB",
+    "  0.0% - HOSE_ACB - plan - template     : bank   (templates.csv)",
+    "  0.0% - HOSE_ACB - plan - documents    : 3  (Q2-2009, Q3-2009, Q4-2009)",
+    "  0.0% - HOSE_ACB - plan - quarters     : ['2009-Q2', '2009-Q3', '2009-Q4']   selected ['2009-Q2', '2009-Q3', '2009-Q4']",
+    "  0.0% - HOSE_ACB - plan - skipped      : 0 quarter(s) already `pdf` in all three statements",
+    "  0.0% - HOSE_ACB - plan - cascade      : 49 of 49 layers",
+    "  0.0% - HOSE_ACB - plan - data root    : D:\\GIT\\master-thesis\\raw_data\\cafef",
+    "  0.0% - HOSE_ACB - plan - models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth",
+    "  0.0% - HOSE_ACB - plan - vietocr cfg  : D:\\GIT\\master-thesis\\src\\web_scraper\\models\\vietocr_vgg_seq2seq.yml",
+    "  0.0% - HOSE_ACB - plan - upsert       : ON — each finished quarter is upserted into the statement CSVs   (force_empty_band: a ticker with no history on disk is bootstrapped, UNGUARDED by `sane`)",
+    "  0.0% - doc 1/3 HOSE_ACB Q2-2009 - open - Q2-2009_bao_cao_tai_chinh_quy_2_nam_2009.pdf  0.8 MB  bank/parent",
+    "  0.0% - doc 1/3 HOSE_ACB Q2-2009 - band - WARNING: Q2-2009: the magnitude band is EMPTY, so `sane` will FAIL OPEN — this ticker has no accepted quarters on disk to reconstruct one from.",
+    "  0.0% - doc 1/3 HOSE_ACB Q2-2009 - layer 1/49 onnx@200 - OCR pass 1/7",
+    "  1.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 1/49 onnx@200 - page 1/3  33% of this pass",
+    "  3.2% - doc 1/3 HOSE_ACB Q2-2009 - layer 1/49 onnx@200 - page 2/3  66% of this pass",
+    "  4.8% - doc 1/3 HOSE_ACB Q2-2009 - layer 1/49 onnx@200 - page 3/3 100% of this pass   ~0 s left",
+    "  4.8% - doc 1/3 HOSE_ACB Q2-2009 - layer 2/49 onnx@300 - OCR pass 2/7",
+    "  6.3% - doc 1/3 HOSE_ACB Q2-2009 - layer 2/49 onnx@300 - page 1/3  33% of this pass",
+    "  7.9% - doc 1/3 HOSE_ACB Q2-2009 - layer 2/49 onnx@300 - page 2/3  66% of this pass",
+    "  9.5% - doc 1/3 HOSE_ACB Q2-2009 - layer 2/49 onnx@300 - page 3/3 100% of this pass   ~0 s left",
+    "  9.5% - doc 1/3 HOSE_ACB Q2-2009 - layer 3/49 onnx@400 - OCR pass 3/7",
+    " 11.1% - doc 1/3 HOSE_ACB Q2-2009 - layer 3/49 onnx@400 - page 1/3  33% of this pass",
+    " 12.7% - doc 1/3 HOSE_ACB Q2-2009 - layer 3/49 onnx@400 - page 2/3  66% of this pass",
+    " 14.3% - doc 1/3 HOSE_ACB Q2-2009 - layer 3/49 onnx@400 - page 3/3 100% of this pass   ~0 s left",
+    " 14.3% - doc 1/3 HOSE_ACB Q2-2009 - layer 4/49 tesseract@200 - OCR pass 4/7",
+    " 15.9% - doc 1/3 HOSE_ACB Q2-2009 - layer 4/49 tesseract@200 - page 1/3  33% of this pass",
+    " 17.5% - doc 1/3 HOSE_ACB Q2-2009 - layer 4/49 tesseract@200 - page 2/3  66% of this pass",
+    " 19.0% - doc 1/3 HOSE_ACB Q2-2009 - layer 4/49 tesseract@200 - page 3/3 100% of this pass   ~0 s left",
+    " 19.0% - doc 1/3 HOSE_ACB Q2-2009 - layer 5/49 onnx@200+relax - cached parse, re-map only",
+    " 19.0% - doc 1/3 HOSE_ACB Q2-2009 - layer 6/49 onnx@300+relax - cached parse, re-map only",
+    " 19.0% - doc 1/3 HOSE_ACB Q2-2009 - layer 7/49 tesseract@400+relax - OCR pass 5/7",
+    " 20.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 7/49 tesseract@400+relax - page 1/3  33% of this pass",
+    " 22.2% - doc 1/3 HOSE_ACB Q2-2009 - layer 7/49 tesseract@400+relax - page 2/3  66% of this pass",
+    " 23.8% - doc 1/3 HOSE_ACB Q2-2009 - layer 7/49 tesseract@400+relax - page 3/3 100% of this pass   ~0 s left",
+    " 23.8% - doc 1/3 HOSE_ACB Q2-2009 - layer 8/49 onnx@200+components - cached parse, re-map only",
+    " 23.8% - doc 1/3 HOSE_ACB Q2-2009 - layer 9/49 onnx@300+components - cached parse, re-map only",
+    " 23.8% - doc 1/3 HOSE_ACB Q2-2009 - layer 10/49 onnx@200+relax+components - cached parse, re-map only",
+    " 23.8% - doc 1/3 HOSE_ACB Q2-2009 - layer 11/49 onnx@200+pad6+components - OCR pass 6/7",
+    " 25.4% - doc 1/3 HOSE_ACB Q2-2009 - layer 11/49 onnx@200+pad6+components - page 1/3  33% of this pass",
+    " 27.0% - doc 1/3 HOSE_ACB Q2-2009 - layer 11/49 onnx@200+pad6+components - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 11/49 onnx@200+pad6+components - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 12/49 onnx@200+pad6+relax+components - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 13/49 onnx@300+split - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 14/49 onnx@300+split+components - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 15/49 onnx@200+join+components - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 15/49 onnx@200+join+components - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 15/49 onnx@200+join+components - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 15/49 onnx@200+join+components - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 16/49 onnx@200+join+relax+components - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 17/49 onnx@200+title - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 17/49 onnx@200+title - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 17/49 onnx@200+title - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 17/49 onnx@200+title - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 18/49 onnx@200+title+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 19/49 onnx@200+loose - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 19/49 onnx@200+loose - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 19/49 onnx@200+loose - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 19/49 onnx@200+loose - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 20/49 onnx@200+loose+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 21/49 onnx@400+loose - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 21/49 onnx@400+loose - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 21/49 onnx@400+loose - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 21/49 onnx@400+loose - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 22/49 onnx@400+loose+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 23/49 onnx@300+loose - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 23/49 onnx@300+loose - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 23/49 onnx@300+loose - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 23/49 onnx@300+loose - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 24/49 onnx@300+loose+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 25/49 onnx@200+title+loose - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 25/49 onnx@200+title+loose - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 25/49 onnx@200+title+loose - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 25/49 onnx@200+title+loose - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 26/49 onnx@200+title+loose+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 27/49 onnx@200+realign - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 27/49 onnx@200+realign - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 27/49 onnx@200+realign - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 27/49 onnx@200+realign - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 28/49 onnx@200+realign+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 29/49 onnx@300+realign - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 29/49 onnx@300+realign - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 29/49 onnx@300+realign - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 29/49 onnx@300+realign - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 30/49 onnx@300+realign+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 31/49 onnx@200+realign+relax+components - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 32/49 onnx@200+notes+seam - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 32/49 onnx@200+notes+seam - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 32/49 onnx@200+notes+seam - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 32/49 onnx@200+notes+seam - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 33/49 onnx@200+notes+seam+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 34/49 onnx@300+notes+seam - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 34/49 onnx@300+notes+seam - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 34/49 onnx@300+notes+seam - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 34/49 onnx@300+notes+seam - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 35/49 onnx@200+notes+seam+realign - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 35/49 onnx@200+notes+seam+realign - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 35/49 onnx@200+notes+seam+realign - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 35/49 onnx@200+notes+seam+realign - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 36/49 onnx@200+notes - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 37/49 onnx@200+tail - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 37/49 onnx@200+tail - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 37/49 onnx@200+tail - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 37/49 onnx@200+tail - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 38/49 onnx@200+tail+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 39/49 onnx@300+tail - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 39/49 onnx@300+tail - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 39/49 onnx@300+tail - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 39/49 onnx@300+tail - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 40/49 onnx@200+tail+relax+components - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 41/49 onnx@200+unit+tail - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 41/49 onnx@200+unit+tail - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 41/49 onnx@200+unit+tail - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 41/49 onnx@200+unit+tail - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 42/49 onnx@200+unit+tail+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 43/49 onnx@200+unit - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 43/49 onnx@200+unit - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 43/49 onnx@200+unit - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 43/49 onnx@200+unit - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 44/49 onnx@300+unit+tail - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 44/49 onnx@300+unit+tail - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 44/49 onnx@300+unit+tail - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 44/49 onnx@300+unit+tail - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 45/49 onnx@300+unit - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 45/49 onnx@300+unit - page 1/3  33% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 45/49 onnx@300+unit - page 2/3  66% of this pass",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 45/49 onnx@300+unit - page 3/3 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 46/49 onnx@200+annual+relax - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 47/49 onnx@200+pad6+annual+extra - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 48/49 onnx@200+pad6+extra - cached parse, re-map only",
+    " 28.6% - doc 1/3 HOSE_ACB Q2-2009 - layer 49/49 onnx@300+pad6+annual+extra - OCR pass 7/7",
+    " 30.2% - doc 1/3 HOSE_ACB Q2-2009 - layer 49/49 onnx@300+pad6+annual+extra - page 1/3  33% of this pass",
+    " 31.7% - doc 1/3 HOSE_ACB Q2-2009 - layer 49/49 onnx@300+pad6+annual+extra - page 2/3  66% of this pass",
+    " 33.3% - doc 1/3 HOSE_ACB Q2-2009 - layer 49/49 onnx@300+pad6+annual+extra - page 3/3 100% of this pass   ~0 s left",
+    " 33.3% - doc 1/3 HOSE_ACB Q2-2009 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:     income_statement absent after 49 layer(s):",
+    " 33.3% - doc 1/3 HOSE_ACB Q2-2009 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@200] reconcile: only 5 rows parsed",
+    " 33.3% - doc 1/3 HOSE_ACB Q2-2009 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [tesseract@200] reconcile: only 6 rows parsed",
+    " 33.3% - doc 1/3 HOSE_ACB Q2-2009 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:     cash_flow absent after 49 layer(s):",
+    " 33.3% - doc 1/3 HOSE_ACB Q2-2009 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@200] no such statement on any page of this filing"
+  ],
+  "history_sizes": {
+    "balance_sheet": {
+      "True": 0,
+      "False": 0
+    },
+    "income_statement": {
+      "True": 0,
+      "False": 0
+    },
+    "cash_flow": {
+      "True": 0,
+      "False": 0
+    }
+  },
+  "open_ref": null,
+  "template_how": "templates.csv",
+  "compare": {
+    "balance_sheet": {
+      "on_disk": "pdf",
+      "disk_layer": "onnx@200+relax",
+      "run_layer": "onnx@200",
+      "cells_disk": 19,
+      "cells_run": 19,
+      "identical": 18,
+      "changed": {},
+      "only_on_disk": [
+        "tong_no_phai_tra_va_von_chu_so_huu"
+      ],
+      "only_in_run": [
+        "v_cac_cong_cu_tai_chinh_phai_sinh_va_cac_tai_san_tai_chinh_khac"
+      ],
+      "same_layer": false,
+      "same_unit": true,
+      "same_publish_date": true,
+      "verdict": "DIFFERS"
+    },
+    "income_statement": {
+      "on_disk": "missing",
+      "disk_layer": "",
+      "run_layer": "",
+      "verdict": "absent in this run"
+    },
+    "cash_flow": {
+      "on_disk": "missing",
+      "disk_layer": "",
+      "run_layer": "",
+      "verdict": "absent in this run"
+    }
+  }
+}

@@ -243,14 +243,28 @@ def test_the_span_needs_both_balances(builder):
 
 # ── the cascade wiring ──────────────────────────────────────────────────────────────────
 
-def test_the_new_layers_are_last_and_relaxed():
-    names = [l.name for l in FinancialsBuilder.LAYERS]
-    extra = [l for l in FinancialsBuilder.LAYERS if l.cash_extra_terms]
+def test_the_span_layers_run_late_and_relaxed():
+    """The span may only judge a statement every STRICT layer has already refused.
+
+    ⚠️ This asserted `names[-len(extra):] == extra` until 2026-08-30 — that the span layers are
+    literally the tail of the list. That was true when they were added and it is not the
+    property being guarded: `onnx@200+unit+condensed` was appended after them and broke the
+    test while changing nothing about when the span runs. **A test that pins a POSITION fails
+    the first time something legitimate is appended; the guard is the ORDER relative to the
+    strict layers**, which is what the docstring of `cash_extra_terms` actually claims.
+    """
+    layers = FinancialsBuilder.LAYERS
+    extra = [i for i, l in enumerate(layers) if l.cash_extra_terms]
     assert extra, "no layer carries cash_extra_terms"
-    assert names[-len(extra):] == [l.name for l in extra], "the span layers must sit last"
-    for l in extra:
+    # contiguous, so the block cannot be interleaved with cheaper layers
+    assert extra == list(range(extra[0], extra[-1] + 1)), "the span layers must be contiguous"
+    strict = [i for i, l in enumerate(layers)
+              if not (l.relax_totals or l.relax_components or l.relax_split_tail
+                      or l.relax_merged_seam or l.condensed_income)]
+    assert extra[0] > max(strict), "a span layer must not run before a strict one"
+    for i in extra:
         # the identity only runs under `verify_cash`, which rides with `relax_totals`
-        assert l.relax_totals
+        assert layers[i].relax_totals
 
 
 def test_every_span_layer_still_carries_the_wide_crop():

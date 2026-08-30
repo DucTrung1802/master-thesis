@@ -112,6 +112,34 @@ class ParseLayer:
         and taking that would break an identity that closes exactly without it. A term OCR could
         not read is skipped, the identity then misses, and the statement is refused — which is
         the correct outcome and not a loss.
+      * `condensed_income` — let the row floor fall for an income statement that IS the
+        condensed disclosure P&L. Mẫu CBTT-03 (Thông tư 38/2007/TT-BTC) lets an issuer publish a
+        "BÁO CÁO TÀI CHÍNH TÓM TẮT" whose profit-and-loss statement is four printed lines, and
+        ACB filed on that form for its early quarters: Q2-2009 parses **5 rows against
+        `MIN_ROWS` = 12** and is refused as "only 5 rows parsed" — a complete statement thrown
+        away for being short. Its four figures are corroborated to the đồng by the comparative
+        column of the NEXT quarter's filing (2,836,309 / 1,968,253 / 868,056 / 685,331).
+
+        ⚠️ **THE FLOOR IS NOT LOWERED — the statement is admitted on POSITIVE EVIDENCE**, the
+        same shape as `tail_continuation`. The permission is this flag AND
+        `Statement.condensed_income`, which the parser sets from the P&L's OWN wording on its
+        OWN pages (`PdfParser.condensed_income`). `MIN_ROWS`' real job — keeping a page that is
+        not a statement out — is untouched for everything else, and `reconcile` still demands
+        the PBT anchor afterwards, which is what actually proves this one.
+
+        ⚠️ **IT CAN ONLY EVER LICENSE AN INCOME STATEMENT**, because the fingerprint is a P&L
+        line. That matters: VIC's Q3-2008 classifies **2 rows** as its cash flow and 8 as its
+        income statement across a 32-page filing, and it carries the "Mẫu CBTT-03" boilerplate
+        on those very pages — so the obvious marker would have licensed that junk and this does
+        not (see `PdfParser.condensed_income`).
+
+        ⚠️ **AND IT SHIPS ONLY BESIDE `unit_from_document`, never alone.** The condensed form
+        prints its unit once, in the page-1 header, while the P&L is on page 3 — so ACB's
+        Q2-2009 income statement declares nothing itself and a bare `+condensed` layer would
+        accept it at ×1, a 10^6 error that `sane` cannot catch on the empty band these earliest
+        quarters have. §6-2-tervicies drew the same conclusion for `annual_tail` (*"only the
+        `+relax` variant ships"*): a layer that can widen what is accepted may not also be the
+        layer that reads the wrong unit.
       * `crop_pad` — how far outside a detected box to crop before RECOGNISING it (onnx only,
         in points; `None` = the engine default of 2). The detector sometimes starts its box
         INSIDE a number and the leading digit is simply not in the crop, so the recogniser
@@ -136,6 +164,7 @@ class ParseLayer:
     unit_from_document: bool = False
     annual_tail: bool = False
     cash_extra_terms: bool = False
+    condensed_income: bool = False
     crop_pad: Optional[float] = None
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
@@ -433,6 +462,12 @@ class FinancialsBuilder:
                     "hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61")        # corp
 
     MIN_ROWS = 12          # a statement with fewer parsed rows than this is not a statement
+    # …EXCEPT for the condensed disclosure P&L, which is four printed lines and complete at
+    # that length. Reached only when the layer sets `condensed_income` AND the statement's own
+    # pages carry the fingerprint — see `ParseLayer.condensed_income`. The value is the four
+    # lines Mẫu CBTT-03 prints (Tổng thu nhập, Tổng chi phí, LNTT, LNST): below that the form
+    # itself is incomplete, so this is the form's own length and not a slackened floor.
+    MIN_ROWS_CONDENSED = 4
 
     # The cash flow's two balance lines are printed with the ACTUAL DATE where the chart of
     # accounts says "đầu kỳ" / "cuối kỳ": ACB prints "TIỀN VÀ CÁC KHOẢN TƯƠNG ĐƯƠNG TIỀN TẠI
@@ -821,6 +856,23 @@ class FinancialsBuilder:
         # and have returned nothing since. These had a measurement available and it went
         # against them, so they are gone rather than kept. **Do not re-add them without a
         # quarter they demonstrably recover.**
+        # ── THE STATEMENT IS THE CONDENSED DISCLOSURE P&L (`condensed_income`) ────────
+        # Mẫu CBTT-03's profit-and-loss is FOUR printed lines, so `MIN_ROWS` = 12 throws away a
+        # statement that is complete: ACB's Q2-2009 parses 5 rows and is refused as "only 5
+        # rows parsed". Admitted here on the P&L's own wording (`PdfParser.condensed_income`),
+        # never on a lowered threshold, and LAST because it widens what may be accepted — only
+        # a statement that defeated every layer above reaches it.
+        #
+        # ⚠️ **`+unit` RIDES WITH IT AND THERE IS NO BARE `+condensed`.** The condensed form
+        # prints its unit once, in the page-1 header, and the P&L is on page 3 — so Q2-2009's
+        # income statement declares nothing itself, `document_unit` is the only thing that
+        # knows it is millions, and a bare layer would accept a pre-tax profit of 868,056
+        # **đồng**. These are a ticker's earliest quarters, where `sane`'s band is empty by
+        # construction (`BND-1`), so the gate that would catch it is the one guaranteed to be
+        # off. Same rule as the `annual_tail` block above: a layer that widens acceptance may
+        # not also be the layer that reads the wrong unit.
+        ParseLayer("onnx@200+unit+condensed", "onnx", 200,
+                   unit_from_document=True, condensed_income=True),
     ]
 
     def __init__(self, logger=None):
@@ -969,7 +1021,8 @@ class FinancialsBuilder:
                                                   or layer.unit_from_document),
                                      open_ref=open_ref,
                                      relax_components=layer.relax_components,
-                                     cash_extra_terms=layer.cash_extra_terms)
+                                     cash_extra_terms=layer.cash_extra_terms,
+                                     condensed_income=layer.condensed_income)
                 if why is not None:
                     why = f"reconcile: {why}"
                 else:
@@ -2301,7 +2354,8 @@ class FinancialsBuilder:
                   verify_cash: bool = False,
                   open_ref: Optional[int] = None,
                   relax_components: bool = False,
-                  cash_extra_terms: bool = False) -> Optional[str]:
+                  cash_extra_terms: bool = False,
+                  condensed_income: bool = False) -> Optional[str]:
         """None if the statement balances against its OWN printed subtotals, else why not.
 
         The subtotals are taken from the CANONICAL columns when the rows have been mapped —
@@ -2309,7 +2363,13 @@ class FinancialsBuilder:
         the text is what most rejections actually were: the row was parsed, its figure correct,
         and the lookup simply could not recognise the name OCR had mangled.
         """
-        if len(st.rows) < self.MIN_ROWS:
+        # ⚠️ BOTH HALVES ARE REQUIRED: the LAYER must permit the lower floor and the STATEMENT
+        # must carry the evidence for it. Either alone is not enough — the flag on its own would
+        # be a slackened threshold, and the evidence on its own would let a widening take effect
+        # at layer 1, where nothing has yet failed.
+        floor = (self.MIN_ROWS_CONDENSED
+                 if condensed_income and st.condensed_income else self.MIN_ROWS)
+        if len(st.rows) < floor:
             return f"only {len(st.rows)} rows parsed"
         # A FRAGMENTED READING IS REFUSED BEFORE ANY OF ITS FIGURES ARE BELIEVED. The detector
         # splits one printed figure into two boxes on some scans, and both halves are plausible

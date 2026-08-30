@@ -65,6 +65,19 @@ class Statement:
     # balances against itself perfectly) and `sane` fails open in a subset run, so nothing else
     # catches it. When this is True, `build` does NOT mark the period cumulative.
     quarter_column: bool = False
+    # ⚠️ THIS STATEMENT IS THE **CONDENSED** DISCLOSURE P&L, NOT A FULL INCOME STATEMENT.
+    # Mẫu CBTT-03 (Thông tư 38/2007/TT-BTC) lets an issuer publish a "BÁO CÁO TÀI CHÍNH TÓM
+    # TẮT" whose profit-and-loss statement is FOUR printed lines — Tổng thu nhập, Tổng chi phí,
+    # Lợi nhuận trước thuế, Lợi nhuận sau thuế — followed by non-financial disclosure rows.
+    # ACB filed on that form for its early quarters, so `reconcile`'s `MIN_ROWS` floor rejects
+    # a statement that is complete: Q2-2009 parses 5 rows against a floor of 12.
+    #
+    # ⚠️ **EVIDENCE, NOT A THRESHOLD, AND IT IS THE P&L'S OWN WORDING** — see
+    # `PdfParser.CONDENSED_PL`. A full bank or corporate income statement never prints a line
+    # called simply "Tổng thu nhập"/"Tổng chi phí"; it prints "Thu nhập lãi thuần", "Doanh thu
+    # thuần" and so on. This is recorded whether or not any layer acts on it, because it is a
+    # fact about the document — like `quarter_column` and `split_figures`.
+    condensed_income: bool = False
     # ⚠️ HOW MANY FIGURES THIS READING SPLIT ACROSS TWO BOXES — see `PdfParser.split_figures`.
     # A count, not a flag, because `reconcile` reports it and a reader of the log should see
     # the size of what was refused. 0 on every reading that is not fragmented, which is every
@@ -1800,6 +1813,31 @@ class PdfParser:
                     since_code = None
         return out
 
+    # The two summary lines Mẫu CBTT-03's condensed profit-and-loss prints, ascii-normalised
+    # and space-stripped, which is the form `norm()` leaves. BOTH are required: "tổng chi phí"
+    # alone appears in an operating-expense note.
+    CONDENSED_PL = ("tongthunhap", "tongchiphi")
+
+    def condensed_income(self, pages: Dict[int, dict], on: List[int]) -> bool:
+        """Do THESE pages print the condensed disclosure P&L (Mẫu CBTT-03)?
+
+        ⚠️ **SCOPED TO THE STATEMENT'S OWN PAGES, AND THAT SCOPE IS THE WHOLE MEASUREMENT.**
+        Searched over the whole document instead, the same two words also hit VCB's 44-page
+        Q4-2009 filings, where they sit in a note — 4 documents matched, 2 of them wrongly. On
+        the income statement's own pages the count is 2 of 1,196 filings, and both are ACB
+        condensed forms (Q1-2008, Q3-2009).
+
+        ⚠️ **AND IT IS WHY THE "Mẫu CBTT-03" MARKER IS NOT USED, THOUGH IT LOOKS LIKE THE
+        OBVIOUS ONE.** That marker is boilerplate quoting the circular, and a FULL filing quotes
+        it too: VIC carries it on the statement pages of eleven 24-32 page filings. One of them,
+        Q3-2008, classifies pages [8, 13, 30, 32] as its income statement (8 rows) and [14, 15]
+        as its cash flow (**2 rows**) — exactly the junk `MIN_ROWS` exists to reject. Keyed on
+        the marker, the floor would have been lowered for it; keyed on the P&L's own wording it
+        is not, and a cash flow can never carry this fingerprint at all.
+        """
+        text = self.norm(" ".join(pages[i]["text"] for i in on)).replace(" ", "")
+        return all(n in text for n in self.CONDENSED_PL)
+
     def unit_of(self, pages: Dict[int, dict], on: List[int]) -> int:
         """×1e6 when the statement is printed in "Triệu VNĐ", else ×1 (plain đồng).
 
@@ -1811,9 +1849,34 @@ class PdfParser:
         """
         return self.declared_unit(pages, on) or 1
 
+    # ⚠️ **THE THIRD SPELLING IS A LEGACY ENCODING, NOT A TYPO — `LGU-1`, 2026-08-30.** A
+    # pre-Unicode filing carries a real text layer in **VNI-Times**, where a tone mark is a
+    # SEPARATE character appended after the base vowel and `đ` is the codepoint `ñ`: the page
+    # prints "Trieäu ñoàng" for "Triệu đồng". `norm` maps `ä`->`a` and `ñ`->`n` (it strips
+    # accents; it does not know VNI), so the same declaration normalises to `trieaunoang` and
+    # neither needle above can see it. ACB's Q3-2009 declares its unit that way on BOTH its
+    # balance-sheet and its income-statement page, and every figure was therefore read as đồng
+    # — a uniform 10^6 error which, as `unit_of`'s docstring says, reconciles perfectly against
+    # itself. `sane` refused the balance sheet (`magnitude 1.7e+08 vs typical 1.3e+14`) and had
+    # an EMPTY band for the income statement, so that one reached disk with a pre-tax profit of
+    # 641,749 **đồng** for a bank holding 169 trillion of assets.
+    #
+    # ⚠️ **IT IS IN THE DEFAULT PATH AND HAS TO BE**, per the rule §6-2-untricies drew: when the
+    # gates cannot see the defect, the repair cannot be an escalation. The statement is ACCEPTED
+    # at layer 1 with the wrong unit, so no later layer is ever reached.
+    #
+    # ⚠️ **MEASURED, NOT GUESSED, IN BOTH DIRECTIONS.** Across the 1,196 filings of the seven
+    # parsed tickers, 366 carry a text layer and exactly FOUR carry this spelling — ACB
+    # Q1-2007, Q2-2007, Q1-2008 and Q3-2009, of which the first two are before
+    # `FINANCIALS_PERIOD_MIN` and are never opened. `trieaunoang` is not a string ordinary
+    # Vietnamese normalises to, so it cannot fire by accident.
+    #
+    # ⚠️ **TCVN3/ABC IS DELIBERATELY ABSENT.** That encoding writes "TriÖu ®ång", which
+    # normalises to `triouang`; it has **0 hits** in this corpus, so adding it would be an
+    # unmeasured needle (§5 rule 2). Add it when a filing needs it, with the filing named.
     @staticmethod
     def _declares_millions(text: str) -> bool:
-        return "trieuvnd" in text or "trieudong" in text
+        return any(n in text for n in ("trieuvnd", "trieudong", "trieaunoang"))
 
     def declared_unit(self, pages: Dict[int, dict], on: List[int]) -> Optional[int]:
         """The unit these pages STATE, or `None` when they state nothing.
@@ -2057,6 +2120,8 @@ class PdfParser:
                 out[report] = Statement(report=report, pages=[i + 1 for i in on],
                                         unit=unit, n_columns=len(columns), rows=rows,
                                         quarter_column=qcol,
+                                        condensed_income=(report == INCOME_STATEMENT
+                                                          and self.condensed_income(pages, on)),
                                         split_figures=self.split_figures(words_by_page, width),
                                         publish_date=published,
                                         shares_authorized=shares["shares_authorized"],

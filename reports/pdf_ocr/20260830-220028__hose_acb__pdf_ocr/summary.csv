@@ -1,0 +1,7 @@
+period,report,layer,items,status,verdict,seconds
+Q2-2009,balance_sheet,onnx@200,19,pdf,DIFFERS,76.2
+Q2-2009,income_statement,,0,absent,absent in this run,76.2
+Q2-2009,cash_flow,,0,absent,absent in this run,76.2
+Q3-2009,balance_sheet,,0,absent,absent in this run,18.72
+Q3-2009,income_statement,onnx@200,2,pdf,REPRODUCED,18.72
+Q3-2009,cash_flow,,0,absent,absent in this run,18.72
