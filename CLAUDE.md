@@ -5829,20 +5829,21 @@ it was removed on request; the `outstanding` grid it was built from is still com
 Outstanding cells come in two shapes and both count: `missing` (tried, refused) and `absent` (no
 row at all — VIC has 45 from the run that was stopped half way, BID has 2026-Q2).
 
-⚠️ **AND `complete` NO LONGER COUNTS FROM THE FILING CHAIN — it is `all three marks <= first_report`
-(2026-08-31), and it must be read BESIDE that column.** It now says *"complete FROM `first_report`"*,
-not *"the whole history is read"*: a hole at the START of a chain pushes that statement's own mark
-later instead of dropping the row to `False` — the lag SHOWS UP as a column out of line, which the
-old rule could not do. ⚠️ **That is knowingly the trap the *index, never the parse* rule below was written against**, and the
-price is paid because the old rule returned `False` for all 7 parsed tickers and so could not
-separate ACB (done from 2009-Q4, its 2009-Q2/Q3 cash flows unfixable forever) from VIC (a
-45-quarter hole). Measured 2026-08-31: **ACB, CTG, TCB, VCB flip to `True`**, BID/BSR/VIC stay
-`False`, the other five columns do not move a cell, and the chain code plus its cross-checking
-`raise` are deleted.
+⚠️ **AND `first_report` IS NOW READ OFF THE PDF FILES ON DISK (2026-08-31), NOT THE INDEX AND NOT
+THE CSVs.** The index is what CafeF advertises; the files are what an OCR run can open. Measured
+over the 7 parsed tickers, exactly **1 quarter has a filing in the index and no PDF on disk** —
+ACB 2009-Q3, still carrying `pdf` rows parsed from the file that has since gone; the notebook
+WARNs on it. The three statement columns became *"the furthest-back quarter read without a
+break"*, anchored at each statement's own newest quarter READ, so a hole at the TOP no longer
+empties them — BID reads bs **2008-Q4** / is **2011-Q3** / cf **2011-Q3** while missing only 2026-Q2.
+`complete` is `all three marks <= first_report`: every statement's read run reaches back at least to
+where the filing chain starts. ⚠️ **It therefore measures the START of the chain and not its TOP,
+which is the one thing it cannot see — BID reads `True` while 2026-Q2 is unparsed** (ACB and BID
+`True`, the other five `False`).
 
-⚠️ **THE FILING-CHAIN MARK — the `first_report` COLUMN until 2026-08-31 and what decided `complete`
-until the same day — WAS TWO RULES, EACH MEASURED SEPARATELY.** The CONTIGUITY half is still
-live: it is exactly how the three statement columns are built. It comes from the INDEX and
+⚠️ **THE FILING-CHAIN MARK — the `first_report` COLUMN throughout, though its SOURCE moved from the
+index to the files on 2026-08-31 — WAS TWO RULES, EACH MEASURED SEPARATELY.** The CONTIGUITY half is
+still live, and is also how the three statement columns are built. It comes from the INDEX and
 never from the parse — a mark taken from the first quarter that *parsed* pushes every early
 failure out of its own denominator, which is `SAN-1`'s shape one level up, and it had BID reading
 `complete = True` while its Q3-2011 income statement was `missing` on a filing whose other two

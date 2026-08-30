@@ -436,36 +436,32 @@ through `FinancialsBuilder.documents()` itself, and returns one row per ticker:
 | column | |
 |---|---|
 | `exchange` | the listing board, read from the CSV's own column |
-| `complete` | `bool` — **all three marks `<= first_report`**, i.e. from `first_report` on, every quarter that HAS A FILING carries a `pdf` row in all three statements. A `—` column is NaN, every comparison with NaN is False, so one incomplete statement drops the row to `False` on its own |
-| `first_report` | the earliest quarter from which **all three** statements are complete — the LATEST of the three marks beside it, `—` when one of them is `—` |
-| `balance_sheet` / `income_statement` / `cash_flow` | the quarter that statement has been read CONTIGUOUSLY from, up to the ticker's newest filing |
+| `complete` | `bool` — **all three marks `<= first_report`**: every statement's read run reaches back at least to where the FILING chain starts. A `—` column is NaN, every comparison with NaN is False, so one unread statement drops the row on its own |
+| `first_report` | the quarter that OPENS the contiguous filing chain, read from `raw_data/cafef/pdfs/files/` — a fact about **filings**, not about the parse |
+| `balance_sheet` / `income_statement` / `cash_flow` | the FURTHEST-BACK quarter that statement has been read from without a break, anchored at its own newest quarter READ |
 
 Quarters print as `2008-Q4`, which sorts and is the `--quarters` / `QUARTERS` spelling
 [§2](#2-choosing-the-filings) takes — so a cell of this table pastes straight into a parse.
 
 ⚠️ **THE THREE STATEMENT COLUMNS ARE A START MARK, NOT THE "LATEST OUTSTANDING QUARTER" THEY
-WERE UNTIL 2026-08-31.** Each answers *"from which quarter on is this statement complete"*. ACB
-forced the change: `bs_HOSE_ACB.csv` is unbroken `pdf` from **2009-Q2** and the column read
-**2008-Q1**, the latest quarter still outstanding — a lone 2008 filing, three years before the
-run that matters. It now reads bs **2009-Q2** / is **2009-Q2** / cf **2009-Q4**, and
-`first_report` **2009-Q4**: the cash flow opens a quarter later because ACB's 2009-Q2 and Q3
-filings are CBTT-03 condensed forms with **no cash flow in the document at all**, so `missing`
-there is correct and permanent.
+WERE UNTIL 2026-08-31.** Each answers *"how far back has this statement been read without a
+break"*, anchored at its own newest quarter READ — so a hole at the TOP does not empty the
+column. BID is missing only **2026-Q2** and still reads bs **2008-Q4** / is **2011-Q3** / cf
+**2011-Q3**; VIC, stopped half way, reads **2011-Q1 / 2014-Q1 / 2014-Q2**. ⚠️ The cost is that the
+column alone cannot say whether the run reaches the present — `complete` and `outstanding` answer
+that, which is why the three numbers are read together.
 
-⚠️ **`—` MEANS THE RUN IS NOT CONTIGUOUS TO THE NEWEST FILING, NOT "nothing parsed".** The mark
-is anchored at the ticker's newest filing, so a hole at the top empties the column: BID (missing
-only **2026-Q2**, published after its parse) and VIC (45 quarters after 2014-Q4) read `—` on all
-three. Anchoring at the newest quarter READ instead would print VIC `balance_sheet = 2011-Q1`
-and hide the 45-quarter hole — which is why it is anchored this way.
+⚠️ **`first_report` IS READ OFF THE PDF FILES ON DISK, NOT THE INDEX AND NOT THE CSVs (2026-08-31).**
+The index is what CafeF advertises; **the files are what an OCR run can open**. The two are not the
+same: measured over the 7 parsed tickers, exactly **1 quarter has a filing in the index and no PDF
+on disk** — ACB 2009-Q3, which is still carrying `pdf` rows parsed from the file that has since
+gone. The notebook WARNs on it. A filename carries its own period (`Q3-2011_…`, `FY-2016_…`), the
+annual folds onto Q4 exactly as `documents()` folds it, and the 3 `NA-<year>` files across all 784
+tickers are skipped rather than guessed (§5 rule 2).
 
-⚠️ **`complete = True` MUST BE READ BESIDE `first_report` (2026-08-31).** It says *"complete
-FROM THERE"*, never *"the whole history is read"*: a hole at the START of a chain no longer drops
-`complete` to `False` — it pushes that statement's own mark later, and the lag SHOWS UP as a
-column out of line with the other two. The rule it replaced counted from the FILING chain (below)
-and returned `False` for all 7 parsed tickers, which cannot separate ACB (done from 2009-Q4,
-and its 2009-Q2/Q3 cash flows unfixable forever) from VIC (a 45-quarter hole). Measured
-2026-08-31: **ACB, CTG, TCB and VCB flip to `True`**, BID/BSR/VIC stay `False`, and the other five
-columns do not move a cell.
+⚠️ **`complete` MEASURES THE START OF THE CHAIN, NOT ITS TOP — the one thing it cannot see.** An
+outstanding quarter at the TOP does not drop it: **BID reads `True` while 2026-Q2 is unparsed**.
+Measured 2026-08-31 over the 7 tickers: ACB and BID `True`, the other five `False`.
 
 ⚠️ **So the table names no missing quarter, and since 2026-08-31 nothing else does either** — the
 per-statement listing that used to print under it was removed on request. The `outstanding` grid
@@ -480,13 +476,14 @@ shapes and both count: `missing` (a row exists, it was tried, a gate refused it)
 (**no row at all** — the CSV grid never reached that quarter; VIC has 45 of these from the run
 that was stopped half way, and BID has 2026-Q2, published after the parse finished).
 
-### ⚠️ The FILING-CHAIN mark is TWO rules, and each was measured on its own
+### ⚠️ The FILING-CHAIN mark — CONTIGUITY is live, the INDEX source is not
 
-⚠️ **RETIRED 2026-08-31.** It was the `first_report` column until that morning and what
-`complete` counted from until that afternoon; the code computing it is gone from the
-notebook, along with the `raise` that cross-checked the two halves. Kept here because rule 2
-is still live — the three statement columns are built by exactly it — and because the reason
-rule 1 existed is the price the new rule knowingly pays.
+⚠️ **Rule 2 (contiguity) is what `first_report` still is, and it is also how the three
+statement columns are built. Rules 1 and 3 are HISTORY as of 2026-08-31**: the mark no longer
+comes from the index at all — it is read off the PDF FILES — so the `quarterly_filing` column
+that rule 3 fixed is still computed and asserted but no longer read by anything. Rule 1's reason
+is kept because it is the price the current `complete` knowingly pays: it counts from the START
+of the chain and cannot see a hole at the top.
 
 1. **It comes from the INDEX, never from the parse.** A mark taken from the first quarter that
    *parsed* pushes every early failure out of its own denominator — `SAN-1`'s shape, a measure
