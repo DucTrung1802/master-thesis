@@ -5805,8 +5805,23 @@ the FIGURES would have called this merge clean**, which is the third instance of
 answers the question a run folder cannot: **across every parsed ticker, which quarters are still
 missing?** It reads every `statements/**/*.csv` and joins them to the PDF index through
 `FinancialsBuilder.documents()` itself — one row per ticker, six columns (`exchange`, `complete`,
-`first_report`, and the latest outstanding quarter of each statement), quarters printed as
-`2008-Q4`, which is the `--quarters` spelling `pdf_ocr_job` takes.
+`first_report`, and the quarter each statement has been CONTIGUOUSLY read from), quarters
+printed as `2008-Q4`, which is the `--quarters` spelling `pdf_ocr_job` takes.
+
+⚠️ **THE THREE STATEMENT COLUMNS BECAME A START MARK, NOT A "LATEST OUTSTANDING QUARTER"
+(2026-08-31).** Each now answers *"from which quarter on is this statement complete"* — every
+FILED quarter from there to the ticker's newest filing carries a `pdf` row — and `first_report`
+is the LATEST of the three, i.e. the quarter from which all three are complete at once. ACB is
+the case that forced it: `bs_HOSE_ACB.csv` is unbroken `pdf` from **2009-Q2** while the old
+column read **2008-Q1**, because that lone 2008 quarter was the latest one still outstanding. ACB
+now reads bs **2009-Q2** / is **2009-Q2** / cf **2009-Q4** / `first_report` **2009-Q4** — the cash
+flow opens a quarter later because 2009-Q2 and Q3 are CBTT-03 condensed forms carrying no cash
+flow at all (§6-2-sesquadragies), so `missing` there is correct and permanent. ⚠️ **The mark is
+anchored at the NEWEST filing, so a hole at the top makes the column `—`** — BID (missing only
+2026-Q2) and VIC (45 quarters after 2014-Q4) read `—` on all three; anchoring at the newest
+quarter READ instead would print VIC `2011-Q1` and hide the 45-quarter hole. ⚠️ **The table names no
+missing quarter, and since 2026-08-31 nothing else does either** — the per-statement listing under
+it was removed on request; the `outstanding` grid it was built from is still computed.
 
 ⚠️ **THE DENOMINATOR HAS TO COME FROM OUTSIDE THE STATEMENTS CSV.** A `missing` row carries no
 `document` (§6-2-terdecies removed provenance from rows nothing produced), so inside the CSV
@@ -5814,7 +5829,20 @@ missing?** It reads every `statements/**/*.csv` and joins them to the PDF index 
 Outstanding cells come in two shapes and both count: `missing` (tried, refused) and `absent` (no
 row at all — VIC has 45 from the run that was stopped half way, BID has 2026-Q2).
 
-⚠️ **AND `first_report` IS TWO RULES, EACH MEASURED SEPARATELY.** It comes from the INDEX and
+⚠️ **AND `complete` NO LONGER COUNTS FROM THE FILING CHAIN — it is `all three marks <= first_report`
+(2026-08-31), and it must be read BESIDE that column.** It now says *"complete FROM `first_report`"*,
+not *"the whole history is read"*: a hole at the START of a chain pushes that statement's own mark
+later instead of dropping the row to `False` — the lag SHOWS UP as a column out of line, which the
+old rule could not do. ⚠️ **That is knowingly the trap the *index, never the parse* rule below was written against**, and the
+price is paid because the old rule returned `False` for all 7 parsed tickers and so could not
+separate ACB (done from 2009-Q4, its 2009-Q2/Q3 cash flows unfixable forever) from VIC (a
+45-quarter hole). Measured 2026-08-31: **ACB, CTG, TCB, VCB flip to `True`**, BID/BSR/VIC stay
+`False`, the other five columns do not move a cell, and the chain code plus its cross-checking
+`raise` are deleted.
+
+⚠️ **THE FILING-CHAIN MARK — the `first_report` COLUMN until 2026-08-31 and what decided `complete`
+until the same day — WAS TWO RULES, EACH MEASURED SEPARATELY.** The CONTIGUITY half is still
+live: it is exactly how the three statement columns are built. It comes from the INDEX and
 never from the parse — a mark taken from the first quarter that *parsed* pushes every early
 failure out of its own denominator, which is `SAN-1`'s shape one level up, and it had BID reading
 `complete = True` while its Q3-2011 income statement was `missing` on a filing whose other two

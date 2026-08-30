@@ -436,12 +436,41 @@ through `FinancialsBuilder.documents()` itself, and returns one row per ticker:
 | column | |
 |---|---|
 | `exchange` | the listing board, read from the CSV's own column |
-| `complete` | `bool` — from `first_report` onward, **every quarter that HAS A FILING** carries a `pdf` row in all three statements |
-| `first_report` | the quarter that OPENS the contiguous filing chain — see below |
-| `balance_sheet` / `income_statement` / `cash_flow` | the LATEST outstanding quarter of each |
+| `complete` | `bool` — **all three marks `<= first_report`**, i.e. from `first_report` on, every quarter that HAS A FILING carries a `pdf` row in all three statements. A `—` column is NaN, every comparison with NaN is False, so one incomplete statement drops the row to `False` on its own |
+| `first_report` | the earliest quarter from which **all three** statements are complete — the LATEST of the three marks beside it, `—` when one of them is `—` |
+| `balance_sheet` / `income_statement` / `cash_flow` | the quarter that statement has been read CONTIGUOUSLY from, up to the ticker's newest filing |
 
 Quarters print as `2008-Q4`, which sorts and is the `--quarters` / `QUARTERS` spelling
 [§2](#2-choosing-the-filings) takes — so a cell of this table pastes straight into a parse.
+
+⚠️ **THE THREE STATEMENT COLUMNS ARE A START MARK, NOT THE "LATEST OUTSTANDING QUARTER" THEY
+WERE UNTIL 2026-08-31.** Each answers *"from which quarter on is this statement complete"*. ACB
+forced the change: `bs_HOSE_ACB.csv` is unbroken `pdf` from **2009-Q2** and the column read
+**2008-Q1**, the latest quarter still outstanding — a lone 2008 filing, three years before the
+run that matters. It now reads bs **2009-Q2** / is **2009-Q2** / cf **2009-Q4**, and
+`first_report` **2009-Q4**: the cash flow opens a quarter later because ACB's 2009-Q2 and Q3
+filings are CBTT-03 condensed forms with **no cash flow in the document at all**, so `missing`
+there is correct and permanent.
+
+⚠️ **`—` MEANS THE RUN IS NOT CONTIGUOUS TO THE NEWEST FILING, NOT "nothing parsed".** The mark
+is anchored at the ticker's newest filing, so a hole at the top empties the column: BID (missing
+only **2026-Q2**, published after its parse) and VIC (45 quarters after 2014-Q4) read `—` on all
+three. Anchoring at the newest quarter READ instead would print VIC `balance_sheet = 2011-Q1`
+and hide the 45-quarter hole — which is why it is anchored this way.
+
+⚠️ **`complete = True` MUST BE READ BESIDE `first_report` (2026-08-31).** It says *"complete
+FROM THERE"*, never *"the whole history is read"*: a hole at the START of a chain no longer drops
+`complete` to `False` — it pushes that statement's own mark later, and the lag SHOWS UP as a
+column out of line with the other two. The rule it replaced counted from the FILING chain (below)
+and returned `False` for all 7 parsed tickers, which cannot separate ACB (done from 2009-Q4,
+and its 2009-Q2/Q3 cash flows unfixable forever) from VIC (a 45-quarter hole). Measured
+2026-08-31: **ACB, CTG, TCB and VCB flip to `True`**, BID/BSR/VIC stay `False`, and the other five
+columns do not move a cell.
+
+⚠️ **So the table names no missing quarter, and since 2026-08-31 nothing else does either** — the
+per-statement listing that used to print under it was removed on request. The `outstanding` grid
+(every filed quarter × three statements, no `pdf` row) is still computed in the notebook and is
+where that list comes from.
 
 ⚠️ **THE DENOMINATOR IS THE FILING INDEX, AND IT HAS TO COME FROM OUTSIDE THE CSVs.** A
 `missing` row carries no `document` (CLAUDE.md §6-2-terdecies removed provenance from rows
@@ -451,7 +480,13 @@ shapes and both count: `missing` (a row exists, it was tried, a gate refused it)
 (**no row at all** — the CSV grid never reached that quarter; VIC has 45 of these from the run
 that was stopped half way, and BID has 2026-Q2, published after the parse finished).
 
-### ⚠️ `first_report` is TWO rules, and each was measured on its own
+### ⚠️ The FILING-CHAIN mark is TWO rules, and each was measured on its own
+
+⚠️ **RETIRED 2026-08-31.** It was the `first_report` column until that morning and what
+`complete` counted from until that afternoon; the code computing it is gone from the
+notebook, along with the `raise` that cross-checked the two halves. Kept here because rule 2
+is still live — the three statement columns are built by exactly it — and because the reason
+rule 1 existed is the price the new rule knowingly pays.
 
 1. **It comes from the INDEX, never from the parse.** A mark taken from the first quarter that
    *parsed* pushes every early failure out of its own denominator — `SAN-1`'s shape, a measure
@@ -499,15 +534,16 @@ only filing is a **standalone** report is therefore reported missing here *and* 
 `"HOSE_ACB files no document for quarter(s) ['2009-Q2', '2009-Q3', '2009-Q4']"` there — two
 opposite answers about a quarter whose PDF is sitting in `raw_data/cafef/pdfs/files/`. Measured
 2026-08-30: **ACB 4 quarters (2008-Q1, 2009-Q2, 2009-Q3, 2009-Q4 — every one of ACB's outstanding
-quarters), TCB 2, VIC 1, BID/CTG/VCB/BSR 0.** The `parent_only` column measures it and the
-per-statement listing printed under the table names the quarters and the knob
-(`ALLOW_PARENT = True`). ⚠️ That listing had been **commented out from the day it was written**
-while the notebook's own prose promised it — a document promising an output that does not exist;
-it prints as of 2026-08-30, in full, in the `--quarters` spelling.
+quarters), TCB 2, VIC 1, BID/CTG/VCB/BSR 0.** The `parent_only` column measures it. ⚠️ **The listing that used to name those quarters and the
+knob was removed on 2026-08-31**, so nothing prints it now — it had also been **commented out
+from the day it was written** until 2026-08-30 while the notebook's own prose promised it, which
+is a document promising an output that does not exist. This time the removal is deliberate and
+is recorded in all three places that used to promise it.
 
-⚠️ **`complete = False` means *not proved continuous*, never *the parser is broken*.** A filing
-may not contain that statement at all, and a cumulative income statement with no Q1..Q(q-1) to
-subtract is refused by the merge by design (CTG has 32 such quarters).
+⚠️ **`complete = False` means *at least one statement is not yet continuous to the newest filing*,
+never *the parser is broken*.** A filing may not contain that statement at all, and a cumulative
+income statement with no Q1..Q(q-1) to subtract is refused by the merge by design (CTG has 32
+such quarters).
 
 ⚠️ **THE PDF INDEX IS NOT IN GIT** — `raw_data/` is ignored except `financials/` — so a fresh
 checkout cannot prove which quarters were filed. Those tickers read `complete = False` with a
