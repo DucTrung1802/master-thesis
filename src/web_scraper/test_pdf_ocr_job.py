@@ -549,19 +549,46 @@ def test_a_cached_layer_does_not_move_the_number_because_it_does_no_work(tmp_pat
     assert "cached parse, re-map only" in log.lines[-1]
 
 
-def test_the_pass_denominator_comes_from_the_cascade_own_cache_key():
-    """⚠️ `run()` counts the DISTINCT `fin.parse_key` of the planned layers — the same key
-    `_parse_cascaded` caches on — so 47 layers collapse to the passes they really are. Two
-    copies of that tuple would disagree the first time a `ParseLayer` field moved between
-    "changes the parse" and "changes the mapping"."""
+def test_the_pass_denominator_comes_from_the_page_cache_key_not_the_parse_cache_key():
+    """⚠️ `run()` counts the DISTINCT `fin.ocr_key` — `(engine, dpi, crop_pad)` — because
+    that is what `PdfParser._ocr_cache` memoises the pixels→text step on. Counting
+    `fin.parse_key` instead would report "OCR pass 23/24" on a document that read its pages
+    seven times: every other `ParseLayer` flag changes the ROWS, and none of them can change
+    a recognised character. Two copies of either tuple would disagree the first time a field
+    moved between "changes the parse" and "changes the mapping"."""
     layers = list(FinancialsBuilder.LAYERS)
-    passes = {fin.parse_key(layer) for layer in layers}
+    parses = {fin.parse_key(layer) for layer in layers}
+    passes = {fin.ocr_key(layer) for layer in layers}
 
-    assert 1 < len(passes) < len(layers), (len(passes), len(layers))
-    # a mapping-only relaxation must NOT open a new pass
+    assert 1 < len(passes) < len(parses) < len(layers), (
+        len(passes), len(parses), len(layers))
     by_name = {layer.name: layer for layer in layers}
+    # a mapping-only relaxation must NOT open a new parse, let alone a new OCR pass
     if "onnx@200" in by_name and "onnx@200+relax" in by_name:
         assert fin.parse_key(by_name["onnx@200"]) == fin.parse_key(by_name["onnx@200+relax"])
+    # …and a CLASSIFICATION knob opens a new parse and shares the OCR pass, which is the
+    # whole gap this denominator exists to name.
+    if "onnx@200" in by_name and "onnx@200+loose" in by_name:
+        assert fin.parse_key(by_name["onnx@200"]) != fin.parse_key(by_name["onnx@200+loose"])
+        assert fin.ocr_key(by_name["onnx@200"]) == fin.ocr_key(by_name["onnx@200+loose"])
+
+
+def test_ocr_key_names_the_three_things_that_change_a_recognised_character():
+    """⚠️ STRUCTURAL, because the failure it guards is silent. A `ParseLayer` field that
+    really does change the OCR — a new engine option, a render flag — added to `ParseLayer`
+    and NOT to `ocr_key` would hand the new configuration the OLD configuration's cached
+    pages, and the layer would 'run' without reading a pixel. The three named here are the
+    only ones `PdfParser._read_page` consults."""
+    assert fin.ocr_key(FinancialsBuilder.LAYERS[0]) == (
+        FinancialsBuilder.LAYERS[0].engine,
+        FinancialsBuilder.LAYERS[0].dpi,
+        FinancialsBuilder.LAYERS[0].crop_pad)
+    # crop_pad is part of it: ACB Q3-2023 reads 93.261.018 as 261.018 at the default crop
+    # and correctly at 6, so the two must never share a cached page.
+    by_name = {layer.name: layer for layer in FinancialsBuilder.LAYERS}
+    if "onnx@200+components" in by_name and "onnx@200+pad6+components" in by_name:
+        assert (fin.ocr_key(by_name["onnx@200+components"])
+                != fin.ocr_key(by_name["onnx@200+pad6+components"]))
 
 
 def test_a_blank_line_is_dropped_rather_than_printed_as_a_bare_percentage(tmp_path):

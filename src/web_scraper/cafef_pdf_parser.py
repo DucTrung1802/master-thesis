@@ -350,7 +350,40 @@ class PdfParser:
         # layer index are positions in a list of wildly unequal items. `None` = no reporting,
         # which is every caller but `pdf_ocr_job`.
         self.on_page = None
+        # ⚠️ **THE PIXELS→TEXT STEP DEPENDS ON `(engine, dpi, crop_pad)` AND ON NOTHING ELSE,
+        # SO IT IS CACHED PER PAGE UNDER EXACTLY THAT KEY.** Every other per-layer knob —
+        # `join_digits`, `title_over_form`, `loose_form_code`, `realign_rows`,
+        # `notes_boundary`, `tail_continuation`, `label_wrap`, `unit_from_document` — runs
+        # AFTER the page has been read, in `_page_kind`, `_fill_continuations`, `table_rows`
+        # or `parse`, and cannot change a single recognised character. `_parse_cascaded`
+        # caches a whole parse under `parse_key`, which carries all of them: **24 distinct
+        # keys over the 49 layers against 7 distinct OCR configurations** (counted
+        # 2026-08-30), so a filing that defeats the cascade was re-reading every page of
+        # itself 24 times to produce 7 different answers.
+        #
+        # ⚠️ **AND IT IS WHAT MAKES `share_capital` AFFORDABLE.** That scan walks from the
+        # last statement page to the END of the document and is invisible to `on_page`, so
+        # it never appeared in a run log: measured on BID's FY-2016 filing it OCR'd **50
+        # pages in 84.8 s, 68.8 % of one `parse()`**, and returned nothing. It runs once per
+        # `parse()`, i.e. once per parse key.
+        #
+        # Scoped to ONE document — cleared the moment `parse` is handed a different path —
+        # because a parser instance is reused across a whole run (`_parser_for`) and the
+        # cache would otherwise grow without bound. `TODO.md` `P41`/`P42`.
+        self._ocr_cache: Dict[tuple, tuple] = {}
+        self._ocr_cache_path: Optional[str] = None
         self.ocr_ready = self._init_ocr()
+
+    def _ocr_config(self) -> tuple:
+        """The three things that decide what the OCR returns. See `_ocr_cache`."""
+        pad = self._onnx.crop_pad if (self.engine == "onnx" and self._onnx is not None) else None
+        return (self.engine, self.dpi, pad)
+
+    def _use_document(self, pdf_path: str) -> None:
+        """Point the page cache at one filing, discarding the previous one's pages."""
+        if self._ocr_cache_path != pdf_path:
+            self._ocr_cache = {}
+            self._ocr_cache_path = pdf_path
 
     def set_dpi(self, dpi: int) -> None:
         """Re-point this parser at a new render DPI, reusing the loaded OCR models. The onnx
@@ -978,11 +1011,33 @@ class PdfParser:
 
         Returns word tuples shaped like PyMuPDF's "words": (x0,y0,x1,y1, word, b, l, n).
         """
+        key = (page.number,) + self._ocr_config()
+        hit = self._ocr_cache.get(key)
+        if hit is None:
+            hit = self._read_page(page, native)
+            self._ocr_cache[key] = hit
+        text, words, split = hit
+        # ⚠️ **THE ONLY POST-STEP THAT IS PER-LAYER, SO IT IS THE ONLY ONE OUTSIDE THE CACHE.**
+        # `join_split_digits` is a `ParseLayer` flag and `_split_number_runs` returns a NEW
+        # list, so replaying it over the cached words is the same operation on the same input
+        # that ran here before the cache existed. The native-text and Tesseract paths never
+        # took it and still do not (`split` says which).
+        return (text, self._split_number_runs(words, self.join_split_digits) if split
+                else words)
+
+    def _read_page(self, page, native: str):
+        """`(text, words, splittable)` for one page — the step the cache keys on.
+
+        Split out of `_ocr_page` so the expensive half can be memoised on
+        `(page, engine, dpi, crop_pad)` while the per-LAYER `join_split_digits` post-step
+        stays outside it. `splittable` is False for the native-text and Tesseract paths,
+        which have never run `_split_number_runs`.
+        """
         native = self._page_content_text(page, native)
         need_ocr = self.ocr_ready and (
             len(native.strip()) < self.MIN_PAGE_TEXT or self._native_garbled(native))
         if not need_ocr:
-            return native, page.get_text("words")
+            return native, page.get_text("words"), False
 
         if self.engine == "onnx":
             text, words = self._onnx.read_page(page)
@@ -997,16 +1052,16 @@ class PdfParser:
             # emitted separately, and the box it produces holds no separator to act on.
             words = self._merge_split_figures(words, self.Y_TOL,
                                               page.rect.width * self.VALUE_ZONE)
-            return text, self._split_number_runs(words, self.join_split_digits)
+            return text, words, True
         if self.engine == "easyocr":
             text, words = self._ocr_page_easyocr(page)
-            return text, self._split_number_runs(words, self.join_split_digits)
+            return text, words, True
 
         tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.dpi, full=True,
                                    tessdata=TESSDATA_DIR)
         text = page.get_text(textpage=tp)
         words = self._to_visual(page, page.get_text("words", textpage=tp))
-        return text, words
+        return text, words, False
 
     def _ocr_page_easyocr(self, page):
         """Rasterise the visual page and OCR it with EasyOCR → (text, words) in pdf-points."""
@@ -1819,14 +1874,25 @@ class PdfParser:
         return self.publish_date(pages, period_end)
 
     def parse(self, pdf_path: str,
-              period_end: Optional[date] = None) -> Dict[str, Statement]:
+              period_end: Optional[date] = None,
+              want_shares: bool = True) -> Dict[str, Statement]:
         """-> {report: Statement} for whichever of the three statements the filing contains.
 
         Every statement carries the filing's `publish_date` — the same document produced them
         all, so they share it.
+
+        ⚠️ **`want_shares=False` SKIPS THE CAPITAL-NOTE SCAN AND LEAVES THE THREE COUNTS
+        `None`.** That scan walks from the last statement page to the END of the filing
+        (`share_capital`) and is the single most expensive thing here — 50 pages / 84.8 s on
+        BID's FY-2016 annual, 68.8 % of one `parse()`, returning nothing. `_parse_cascaded`
+        reads the counts only while the document's facts are still open, so every layer after
+        the first one that produced a statement was paying for a value that is discarded.
+        The DEFAULT is True, so a caller that has not thought about it keeps today's
+        behaviour.
         """
         import fitz
 
+        self._use_document(pdf_path)
         doc = fitz.open(pdf_path)
         try:
             pages = self.scan(doc)
@@ -1836,7 +1902,8 @@ class PdfParser:
             # there so we OCR one note page, not the whole tail. A per-document fact, shared by
             # all three statements — like publish_date.
             last_stmt = max((i for i, p in pages.items() if p["kind"] in REPORTS), default=-1)
-            shares = self.share_capital(doc, after=last_stmt + 1)
+            shares = (self.share_capital(doc, after=last_stmt + 1) if want_shares
+                      else {k: None for k in self.SHARE_LABELS})
             out: Dict[str, Statement] = {}
             for report in REPORTS:
                 on = sorted(i for i, p in pages.items() if p["kind"] == report)

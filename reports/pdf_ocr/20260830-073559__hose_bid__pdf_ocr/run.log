@@ -1,0 +1,148 @@
+  0.0% - HOSE_BID - plan - overall %    : documents finished + OCR passes done of the 24 this 49-layer cascade can cost, over 1 document(s) — a POSITION IN THE PLAN, never a fraction of the time
+  0.0% - HOSE_BID - plan - symbol       : HOSE_BID
+  0.0% - HOSE_BID - plan - template     : bank   (templates.csv)
+  0.0% - HOSE_BID - plan - documents    : 1  (Q4-2016)
+  0.0% - HOSE_BID - plan - quarters     : ['2016-Q4']   selected ['2016-Q4']
+  0.0% - HOSE_BID - plan - skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]
+  0.0% - HOSE_BID - plan - cascade      : 49 of 49 layers
+  0.0% - HOSE_BID - plan - data root    : D:\GIT\master-thesis\raw_data\cafef
+  0.0% - HOSE_BID - plan - models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+  0.0% - HOSE_BID - plan - vietocr cfg  : D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml
+  0.0% - doc 1/1 HOSE_BID Q4-2016 - open - FY-2016_bao_cao_tai_chinh_hop_nhat_nam_2016_da_kiem_toan.pdf  4.8 MB  bank/consolidated  CUMULATIVE
+  0.0% - doc 1/1 HOSE_BID Q4-2016 - band - balance 24, income 19, cash 23   open_ref=55968854000000
+  0.0% - doc 1/1 HOSE_BID Q4-2016 - layer 1/49 onnx@200 - OCR pass 1/24
+  0.1% - doc 1/1 HOSE_BID Q4-2016 - layer 1/49 onnx@200 - page 1/62   1% of this pass
+  0.5% - doc 1/1 HOSE_BID Q4-2016 - layer 1/49 onnx@200 - page 7/62  11% of this pass   ~122 s left
+  0.9% - doc 1/1 HOSE_BID Q4-2016 - layer 1/49 onnx@200 - page 13/62  20% of this pass   ~122 s left
+  4.2% - doc 1/1 HOSE_BID Q4-2016 - layer 2/49 onnx@300 - OCR pass 2/24
+  4.2% - doc 1/1 HOSE_BID Q4-2016 - layer 2/49 onnx@300 - page 1/62   1% of this pass
+  4.6% - doc 1/1 HOSE_BID Q4-2016 - layer 2/49 onnx@300 - page 7/62  11% of this pass   ~73 s left
+  5.0% - doc 1/1 HOSE_BID Q4-2016 - layer 2/49 onnx@300 - page 13/62  20% of this pass   ~93 s left
+  8.3% - doc 1/1 HOSE_BID Q4-2016 - layer 3/49 onnx@400 - OCR pass 3/24
+  8.4% - doc 1/1 HOSE_BID Q4-2016 - layer 3/49 onnx@400 - page 1/62   1% of this pass
+  8.8% - doc 1/1 HOSE_BID Q4-2016 - layer 3/49 onnx@400 - page 7/62  11% of this pass   ~80 s left
+  9.2% - doc 1/1 HOSE_BID Q4-2016 - layer 3/49 onnx@400 - page 13/62  20% of this pass   ~99 s left
+ 12.5% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - OCR pass 4/24
+ 12.6% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 1/62   1% of this pass
+ 13.0% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 7/62  11% of this pass   ~129 s left
+ 13.4% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 13/62  20% of this pass   ~125 s left
+ 13.7% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 18/62  29% of this pass   ~129 s left
+ 14.0% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 22/62  35% of this pass   ~128 s left
+ 14.2% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 26/62  41% of this pass   ~121 s left
+ 14.6% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 31/62  50% of this pass   ~103 s left
+ 15.1% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 38/62  61% of this pass   ~76 s left
+ 15.5% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 45/62  72% of this pass   ~51 s left
+ 15.9% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 51/62  82% of this pass   ~31 s left
+ 16.3% - doc 1/1 HOSE_BID Q4-2016 - layer 4/49 tesseract@200 - page 57/62  91% of this pass   ~14 s left
+ 16.7% - doc 1/1 HOSE_BID Q4-2016 - layer 5/49 onnx@200+relax - cached parse, re-map only
+ 16.7% - doc 1/1 HOSE_BID Q4-2016 - layer 6/49 onnx@300+relax - cached parse, re-map only
+ 16.7% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - OCR pass 5/24
+ 16.7% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 1/62   1% of this pass
+ 17.1% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 7/62  11% of this pass   ~130 s left
+ 17.5% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 12/62  19% of this pass   ~137 s left
+ 17.8% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 17/62  27% of this pass   ~138 s left
+ 18.0% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 20/62  32% of this pass   ~143 s left
+ 18.2% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 23/62  37% of this pass   ~143 s left
+ 18.5% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 27/62  43% of this pass   ~133 s left
+ 18.8% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 32/62  51% of this pass   ~111 s left
+ 19.2% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 38/62  61% of this pass   ~86 s left
+ 19.6% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 44/62  70% of this pass   ~63 s left
+ 20.0% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 50/62  80% of this pass   ~40 s left
+ 20.4% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 56/62  90% of this pass   ~20 s left
+ 20.8% - doc 1/1 HOSE_BID Q4-2016 - layer 7/49 tesseract@400+relax - page 62/62 100% of this pass   ~0 s left
+ 20.8% - doc 1/1 HOSE_BID Q4-2016 - layer 8/49 onnx@200+components - cached parse, re-map only
+ 20.8% - doc 1/1 HOSE_BID Q4-2016 - layer 9/49 onnx@300+components - cached parse, re-map only
+ 20.8% - doc 1/1 HOSE_BID Q4-2016 - layer 10/49 onnx@200+relax+components - cached parse, re-map only
+ 20.8% - doc 1/1 HOSE_BID Q4-2016 - layer 11/49 onnx@200+pad6+components - OCR pass 6/24
+ 20.9% - doc 1/1 HOSE_BID Q4-2016 - layer 11/49 onnx@200+pad6+components - page 1/62   1% of this pass
+ 21.3% - doc 1/1 HOSE_BID Q4-2016 - layer 11/49 onnx@200+pad6+components - page 7/62  11% of this pass   ~46 s left
+ 21.8% - doc 1/1 HOSE_BID Q4-2016 - layer 11/49 onnx@200+pad6+components - page 14/62  22% of this pass   ~50 s left
+ 21.8% - doc 1/1 HOSE_BID Q4-2016 - layer 12/49 onnx@200+pad6+relax+components - cached parse, re-map only
+ 21.8% - doc 1/1 HOSE_BID Q4-2016 - layer 13/49 onnx@300+split - cached parse, re-map only
+ 21.8% - doc 1/1 HOSE_BID Q4-2016 - layer 14/49 onnx@300+split+components - cached parse, re-map only
+ 25.0% - doc 1/1 HOSE_BID Q4-2016 - layer 15/49 onnx@200+join+components - OCR pass 7/24
+ 25.1% - doc 1/1 HOSE_BID Q4-2016 - layer 15/49 onnx@200+join+components - page 1/62   1% of this pass
+ 25.5% - doc 1/1 HOSE_BID Q4-2016 - layer 15/49 onnx@200+join+components - page 7/62  11% of this pass   ~1 s left
+ 25.9% - doc 1/1 HOSE_BID Q4-2016 - layer 15/49 onnx@200+join+components - page 14/62  22% of this pass   ~1 s left
+ 25.9% - doc 1/1 HOSE_BID Q4-2016 - layer 16/49 onnx@200+join+relax+components - cached parse, re-map only
+ 29.2% - doc 1/1 HOSE_BID Q4-2016 - layer 17/49 onnx@200+title - OCR pass 8/24
+ 29.2% - doc 1/1 HOSE_BID Q4-2016 - layer 17/49 onnx@200+title - page 1/62   1% of this pass
+ 29.6% - doc 1/1 HOSE_BID Q4-2016 - layer 17/49 onnx@200+title - page 7/62  11% of this pass   ~1 s left
+ 30.1% - doc 1/1 HOSE_BID Q4-2016 - layer 17/49 onnx@200+title - page 14/62  22% of this pass   ~1 s left
+ 30.1% - doc 1/1 HOSE_BID Q4-2016 - layer 18/49 onnx@200+title+relax - cached parse, re-map only
+ 33.3% - doc 1/1 HOSE_BID Q4-2016 - layer 19/49 onnx@200+loose - OCR pass 9/24
+ 33.4% - doc 1/1 HOSE_BID Q4-2016 - layer 19/49 onnx@200+loose - page 1/62   1% of this pass
+ 33.8% - doc 1/1 HOSE_BID Q4-2016 - layer 19/49 onnx@200+loose - page 7/62  11% of this pass   ~1 s left
+ 34.3% - doc 1/1 HOSE_BID Q4-2016 - layer 19/49 onnx@200+loose - page 14/62  22% of this pass   ~1 s left
+ 34.3% - doc 1/1 HOSE_BID Q4-2016 - layer 20/49 onnx@200+loose+relax - cached parse, re-map only
+ 37.5% - doc 1/1 HOSE_BID Q4-2016 - layer 21/49 onnx@400+loose - OCR pass 10/24
+ 37.6% - doc 1/1 HOSE_BID Q4-2016 - layer 21/49 onnx@400+loose - page 1/62   1% of this pass
+ 38.0% - doc 1/1 HOSE_BID Q4-2016 - layer 21/49 onnx@400+loose - page 7/62  11% of this pass   ~1 s left
+ 38.4% - doc 1/1 HOSE_BID Q4-2016 - layer 21/49 onnx@400+loose - page 14/62  22% of this pass   ~1 s left
+ 38.4% - doc 1/1 HOSE_BID Q4-2016 - layer 22/49 onnx@400+loose+relax - cached parse, re-map only
+ 41.7% - doc 1/1 HOSE_BID Q4-2016 - layer 23/49 onnx@300+loose - OCR pass 11/24
+ 41.7% - doc 1/1 HOSE_BID Q4-2016 - layer 23/49 onnx@300+loose - page 1/62   1% of this pass
+ 42.1% - doc 1/1 HOSE_BID Q4-2016 - layer 23/49 onnx@300+loose - page 7/62  11% of this pass   ~1 s left
+ 42.6% - doc 1/1 HOSE_BID Q4-2016 - layer 23/49 onnx@300+loose - page 14/62  22% of this pass   ~1 s left
+ 42.6% - doc 1/1 HOSE_BID Q4-2016 - layer 24/49 onnx@300+loose+relax - cached parse, re-map only
+ 45.8% - doc 1/1 HOSE_BID Q4-2016 - layer 25/49 onnx@200+title+loose - OCR pass 12/24
+ 45.9% - doc 1/1 HOSE_BID Q4-2016 - layer 25/49 onnx@200+title+loose - page 1/62   1% of this pass
+ 46.3% - doc 1/1 HOSE_BID Q4-2016 - layer 25/49 onnx@200+title+loose - page 7/62  11% of this pass   ~1 s left
+ 46.8% - doc 1/1 HOSE_BID Q4-2016 - layer 25/49 onnx@200+title+loose - page 14/62  22% of this pass   ~1 s left
+ 46.8% - doc 1/1 HOSE_BID Q4-2016 - layer 26/49 onnx@200+title+loose+relax - cached parse, re-map only
+ 50.0% - doc 1/1 HOSE_BID Q4-2016 - layer 27/49 onnx@200+realign - OCR pass 13/24
+ 50.1% - doc 1/1 HOSE_BID Q4-2016 - layer 27/49 onnx@200+realign - page 1/62   1% of this pass
+ 50.5% - doc 1/1 HOSE_BID Q4-2016 - layer 27/49 onnx@200+realign - page 7/62  11% of this pass   ~1 s left
+ 50.9% - doc 1/1 HOSE_BID Q4-2016 - layer 27/49 onnx@200+realign - page 14/62  22% of this pass   ~1 s left
+ 50.9% - doc 1/1 HOSE_BID Q4-2016 - layer 28/49 onnx@200+realign+relax - cached parse, re-map only
+ 54.2% - doc 1/1 HOSE_BID Q4-2016 - layer 29/49 onnx@300+realign - OCR pass 14/24
+ 54.2% - doc 1/1 HOSE_BID Q4-2016 - layer 29/49 onnx@300+realign - page 1/62   1% of this pass
+ 54.6% - doc 1/1 HOSE_BID Q4-2016 - layer 29/49 onnx@300+realign - page 7/62  11% of this pass   ~1 s left
+ 55.1% - doc 1/1 HOSE_BID Q4-2016 - layer 29/49 onnx@300+realign - page 14/62  22% of this pass   ~1 s left
+ 55.1% - doc 1/1 HOSE_BID Q4-2016 - layer 30/49 onnx@300+realign+relax - cached parse, re-map only
+ 55.1% - doc 1/1 HOSE_BID Q4-2016 - layer 31/49 onnx@200+realign+relax+components - cached parse, re-map only
+ 58.3% - doc 1/1 HOSE_BID Q4-2016 - layer 32/49 onnx@200+notes+seam - OCR pass 15/24
+ 58.4% - doc 1/1 HOSE_BID Q4-2016 - layer 32/49 onnx@200+notes+seam - page 1/62   1% of this pass
+ 58.8% - doc 1/1 HOSE_BID Q4-2016 - layer 32/49 onnx@200+notes+seam - page 7/62  11% of this pass   ~1 s left
+ 59.3% - doc 1/1 HOSE_BID Q4-2016 - layer 32/49 onnx@200+notes+seam - page 14/62  22% of this pass   ~1 s left
+ 59.3% - doc 1/1 HOSE_BID Q4-2016 - layer 33/49 onnx@200+notes+seam+relax - cached parse, re-map only
+ 62.5% - doc 1/1 HOSE_BID Q4-2016 - layer 34/49 onnx@300+notes+seam - OCR pass 16/24
+ 62.6% - doc 1/1 HOSE_BID Q4-2016 - layer 34/49 onnx@300+notes+seam - page 1/62   1% of this pass
+ 63.0% - doc 1/1 HOSE_BID Q4-2016 - layer 34/49 onnx@300+notes+seam - page 7/62  11% of this pass   ~1 s left
+ 63.4% - doc 1/1 HOSE_BID Q4-2016 - layer 34/49 onnx@300+notes+seam - page 14/62  22% of this pass   ~1 s left
+ 66.7% - doc 1/1 HOSE_BID Q4-2016 - layer 35/49 onnx@200+notes+seam+realign - OCR pass 17/24
+ 66.7% - doc 1/1 HOSE_BID Q4-2016 - layer 35/49 onnx@200+notes+seam+realign - page 1/62   1% of this pass
+ 67.1% - doc 1/1 HOSE_BID Q4-2016 - layer 35/49 onnx@200+notes+seam+realign - page 7/62  11% of this pass   ~1 s left
+ 67.6% - doc 1/1 HOSE_BID Q4-2016 - layer 35/49 onnx@200+notes+seam+realign - page 14/62  22% of this pass   ~1 s left
+ 67.6% - doc 1/1 HOSE_BID Q4-2016 - layer 36/49 onnx@200+notes - cached parse, re-map only
+ 70.8% - doc 1/1 HOSE_BID Q4-2016 - layer 37/49 onnx@200+tail - OCR pass 18/24
+ 70.9% - doc 1/1 HOSE_BID Q4-2016 - layer 37/49 onnx@200+tail - page 1/62   1% of this pass
+ 71.3% - doc 1/1 HOSE_BID Q4-2016 - layer 37/49 onnx@200+tail - page 7/62  11% of this pass   ~1 s left
+ 71.8% - doc 1/1 HOSE_BID Q4-2016 - layer 37/49 onnx@200+tail - page 14/62  22% of this pass   ~1 s left
+ 71.8% - doc 1/1 HOSE_BID Q4-2016 - layer 38/49 onnx@200+tail+relax - cached parse, re-map only
+ 75.0% - doc 1/1 HOSE_BID Q4-2016 - layer 39/49 onnx@300+tail - OCR pass 19/24
+ 75.1% - doc 1/1 HOSE_BID Q4-2016 - layer 39/49 onnx@300+tail - page 1/62   1% of this pass
+ 75.5% - doc 1/1 HOSE_BID Q4-2016 - layer 39/49 onnx@300+tail - page 7/62  11% of this pass   ~1 s left
+ 75.9% - doc 1/1 HOSE_BID Q4-2016 - layer 39/49 onnx@300+tail - page 14/62  22% of this pass   ~1 s left
+ 75.9% - doc 1/1 HOSE_BID Q4-2016 - layer 40/49 onnx@200+tail+relax+components - cached parse, re-map only
+ 79.2% - doc 1/1 HOSE_BID Q4-2016 - layer 41/49 onnx@200+unit+tail - OCR pass 20/24
+ 79.2% - doc 1/1 HOSE_BID Q4-2016 - layer 41/49 onnx@200+unit+tail - page 1/62   1% of this pass
+ 79.6% - doc 1/1 HOSE_BID Q4-2016 - layer 41/49 onnx@200+unit+tail - page 7/62  11% of this pass   ~1 s left
+ 80.1% - doc 1/1 HOSE_BID Q4-2016 - layer 41/49 onnx@200+unit+tail - page 14/62  22% of this pass   ~1 s left
+ 80.1% - doc 1/1 HOSE_BID Q4-2016 - layer 42/49 onnx@200+unit+tail+relax - cached parse, re-map only
+ 83.3% - doc 1/1 HOSE_BID Q4-2016 - layer 43/49 onnx@200+unit - OCR pass 21/24
+ 83.4% - doc 1/1 HOSE_BID Q4-2016 - layer 43/49 onnx@200+unit - page 1/62   1% of this pass
+ 83.8% - doc 1/1 HOSE_BID Q4-2016 - layer 43/49 onnx@200+unit - page 7/62  11% of this pass   ~1 s left
+ 84.3% - doc 1/1 HOSE_BID Q4-2016 - layer 43/49 onnx@200+unit - page 14/62  22% of this pass   ~1 s left
+ 87.5% - doc 1/1 HOSE_BID Q4-2016 - layer 44/49 onnx@300+unit+tail - OCR pass 22/24
+ 87.6% - doc 1/1 HOSE_BID Q4-2016 - layer 44/49 onnx@300+unit+tail - page 1/62   1% of this pass
+ 88.0% - doc 1/1 HOSE_BID Q4-2016 - layer 44/49 onnx@300+unit+tail - page 7/62  11% of this pass   ~1 s left
+ 88.4% - doc 1/1 HOSE_BID Q4-2016 - layer 44/49 onnx@300+unit+tail - page 14/62  22% of this pass   ~1 s left
+ 91.7% - doc 1/1 HOSE_BID Q4-2016 - layer 45/49 onnx@300+unit - OCR pass 23/24
+ 91.7% - doc 1/1 HOSE_BID Q4-2016 - layer 45/49 onnx@300+unit - page 1/62   1% of this pass
+ 92.1% - doc 1/1 HOSE_BID Q4-2016 - layer 45/49 onnx@300+unit - page 7/62  11% of this pass   ~1 s left
+ 92.6% - doc 1/1 HOSE_BID Q4-2016 - layer 45/49 onnx@300+unit - page 14/62  22% of this pass   ~1 s left
+ 92.6% - doc 1/1 HOSE_BID Q4-2016 - layer 46/49 onnx@200+annual+relax - cached parse, re-map only
+ 92.6% - doc 1/1 HOSE_BID Q4-2016 - layer 47/49 onnx@200+pad6+annual+extra - cached parse, re-map only
+100.0% - doc 1/1 HOSE_BID Q4-2016 - accepted - Q4-2016: balance_sheet=52 items [onnx@200]; income_statement=19 items [onnx@200]; cash_flow=24 items [onnx@200+pad6+annual+extra]  (9.5 min)
+100.0% - HOSE_BID - done - run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260830-073559__hose_bid__pdf_ocr

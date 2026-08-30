@@ -313,6 +313,26 @@ def parse_key(layer: ParseLayer) -> tuple:
             layer.unit_from_document)
 
 
+def ocr_key(layer: ParseLayer) -> tuple:
+    """What makes two layers share ONE trip through the OCR — the PAGE cache's key.
+
+    ⚠️ **NARROWER THAN `parse_key`, AND THE GAP BETWEEN THEM IS 24 AGAINST 7.** `parse_key`
+    keys a whole parse — `{report: Statement}` — which every layer flag can change: they
+    move which page is classified as what (`title_over_form`, `loose_form_code`,
+    `notes_boundary`, `tail_continuation`), how rows are built (`realign_rows`,
+    `label_wrap`, `join_digits`) and what the figures are scaled by
+    (`unit_from_document`). **Not one of them can change a recognised character**, because
+    every one runs AFTER `scan` has read the page. So the pixels→text step keys on these
+    three alone, and `PdfParser._ocr_cache` memoises it under exactly them.
+
+    Counted over the 49 layers on 2026-08-30: **24 distinct `parse_key`, 7 distinct
+    `ocr_key`**. That is why this is the denominator the progress readout uses — reporting
+    "OCR pass 23/24" while seven of them read pixels and sixteen replayed a cached page
+    would be a denominator that names the wrong work.
+    """
+    return (layer.engine, layer.dpi, layer.crop_pad)
+
+
 class FinancialsBuilder:
     """Build quarterly financial statements for a ticker from its LOCAL PDF archive.
 
@@ -866,6 +886,10 @@ class FinancialsBuilder:
         # filing — the relaxed layers reuse a strict layer's already-OCR'd statements and only
         # re-map them, no second OCR pass.
         parsed: Dict[Tuple[str, int], Dict[str, Statement]] = {}
+        # Which OCR configurations have actually read the pixels — the PAGE cache lives on
+        # the parser (`PdfParser._ocr_cache`); this is only so the progress hook can say
+        # whether a layer is about to pay for one. See `ocr_key`.
+        ocr_done: set = set()
         for layer_index, layer in enumerate(self.LAYERS, start=1):
             if len(accepted) == len(REPORTS):
                 break
@@ -874,9 +898,14 @@ class FinancialsBuilder:
                 continue                                  # engine unavailable on this machine
             key = parse_key(layer)
             if self.on_layer is not None:
-                # `cached` is the whole cost story: a layer whose parse key is already in
-                # `parsed` re-maps in milliseconds, while a new key re-OCRs every page.
-                self.on_layer(layer_index, len(self.LAYERS), layer, key in parsed)
+                # ⚠️ `cached` MEANS "THIS LAYER READS NO PIXELS", which is a wider set than
+                # "this layer does no work". Three states collapse into two here: a repeated
+                # `parse_key` returns in milliseconds; a NEW `parse_key` whose `ocr_key` has
+                # already run re-maps pages the cache holds (host work, seconds); only a new
+                # `ocr_key` renders and recognises. The progress denominator counts OCR
+                # passes, so those first two must not advance it.
+                self.on_layer(layer_index, len(self.LAYERS), layer,
+                              key in parsed or ocr_key(layer) in ocr_done)
             if key not in parsed:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)
@@ -889,11 +918,22 @@ class FinancialsBuilder:
                 parser.set_label_wrap(layer.label_wrap)
                 parser.set_unit_from_document(layer.unit_from_document)
                 try:
-                    parsed[key] = parser.parse(path, period_end)
+                    # ⚠️ **THE CAPITAL-NOTE SCAN IS REQUESTED ONLY WHILE THE FACTS ARE STILL
+                    # OPEN, AND THAT IS THE SAME CONDITION THE BLOCK BELOW READS THEM UNDER.**
+                    # `facts["shares"]` is assigned inside `if not facts["publish_date"]`, so
+                    # once a layer has produced a publish date no later layer's counts are ever
+                    # looked at — while `parse()` went on paying for them, once per parse key.
+                    # Measured 2026-08-30 on BID's FY-2016 annual: 50 pages / 84.8 s per call,
+                    # **68.8 % of one `parse()`**, returning nothing, and the document ran 23
+                    # OCR passes. `facts` cannot change between this line and that check, so
+                    # the accepted rows and the written facts are unchanged.
+                    parsed[key] = parser.parse(path, period_end,
+                                               want_shares=not facts["publish_date"])
                 except Exception as e:
                     self._warn(f"    {layer.name}: parse failed — {type(e).__name__}: {e}")
                     self.layer_errors.append((layer.name, f"{type(e).__name__}: {e}"))
                     parsed[key] = {}
+                ocr_done.add(ocr_key(layer))
             statements = parsed[key]
 
             if not facts["publish_date"]:

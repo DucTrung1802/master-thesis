@@ -1,0 +1,184 @@
+  0.0% - HOSE_VIC - plan - overall %    : documents finished + OCR passes done of the 7 this 49-layer cascade can cost, over 1 document(s) — a POSITION IN THE PLAN, never a fraction of the time
+  0.0% - HOSE_VIC - plan - symbol       : HOSE_VIC
+  0.0% - HOSE_VIC - plan - template     : corp   (detect_template (CafeF fingerprint, over the network))
+  0.0% - HOSE_VIC - plan - documents    : 1  (Q1-2026)
+  0.0% - HOSE_VIC - plan - quarters     : ['2026-Q1']   selected ['2026-Q1']
+  0.0% - HOSE_VIC - plan - skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]
+  0.0% - HOSE_VIC - plan - cascade      : 49 of 49 layers
+  0.0% - HOSE_VIC - plan - data root    : D:\GIT\master-thesis\raw_data\cafef
+  0.0% - HOSE_VIC - plan - models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+  0.0% - HOSE_VIC - plan - vietocr cfg  : D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml
+  0.0% - doc 1/1 HOSE_VIC Q1-2026 - open - Q1-2026_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2026.pdf  4.8 MB  corp/consolidated
+  0.0% - doc 1/1 HOSE_VIC Q1-2026 - band - balance 20, income 13, cash 16   open_ref=—
+  0.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 1/49 onnx@200 - OCR pass 1/7
+  0.2% - doc 1/1 HOSE_VIC Q1-2026 - layer 1/49 onnx@200 - page 1/71   1% of this pass
+  1.6% - doc 1/1 HOSE_VIC Q1-2026 - layer 1/49 onnx@200 - page 8/71  11% of this pass   ~72 s left
+  2.8% - doc 1/1 HOSE_VIC Q1-2026 - layer 1/49 onnx@200 - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 14.3% - doc 1/1 HOSE_VIC Q1-2026 - layer 2/49 onnx@300 - OCR pass 2/7
+ 14.5% - doc 1/1 HOSE_VIC Q1-2026 - layer 2/49 onnx@300 - page 1/71   1% of this pass
+ 15.9% - doc 1/1 HOSE_VIC Q1-2026 - layer 2/49 onnx@300 - page 8/71  11% of this pass   ~45 s left
+ 17.1% - doc 1/1 HOSE_VIC Q1-2026 - layer 2/49 onnx@300 - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 28.6% - doc 1/1 HOSE_VIC Q1-2026 - layer 3/49 onnx@400 - OCR pass 3/7
+ 28.8% - doc 1/1 HOSE_VIC Q1-2026 - layer 3/49 onnx@400 - page 1/71   1% of this pass
+ 30.2% - doc 1/1 HOSE_VIC Q1-2026 - layer 3/49 onnx@400 - page 8/71  11% of this pass   ~51 s left
+ 31.4% - doc 1/1 HOSE_VIC Q1-2026 - layer 3/49 onnx@400 - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 42.9% - doc 1/1 HOSE_VIC Q1-2026 - layer 4/49 tesseract@200 - OCR pass 4/7
+ 43.1% - doc 1/1 HOSE_VIC Q1-2026 - layer 4/49 tesseract@200 - page 1/71   1% of this pass
+ 44.5% - doc 1/1 HOSE_VIC Q1-2026 - layer 4/49 tesseract@200 - page 8/71  11% of this pass   ~99 s left
+ 45.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 4/49 tesseract@200 - page 14/71  19% of this pass   ~115 s left
+ 45.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 5/49 onnx@200+relax - cached parse, re-map only
+ 45.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 5/49 onnx@200+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 45.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 6/49 onnx@300+relax - cached parse, re-map only
+ 45.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 6/49 onnx@300+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 57.1% - doc 1/1 HOSE_VIC Q1-2026 - layer 7/49 tesseract@400+relax - OCR pass 5/7
+ 57.3% - doc 1/1 HOSE_VIC Q1-2026 - layer 7/49 tesseract@400+relax - page 1/71   1% of this pass
+ 58.8% - doc 1/1 HOSE_VIC Q1-2026 - layer 7/49 tesseract@400+relax - page 8/71  11% of this pass   ~117 s left
+ 59.6% - doc 1/1 HOSE_VIC Q1-2026 - layer 7/49 tesseract@400+relax - page 12/71  16% of this pass   ~150 s left
+ 60.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 8/49 onnx@200+components - cached parse, re-map only
+ 60.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 8/49 onnx@200+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 60.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 9/49 onnx@300+components - cached parse, re-map only
+ 60.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 9/49 onnx@300+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 60.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 10/49 onnx@200+relax+components - cached parse, re-map only
+ 60.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 10/49 onnx@200+relax+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 71.4% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - OCR pass 6/7
+ 71.6% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 1/71   1% of this pass
+ 73.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 8/71  11% of this pass   ~53 s left
+ 74.4% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 15/71  21% of this pass   ~45 s left
+ 76.1% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 23/71  32% of this pass   ~47 s left
+ 77.5% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 30/71  42% of this pass   ~44 s left
+ 78.9% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 37/71  52% of this pass   ~34 s left
+ 80.5% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 45/71  63% of this pass   ~25 s left
+ 81.9% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 52/71  73% of this pass   ~18 s left
+ 83.3% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 59/71  83% of this pass   ~11 s left
+ 84.9% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - page 67/71  94% of this pass   ~4 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 11/49 onnx@200+pad6+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 12/49 onnx@200+pad6+relax+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 12/49 onnx@200+pad6+relax+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 13/49 onnx@300+split - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 13/49 onnx@300+split - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 14/49 onnx@300+split+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 14/49 onnx@300+split+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 15/49 onnx@200+join+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 15/49 onnx@200+join+components - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 15/49 onnx@200+join+components - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 15/49 onnx@200+join+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 16/49 onnx@200+join+relax+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 16/49 onnx@200+join+relax+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 17/49 onnx@200+title - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 17/49 onnx@200+title - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 17/49 onnx@200+title - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 17/49 onnx@200+title - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 18/49 onnx@200+title+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 18/49 onnx@200+title+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 19/49 onnx@200+loose - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 19/49 onnx@200+loose - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 19/49 onnx@200+loose - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 19/49 onnx@200+loose - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 20/49 onnx@200+loose+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 20/49 onnx@200+loose+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 21/49 onnx@400+loose - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 21/49 onnx@400+loose - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 21/49 onnx@400+loose - page 8/71  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 21/49 onnx@400+loose - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 22/49 onnx@400+loose+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 22/49 onnx@400+loose+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 23/49 onnx@300+loose - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 23/49 onnx@300+loose - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 23/49 onnx@300+loose - page 8/71  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 23/49 onnx@300+loose - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 24/49 onnx@300+loose+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 24/49 onnx@300+loose+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 25/49 onnx@200+title+loose - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 25/49 onnx@200+title+loose - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 25/49 onnx@200+title+loose - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 25/49 onnx@200+title+loose - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 26/49 onnx@200+title+loose+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 26/49 onnx@200+title+loose+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 27/49 onnx@200+realign - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 27/49 onnx@200+realign - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 27/49 onnx@200+realign - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 27/49 onnx@200+realign - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 28/49 onnx@200+realign+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 28/49 onnx@200+realign+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 29/49 onnx@300+realign - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 29/49 onnx@300+realign - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 29/49 onnx@300+realign - page 8/71  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 29/49 onnx@300+realign - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 30/49 onnx@300+realign+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 30/49 onnx@300+realign+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 31/49 onnx@200+realign+relax+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 31/49 onnx@200+realign+relax+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 32/49 onnx@200+notes+seam - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 32/49 onnx@200+notes+seam - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 32/49 onnx@200+notes+seam - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 32/49 onnx@200+notes+seam - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 33/49 onnx@200+notes+seam+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 33/49 onnx@200+notes+seam+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 34/49 onnx@300+notes+seam - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 34/49 onnx@300+notes+seam - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 34/49 onnx@300+notes+seam - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 34/49 onnx@300+notes+seam - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 35/49 onnx@200+notes+seam+realign - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 35/49 onnx@200+notes+seam+realign - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 35/49 onnx@200+notes+seam+realign - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 35/49 onnx@200+notes+seam+realign - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 36/49 onnx@200+notes - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 36/49 onnx@200+notes - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 37/49 onnx@200+tail - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 37/49 onnx@200+tail - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 37/49 onnx@200+tail - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 37/49 onnx@200+tail - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 38/49 onnx@200+tail+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 38/49 onnx@200+tail+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 39/49 onnx@300+tail - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 39/49 onnx@300+tail - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 39/49 onnx@300+tail - page 8/71  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 39/49 onnx@300+tail - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 40/49 onnx@200+tail+relax+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 40/49 onnx@200+tail+relax+components - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 41/49 onnx@200+unit+tail - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 41/49 onnx@200+unit+tail - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 41/49 onnx@200+unit+tail - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 41/49 onnx@200+unit+tail - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 42/49 onnx@200+unit+tail+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 42/49 onnx@200+unit+tail+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 43/49 onnx@200+unit - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 43/49 onnx@200+unit - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 43/49 onnx@200+unit - page 8/71  11% of this pass   ~2 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 43/49 onnx@200+unit - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 44/49 onnx@300+unit+tail - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 44/49 onnx@300+unit+tail - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 44/49 onnx@300+unit+tail - page 8/71  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 44/49 onnx@300+unit+tail - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 45/49 onnx@300+unit - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 45/49 onnx@300+unit - page 1/71   1% of this pass
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 45/49 onnx@300+unit - page 8/71  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 45/49 onnx@300+unit - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 46/49 onnx@200+annual+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 46/49 onnx@200+annual+relax - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 47/49 onnx@200+pad6+annual+extra - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 47/49 onnx@200+pad6+annual+extra - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 48/49 onnx@200+pad6+extra - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 48/49 onnx@200+pad6+extra - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+ 85.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - OCR pass 7/7
+ 85.9% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 1/71   1% of this pass
+ 87.3% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 8/71  11% of this pass   ~52 s left
+ 88.7% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 15/71  21% of this pass   ~48 s left
+ 90.3% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 23/71  32% of this pass   ~52 s left
+ 91.8% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 30/71  42% of this pass   ~48 s left
+ 93.2% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 37/71  52% of this pass   ~36 s left
+ 94.8% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 45/71  63% of this pass   ~27 s left
+ 96.2% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 52/71  73% of this pass   ~19 s left
+ 97.6% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 59/71  83% of this pass   ~12 s left
+ 99.2% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - page 67/71  94% of this pass   ~4 s left
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:     cash flow: the FX line printed no figure and its label rode onto the closing balance — 54,750,360,000,000 moved from `hdtc_anh_huong_cua_thay_doi_ty_gia_hoi_doai_quy_doi_ngoai_te` to `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, FX left empty
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:     balance_sheet absent after 49 layer(s):
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@200] sane: magnitude 1.18e+15 vs typical 5.11e+13 (units? cumulative column? OCR misread?)
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@200+pad6+components] reconcile: assets != liabilities + equity
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:     income_statement absent after 49 layer(s):
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@200] no such statement on any page of this filing
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:     cash_flow absent after 49 layer(s):
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@200] sane: magnitude 5.48e+13 vs typical 1.18e+12 (units? cumulative column? OCR misread?)
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@200+pad6+relax+components] reconcile: cash flow unverifiable — fx not mapped
+100.0% - doc 1/1 HOSE_VIC Q1-2026 - accepted - Q1-2026: ; absent ['balance_sheet', 'income_statement', 'cash_flow']  (5.2 min)
+100.0% - HOSE_VIC - done - run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260830-080747__hose_vic__pdf_ocr

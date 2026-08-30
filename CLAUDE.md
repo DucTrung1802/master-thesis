@@ -5370,6 +5370,99 @@ BSR Q4-2016 is the ticker's earliest period, so `seed_history` can never build a
 and `force_empty_band` is unavoidable rather than convenient (`BND-1`). And the eight other
 never-de-cumulatable quarters are **not** written: reaching them needs a run each.
 
+### ✅ 6-2-duoquadragies. THE HARD FILING COSTS 9.5 MIN INSTEAD OF 64.6 — and every character it reads is unchanged
+
+Done 2026-08-30 on request: make the OCR module cheaper without moving its output. `P41` and
+`P42` were already on the list as *"the cost `P38`/`P6` are budgeted on"*, and both are now
+measured rather than estimated. **Nothing about the parse, the gates, the layer order or the
+49 layers moved.**
+
+| document | before | after | |
+|---|---|---|---|
+| **BID Q4-2016** — the hardest filing on disk, cash flow at layer 47 of 49 | **64.6 min** | **9.5 min** | **6.8x** |
+| **VIC Q1-2026** — `corp`, all three statements refused | 34.8 min | 5.2 min | **6.7x** |
+| **TCB Q3-2013** — three different layers, two at 300 dpi | 39.1 min | 7.9 min | **5.0x** |
+| VCB Q1-2026 — accepted at layer 1, ONE OCR pass | 1.4 min | 1.4 min | **1.0x** |
+
+⚠️ **THE FLAT ROW IS THE CONTROL, NOT A DISAPPOINTMENT.** A filing that stops at layer 1 pays
+one OCR pass and has no repetition to remove. What was removed is what a filing pays when it
+does **not** stop there — 17 % of quarters at the three-ticker rate (§6-2-quindecies), and all
+of the tail that `P38`'s 190 h and `P6`'s "days of GPU" are made of.
+
+#### Three defects, and the first two are the same shape: work repeated for an answer nobody reads
+
+1. ⚠️ **`P42` — THE PARSE CACHE KEYS ON ELEVEN FIELDS AND THE OCR DEPENDS ON THREE.**
+   `_parse_cascaded` caches a whole parse under `parse_key`, correctly, because every
+   `ParseLayer` flag can change the ROWS. **None of them can change a recognised character** —
+   `join_digits`, `title_over_form`, `loose_form_code`, `realign_rows`, `notes_boundary`,
+   `tail_continuation`, `label_wrap` and `unit_from_document` all run AFTER `scan` has read the
+   page. Counted over the 49 layers: **24 distinct `parse_key` against 7 distinct `ocr_key`**,
+   so a filing that defeats the cascade was reading every page of itself **24 times to produce
+   7 answers**. `PdfParser._ocr_cache` now memoises the page under `(engine, dpi, crop_pad)`,
+   scoped to one document.
+2. ⚠️ **`P41` — THE CAPITAL-NOTE SCAN WAS 69-77 % OF A PARSE AND HAS NEVER APPEARED IN A LOG.**
+   `share_capital` walks from the last statement page to the END of the filing and calls
+   `_ocr_page` directly rather than through `scan`, so the page-progress hook never saw it.
+   Profiled: BID's FY-2016 annual **50 pages / 84.8 s / 68.8 % of one `parse()`**, VIC's
+   Q1-2026 **58 pages / 81.9 s / 76.6 %** — and **both returned nothing**. That is where the
+   missing time was: 23 passes of ETA-inverted page rates sum to 16 min against a 64.6 min run,
+   and the gap was this scan, invisible. `parse()` gained `want_shares` and `_parse_cascaded`
+   passes `not facts["publish_date"]` — **the same condition the value is READ under two lines
+   later**, so it is provably output-identical.
+3. **The recogniser bucketed its crops AFTER chunking them.** A vietocr batch is one
+   autoregressive decode and must share a padded width; the code sorted by ASPECT RATIO and
+   chunked by `batch_size`, and `predict_batch` then re-grouped each chunk by exact width —
+   **542 crops over 44 widths**, so a 24-crop chunk fragmented into a dozen decode loops of one
+   or two images. Bucketing first is **1.11-1.22x on recognition over four interleaved pairs,
+   with 0 of 542 crops changed**. ⚠️ **A first measurement said 1.37x and was measuring a
+   different thing** — it pre-computed each crop's tensor and skipped a resize the shipped
+   path still does. ⚠️ **The 2.35x version is not available from here**: bucketing across the
+   whole document is that much better, and taking it means recognising pages in blocks, while
+   `scan` reads each page's TEXT to decide whether to read the next. That would change which
+   pages are read — a change to the parse, not to its cost.
+   ⚠️ **Recognition is 85 % of an OCR pass** (render 1.2 %, detection 12.7 %, crop 1.1 %), so
+   this is the only part of the pass worth attacking.
+
+#### ⚠️ TWO FASTER THINGS WERE MEASURED AND REJECTED, and the first is the reason to trust the third
+
+- **Padding every crop in a chunk to a common width** is 2.0x faster again and changes
+  **70 of 542 crops** — `'Deloitte'` -> `'Deloitte.'`, `'ĐÃ ĐƯỢC KIỂM TOÁN TH'` ->
+  `'ĐÃ ĐƯỢC KIỂM TOÁN TRUNG'`. The recogniser is width-sensitive, so a fuller batch buys a
+  different answer. **The shipped change is bucketing precisely BECAUSE padding was tried
+  first**, and the 0-of-542 is what separates them.
+- **A rewritten greedy decode** — no per-step `.to('cpu')`, no `topk(5)` for a top-1, no
+  O(steps²) numpy rebuild of the token history — is **not faster** (3.00x against 3.07x) and
+  changed one crop. The decode is bound by the RNN step, not by the host work around it.
+
+#### ⚠️ VERIFIED ON `rows_sha`, NOT ON THE MAPPED CELLS
+
+`compare()` scores the cells that map to a chart of accounts — 76 for BID Q4-2016 — and says
+nothing about the rest of the statement. `rows_sha` digests **every row the OCR read**: label,
+the filing's own numbering, every figure. **BID, TCB and VCB all reproduce IDENTICAL `rows_sha`
+on all three statements, at the same winning layers**, BID's cash flow included — a statement
+that has to lose 46 layers and win on the 47th. **731 tests pass** across `src/`, 15 of them
+new (`test_cafef_ocr_cache.py`, no PDF, no network, no engine).
+
+⚠️ **AND ONE APPARENT REGRESSION WAS PROVEN NOT TO BE MINE, WHICH COST A 34.8-MINUTE RE-RUN
+AND WAS WORTH IT.** VIC Q1-2026 parsed at `onnx@200` on 2026-08-28 and is refused now. HEAD
+was stashed back in and run against **today's** disk: the same three absences, the same
+reasons, layer for layer. The cause is `sane` — every VIC balance sheet on disk is 2008-2014,
+and six more small quarters were merged on 2026-08-29, pulling the band's median to 5.11e13
+against Q1-2026's 1.18e15. **"The output changed" and "my change did it" are different claims,
+and only a re-run on the old code with today's data separates them.**
+
+#### ⚠️ WHAT IS NOT CLOSED
+
+`P41` is **reduced, not closed**. A filing whose pages carry no signing date leaves `facts`
+open, so every layer still asks for the counts — TCB Q3-2013 is exactly that, and it still came
+down 5.0x only because the page cache makes the repeats cheap. Two further reductions are
+measured-available and **deliberately not taken**, because both change behaviour rather than
+cost: `SHARE_NOTE_ANCHOR` is *"phat hanh cua ngan hang"*, so on `corp`/`securities`/`insurance`
+it can never match (**0 of 91 `corp` rows on disk carry a share count against 201 of 753
+`bank` rows**), and the walk has no page budget. ⚠️ **And `P38`/`P6` should NOT simply be
+divided by 6.8** — the multiplier applies to the failing tail and not to the 83 % of statements
+that win at layer 1. `web_scraper/CONTEXT.md` §3c.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

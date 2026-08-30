@@ -2041,6 +2041,147 @@ before running the suite. **2 tests, one per direction.**
 (`pdf_ocr_job.run` refuses to merge at all when the root is a payload), so honouring
 `$CAFEF_DATA_ROOT` could only point it at a copy that dies with a kernel.
 
+### ⚠️ 3c. THE CASCADE READ EVERY PAGE 24 TIMES TO GET 7 ANSWERS — `P41` + `P42`, 2026-08-30
+
+Two cost defects, measured together and fixed together. **Nothing about the parse, the gates,
+the layer order or the 49 layers moved**, and that is the claim the regression below has to
+carry: a change to the path that writes fundamentals is only worth having if the fundamentals
+do not move.
+
+| document | before | after | |
+|---|---|---|---|
+| **BID Q4-2016** — the hardest filing on disk, cash flow at layer 47 of 49 | **64.6 min** | **9.5 min** | **6.8x** |
+| **VIC Q1-2026** — `corp`, all three statements refused | 34.8 min | 5.2 min | **6.7x** |
+| **TCB Q3-2013** — three different layers, two at 300 dpi | 39.1 min | 7.9 min | **5.0x** |
+| VCB Q1-2026 — accepted at layer 1, ONE OCR pass | 1.4 min | 1.4 min | 1.0x |
+
+⚠️ **THE EASY DOCUMENT IS THE CONTROL AND IT IS SUPPOSED TO BE FLAT.** A filing accepted at
+layer 1 pays one OCR pass and one note scan; there is no repetition to remove. Everything
+below is about what a filing pays when it does NOT stop at layer 1 — which is ~17 % of
+quarters (§6-2-quindecies' three-ticker failure rate) and all of the tail of the cost
+distribution.
+
+#### `P42` · the parse cache keys on eleven fields; the OCR depends on three
+
+`_parse_cascaded` caches a whole parse under `parse_key`, which carries every `ParseLayer`
+flag because every one of them can change the ROWS. **Not one of them can change a recognised
+character**: `join_digits`, `title_over_form`, `loose_form_code`, `realign_rows`,
+`notes_boundary`, `tail_continuation`, `label_wrap` and `unit_from_document` all run AFTER
+`scan` has read the page, in `_page_kind`, `_fill_continuations`, `table_rows` or `parse`.
+Counted over the 49 layers: **24 distinct `parse_key` against 7 distinct `ocr_key`**.
+
+So `PdfParser._ocr_cache` memoises `(text, words)` per page under `(engine, dpi, crop_pad)`,
+scoped to one document (`_use_document`, cleared when `parse` is handed a different path — a
+parser instance is reused for a whole run by `_parser_for`, and page 3 of one filing is not
+page 3 of the next). ⚠️ **`_split_number_runs` stays OUTSIDE the cache**, because
+`join_split_digits` is per-LAYER: freezing it into the stored words would hand
+`onnx@200+join+components` the un-joined words of `onnx@200` and the flag would do nothing at
+all. A test drives exactly that.
+
+#### `P41` · the capital-note scan was 69-77 % of a parse, and invisible
+
+`share_capital` walks from the last statement page to the **END** of the filing, OCR-ing every
+page until it meets `SHARE_NOTE_ANCHOR`. It calls `_ocr_page` directly rather than through
+`scan`, so **the page-progress hook never saw it and it has never appeared in a run log** —
+which is why 23 passes of ETA-inverted page rates summed to 16 min against a 64.6 min run.
+Profiled per phase 2026-08-30:
+
+| filing | `scan` | `share_capital` | found |
+|---|---|---|---|
+| BID FY-2016 (bank, 62 pp) | 14 pages, 37.6 s, 30.5 % | **50 pages, 84.8 s, 68.8 %** | nothing |
+| VIC Q1-2026 (corp, 71 pp) | 14 pages, 24.5 s, 22.9 % | **58 pages, 81.9 s, 76.6 %** | nothing |
+
+`parse()` gained `want_shares`, and `_parse_cascaded` passes `not facts["publish_date"]` —
+**the same condition the block below the call reads the counts under**. `facts["shares"]` is
+assigned inside `if not facts["publish_date"]`, so once a layer has produced a signing date no
+later layer's counts can be looked at, while `parse()` went on paying for them once per parse
+key. `facts` cannot change between the two lines, so this is provably output-identical.
+
+⚠️ **IT IS REDUCED, NOT CLOSED, AND THE RESIDUE HAS A SHAPE.** A filing whose pages carry no
+signing date leaves `facts` open, so every layer still asks — TCB Q3-2013 is exactly that. The
+page cache makes the repeats cheap (the scan now costs once per OCR **configuration**, not
+once per parse key), which is why that document still came down 5.0x. Two further reductions
+are measured-available and deliberately NOT taken: `SHARE_NOTE_ANCHOR` is
+*"phat hanh cua ngan hang"*, so on `corp`/`securities`/`insurance` it can never match
+(**0 of 91 `corp` rows on disk carry a share count, against 201 of 753 `bank` rows**), and the
+walk has no page budget. Both are behaviour changes rather than cost changes, and neither was
+needed to get the 6.8x.
+
+#### The recogniser was bucketing its crops AFTER chunking them
+
+`_BatchedVietOcr.__call__` sorted crops by ASPECT RATIO and chunked by `batch_size`;
+`predict_batch` then re-grouped each chunk by the EXACT padded width `process_input` produces,
+because a vietocr batch is one autoregressive decode and must share a width. Measured on BID's
+FY-2016 filing: **542 crops over 44 distinct widths**, so a 24-crop chunk fragmented into a
+dozen decode loops of one or two images. Grouping by width FIRST and chunking each group is
+**1.11-1.22x on recognition, over four interleaved pairs, with 0 of 542 crops changed**;
+`REC_BATCH` went 24 -> 64 with it, because a chunk is now one real batch rather than a cap on
+how badly the crops can be regrouped.
+
+⚠️ **A FIRST MEASUREMENT OF THIS SAID 1.37x AND IT WAS MEASURING A DIFFERENT THING.** The
+benchmark pre-computed each crop's tensor once and handed it straight to `translate`, which
+skips the convert + LANCZOS-resize + normalise that `predict_batch` does internally — a saving
+the shipped code does not take. The shipped version asks vietocr's own `resize` for the WIDTH
+(pure arithmetic on `(w, h)`, verified to agree with `process_input` on all 542 crops) and lets
+`predict_batch` build the tensors as it always has.
+
+⚠️ **AND THE BIG NUMBER IS NOT AVAILABLE FROM HERE.** Bucketing across the WHOLE document
+rather than within a page is **2.35x**, also at 0 of 542 mismatches — 68 crops per page spread
+over 44 widths is a thin bucket however it is chunked. Taking it means recognising pages in
+blocks, and `scan` reads each page's TEXT to decide whether to read the next one (it stops at
+the notes boundary once all three statements are behind it). Deferring recognition would change
+which pages are read, which is a change to the parse and not to its cost.
+
+⚠️ **Recognition is 85 % of an OCR pass** — profiled at 200 dpi: render 1.2 %, detection
+12.7 %, cropping 1.1 %, **recognition 85.1 %**. Detection already runs on the GPU and the DB
+detector downsamples to `DET_SIDE_LEN` whatever the render DPI, so neither rasterising nor
+detecting is where the money is.
+
+#### ⚠️ TWO FASTER THINGS WERE MEASURED AND REJECTED
+
+1. **Padding every crop in a chunk to a common width** — 2.0x further, and **70 of 542 crops
+   came back different** (`'Deloitte'` -> `'Deloitte.'`, `'ĐÃ ĐƯỢC KIỂM TOÁN TH'` ->
+   `'ĐÃ ĐƯỢC KIỂM TOÁN TRUNG'`). The recogniser is width-sensitive; a fuller batch bought a
+   different answer. **That is why the change that shipped is bucketing and not padding**, and
+   it is why the 0-of-542 figure is quoted beside it.
+2. **A rewritten greedy decode** — no per-step `.to('cpu')`, no `topk(5)` for a top-1, no
+   O(steps^2) numpy rebuild of the whole token history. It is **not faster** (3.00x against
+   the bucketing's 3.07x on the same crops) and it changed one crop. The decode is bound by
+   the RNN step, not by the host work around it.
+
+#### What the change was verified against
+
+⚠️ **`rows_sha`, not the mapped cells.** `compare()` scores the cells that map to a chart of
+accounts — 76 for BID Q4-2016 — and says nothing about the rest of the statement. `rows_sha`
+digests **every row the OCR read**: the label, the filing's own numbering and every figure of
+every parsed row.
+
+| | |
+|---|---|
+| BID Q4-2016 | all three statements **IDENTICAL `rows_sha`**, same winning layer `onnx@200+pad6+annual+extra` |
+| TCB Q3-2013 | all three **IDENTICAL**, layers `onnx@200` / `onnx@300+unit+tail` / `onnx@300+unit` |
+| VCB Q1-2026 | all three **IDENTICAL**, and 98 of 98 cells `REPRODUCED` |
+| VIC Q1-2026 | all three refused — **identical refusal reasons, layer for layer** |
+
+⚠️ **AND VIC's REFUSAL WAS PROVEN PRE-EXISTING RATHER THAN ASSUMED.** VIC Q1-2026 parsed at
+`onnx@200` on 2026-08-28 and is refused now, which reads like a regression. It is not: HEAD
+was stashed back in and re-run against today's disk (34.8 min) and produced **the same three
+absences with the same reasons**. The cause is `sane` — every VIC balance sheet on disk is
+2008-2014, and six more small quarters (2011-2014) were merged on 2026-08-29, pulling the
+band's median to 5.11e13 while Q1-2026 is 1.18e15. **A stash-and-re-run is what separates "my
+change did this" from "the disk moved underneath it", and nothing cheaper does.**
+
+#### ⚠️ AND THE PROGRESS DENOMINATOR HAD TO MOVE WITH IT
+
+`run()` counted `parse_key` to size the overall %, so the first run under the cache printed
+*"OCR pass 23/24"* on a document that read its pages **7** times — a denominator naming work
+that no longer happens. `fin.ocr_key` is that denominator now, and `_parse_cascaded`'s
+`on_layer(cached=...)` means *"this layer reads no pixels"*, which folds three states into the
+two the bar can show: a repeated `parse_key` returns in milliseconds, a new `parse_key` whose
+`ocr_key` has already run re-maps cached pages, and only a new `ocr_key` costs a pass.
+
+**`test_cafef_ocr_cache.py` — 15 tests, no PDF, no network, no OCR engine.**
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

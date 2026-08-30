@@ -1361,12 +1361,16 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
     (folder / "documents").mkdir(parents=True, exist_ok=True)
 
     # ⚠️ THE DENOMINATOR OF THE OVERALL %, COMPUTED FROM THE PLAN AND NOT GUESSED: how
-    # many DISTINCT OCR passes this cascade can cost a document. `fin.parse_key` is the
-    # cache key `_parse_cascaded` itself uses, so 47 layers collapse to the ~12 passes
-    # they really are. ⚠️ It is a CEILING — a document accepted at layer 1 pays one pass,
-    # and layers whose engine is unavailable here (no tesseract) pay none — so the number
-    # under-reports progress rather than over-reporting it.
-    passes = len({fin.parse_key(layer) for layer in prepared.layers})
+    # many times this cascade can send a document's pages through the OCR. ⚠️ **`fin.ocr_key`
+    # AND NOT `fin.parse_key` — 7 against 24 over the 49 layers, counted 2026-08-30.** The
+    # parse cache keys on every layer flag because they change the ROWS; the page cache
+    # (`PdfParser._ocr_cache`) keys on `(engine, dpi, crop_pad)` because nothing else can
+    # change a recognised character. Counting parse keys here would report "OCR pass 23/24"
+    # on a document that read pixels seven times — a denominator naming the wrong work.
+    # ⚠️ It is still a CEILING: a document accepted at layer 1 pays one pass, and layers
+    # whose engine is unavailable here (no tesseract) pay none — so the number under-reports
+    # progress rather than over-reporting it.
+    passes = len({fin.ocr_key(layer) for layer in prepared.layers})
     log = Progress(len(tasks), log_path=folder / "run.log", label="_".join(symbols),
                    passes=passes)
     # ⚠️ **A WORKER MAY NOT WRITE THE STATEMENT CSVs, AND THE ROOT IS HOW WE KNOW.** On Kaggle

@@ -31,7 +31,7 @@ in VISUAL pdf-point space, so the row builder downstream cannot tell which engin
 
 # ===== Standard Library =====
 import os
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # ===== Third-party =====
 import numpy as np
@@ -77,7 +77,13 @@ VIETOCR_CONFIG = os.environ.get(
     "CAFEF_ONNX_VIETOCR_CONFIG", os.path.join(_MODELS_DIR, "vietocr_vgg_seq2seq.yml"))
 RENDER_DPI = 200
 MIN_SCORE = 0.25            # drop recognitions below this confidence (scan speckle detects as text)
-REC_BATCH = 24
+# ⚠️ Raised 24 -> 64 on 2026-08-30, WITH the width-bucketing in `_BatchedVietOcr.__call__`
+# and not before it. At 24, sorted by aspect ratio, a chunk fragmented into a dozen decode
+# loops of one or two images, so the number was not a batch size at all — it was a cap on how
+# badly the crops could be regrouped. Bucketed first, a chunk IS one batch. 64 rather than
+# larger because a page carries ~68 crops over ~44 widths: past that the chunk stops binding
+# and only the VRAM grows.
+REC_BATCH = 64
 
 # Margin added around each detected box BEFORE recognition, in pdf points (scaled to pixels at
 # the render DPI). The detector returns a box hugging the glyphs, and VietOCR misreads a crop
@@ -243,6 +249,29 @@ class _BatchedVietOcr:
 
     The stock vietocr `Predictor.predict` reads one crop at a time; a filing is thousands of
     crops, so they are bucketed by width (vietocr batches must share a width) and run in chunks.
+
+    ⚠️ **THE BUCKETING HAS TO HAPPEN BEFORE THE CHUNKING, AND IT USED TO HAPPEN AFTER.**
+    `predict_batch` re-groups whatever it is handed by the EXACT padded width
+    `process_input` produces (height 32, width rounded up to a multiple of 10), and a batch
+    is one autoregressive decode that runs until its longest sequence ends. Handing it a
+    chunk of `batch_size` crops sorted by ASPECT RATIO therefore split into a dozen buckets
+    of one or two images each: measured 2026-08-30 on BID's FY-2016 filing, **542 crops over
+    44 distinct widths**, i.e. ~12 crops per bucket spread across 23 separate calls. Grouping
+    by width FIRST and chunking each group makes every batch as full as the page allows.
+
+    ⚠️ **NOTHING IS PADDED TO A COMMON WIDTH, AND THAT IS A MEASUREMENT, NOT CAUTION.** Doing
+    so would fill the batches completely and is ~2x faster again — and it CHANGES WHAT THE
+    RECOGNISER READS: 70 of those 542 crops came back different, `'Deloitte'` as
+    `'Deloitte.'`, `'ĐÃ ĐƯỢC KIỂM TOÁN TH'` as `'ĐÃ ĐƯỢC KIỂM TOÁN TRUNG'`. The recogniser is
+    width-sensitive, so a faster batch bought a different answer. Re-grouping alone is
+    verified **0 of 542 crops changed**, which is what makes it shippable at all.
+
+    ⚠️ **WITHIN A PAGE THIS IS WORTH 1.11-1.22x (four interleaved pairs), NOT MORE.** 68 crops
+    over 44 widths is a thin bucket however it is chunked; bucketing across the whole DOCUMENT
+    is **2.35x** at the same 0 mismatches. That is deliberately not taken: `PdfParser.scan`
+    reads each page's TEXT to decide whether to read the next one, so deferring recognition to
+    a block boundary would change WHICH PAGES ARE READ — a change to the parse rather than to
+    its cost.
     """
 
     def __init__(self, arch: str = VIETOCR_ARCH, device: Optional[str] = None,
@@ -291,15 +320,32 @@ class _BatchedVietOcr:
     def __call__(self, crops) -> List[Tuple[str, float]]:
         if not crops:
             return []
-        order = sorted(range(len(crops)),
-                       key=lambda i: crops[i].width / max(1, crops[i].height))
+        # Group by the width `process_input` will pad each crop to — the same key
+        # `predict_batch` buckets on internally — so a chunk handed to it is ONE batch and
+        # one decode loop, not a dozen. Aspect ratio was a proxy for this and a poor one:
+        # it orders the crops correctly and then cuts across the buckets.
+        # ⚠️ **`resize` AND NOT `process_input` — the width, not the tensor.** vietocr's own
+        # `process_image` calls exactly this to decide the padded width, so importing it is
+        # what keeps the two in step; recomputing the rounding here would be a second copy of
+        # a rule that lives one function away. `process_input` would give the same answer and
+        # would also convert, LANCZOS-resize and normalise every crop a SECOND time —
+        # `predict_batch` does all of that itself moments later.
+        from vietocr.tool.translate import resize
+
+        cfg = self.predictor.config["dataset"]
+        widths: Dict[int, List[int]] = {}
+        for i, crop in enumerate(crops):
+            w, _ = resize(crop.width, crop.height, cfg["image_height"],
+                          cfg["image_min_width"], cfg["image_max_width"])
+            widths.setdefault(w, []).append(i)
         out: List[Tuple[str, float]] = [("", 0.0)] * len(crops)
-        for start in range(0, len(order), self.batch_size):
-            idx = order[start:start + self.batch_size]
-            texts, probs = self.predictor.predict_batch([crops[i] for i in idx],
-                                                        return_prob=True)
-            for i, text, prob in zip(idx, texts, probs):
-                out[i] = (text, float(prob))
+        for group in widths.values():
+            for start in range(0, len(group), self.batch_size):
+                idx = group[start:start + self.batch_size]
+                texts, probs = self.predictor.predict_batch([crops[i] for i in idx],
+                                                            return_prob=True)
+                for i, text, prob in zip(idx, texts, probs):
+                    out[i] = (text, float(prob))
         return out
 
 
