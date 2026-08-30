@@ -22,7 +22,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
 from .config import (
     BUILD_DIR,
@@ -353,16 +353,23 @@ def download(cfg: JobConfig) -> List[str]:
     return files
 
 
-def merge_results(cfg: JobConfig, force: bool = False) -> List[Path]:
-    """Copy each downloaded run folder into the repo's real report root.
+def merge_results(cfg: JobConfig,
+                  force: bool = False) -> Tuple[List[Path], List[Path]]:
+    """`(copied, already_present)` — the downloaded run folders, by what happened to each.
 
     A run folder is identified the way the rest of the repo identifies one: a
     directory holding `metadata.json`. Existing folders are never overwritten —
     `--force` is the only way, and it is for a re-download of the same run, not
     for a second run that happened to pick the same id.
+
+    ⚠️ **THE SECOND LIST IS NOT BOOKKEEPING — IT IS THE DIFFERENCE BETWEEN "NOTHING TO DO" AND
+    "NOTHING WAS DONE".** `pull` merges into `raw_data/` only what THIS pull copied, so a
+    folder already in the report root took the statement CSVs out of the round trip entirely,
+    and until 2026-08-30 the only trace was one line about the run FOLDER. Returning it lets
+    the caller say which of the two happened.
     """
     if not cfg.results_into:
-        return []
+        return [], []
 
     source_root = RESULTS_DIR / cfg.results_into
     target_root = REPO_ROOT / cfg.results_into
@@ -371,16 +378,18 @@ def merge_results(cfg: JobConfig, force: bool = False) -> List[Path]:
             f"⚠️ nothing under results/{cfg.results_into} — the run wrote no report "
             f"folder there. Check the notebook's REPORT_ROOT."
         )
-        return []
+        return [], []
 
     target_root.mkdir(parents=True, exist_ok=True)
     merged: List[Path] = []
+    present: List[Path] = []
     for run in sorted(p for p in source_root.iterdir() if p.is_dir()):
         if not (run / "metadata.json").exists():
             continue
         target = target_root / run.name
         if target.exists() and not force:
             print(f"  ⚠️ {run.name} already exists in {cfg.results_into} — skipped")
+            present.append(target)
             continue
         if target.exists():
             shutil.rmtree(target)
@@ -406,7 +415,7 @@ def merge_results(cfg: JobConfig, force: bool = False) -> List[Path]:
         # warning on every pull — a warning that always fires is a warning nobody reads, which
         # is the same argument `_payload_hash` makes about a staleness check that always fires.
         if cfg.data is not None and cfg.data.is_documents:
-            return merged
+            return merged, present
         shortlist = _shortlist_filename()
         without = [m.name for m in merged if not (m / shortlist).exists()]
         if without:
@@ -417,10 +426,11 @@ def merge_results(cfg: JobConfig, force: bool = False) -> List[Path]:
                 f"the archived feature_importance.csv, and check the execution log for "
                 f"why the notebook's own shortlist cell did not."
             )
-    return merged
+    return merged, present
 
 
-def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True) -> None:
+def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True,
+                     already_present: Optional[List[Path]] = None) -> int:
     """Upsert the pulled run folders' accepted statements into `raw_data/`.
 
     ⚠️ **THE WORKER CANNOT DO THIS AND NEVER COULD.** A Kaggle kernel writes
@@ -434,10 +444,34 @@ def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True) ->
     for had a worker ACCEPT an income statement the full local run REFUSED, because
     `seed_history` reconstructs the magnitude band from disk while a full run accumulates it
     in the run. Same machine result, different populations, different verdict.
+
+    Returns the number of statements actually written, so a caller can tell a merge that
+    refused everything from a merge that never ran.
+
+    ⚠️ **AN EMPTY `folders` USED TO RETURN IN SILENCE, AND THAT IS HOW A GREEN ROUND TRIP CAME
+    TO WRITE NO CSV WITH NOTHING SAYING SO.** `pull` passes only what it just copied, so a run
+    folder already in the report root — a re-pull, or a second push of the same job — leaves
+    this list empty. The run folder is on disk, the parse is fine, and the statement CSVs were
+    never opened. It now says which case it is and names the command that finishes the job.
     """
-    if not folders:
-        return
     import sys
+
+    if not folders:
+        if already_present:
+            print()
+            print("WARNING: NOTHING WAS MERGED INTO raw_data/.../statements/.")
+            print(f"  {len(already_present)} run folder(s) were already in "
+                  f"{cfg.results_into}, so this pull copied none — and only what a "
+                  f"pull copies is offered to the upsert.")
+            print("  The parse is on disk and the statement CSVs were NOT opened. "
+                  "To finish the job:")
+            print(f"      python -m kgpu merge {cfg.name}")
+            print("  (or re-run with force=True to re-copy the folder and merge it "
+                  "here.)")
+        else:
+            print()
+            print("WARNING: no run folder came home, so no statement CSV was written.")
+        return 0
 
     src = str(REPO_ROOT / "src")
     if src not in sys.path:
@@ -454,11 +488,48 @@ def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True) ->
           + ("\n  force_empty_band=True: a ticker with no history on disk is bootstrapped;"
              "\n  those figures passed NO magnitude guard (`BND-1`), so screen them"
              " before quoting any." if cfg.merge_force_empty_band else ""))
+    written = 0
     for folder in folders:
         if not (folder / "documents").is_dir():
             continue                     # not a pdf_ocr run folder
-        pdf_ocr_merge.merge_run(folder, apply=apply, force_differs=overwrite,
-                                force_empty_band=cfg.merge_force_empty_band)
+        report = pdf_ocr_merge.merge_run(folder, apply=apply, force_differs=overwrite,
+                                         force_empty_band=cfg.merge_force_empty_band)
+        # ⚠️ The worker wrote `metadata.json` and could not have known this; without writing
+        # the outcome back, the artefact says `merged_into_csv: false` on every Kaggle run
+        # forever, whatever the pull did with it.
+        if apply:
+            pdf_ocr_merge.record_merge(folder, report)
+        # ⚠️ **`report.written` IS THE FILE'S TOTAL, NOT THIS MERGE'S.**
+        # `_write` returns `{report: rows whose source is pdf}` over the WHOLE csv
+        # after the upsert, so summing it reports a ticker's entire history as
+        # though this run had produced it. What this run did is its own decisions.
+        written += len(report.to_write) if report.applied else 0
+    _say_what_landed(written, apply)
+    return written
+
+
+def _say_what_landed(written: int, apply: bool) -> None:
+    """One line, at the end, saying whether anything reached `raw_data/`.
+
+    ⚠️ **"THE RUN FINISHED" AND "THE CSV CHANGED" ARE DIFFERENT FACTS AND ONLY THE SECOND WAS
+    EVER THE POINT.** A bootstrap ticker whose every statement is refused for an empty band
+    prints a full page of `skip` lines and then a green finish; measured on HOSE_BSR and again
+    on HOSE_CTG, both 8-hour runs that wrote nothing (`BND-1`).
+    """
+    print()
+    if not apply:
+        print("  DRY RUN — no statement CSV was touched.")
+    elif written:
+        print(f"{written} statement(s) written into raw_data/.../statements/.")
+    else:
+        print("WARNING: 0 statements were written — every one was REFUSED. "
+              "The reasons are the `skip` lines above.")
+        print("  The commonest on a ticker with no CSV yet is an EMPTY `sane` band: "
+              "pass FORCE_EMPTY_BAND = True in the")
+        print("  control notebook (`--force-empty-band` on `kgpu merge`) to bootstrap "
+              "it. That lifts ONE guard and no")
+        print("  other, so screen the artefact before quoting anything from it "
+              "(`BND-1`).")
 
 
 def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
@@ -487,10 +558,13 @@ def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
         print(f"no run folder for {spec.get('exchange')}_{spec['symbol']} — pull one first")
         return 1
     print(f"merging {folder.name}")
-    pdf_ocr_merge.merge_run(
+    report = pdf_ocr_merge.merge_run(
         folder, apply=apply,
         force_differs=bool((cfg.parameters or {}).get("OVERWRITE", False)),
         force_empty_band=cfg.merge_force_empty_band)
+    if apply:
+        pdf_ocr_merge.record_merge(folder, report)
+    _say_what_landed(len(report.to_write) if report.applied else 0, apply)
     return 0
 
 
@@ -553,12 +627,14 @@ def pull(cfg: JobConfig, force: bool = False, progress=None) -> List[str]:
             progress.skip("merge", "nothing was downloaded, so there is nothing to merge")
         return files
     with _stage(progress, "merge", f"-> {cfg.results_into or 'results/ only'}"):
-        merged = merge_results(cfg, force=force)
+        merged, present = merge_results(cfg, force=force)
         # ⚠️ Only what THIS pull merged. A job whose folder already existed was skipped by
         # `merge_results`, and re-merging it into the CSVs would upsert a run the user did not
         # just fetch — the same class of surprise `--force` exists to make explicit.
+        # ⚠️ `present` travels with it so that "there was nothing to merge" cannot be printed
+        # as silence: those folders ARE the run the caller is waiting on.
         if cfg.merge_statements:
-            merge_statements(cfg, merged)
+            merge_statements(cfg, merged, already_present=present)
     return files
 
 

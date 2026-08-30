@@ -497,6 +497,93 @@ def merge_run(folder: os.PathLike | str,
     return result
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Recording the outcome back into the run folder
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def merge_event(report: MergeReport) -> dict:
+    """One merge, as the run folder records it — JSON, no Path objects, no I/O."""
+    return {
+        "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "applied": report.applied,
+        "backup": str(report.backup) if report.backup else None,
+        # ⚠️ NAMED FOR WHAT IT IS. `_write` returns the number of `pdf` rows in the WHOLE csv
+        # after the upsert, not the number this merge produced — summing it as "statements
+        # written" reports a ticker's entire history as this run's work. `statements_written`
+        # in the block below counts the DECISIONS instead.
+        "pdf_rows_on_disk": dict(report.written),
+        "decisions": [
+            {"period": d.period, "report": d.report, "action": d.action,
+             "reason": d.reason, "layer": d.layer, "items": d.items,
+             "on_disk": d.on_disk, "months": d.months, "note": d.note,
+             "columns_changed": len(d.changed)}
+            for d in sorted(report.decisions, key=lambda d: (d.period, d.report))
+        ],
+    }
+
+
+def merge_block(events: Sequence[dict]) -> dict:
+    """The `merge` block of a run folder's `metadata.json` — events plus their union.
+
+    ⚠️ **EVENTS, NOT A FLAG, because a folder is legitimately merged more than once.** The CTG
+    bootstrap took three calls — one per report, each carrying only the periods that survived
+    an external screen — and a single overwritten block would have kept the last and lost the
+    other two. A LOCAL run appends one event per QUARTER, for the same reason.
+
+    The union is keyed by `(period, report)` so a later event supersedes an earlier one for
+    the same statement, which is what a reader asking "is this quarter on disk?" needs.
+    """
+    latest: Dict[Tuple[str, str], dict] = {}
+    for ev in events:
+        for d in ev["decisions"]:
+            latest[(d["period"], d["report"])] = {**d, "applied": ev["applied"]}
+    written = [d for d in latest.values() if d["action"] == "write" and d["applied"]]
+    return {
+        "events": list(events),
+        "statements_written": len(written),
+        "statements_skipped": len(latest) - len(written),
+        "periods_written": sorted({d["period"] for d in written}, key=fin._period_key),
+    }
+
+
+def record_merge(folder: os.PathLike | str, report: MergeReport) -> Optional[Path]:
+    """Write what this merge DID into the run folder's `metadata.json`.
+
+    ⚠️ **THE ARTEFACT WAS SAYING `merged_into_csv: false` ON EVERY KAGGLE RUN, FOREVER, AND IT
+    WAS NOT A STALE FLAG — NOTHING COULD EVER HAVE SET IT.** `metadata.json` is written by the
+    process that PARSES, and on a Kaggle round trip that process is a worker which cannot
+    reach this disk (`pdf_ocr_job.run` turns its own upsert off for exactly that reason). The
+    merge happens later, here, on the pull — and until 2026-08-30 it wrote nothing back. So a
+    run that upserted 126 statements and a run that upserted none carried the identical
+    artefact, and the control notebook printed `upserted : False` for both.
+
+    That is §5 rule 10 at the artefact: the field recorded what was INTENDED at parse time,
+    and was read as what HAPPENED.
+
+    ⚠️ **`inputs.merged_into_csv` BECOMES TRUE ONLY IF SOMETHING WAS ACTUALLY WRITTEN.** An
+    applied merge that every refusal turned away is not a merge, and recording it as one would
+    re-create the defect one level down.
+
+    Returns the metadata path, or `None` when the folder carries no `metadata.json` — a LOCAL
+    run writes its metadata once, at the end, and builds the same block itself from the
+    reports it collected on the way.
+    """
+    path = Path(folder) / "metadata.json"
+    if not path.is_file():
+        return None
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    events = list((meta.get("merge") or {}).get("events") or []) + [merge_event(report)]
+    meta["merge"] = merge_block(events)
+    inputs = meta.setdefault("inputs", {})
+    inputs["merged_into_csv"] = (bool(inputs.get("merged_into_csv"))
+                                 or bool(meta["merge"]["statements_written"]))
+    if report.backup:
+        inputs["merge_backup"] = str(report.backup)
+    path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
 def latest_run(reports_root: os.PathLike | str, exchange: str, symbol: str) -> Optional[Path]:
     """The newest run folder for this ticker — run ids sort chronologically by construction."""
     root = Path(reports_root)

@@ -631,3 +631,108 @@ def test_a_run_that_knows_no_span_never_blanks_one_disk_already_has(root, tmp_pa
 
     assert report.to_write == []
     assert _rows(fin.CASH_FLOW)["Q4-2016"]["months"] == "12"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# recording the outcome back into the run folder
+#
+# ⚠️ **THE ARTEFACT USED TO SAY `merged_into_csv: false` ON EVERY KAGGLE RUN AND COULD NEVER
+# HAVE SAID ANYTHING ELSE.** `metadata.json` is written by the process that PARSES; on a
+# Kaggle round trip that is a worker with no path to this disk, and the pull that does the
+# merge wrote nothing back. A run that upserted 126 statements and one that upserted none
+# carried the identical file. These pin the fix.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_record_merge_writes_what_the_merge_actually_did(root, tmp_path):
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 900})})
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+    path = merge.record_merge(folder, report)
+
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    assert meta["merge"]["statements_written"] == 1
+    assert meta["merge"]["periods_written"] == ["Q3-2014"]
+    assert meta["inputs"]["merged_into_csv"] is True
+    written = [d for d in meta["merge"]["events"][0]["decisions"] if d["action"] == "write"]
+    assert [d["report"] for d in written] == [fin.BALANCE_SHEET]
+
+
+def test_a_merge_that_refused_everything_is_NOT_recorded_as_merged(root, tmp_path):
+    """⚠️ The defect one level down. An applied merge every refusal turned away is not a
+    merge, and a flag that says otherwise re-creates exactly what this block exists to fix."""
+    folder = _run_folder(
+        tmp_path, accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 900})},
+        bands={r: {"True": 0, "False": 0} for r in fin.REPORTS})
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+    path = merge.record_merge(folder, report)
+
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    assert report.to_write == []
+    assert meta["merge"]["statements_written"] == 0
+    assert meta["merge"]["statements_skipped"] == 3
+    assert meta["inputs"]["merged_into_csv"] is False
+
+
+def test_a_second_merge_APPENDS_rather_than_replacing(root, tmp_path):
+    """⚠️ A folder is legitimately merged more than once — the CTG bootstrap took three
+    calls, one per report, each carrying only the periods an external screen had cleared.
+    A block that overwrote would have kept the last and lost the other two."""
+    folder = _run_folder(tmp_path, accepted={
+        fin.BALANCE_SHEET: _statement(**{ASSETS: 900}),
+        fin.CASH_FLOW: _statement(**{PBT: 7})})
+
+    first = merge.merge_run(folder, apply=True, reports=[fin.BALANCE_SHEET], quiet=True)
+    merge.record_merge(folder, first)
+    second = merge.merge_run(folder, apply=True, reports=[fin.CASH_FLOW], quiet=True)
+    path = merge.record_merge(folder, second)
+
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    assert len(meta["merge"]["events"]) == 2
+    assert meta["merge"]["statements_written"] == 2
+    assert sorted(d["report"] for ev in meta["merge"]["events"]
+                  for d in ev["decisions"] if d["action"] == "write") == sorted(
+        [fin.BALANCE_SHEET, fin.CASH_FLOW])
+
+
+def test_a_later_event_supersedes_an_earlier_one_for_the_same_statement(root, tmp_path):
+    """The union is keyed by (period, report) — the question a reader asks is "is this
+    quarter on disk?", and the last word on it is the one that answers."""
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 900})})
+
+    merge.record_merge(folder, merge.merge_run(folder, apply=True, quiet=True))
+    # The second pass finds the row identical and skips it — the statement is still on disk.
+    path = merge.record_merge(folder, merge.merge_run(folder, apply=True, quiet=True))
+
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    assert len(meta["merge"]["events"]) == 2
+    assert meta["merge"]["statements_written"] == 0     # the LAST word: nothing was written
+    assert meta["inputs"]["merged_into_csv"] is True    # ...but it had been, and stays true
+
+
+def test_record_merge_is_silent_when_there_is_no_metadata_yet(root, tmp_path):
+    """A LOCAL run upserts quarter by quarter and writes its metadata once, at the end —
+    there is nothing to amend while it is still going, and inventing a file would leave a
+    run folder whose metadata predates its own results."""
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 900})})
+    (folder / "metadata.json").unlink()
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+
+    assert merge.record_merge(folder, report) is None
+
+
+def test_the_event_names_the_file_total_for_what_it_is(root, tmp_path):
+    """⚠️ `_write` returns the number of `pdf` rows in the WHOLE csv after the upsert, not
+    the number this merge produced. Summing it as "statements written" reports a ticker's
+    entire history as one run's work — which is the mistake this key's name prevents."""
+    _write_disk(fin.BALANCE_SHEET, "Q1-2014", **{ASSETS: 100})
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 900})})
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+    event = merge.merge_event(report)
+
+    assert "written" not in event
+    assert event["pdf_rows_on_disk"][fin.BALANCE_SHEET] == 2    # the file holds two
+    assert merge.merge_block([event])["statements_written"] == 1  # this run wrote one

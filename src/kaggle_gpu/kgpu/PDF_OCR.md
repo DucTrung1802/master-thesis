@@ -182,6 +182,40 @@ The notebook's last two cells read it; `metadata.json` carries the whole scoreca
 ⚠️ **`compare()` READS EVERY COLUMN, NOT THE FIGURES.** Two runs have been caught losing a
 single `publish_date` and nothing else — a figures-only diff called both of them clean.
 
+### ⚠️ Did it actually WRITE anything? — ask the artefact, then ask the CSV
+
+**"The run finished" and "the CSV changed" are different facts, and only the second was ever
+the point.** They came apart twice: HOSE_BSR (14 documents) and HOSE_CTG (**8 h 40 m, 201
+accepted cells**) both finished green, wrote complete run folders and created **no statement
+CSV at all**, because every statement was refused for an empty `sane` band (`BND-1`).
+
+Since 2026-08-30 there are three places to look, and the notebook's last three cells are them:
+
+| | says |
+|---|---|
+| `metadata.json` -> **`merge`** (schema **v3**) | one event per upsert plus their union — `statements_written`, `statements_skipped`, `periods_written`, and every decision with its reason |
+| `inputs.merged_into_csv` | ⚠️ **what HAPPENED, not what was asked for.** True only if something was actually written. The request is still there, as `inputs.merge_into_csv` |
+| the CSVs themselves | the notebook's last cell reads `bs_/is_/cf_<EXCHANGE>_<SYMBOL>.csv` and prints `pdf`/`missing`/`cafef` per report, and how many rows came from this run |
+
+⚠️ **UNTIL THAT BLOCK EXISTED, `merged_into_csv` READ `false` ON EVERY KAGGLE RUN AND COULD NOT
+HAVE READ ANYTHING ELSE** — `metadata.json` is written by the WORKER, which has no path to this
+disk, and the pull that does the merge wrote nothing back. On a v2 folder the **absent** block
+means *"this run predates the field"*, never *"nothing was written"*. `MRG-1`.
+
+⚠️ **AND A MERGE DECISION IS NOT IN THE WORKER'S `run.log`.** The merge runs HERE, after the
+pull, so a filter over that log finds only the PARSE's refusals — the notebook prints the two
+under separate headings for that reason. A cell that conflated them once printed *"no refusals
+— every statement was accepted"* over the CTG run that wrote nothing.
+
+⚠️ **A FOLDER ALREADY IN `reports/pdf_ocr/` IS NOT RE-MERGED.** `pull` offers the upsert only
+what it copied THIS time, so a re-pull or a second push of the same job leaves the CSVs
+untouched — deliberately, and it now says so and names the command:
+
+```powershell
+python -m kgpu merge <job>            # finishes it
+python -m kgpu merge <job> --force-empty-band     # ...for a ticker with no CSV yet
+```
+
 ### The log's shape — one line, leading with the OVERALL % (2026-08-30)
 
 Both machines print the same shape, from the same formatter (`utils/progress.py`), so a
@@ -261,7 +295,10 @@ that both gates accepted. The invariant that holds is **verified-equal output**,
 ## 6. Merging a recovered quarter into `raw_data/`
 
 It happens on its own: `MERGE_INTO_CSV = True` is the control notebook's default, so
-`kgpu run` merges as soon as the folder lands. To do it by hand, or to look first:
+`kgpu run` merges as soon as the folder lands — and **since 2026-08-30 every merge records what
+it did into the run folder's own `merge` block**, so *"did it write?"* is answerable from the
+artefact rather than from a log on the wrong machine (§4, `MRG-1`). To do it by hand, or to
+look first:
 
 ```powershell
 cd src\kaggle_gpu

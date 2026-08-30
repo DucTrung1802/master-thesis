@@ -1147,7 +1147,15 @@ def compare(builder: FinancialsBuilder, result: DocumentResult) -> Dict[str, dic
 #           no `engine_errors` key and `pdf_ocr_merge` reads that as "none recorded", which is
 #           the only reading available — it CANNOT mean "none happened", and the version is
 #           what lets a reader tell those apart.
-SCHEMA_VERSION = 2
+#   2 -> 3 (2026-08-30): a `merge` block records what reached `raw_data/.../statements/` —
+#           one event per upsert, plus their union. ⚠️ Before it, a KAGGLE run's
+#           `inputs.merged_into_csv` was `false` on EVERY run and could never have been
+#           anything else: `metadata.json` is written by the WORKER, which cannot reach this
+#           disk, and the pull that does the merge wrote nothing back. So a run that upserted
+#           126 statements and one that upserted none carried the identical artefact. On a v2
+#           folder the absent block means "this run predates the field", never "nothing was
+#           written" — which is exactly the distinction the version exists for.
+SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -1336,7 +1344,11 @@ def _upsert_period(folder: Path, task: DocumentTask, *, overwrite: bool,
     # sub-task is what says where these came from.
     for line in result.lines()[1:]:            # [0] repeats the ticker header
         log.line(line)
-    return result.backup
+    # ⚠️ **THE WHOLE REPORT, NOT JUST THE BACKUP PATH.** The caller records every merge into
+    # the run folder's own `metadata.json`, so that "what reached raw_data/?" is answerable
+    # from the artefact rather than by grepping a log — and answerable in the SAME shape a
+    # Kaggle pull writes (`pdf_ocr_merge.merge_block`), so one reader serves both machines.
+    return result
 
 
 def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
@@ -1387,6 +1399,13 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
     # None while every quarter is refused or identical, which is correct: nothing was changed,
     # so there is nothing to be able to restore.
     merge_backup: Optional[Path] = None
+    # ⚠️ One event per QUARTER on this path — the merge here runs between documents, so a
+    # single flag would say only that SOME quarter was written. `merge_block` folds them.
+    merge_events: List[dict] = []
+    # ⚠️ LOCAL, not at module scope: `pdf_ocr_merge` imports THIS module, so a top-level
+    # import here is a cycle. `_upsert_period` does the same, for the same reason.
+    from web_scraper import pdf_ocr_merge
+
     try:
         log.stage("plan")
         # ⚠️ SAID ONCE, AT THE TOP, BECAUSE THE NUMBER IS ON EVERY LINE AFTER IT. A reader
@@ -1468,10 +1487,12 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
             # never a quarter already on disk.
             if merge_into_csv:
                 log.stage("merge")
-                merge_backup = _upsert_period(
+                _report = _upsert_period(
                     folder, task, overwrite=spec.overwrite, log=log,
                     backup=merge_backup is None,
-                    force_empty_band=spec.force_empty_band) or merge_backup
+                    force_empty_band=spec.force_empty_band)
+                merge_events.append(pdf_ocr_merge.merge_event(_report))
+                merge_backup = _report.backup or merge_backup
     finally:
         timer.stop(ok=True)
 
@@ -1480,6 +1501,10 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
             f, fieldnames=list(rows[0]) if rows else ["period", "report", "status"])
         writer.writeheader()
         writer.writerows(rows)
+
+    # The same shape `kgpu pull` writes through `pdf_ocr_merge.record_merge`, so the control
+    # notebook and any later reader have ONE place to look on either machine.
+    merge_summary = pdf_ocr_merge.merge_block(merge_events) if merge_events else None
 
     metadata = {
         "schema_version": SCHEMA_VERSION,
@@ -1503,7 +1528,13 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
             # ⚠️ §5 rule 2 at the artefact: "no quarter was skipped" and "the skip was off"
             # are different facts, and only one of them says anything about the corpus.
             "skipped_already_parsed": [t.period for t in prepared.skipped],
-            "merged_into_csv": merge_into_csv,
+            # ⚠️ **WHAT HAPPENED, NOT WHAT WAS ASKED FOR.** This read `merge_into_csv` —
+            # the REQUEST — until 2026-08-30, so a run whose every statement was refused
+            # (an empty `sane` band, say) recorded `true` and looked like a run that wrote
+            # 126. The request is still visible: it is `inputs.merge_into_csv`, from
+            # `spec.to_json()` above.
+            "merged_into_csv": bool(merge_summary
+                                    and merge_summary["statements_written"]),
             "merge_backup": str(merge_backup) if merge_backup else None,
         },
         # ⚠️ `runtime.environment()` names the CARD; `engine_report()` names what each half of
@@ -1512,6 +1543,9 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
         "environment": {**runtime.environment(), "ocr": engine_report()},
         "execution": timer.summary(),
         "results": rows,
+        # ⚠️ ABSENT, never an empty block, when no merge was asked for: "nothing was written"
+        # and "no upsert ran" are different facts (§5 rule 2).
+        **({"merge": merge_summary} if merge_summary else {}),
     }
     (folder / "metadata.json").write_text(
         json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")

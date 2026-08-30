@@ -233,12 +233,18 @@ def _default_notes(exchange: str, symbol: str, periods, quarters, template) -> s
                      if len(quarters) > 3 else f"quarters={quarters}")
     filt = ", ".join(which) if which else "every period this ticker files"
     tpl = f"template={template} (stated)" if template else "template resolved on the worker"
+    # ⚠️ **THIS SENTENCE SAID "Writes a run folder and NO statement CSV" UNTIL 2026-08-30,
+    # WHICH HAD BEEN THE OPPOSITE OF THE TRUTH SINCE 2026-08-29** — `merge_statements`
+    # defaults to True, so the pull upserts. The notes are stamped into every run folder's
+    # `metadata.json`, so the artefact was telling a later reader the reverse of what the
+    # pull had just done to their disk. A default string is a claim like any other.
     return (
         f"{exchange}_{symbol} PDF parse on a Kaggle T4 — {filt}; {tpl}. "
-        f"Writes a run folder and NO statement CSV: compare() scores every parsed cell "
-        f"against the CSVs on disk, and merging a recovered quarter stays a deliberate "
-        f"Dagster act with a pre-run backup. Nothing from a non-bank template may be "
-        f"quoted as a fundamental (CRP-1)."
+        f"The WORKER writes only a run folder; the statement CSVs are upserted on THIS "
+        f"machine when the folder is pulled home, through pdf_ocr_merge and its four "
+        f"refusals, with a backup taken first. See the `merge` block of this file for what "
+        f"that decided. Nothing from a non-bank template may be quoted as a fundamental "
+        f"(CRP-1)."
     )
 
 
