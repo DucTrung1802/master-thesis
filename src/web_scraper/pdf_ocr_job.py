@@ -1039,6 +1039,15 @@ def run_document(builder: FinancialsBuilder, task: DocumentTask,
             "n_columns": statement.n_columns,
             "cash_flow_method": statement.cash_flow_method or "",
             "quarter_column": bool(statement.quarter_column),
+            # ⚠️ THE SPAN THESE FIGURES COVER, decided HERE where both terms are in hand —
+            # the index's `cumulative` flag and the filing's own "Quý N | Lũy kế" heading,
+            # which overrules it. `pdf_ocr_merge` writes it into the row's `months` column
+            # rather than deciding it again: a second copy of this rule would be wrong the
+            # first time either term moved.
+            "months": fin.statement_months(
+                report, task.period,
+                cumulative=bool(task.cumulative),
+                quarter_column=bool(statement.quarter_column)),
             "values": {k: int(v) for k, v in row.items()},
         }
     result.facts = {
@@ -1083,11 +1092,23 @@ def compare(builder: FinancialsBuilder, result: DocumentResult) -> Dict[str, dic
             entry["verdict"] = "no pdf row on disk to compare against"
             out[report] = entry
             continue
+        # ⚠️ **COMPARE SPANS, NOT `cumulative` FLAGS.** A YTD parse and a de-cumulated row
+        # disagree in every cell by construction, so scoring them would report a defect that
+        # is not one. But since 2026-08-30 a row can legitimately BE cumulative — the `months`
+        # column says so — and two 12-month readings of one filing are perfectly comparable.
+        # The test is therefore whether the two spans MATCH, which the older test could not
+        # ask because disk had no span to state. A disk row written before the column carries
+        # no span; that is unknown, not 3, so it is still skipped (§5 rule 2).
+        run_months = (got or {}).get("months")
+        disk_months = str(disk.get("months", "")).strip()
         if report == fin.INCOME_STATEMENT and result.task.cumulative:
-            entry["verdict"] = (
-                "skipped — the filing is cumulative and the row on disk is de-cumulated")
-            out[report] = entry
-            continue
+            if not (run_months and disk_months and str(run_months) == disk_months):
+                entry["verdict"] = (
+                    "skipped — the filing is cumulative and the row on disk "
+                    + (f"covers {disk_months} month(s), not {run_months}"
+                       if disk_months else "is de-cumulated"))
+                out[report] = entry
+                continue
 
         disk_values = _line_items(disk)
         run_values = {k: int(v) for k, v in got["values"].items()}

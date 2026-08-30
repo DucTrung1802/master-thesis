@@ -1349,6 +1349,24 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     income statement never left `onnx@200`, while **over 40% of cash flows needed a relaxed
     layer** — and it predicts a re-run's cost, since a tesseract quarter is minutes where an
     `onnx@200` one is seconds.
+  - **⚠️ `months` RECORDS THE SPAN A FLOW ROW COVERS** — 3 for a standalone quarter, 6/9/12
+    for a year-to-date figure that could not be split, blank for a balance sheet (a STOCK at
+    a date, so a span would be a category error) and for a `missing` row. Added 2026-08-30,
+    and it is the same move `consolidated` made: **two different things in one column with
+    nothing saying which is which**. Two consequences worth knowing before reading any flow
+    column:
+    - **the cash flow has ALWAYS been cumulative from 1 January**, so a Q3 row is nine
+      months. That was true before the column and unsaid; `statement_months` only writes it
+      down. ⚠️ **Read it before summing or diffing two rows of one column.**
+    - **it is what lets `_decumulate` KEEP a row it used to drop.** A cumulative Q2/Q4
+      income statement needs Q1..Q(q-1) subtracted from it; where those quarters were never
+      FILED — BSR before H2-2018, BID before 2012, VCB Q4-2008, **9 quarters measured** —
+      nothing will ever subtract them, so dropping is permanent loss rather than a deferral.
+      Where they WERE filed the drop stands, because a full `build()` can still do it
+      properly. ⚠️ **The set of filed periods must be the TICKER'S, never the RUN'S**, or
+      every subset run reads its own narrowing as "never filed"; `build()` captures it before
+      the `periods` filter and `pdf_ocr_merge._unfiled_priors` reads the PDF index at
+      `allow_parent=True`, the widest set there is.
   - **⚠️ A COLUMN ADDED HERE MUST BE ADDED TO `CAFEF_FINANCIAL_META_COLS`** in
     `data_preprocessor.py`. That list is defined by exclusion — a line item is "any column
     that is not meta" — so an unlisted text column is fed to a decimal cast and the bronze
@@ -1810,7 +1828,7 @@ contract to be wrong.
 
 | refused | the measurement |
 |---|---|
-| a **cumulative income statement** | an annual filing prints the year to date; the column holds the quarter, and a one-document run has no Q1..Q(q-1) to de-cumulate with |
+| a **cumulative income statement whose priors WERE filed** | an annual filing prints the year to date; the column holds the quarter, and a one-document run has no Q1..Q(q-1) to de-cumulate with. ⚠️ **Where those priors were NEVER FILED it is written instead**, carrying `months = 6`/`12` — nothing can ever split it, so refusing would be permanent loss rather than a deferral (BSR Q4-2016) |
 | an **empty `sane` band** | with no band the magnitude guard fails open — the documented way a subset run writes a wrong figure (§6-2-octodecies) |
 | a figure that **DIFFERS from a good `pdf` row** | `compare()` already scored it; two runs disagreeing is not resolved by preferring the newer |
 | a document whose parse **RAISED** (`VCR-1`, 2026-08-29) | a refusal measures the FILING, an exception measures the MACHINE — `vocr.vn`'s certificate expired, every `onnx@*` layer raised, and `tesseract@200` rewrote 13 columns of a filing that had reproduced 98 of 98 cells, both gates passing |

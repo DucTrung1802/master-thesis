@@ -165,6 +165,37 @@ def _period_key(period: str) -> Tuple[int, int]:
     return (int(y), int(q[1]))
 
 
+def statement_months(report: str, period: str, *,
+                     cumulative: bool, quarter_column: bool = False) -> Optional[int]:
+    """How many months of activity one written row covers — the value of the `months` column.
+
+    ⚠️ **THE THREE STATEMENTS ANSWER THIS DIFFERENTLY, AND ONLY ONE OF THEM IS EVER SPLIT.**
+
+      * **balance sheet** -> `None`. It is a STOCK read at a date, not a flow over a span;
+        a number of months would be a category error, not a missing value.
+      * **cash flow** -> `3 * q`. A VN filing's `lưu chuyển tiền tệ` is cumulative from
+        1 January in EVERY quarter — which is why `_decumulate`'s docstring says it is left
+        alone, and why every quarter of a year shares one opening balance (`CLAUDE.md`
+        §6-2-vicies used exactly that to convict a mis-read closing figure). So a Q3 cash
+        flow is nine months and always was; this only writes it down.
+      * **income statement** -> 3 when the filing printed a standalone-quarter column
+        (`quarter_column`) or is an ordinary quarterly one, else `3 * q` — the year-to-date
+        span it actually carries.
+
+    ⚠️ **`quarter_column` OUTRANKS `cumulative`, because the DOCUMENT outranks the INDEX.**
+    The index says a semi-annual or annual filing is cumulative; VCB's Q2-2014 prints
+    "Quý II" BESIDE "Lũy kế từ đầu năm", so its column 0 is already the quarter. `build()`
+    has always used the statement to overrule the index here (see where `half_year[period]`
+    is reset) and this must agree with it or the label would contradict the figure.
+    """
+    if report == BALANCE_SHEET:
+        return None
+    q = int(period[1])
+    if report == CASH_FLOW:
+        return 3 * q
+    return 3 if (quarter_column or not cumulative) else 3 * q
+
+
 PDFS_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "pdfs")
 FIN_DIR = os.path.join(CAFEF_RAW_DATA_DIR, "financials")
 
@@ -223,6 +254,27 @@ DATA_COLS = ["symbol", "exchange", "template", "period", "year", "quarter",
              # it before comparing two quarters of the same ticker.**
              "consolidated",
              "cash_flow_method", "unit", "n_columns",
+             # ⚠️ **HOW MANY MONTHS OF ACTIVITY THIS ROW COVERS** — 3 for a standalone
+             # quarter, 6/9/12 for a year-to-date figure that could not be split into one.
+             # Blank for a balance sheet (a STOCK at a date, not a flow over a span) and
+             # for a `cafef`/`missing` row.
+             #
+             # It became a column on 2026-08-30, for the same reason `consolidated` did:
+             # until then the CSV had exactly one way to hold a figure covering the wrong
+             # span, which was NOT TO HOLD IT. `_decumulate` dropped a cumulative Q2/Q4
+             # income statement whenever this run lacked its Q1..Q(q-1) priors — correct
+             # while the alternative was an unmarked 12-month figure in a 3-month column,
+             # and permanently lossy where those priors DO NOT EXIST: **BSR files no
+             # quarterly report at all for 2016, 2017 or H1-2018, and BID none before
+             # 2012**, so nine quarters across three tickers were unobtainable by
+             # construction rather than by any parse failure (measured 2026-08-30).
+             #
+             # ⚠️ **READ IT BEFORE SUMMING OR DIFFING TWO ROWS OF ONE COLUMN.** A row with
+             # `months = 12` is a year, printed in the quarter its filing closes; adding it
+             # to three quarterly rows counts that year twice. The cash flow has ALWAYS been
+             # cumulative-from-1-January (a Q3 row is 9 months, `CLAUDE.md` §6-2-vicies) and
+             # this is the first time the CSV says so out loud.
+             "months",
              "document",
              # Share capital read from the filing's "Vốn cổ phần" note — a per-DOCUMENT fact
              # (one filing, one note), so all three statements of a quarter carry the same
@@ -2747,6 +2799,13 @@ class FinancialsBuilder:
 
         docs = self.documents(exchange, symbol, allow_parent=allow_parent,
                               period_min=period_min)
+        # ⚠️ **WHICH QUARTERS THIS TICKER FILED AT ALL — captured BEFORE the `periods` subset
+        # filter, and it is what tells `_decumulate` apart from a gap it can blame on itself.**
+        # A cumulative Q2/Q4 income statement needs Q1..Q(q-1) to become a quarter. When those
+        # quarters were FILED and this run merely did not parse them, dropping the row is right:
+        # an authoritative run will do it properly. When no filing for them EXISTS, dropping it
+        # discards the only figure the corpus can ever hold for that period.
+        filed = {d["period"] for d in docs}
         if periods:
             docs = [d for d in docs if d["period"] in set(periods)]
 
@@ -2921,6 +2980,11 @@ class FinancialsBuilder:
                     # read from THIS filing: a company chooses the method and may switch it
                     "cash_flow_method": st.cash_flow_method or "",
                     "ocr_config": cfg,          # which cascade config produced this statement
+                    # the span these figures cover, AS PARSED. The income statement's is
+                    # rewritten to 3 by `_decumulate` on the rows it manages to split.
+                    "months": statement_months(report, period,
+                                               cumulative=bool(half_year.get(period)),
+                                               quarter_column=bool(st.quarter_column)),
                 }
                 # ⚠️ THE INDEX SAYS THE FILING IS CUMULATIVE; THE STATEMENT SAYS WHETHER IT
                 # ACTUALLY IS. A semi-annual or annual report is de-cumulated because it is
@@ -2966,7 +3030,7 @@ class FinancialsBuilder:
                 self._write(exchange, symbol, data, items, meta, attempted_so_far, template,
                             published, assurance, shares, merge=merge)
 
-        self._decumulate(data, half_year)
+        self._decumulate(data, half_year, meta, filed)
 
         # Whatever the filings could not give us, take from CafeF's own tabs. Keyed by item
         # CODE, so it lands on the canonical column exactly — for a quarter whose scan is too
@@ -3098,16 +3162,43 @@ class FinancialsBuilder:
         return out
 
     def _decumulate(self, data: Dict[str, Dict[str, dict]],
-                    half_year: Dict[str, bool]) -> None:
+                    half_year: Dict[str, bool],
+                    meta: Optional[Dict[str, Dict[str, dict]]] = None,
+                    filed: Optional[set] = None) -> None:
         """Turn a year-to-date income statement into the standalone quarter.
 
         A semi-annual filing prints only the cumulative Jan-Jun column, so its figures are
         Jan-Jun, not Apr-Jun. Nothing else catches this: the cumulative numbers reconcile
         perfectly against each other and 2x is well inside any magnitude band. The quarter is
-        recovered as YTD minus the quarters already accepted for that year; a line whose
-        prior quarters are not all available is DROPPED rather than guessed.
+        recovered as YTD minus the quarters already accepted for that year.
 
         Cash flow is NOT adjusted — it is cumulative by nature.
+
+        ⚠️ **A ROW THAT CANNOT BE SPLIT IS NOW KEPT AND LABELLED, NOT ALWAYS DROPPED — and
+        WHICH of the two depends on whether the priors were ever FILED.** Dropping was the
+        only safe answer while the CSV had no way to say "these figures are twelve months":
+        an unmarked YTD total in a quarterly column is the error this whole module exists to
+        prevent, and it cost ACB Q4-2010 once already. `months` says it out loud, so the two
+        cases separate:
+
+          * **the priors exist and this run did not parse them** -> DROP, exactly as before.
+            The quarter is recoverable — an authoritative run over the whole ticker will
+            subtract them — and writing the YTD figure now would pre-empt a better answer
+            with a worse one. This is every subset run, and it is the common case.
+          * **no filing for a prior quarter exists at all** -> KEEP, with `months = 3*q`.
+            Nothing will ever subtract quarters that were never reported, so the choice is
+            not "cumulative now or a quarter later", it is "cumulative now or nothing ever".
+            Measured 2026-08-30 across every parsed ticker: **9 quarters** are in this state —
+            BSR Q4-2016/Q4-2017/Q2-2018/Q4-2018 (it filed no quarterly report before H2-2018),
+            BID Q4-2008..Q4-2011 and VCB Q4-2008 (annual reports only) — against 7 that a full
+            run can still split properly.
+
+        ⚠️ **`filed` MUST BE THE TICKER'S WHOLE DOCUMENT SET, NOT THIS RUN'S.** Passing the
+        subset would read every subset run's own narrowing as "never filed" and write YTD
+        figures over quarters that are perfectly recoverable. `build()` captures it from
+        `documents()` before the `periods` filter for exactly that reason. With `filed=None`
+        nothing is kept — the caller has not said which case it is in, and §5 rule 2 says an
+        absent measurement is absent, never inferred in the permissive direction.
         """
         rows = data[INCOME_STATEMENT]
         for period in sorted(rows):
@@ -3116,8 +3207,19 @@ class FinancialsBuilder:
             # cumulative, and the quarter is what is left when the earlier quarters come off.
             if q == 1 or not half_year.get(period):
                 continue
-            prior = [rows.get(f"Q{i}-{year}") for i in range(1, q)]
+            priors = [f"Q{i}-{year}" for i in range(1, q)]
+            prior = [rows.get(pp) for pp in priors]
             if any(p is None for p in prior):
+                unfiled = [pp for pp in priors if filed is not None and pp not in filed]
+                if unfiled:
+                    self._warn(
+                        f"  {period}: cumulative, and {', '.join(unfiled)} "
+                        f"{'was' if len(unfiled) == 1 else 'were'} never filed — keeping the "
+                        f"{3 * q}-month figure, labelled `months={3 * q}`. It can never become "
+                        f"a quarter, and it is the only figure this period will ever have.")
+                    if meta is not None and period in meta[INCOME_STATEMENT]:
+                        meta[INCOME_STATEMENT][period]["months"] = 3 * q
+                    continue
                 self._warn(f"  {period}: cumulative, but Q1..Q{q-1} not all parsed — "
                            f"dropping (would otherwise be a 6-month figure in a "
                            f"quarterly row)")
@@ -3130,6 +3232,8 @@ class FinancialsBuilder:
                     continue
                 out[col] = ytd - sum(vals)
             rows[period] = out
+            if meta is not None and period in meta[INCOME_STATEMENT]:
+                meta[INCOME_STATEMENT][period]["months"] = 3
             self._log(f"  {period:<8} income_statement de-cumulated "
                       f"(YTD - Q1..Q{q-1}), {len(out)} items")
 
@@ -3201,6 +3305,8 @@ class FinancialsBuilder:
                        "cash_flow_method": prov.get("cash_flow_method", ""),
                        "unit": prov.get("unit", ""),
                        "n_columns": prov.get("n_columns", ""),
+                       # blank for a balance sheet (a stock) and for a row nothing produced
+                       "months": _blank(prov.get("months")),
                        "document": prov.get("document", ""),
                        # from the QUARTER's filing, shared across its three statements — blank
                        # for a cafef/missing quarter (the tabs have no share field)

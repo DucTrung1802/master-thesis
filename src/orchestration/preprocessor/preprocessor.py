@@ -1557,6 +1557,16 @@ class DataPreprocessor:
         # writer's `DATA_COLS` and this reader's list are two halves of one contract with
         # nothing enforcing the match; adding a column to one means adding it to the other.
         "consolidated",
+        # ⚠️ HOW MANY MONTHS OF ACTIVITY THE ROW COVERS — 3 for a standalone quarter,
+        # 6/9/12 for a year-to-date figure that could not be split, blank for a balance
+        # sheet (a stock) and for a `missing` row. Added 2026-08-30 with
+        # `FinancialsBuilder._decumulate`'s keep-and-label branch. ⚠️ **It must be listed
+        # here AND in `CAFEF_FINANCIAL_KEY_COLS`**: here so it is not treated as a line
+        # item, there so it stays ON the statement table beside `source` — a consumer
+        # summing a flow column has to know the span without a join, and it is the one
+        # piece of metadata that changes what the FIGURES mean rather than where they
+        # came from.
+        "months",
         "cash_flow_method",
         "unit",
         "n_columns",
@@ -1570,6 +1580,11 @@ class DataPreprocessor:
         "year",
         "quarter",
         "source",
+        # ⚠️ The SPAN of a flow row — see CAFEF_FINANCIAL_META_COLS."months". Kept here, not
+        # only in `cafef_financial_reports`, for the same reason `source` is: a reader of one
+        # statement must be able to tell a quarter from a year without joining another table,
+        # and summing four rows of which one is already a year double-counts that year.
+        "months",
     )
     # Share counts read from the filing's "Vốn cổ phần" note. A per-DOCUMENT fact like
     # publish_date, but — unlike the other meta — kept on EACH statement table (not split into
@@ -1806,7 +1821,11 @@ class DataPreprocessor:
                     df, decimal_cols=decimal_line_cols, bigint_cols=[]
                 )
                 df = self._helper_cast_columns(
-                    df, decimal_cols=[], bigint_cols=["year", "quarter", *share_cols]
+                    df,
+                    decimal_cols=[],
+                    # `months` is a whole number of months (3/6/9/12), never a fraction —
+                    # bigint like year/quarter, not decimal like the đồng figures.
+                    bigint_cols=["year", "quarter", "months", *share_cols],
                 )
                 df = self._helper_remove_duplicates(
                     df, primary_keys=["exchange", "ticker", "year", "quarter"]
@@ -2725,14 +2744,14 @@ class DataPreprocessor:
                 c
                 for c in df.columns
                 if c not in self.CAFEF_FINANCIAL_STATEMENT_TEXT_COLS
-                and c not in ("year", "quarter")
+                and c not in ("year", "quarter", "months")
             ]
             share_cols = [c for c in self.CAFEF_FINANCIAL_SHARE_COLS if c in line_cols]
             decimal_line_cols = [c for c in line_cols if c not in share_cols]
             df = self._helper_cast_columns(
                 df,
                 decimal_cols=decimal_line_cols,
-                bigint_cols=["year", "quarter", *share_cols],
+                bigint_cols=["year", "quarter", "months", *share_cols],
             )
 
             self._database_driver.drop_table(SILVER_SCHEMA, table_name)
@@ -3156,6 +3175,36 @@ class DataPreprocessor:
         q = q.copy()
         for c in num_cols:
             q[c] = pd.to_numeric(q.get(c), errors="coerce")
+
+        # ⚠️ **A P&L ROW THAT IS NOT A QUARTER MAY NOT ENTER A TRAILING-4-QUARTER SUM.**
+        # `income_statement_months` says how many months of activity the row covers, and
+        # since 2026-08-30 it can legitimately read 6 or 12: `_decumulate` KEEPS a
+        # year-to-date figure — labelled — where the quarters that would have been
+        # subtracted from it were never filed (BID before 2012, BSR before H2-2018, VCB
+        # Q4-2008). Summing such a row with three quarterly ones counts that year twice,
+        # and the result would reconcile against nothing that could catch it.
+        #
+        # NaN is the right way to exclude it, not a row drop: `_ttm` requires all four
+        # quarters (`min_periods=4`), so every window touching this quarter goes NULL —
+        # which is the docstring's own rule that *a gap makes the window NULL rather than
+        # wrong*. The BALANCE SHEET is untouched: a stock at 31 December is the Q4 stock
+        # whatever span the P&L beside it covers.
+        #
+        # ⚠️ A BLANK `months` IS LEFT ALONE, and it has to be. Every income-statement row
+        # written before the column existed was either de-cumulated or read from an
+        # ordinary quarterly filing — both 3 months — so blanking them would delete the
+        # whole bank history to guard against a case none of them is in. The column is the
+        # measurement; its absence is not evidence of the opposite (§5 rule 2).
+        span = pd.to_numeric(q.get("income_statement_months"), errors="coerce")
+        not_a_quarter = span.notna() & (span != 3)
+        if not_a_quarter.any():
+            for c in (self.BANK_FA_NET_INCOME, self.BANK_FA_PRETAX, self.BANK_FA_NII,
+                      self.BANK_FA_OP_INCOME, self.BANK_FA_OP_EXPENSE):
+                q.loc[not_a_quarter, c] = np.nan
+            self._logger.log_info(
+                f"  {int(not_a_quarter.sum())} quarter(s) carry a non-quarterly income "
+                f"statement (months != 3) — their P&L flows are excluded from the TTM sums."
+            )
 
         q = q.sort_values(key + ["year", "quarter"]).reset_index(drop=True)
         g = q.groupby(key, sort=False)

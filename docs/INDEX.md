@@ -94,7 +94,7 @@ one or two.**
 | open this | ~tokens | when you are… |
 |---|---|---|
 | [../src/kaggle_gpu/README.md](../src/kaggle_gpu/README.md) | 7.5k | running a repo notebook on a Kaggle T4. §7b PANEL MODE, §7's five measured traps |
-| [../src/kaggle_gpu/kgpu/PDF_OCR.md](../src/kaggle_gpu/kgpu/PDF_OCR.md) | 4.5k | **running the FILING OCR on a T4** — the control notebook, the `YEARS`/`PERIODS` filter, what a verdict means, and the five things that have actually gone wrong. ⚠️ §6 is when a recovered quarter may be merged, and it is a four-step procedure |
+| [../src/kaggle_gpu/kgpu/PDF_OCR.md](../src/kaggle_gpu/kgpu/PDF_OCR.md) | 5.5k | **running the FILING OCR on a T4** — the control notebook, the `QUARTERS`/`PERIODS` filter, what a verdict means, and the five things that have actually gone wrong. ⚠️ §6 is when a recovered quarter may be merged, and it is a four-step procedure; the merge's refusal table is where `months` — the span a row covers — is explained |
 | [../src/feature_selection/docs/RANKER_COMPARISON.md](../src/feature_selection/docs/RANKER_COMPARISON.md) | 4.5k | asking which ranker to keep, drop or add — the scorecard behind `feature_selection` §19 |
 | [../src/feature_selection/docs/NULL_DRAWS_VI.md](../src/feature_selection/docs/NULL_DRAWS_VI.md) | 3.8k | how many null draws, and why (VI) |
 | [../src/feature_selection/docs/NULL_DRAWS.md](../src/feature_selection/docs/NULL_DRAWS.md) | 3.1k | how many null draws, and why (EN) |

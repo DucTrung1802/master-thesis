@@ -96,6 +96,13 @@ class Decision:
     items: int = 0
     on_disk: str = ""            # the row's `source` before the merge
     changed: Dict[str, Tuple[Optional[int], Optional[int]]] = field(default_factory=dict)
+    # How many months of activity this row covers, when it is anything other than a quarter.
+    # Set only where refusal 1 let a year-to-date income statement through; `None` everywhere
+    # else, because the span is then the ordinary one and `_write` takes it from the run.
+    months: Optional[int] = None
+    # A caveat printed beside a WRITE. A write with a note is still a write — what the note
+    # says is what a reader would otherwise have to reconstruct from the PDF index.
+    note: str = ""
 
     @property
     def writing(self) -> bool:
@@ -127,6 +134,12 @@ class MergeReport:
             mark = "WRITE " if d.writing else "skip  "
             detail = f"[{d.layer}] {d.items} items" if d.layer else ""
             out.append(f"  {mark} {d.period:9} {d.report:18} {detail:32} {d.reason}")
+            # ⚠️ A CAVEAT ON A WRITE IS LOUDER THAN A REFUSAL, because a refusal stops and a
+            # write does not. The one that exists today says a row is 6 or 12 months. It is
+            # printed only for a WRITE: refusal 1 sets it before refusals 2-4 have had their
+            # say, and "written with months=12" beside the word `skip` would contradict itself.
+            if d.note and d.writing:
+                out.append(f"           ⚠️  {d.note}")
             for column, (was, now) in sorted(d.changed.items())[:8]:
                 out.append(f"           {column:56} {was} -> {now}")
             if len(d.changed) > 8:
@@ -171,6 +184,35 @@ def _backup(exchange: str, symbol: str, template: str, stamp: str) -> Path:
         if path.is_file():
             shutil.copy2(path, target / path.name)
     return target
+
+
+def _unfiled_priors(builder: FinancialsBuilder, exchange: str, symbol: str,
+                    period: str) -> List[str]:
+    """Which of `period`'s earlier quarters this ticker never filed a report for.
+
+    De-cumulating a Q2/Q4 income statement means subtracting Q1..Q(q-1) of the same year, so
+    an empty list is "a full `build()` could do it" and a non-empty one is "no run ever will".
+    That distinction is the whole of refusal 1: the same YTD figure is a bad write in the
+    first case and the only write available in the second.
+
+    ⚠️ **`allow_parent=True` — THE WIDEST POSSIBLE SET, DELIBERATELY.** This answers "does a
+    filing exist AT ALL", and it is used to justify writing a 12-month figure into a quarterly
+    row. A prior quarter reachable only through the standalone report still makes that claim
+    false, so it must count — the conservative direction is to keep refusing, and the operator
+    who knows better has `force_cumulative`.
+
+    ⚠️ It reads the PDF INDEX, not the statement CSVs: "was it filed" and "did we parse it"
+    are different questions, and only the first one is permanent.
+    """
+    year, quarter = int(period.split("-")[1]), int(period[1])
+    try:
+        filed = {d["period"] for d in
+                 builder.documents(exchange, symbol, allow_parent=True, period_min=None)}
+    except FileNotFoundError:
+        # No index on disk — we cannot show a prior quarter was never filed, so we must not
+        # claim it. An empty list keeps refusal 1 refusing, which is the safe direction.
+        return []
+    return [p for p in (f"Q{i}-{year}" for i in range(1, quarter)) if p not in filed]
 
 
 def plan_merge(folder: os.PathLike | str,
@@ -267,13 +309,38 @@ def plan_merge(folder: os.PathLike | str,
             decision = Decision(period, name, "write", "", layer=got.get("layer", ""),
                                 items=got.get("items", 0), on_disk=on_disk)
 
-            # ── refusal 1: a cumulative P&L is not a quarter ──────────────────────────
-            if name == fin.INCOME_STATEMENT and doc.get("cumulative") and not force_cumulative:
-                decision.action = "skip"
-                decision.reason = ("cumulative income statement — the filing prints the year "
-                                   "to date and this module does not de-cumulate")
-                report.decisions.append(decision)
-                continue
+            # ── refusal 1: a cumulative P&L is not a quarter — UNLESS it can never be one ─
+            #
+            # ⚠️ **THE SPAN COMES FROM THE RUN, NOT FROM THE INDEX'S `cumulative` FLAG.**
+            # `pdf_ocr_job` decided it with the filing's own column headings in hand, and a
+            # half-year report that prints "Quý II" BESIDE "Lũy kế" already IS the quarter —
+            # `months = 3`, and refusing it on the index's flag alone was an over-refusal.
+            # A run folder written before the field records no span, and the flag is then the
+            # only thing available: refuse, as before.
+            months = got.get("months")
+            cumulative = months > 3 if months is not None else bool(doc.get("cumulative"))
+            if name == fin.INCOME_STATEMENT and cumulative and not force_cumulative:
+                unfiled = _unfiled_priors(builder, exchange, symbol, period)
+                if not unfiled:
+                    # Every prior quarter WAS filed, so an authoritative `build()` over the
+                    # whole ticker can subtract them and produce the real quarter. Writing the
+                    # year-to-date figure now would pre-empt a better answer with a worse one.
+                    decision.action = "skip"
+                    decision.reason = (
+                        "cumulative income statement — this module does not de-cumulate, and "
+                        f"Q1..Q{int(period[1]) - 1}-{period.split('-')[1]} WERE filed, so a "
+                        f"full `build()` can subtract them")
+                    report.decisions.append(decision)
+                    continue
+                # ⚠️ NOTHING WILL EVER SUBTRACT QUARTERS THAT WERE NEVER REPORTED, so the
+                # choice here is not "cumulative now or a quarter later" — it is "cumulative
+                # now or nothing, ever". The row is written with `months` saying what it is,
+                # which is the whole reason that column exists; see `DATA_COLS`.
+                decision.months = months if months is not None else 3 * int(period[1])
+                decision.note = (f"{decision.months}-month figure — {', '.join(unfiled)} "
+                                 f"{'was' if len(unfiled) == 1 else 'were'} never filed, so "
+                                 f"no run can ever split it. Written with `months="
+                                 f"{decision.months}`")
 
             # ── refusal 2: `sane` had no band, so it could not have refused anything ──
             band = (bands.get(name) or {}).get(doc.get("consolidated", "True"), 0)
@@ -298,9 +365,25 @@ def plan_merge(folder: os.PathLike | str,
                     for column in sorted(set(values) | set(disk_values))
                     if disk_values.get(column) != values.get(column)}
                 changed = decision.changed
-                if not changed and disk.get("method") == got.get("layer"):
+                # ⚠️ **A ROW WHOSE FIGURES MATCH BUT WHOSE SPAN DISK DOES NOT RECORD IS NOT
+                # "IDENTICAL" — IT IS INCOMPLETE.** `months` arrived after most of the corpus
+                # was written, so every row parsed before it carries a blank there while the
+                # run in hand knows the answer. Rewriting fills it in and moves no figure.
+                # ⚠️ Only ever in that direction: when THIS run has no span (a folder written
+                # before the field) disk's value stands, because a blank overwriting a known
+                # 12 would destroy the one thing the column exists to say.
+                span_known = "" if got.get("months") is None else str(got["months"])
+                span_on_disk = str(disk.get("months", "")).strip()
+                fills_span = bool(span_known) and span_on_disk != span_known
+                if not changed and disk.get("method") == got.get("layer") and not fills_span:
                     decision.action = "skip"
                     decision.reason = "identical to the row already on disk"
+                    report.decisions.append(decision)
+                    continue
+                if not changed and fills_span:
+                    decision.reason = (
+                        f"same figures, same layer — recording the span this row covers "
+                        f"(`months`: {span_on_disk or 'unrecorded'} -> {span_known})")
                     report.decisions.append(decision)
                     continue
                 if changed and not force_differs:
@@ -388,6 +471,13 @@ def merge_run(folder: os.PathLike | str,
                     "cash_flow_method": got.get("cash_flow_method", "") or "",
                     "unit": got.get("unit", ""),
                     "n_columns": got.get("n_columns", ""),
+                    # ⚠️ **THE SPAN, TAKEN FROM THE RUN AND NEVER RE-DERIVED HERE.**
+                    # `pdf_ocr_job` decided it with both terms in hand (the index's
+                    # cumulative flag, and the filing's own "Quý N | Lũy kế" heading that
+                    # overrules it). A run folder written before this field simply has no
+                    # span recorded, and a blank is the only honest reading of that — §5
+                    # rule 2, never a default of 3.
+                    "months": got.get("months"),
                     "document": doc.get("document", ""),
                     "assurance": doc.get("assurance", "") or "",
                 }

@@ -5277,6 +5277,99 @@ did not exist on 2026-08-27**: `onnx@300+unit+tail` and `onnx@300+unit` shipped 
 quarter and this one-quarter run are not one measurement repeated, and §6-2-sexvicies has already
 withdrawn cross-run timings on this machine taken hours apart.
 
+### ✅ 6-2-unquadragies. BSR Q4-2016 — THE ROW WAS UNWRITEABLE BECAUSE THE CSV HAD NO WAY TO SAY "TWELVE MONTHS"
+
+Asked 2026-08-30: make `is_HOSE_BSR.csv` Q4-2016 parse. ⚠️ **It already parsed, and had for
+days** — 16 line items at `onnx@200`, layer 1 of 49, on page 9 of the FY-2016 audited
+consolidated filing, with **all five of the filing's own subtotals closing to the đồng**
+(net revenue, gross profit, operating profit, PBT, PAT). Nothing about the OCR was wrong. The
+blocker was one refusal in `pdf_ocr_merge`, and behind it a limitation of the CSV itself.
+
+**The FY-2016 annual prints the YEAR.** The Q4 income-statement column holds the standalone
+quarter, so Q4 = FY − (Q1+Q2+Q3) — and **BSR filed no quarterly report for 2016 at all**
+(CafeF lists exactly two 2016 documents, the parent and consolidated FY annuals). So the
+subtraction has no operands and never will. `_decumulate` dropped the row, the merge refused
+it, and both were right: **a 12-month total in a 3-month column with nothing saying so is the
+error this whole module exists to prevent**, and it cost ACB Q4-2010 once already.
+
+⚠️ **SO THE FIX IS NOT A PARSER CHANGE — IT IS A COLUMN.** `months` says how many months of
+activity a row covers, and it is the same move `consolidated` made on 2026-08-24 for the same
+reason: *two things in one column with nothing saying which is which is the same defect as
+sourcing a figure from a web tab*. With the span on the row the choice stops being "an
+unmarked wrong-span figure or nothing".
+
+| statement | `months` | why |
+|---|---|---|
+| balance sheet | **blank** | a STOCK read at a date. A span against it is a category error, not a missing value |
+| cash flow | **3·q** | cumulative from 1 January in every quarter — §6-2-vicies used exactly that to convict a mis-read closing balance. **A Q3 row has always been nine months; this is the first time the CSV says so** |
+| income statement | **3**, or **3·q** when it could not be split | and `quarter_column` outranks the index: VCB's Q2-2014 prints "Quý II" beside "Lũy kế", so it IS the quarter |
+
+#### ⚠️ WHICH OF "DROP" AND "KEEP" IS RIGHT DEPENDS ON A FACT NOBODY WAS CONSULTING — the PDF index
+
+`_decumulate` and the merge now ask the same question: **were the quarters that would be
+subtracted ever FILED?**
+
+* **filed, and merely not parsed in this run** → DROP, exactly as before. Every subset run is
+  in this case; the quarter is recoverable and writing the YTD figure now pre-empts a better
+  answer with a worse one.
+* **never filed** → KEEP, labelled. Nothing will ever subtract quarters that were not
+  reported, so the choice is not *"cumulative now or a quarter later"*, it is **"cumulative
+  now or nothing, ever"**.
+
+⚠️ **MEASURED ACROSS EVERY PARSED TICKER BEFORE THE RULE WAS WRITTEN — 9 quarters are in the
+second case and 7 in the first**, so the distinction is load-bearing rather than theoretical:
+
+| ticker | never de-cumulatable | a full `build()` could still split |
+|---|---|---|
+| **BSR** | Q4-2016, Q4-2017, Q2-2018, Q4-2018 — it filed no quarterly report before H2-2018 | Q2-2019, Q4-2019, Q2-2020, Q4-2020 |
+| **BID** | Q4-2008, Q4-2009, Q4-2010, Q4-2011 — annual reports only, as §6-2-quindecies recorded | — |
+| **VCB** | Q4-2008 | — |
+| VIC | — | Q4-2010, Q2-2013, Q4-2013 |
+| ACB, TCB | — | — |
+
+⚠️ **`filed` MUST BE THE TICKER'S WHOLE DOCUMENT SET, NEVER THE RUN'S.** Passing the subset
+would read every subset run's own narrowing as *"never filed"* and write YTD figures over
+quarters that are perfectly recoverable — so `build()` captures it from `documents()` BEFORE
+the `periods` filter, and the merge reads the PDF index directly at `allow_parent=True`, the
+widest possible set. ⚠️ **With no index on disk nothing is kept**: the claim "this was never
+filed" cannot be made without the evidence for it (§5 rule 2).
+
+#### ⚠️ AND THE OVER-REFUSAL IT EXPOSED: the merge was refusing statements `build()` never did
+
+Refusal 1 tested the INDEX's `cumulative` flag. `build()` has always let the DOCUMENT overrule
+it — a half-year filing printing its own quarter column *is* the quarter — so a run of VCB
+Q2-2014 through `pdf_ocr_merge` would have been refused where the authoritative path accepts.
+The refusal now reads the span, which is that override already applied. Latent, never fired,
+and it only became visible because the span had to be computed anyway.
+
+#### The result
+
+| | |
+|---|---|
+| the run | `pdf_ocr_job --symbol BSR --quarters 2016-Q4 --merge --force-empty-band`, **1m 17s**, accepted at `onnx@200` |
+| written | `is_HOSE_BSR.csv` Q4-2016 — `source=pdf`, `months=12`, `unit=1`, 16 line items, publish 2017-03-17. BSR's income statement **6 of 17** parsed, was 5 |
+| the arithmetic | **5 of 5** of the filing's own subtotals close to the đồng — revenue 73,686,050,815,612, PAT 4,435,734,601,163, and 4,483,216,556,061 + (−47,481,954,898) = PAT exactly |
+| the diff | pre-merge backup, **every column compared**: exactly ONE period changed in ONE statement, `months` added to all three files, **0 columns lost**, no other ticker touched |
+| tests | **359** in `src/web_scraper/` (24 new), **717** across `src/`, none needing a PDF, a network or an engine |
+
+⚠️ **THE TTM SUMS ARE GUARDED, AND THAT GUARD IS THE PRICE OF THE COLUMN.** A row with
+`months = 12` entering `_helper_build_bank_fundamental_indicators`' trailing-4-quarter sum
+would count a year twice, and nothing downstream could catch it — so a P&L row whose span is
+present and ≠ 3 has its flow columns NaN'd, which makes every window touching it NULL rather
+than wrong. ⚠️ **A BLANK span is left alone and has to be**: every income-statement row written
+before the column existed was either de-cumulated or read from an ordinary quarterly filing —
+both 3 months — so blanking them would delete the whole bank history to guard against a case
+none of them is in. ⚠️ **It is reviewed and NOT measured**: no bank row carries a non-blank
+`months` today, so the branch has never executed on real data.
+
+⚠️ **WHAT THIS DOES NOT DO.** It writes no figure that was not already parsed — the OCR
+cascade, the gates and the 49 layers are untouched. It does not make BSR quotable: `CRP-1`
+stands (`C_LIABILITIES` misses on `corp`, so a corp balance sheet still reconciles on the
+trivial `assets == resources`), and this quarter passed **no magnitude guard at all** —
+BSR Q4-2016 is the ticker's earliest period, so `seed_history` can never build a band for it
+and `force_empty_band` is unavoidable rather than convenient (`BND-1`). And the eight other
+never-de-cumulatable quarters are **not** written: reaching them needs a run each.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

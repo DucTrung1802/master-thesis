@@ -66,10 +66,13 @@ def _run_folder(tmp_path, *, period="Q3-2014", accepted=None, cumulative=False,
     return folder
 
 
-def _statement(layer="onnx@200", **values):
+def _statement(layer="onnx@200", months=None, **values):
+    """`months` is the span the run recorded — the default states none, which is both what a
+    balance sheet gets (a stock has no span) and what a folder written before 2026-08-30 has.
+    A test that cares about the span passes it."""
     return {"layer": layer, "items": len(values), "rows": 20, "rows_sha": "abc",
             "pages": [1], "unit": 1, "n_columns": 2, "cash_flow_method": "",
-            "quarter_column": False, "values": values}
+            "quarter_column": False, "months": months, "values": values}
 
 
 def _write_disk(report, period, source="pdf", method="onnx@200", **values):
@@ -156,9 +159,15 @@ def test_a_backup_is_taken_before_anything_is_written(root, tmp_path):
 def test_a_cumulative_income_statement_is_refused(root, tmp_path):
     """An annual filing prints the year to date and the CSV column holds the quarter.
     `pdf_ocr_job` cannot de-cumulate — a one-document run has no Q1..Q(q-1) — so writing its
-    figure would put a 9-month total in a 3-month column with nothing saying so."""
+    figure would put a 9-month total in a 3-month column with nothing saying so.
+
+    ⚠️ **`months=12` IS WHAT MAKES THIS STATEMENT CUMULATIVE, NOT THE FOLDER FLAG.** Since
+    2026-08-30 the run records the span it read, and the span outranks the index — a filing
+    the index calls cumulative that prints its own quarter column is a quarter. With no PDF
+    index on disk `_unfiled_priors` cannot show the priors were never filed, so the refusal
+    stands, which is the direction §5 rule 2 requires."""
     folder = _run_folder(tmp_path, cumulative=True, accepted={
-        fin.INCOME_STATEMENT: _statement(**{PBT: 4_807})})
+        fin.INCOME_STATEMENT: _statement(months=12, **{PBT: 4_807})})
 
     report = merge.merge_run(folder, quiet=True)
 
@@ -178,7 +187,7 @@ def test_the_cumulative_refusal_is_scoped_to_the_income_statement(root, tmp_path
 
 def test_force_cumulative_is_available_and_is_not_the_default(root, tmp_path):
     folder = _run_folder(tmp_path, cumulative=True, accepted={
-        fin.INCOME_STATEMENT: _statement(**{PBT: 4_807})})
+        fin.INCOME_STATEMENT: _statement(months=12, **{PBT: 4_807})})
 
     assert merge.merge_run(folder, quiet=True).to_write == []
     assert len(merge.merge_run(folder, force_cumulative=True, quiet=True).to_write) == 1
@@ -227,7 +236,8 @@ def test_force_empty_band_does_not_lift_the_OTHER_refusals(root, tmp_path):
     has nothing to do with the band, and bootstrapping a ticker must not smuggle it in."""
     folder = _run_folder(tmp_path, cumulative=True,
                          bands={r: {"True": 0, "False": 0} for r in fin.REPORTS},
-                         accepted={fin.INCOME_STATEMENT: _statement(**{PBT: 5_000})})
+                         accepted={fin.INCOME_STATEMENT: _statement(months=12,
+                                                                   **{PBT: 5_000})})
 
     report = merge.merge_run(folder, force_empty_band=True, quiet=True)
 
@@ -341,7 +351,7 @@ def test_writing_is_the_DEFAULT_and_the_refusals_are_what_keeps_it_honest(root, 
     assert _rows(fin.BALANCE_SHEET)["Q3-2014"][ASSETS] == "1000"
 
     refused = _run_folder(tmp_path / "refused", period="Q4-2014", cumulative=True, accepted={
-        fin.INCOME_STATEMENT: _statement(**{PBT: 4_807})})
+        fin.INCOME_STATEMENT: _statement(months=12, **{PBT: 4_807})})
     report = merge.merge_run(refused, quiet=True)
     assert report.to_write == []
     assert report.applied is False
@@ -484,3 +494,140 @@ def test_an_absolute_statements_dir_is_a_DELIBERATE_root_and_is_left_alone(root,
     merge.plan_merge(_run_folder(tmp_path))
 
     assert fin.STATEMENTS_DIR == before
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# refusal 1, second half — a YTD figure NOTHING can ever split
+#
+# ⚠️ Refusing a cumulative income statement is right while a later run can do better. It is
+# not right when no later run can: BSR filed no quarterly report for 2016 at all, so its
+# Q4-2016 P&L read `missing` for a reason that was never going to change. The span column is
+# what makes writing it safe — see `fin.DATA_COLS`."months".
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _write_index(base, *filed, symbol="TST"):
+    """A PDF index holding one consolidated filing per named period.
+
+    `("Q4-2016", 5)` files it as CafeF quarter 5 — the annual — which `documents()` folds
+    onto that year's Q4, exactly as it does for a real ticker.
+    """
+    path = base / "pdfs" / "index" / f"HOSE_{symbol}.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cols = ["symbol", "exchange", "year", "quarter", "period", "name", "consolidated",
+            "assurance", "half_year", "file_date", "bytes", "file", "path", "url"]
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=cols)
+        w.writeheader()
+        for entry in filed:
+            period, quarter = entry if isinstance(entry, tuple) else (entry, int(entry[1]))
+            year = period.split("-")[1]
+            w.writerow({"symbol": symbol, "exchange": "HOSE", "year": year,
+                        "quarter": quarter, "period": period, "name": period,
+                        "consolidated": "True", "assurance": "audited",
+                        "half_year": "False", "file_date": f"{year}-01-01", "bytes": 1,
+                        "file": f"{period}.pdf", "path": f"files/HOSE_TST/{period}.pdf",
+                        "url": ""})
+    return path
+
+
+def test_a_cumulative_pl_is_still_refused_when_its_priors_were_filed(root, tmp_path):
+    """The common case, and the one the refusal was written for: an authoritative `build()`
+    over the whole ticker CAN subtract Q1..Q3, so writing the year-to-date figure now would
+    pre-empt a better answer with a worse one."""
+    _write_index(root, "Q1-2016", "Q2-2016", "Q3-2016", ("Q4-2016", 5))
+    folder = _run_folder(tmp_path, period="Q4-2016", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=12, **{PBT: 4_807})})
+
+    report = merge.merge_run(folder, quiet=True)
+
+    assert report.to_write == []
+    assert "WERE filed" in _reason(report, fin.INCOME_STATEMENT).reason
+
+
+def test_a_cumulative_pl_whose_priors_were_never_filed_is_written_and_labelled(root, tmp_path):
+    """⚠️ Nothing will ever subtract quarters that were never reported, so the choice is not
+    "cumulative now or a quarter later" — it is "cumulative now or nothing, ever". Measured on
+    BSR, whose only 2016 filing is the FY-2016 annual."""
+    _write_index(root, ("Q4-2016", 5))
+    folder = _run_folder(tmp_path, period="Q4-2016", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=12, **{PBT: 4_807})})
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+
+    assert [d.report for d in report.to_write] == [fin.INCOME_STATEMENT]
+    row = _rows(fin.INCOME_STATEMENT)["Q4-2016"]
+    assert row[PBT] == "4807"
+    # the whole reason the write is allowed: the row says what span it covers
+    assert row["months"] == "12"
+    assert "never filed" in _reason(report, fin.INCOME_STATEMENT).note
+
+
+def test_a_missing_index_keeps_the_refusal_rather_than_assuming(root, tmp_path):
+    """⚠️ `_unfiled_priors` cannot show a quarter was never filed without the index, and §5
+    rule 2 says an absent measurement is absent — never read in the permissive direction."""
+    folder = _run_folder(tmp_path, period="Q4-2016", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=12, **{PBT: 4_807})})
+
+    assert merge.merge_run(folder, quiet=True).to_write == []
+
+
+def test_a_half_year_filing_that_prints_a_quarter_column_is_not_refused(root, tmp_path):
+    """⚠️ THE DOCUMENT OUTRANKS THE INDEX. VCB Q2-2014 prints its quarter column beside the
+    cumulative one, so column 0 is already the quarter — `months = 3` — and refusing it on
+    the index flag alone was an over-refusal `build()` has never made."""
+    _write_index(root, "Q1-2014", "Q2-2014")
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=3, **{PBT: 1_345})})
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+
+    assert [d.report for d in report.to_write] == [fin.INCOME_STATEMENT]
+    assert _rows(fin.INCOME_STATEMENT)["Q2-2014"]["months"] == "3"
+
+
+def test_a_run_folder_with_no_span_falls_back_to_the_cumulative_flag(root, tmp_path):
+    """A folder written before `months` existed records no span. The index flag is then the
+    only thing available, and it must still refuse."""
+    _write_index(root, "Q1-2016", "Q2-2016", "Q3-2016", ("Q4-2016", 5))
+    statement = _statement(**{PBT: 4_807})
+    statement.pop("months", None)
+    folder = _run_folder(tmp_path, period="Q4-2016", cumulative=True,
+                         accepted={fin.INCOME_STATEMENT: statement})
+
+    assert merge.merge_run(folder, quiet=True).to_write == []
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# filling in a span disk does not record
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_a_known_span_fills_an_unrecorded_one_without_touching_a_figure(root, tmp_path):
+    """Every row parsed before `months` existed carries a blank there. Same figures, same
+    layer, blank span: that is not `identical`, it is incomplete."""
+    _write_disk(fin.CASH_FLOW, "Q4-2016", **{PBT: 500})
+    folder = _run_folder(tmp_path, period="Q4-2016", accepted={
+        fin.CASH_FLOW: _statement(months=12, **{PBT: 500})})
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+
+    assert [d.report for d in report.to_write] == [fin.CASH_FLOW]
+    row = _rows(fin.CASH_FLOW)["Q4-2016"]
+    assert row["months"] == "12"
+    assert row[PBT] == "500"          # the figure did not move
+
+
+def test_a_run_that_knows_no_span_never_blanks_one_disk_already_has(root, tmp_path):
+    """⚠️ Only ever in one direction. A blank overwriting a known 12 would delete the one
+    thing the column exists to say."""
+    _write_disk(fin.CASH_FLOW, "Q4-2016", months="12", **{PBT: 500})
+    statement = _statement(**{PBT: 500})
+    statement.pop("months", None)
+    folder = _run_folder(tmp_path, period="Q4-2016",
+                         accepted={fin.CASH_FLOW: statement})
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+
+    assert report.to_write == []
+    assert _rows(fin.CASH_FLOW)["Q4-2016"]["months"] == "12"
