@@ -7,6 +7,11 @@
 > | **[`src/kaggle_gpu/RUN__pdf_ocr_control.ipynb`](../RUN__pdf_ocr_control.ipynb)** | the one you open. **One parameter cell**, and `ENVIRONMENT` decides where the OCR happens: `"LOCAL"` parses on this machine, `"KAGGLE"` builds the job, ships the filings, starts the kernel, waits and pulls the run folder back |
 > | `src/web_scraper/RUN__pdf_ocr.ipynb` | runs **on Kaggle**. `kgpu` patches its parameter cell and uploads it — you do not open or edit it |
 >
+> ⚠️ **A THIRD NOTEBOOK EXISTS AND PARSES NOTHING.**
+> [`RUN__pdf_ocr_summary.ipynb`](../RUN__pdf_ocr_summary.ipynb) is read-only and answers the
+> planning question instead — *which quarters are still missing, on every ticker at once*
+> ([§8](#8-what-is-still-missing--across-every-ticker-at-once)).
+>
 > ⚠️ **IT LIVES UNDER `kaggle_gpu/` AND DRIVES BOTH MACHINES** (since 2026-08-29). The folder
 > name is where its Kaggle half staged its payload from long before it had a LOCAL half; the
 > guide beside it is this file, which is why it was not moved.
@@ -391,7 +396,74 @@ and free; only `data`/`run` upload. CLAUDE.md §6-2-sextricies.
 
 ---
 
-## 8. Where the rest is written down
+## 8. What is still MISSING — across every ticker at once
+
+Sections 4 and 6 are about ONE run. The question they cannot answer is the planning one:
+**which quarters are left, on every ticker that has ever been parsed?**
+
+```powershell
+jupyter lab src\kaggle_gpu\RUN__pdf_ocr_summary.ipynb    # read-only: no OCR, no network, no write
+```
+
+It reads every `statements/**/*.csv` (all four templates), joins them to the **PDF index**
+through `FinancialsBuilder.documents()` itself, and returns one row per ticker:
+
+| column | |
+|---|---|
+| `exchange` | the listing board, read from the CSV's own column |
+| `complete` | `bool` — from `first_report` onward, **every quarter that HAS A FILING** carries a `pdf` row in all three statements |
+| `first_report` | the quarter that OPENS the contiguous filing chain — see below |
+| `balance_sheet` / `income_statement` / `cash_flow` | the LATEST outstanding quarter of each |
+
+Quarters print as `2008-Q4`, which sorts and is the `--quarters` / `QUARTERS` spelling
+[§2](#2-choosing-the-filings) takes — so a cell of this table pastes straight into a parse.
+
+⚠️ **THE DENOMINATOR IS THE FILING INDEX, AND IT HAS TO COME FROM OUTSIDE THE CSVs.** A
+`missing` row carries no `document` (CLAUDE.md §6-2-terdecies removed provenance from rows
+nothing produced), so within the statements CSV *"the company never filed"* and *"a filing
+exists and the parse failed"* are **the same word**. Outstanding cells therefore come in two
+shapes and both count: `missing` (a row exists, it was tried, a gate refused it) and `absent`
+(**no row at all** — the CSV grid never reached that quarter; VIC has 45 of these from the run
+that was stopped half way, and BID has 2026-Q2, published after the parse finished).
+
+### ⚠️ `first_report` is TWO rules, and each was measured on its own
+
+1. **It comes from the INDEX, never from the parse.** A mark taken from the first quarter that
+   *parsed* pushes every early failure out of its own denominator — `SAN-1`'s shape, a measure
+   learning its baseline from the thing it is measuring. BID read `complete = True` while its
+   Q3-2011 income statement was `missing`, on a filing whose other two statements read fine at
+   `onnx@200`.
+2. **The chain must be CONTIGUOUS, walking back from the ticker's NEWEST filing** (2026-08-30).
+   Touching a quarter with no filing ends it; an isolated old filing opens no chain. Anchored at
+   the ticker's own newest filing, not the calendar quarter — a delisted name still has a chain,
+   and the calendar anchor would break every ticker at step one.
+
+| ticker | the PDF index says | before | **after** | cells leaving the denominator |
+|---|---|---|---|---|
+| **ACB** | 2008-Q1, then **four empty quarters**, then 2009-Q2 → 2026-Q1 unbroken | 2008-Q1 | **2009-Q2** | 3 — all of one lone quarter |
+| **BSR** | 2016-Q4, 2017-Q3, 2017-Q4, **no 2018-Q1**, then 2018-Q2 → 2020-Q4 | 2017-Q3 | **2018-Q2** | 3 |
+| BID · TCB · VIC · VCB · CTG | no break after the mark | — | **unchanged** | 0 |
+
+⚠️ **CONTIGUITY IS MEASURED OVER EVERY FILING WHILE THE MARK IS STILL A QUARTERLY ONE — three
+variants were run before one was chosen.** `documents()` folds the audited annual onto Q4, so
+demanding contiguity over *quarterly* filings alone breaks at **every Q4** and the longest chain
+is three quarters. Taking the chain's own first quarter as the mark instead pulls VCB and CTG
+back to 2008-Q4 — a year that filed nothing but its annual — and hands VCB one more blocking
+cell, the cumulative Q4-2008 income statement that can never be split
+([§6](#6-merging-a-recovered-quarter-into-raw_data), CLAUDE.md §6-2-unquadragies). **Filter for
+contiguity first, then take the earliest QUARTERLY filing still inside the chain.**
+
+⚠️ **`complete = False` means *not proved continuous*, never *the parser is broken*.** A filing
+may not contain that statement at all, and a cumulative income statement with no Q1..Q(q-1) to
+subtract is refused by the merge by design (CTG has 32 such quarters).
+
+⚠️ **THE PDF INDEX IS NOT IN GIT** — `raw_data/` is ignored except `financials/` — so a fresh
+checkout cannot prove which quarters were filed. Those tickers read `complete = False` with a
+warning rather than a guess (CLAUDE.md §5 rule 2).
+
+---
+
+## 9. Where the rest is written down
 
 | | |
 |---|---|
