@@ -2241,6 +2241,61 @@ scoped `REPAIR` list instead: explicit `(quarter, statement)` pairs through `mer
 
 **`test_cafef_condensed_form.py` — 23 tests, no PDF, no network, no OCR engine.**
 
+### ⚠️ 3e. THE ARTEFACT SAID *THAT* A STATEMENT WAS ABSENT AND NEVER *WHY* — schema v4 (2026-08-31)
+
+`_parse_cascaded` prints the word `absent` for two failures that are nothing alike:
+
+| the reason | what it is | can a re-run change it? |
+|---|---|---|
+| `no such statement on any page of this filing` | a verdict on the **DOCUMENT** — the filing does not contain that statement | ❌ **never**, at any layer, engine or DPI |
+| everything else (`cash flow does not close`, `sane: magnitude …`, `no total assets`, …) | a verdict on a **PARSE** | ✅ a later layer, a better crop or a fixed anchor might |
+
+⚠️ **AND THE REASON LIVED IN `run.log` PROSE ALONE, SO NOTHING COULD TELL THEM APART.** ACB's
+Q2-2009 and Q3-2009 cash flows were put through **all 50 layers four times on 2026-08-30** — the
+filings are §3d's three-page Mẫu CBTT-03 forms and hold no cash flow, so not one of those runs
+could have succeeded. Re-measured 2026-08-31 before anything was changed, three independent
+ways: Q3-2009's own **text layer** (3 pages, `I.B. BẢNG CÂN ĐỐI KẾ TOÁN` + `II.B. KẾT QUẢ HOẠT
+ĐỘNG KINH DOANH`, **0 occurrences** of `LƯU CHUYỂN` or `TIỀN TỆ`), Q2-2009 through
+`PdfParser.scan` itself (`balance_sheet, balance_sheet, income_statement`), and all 50 layers
+returning that one reason. ⚠️ **`documents()` offers no alternate**, and a live re-enumeration
+through Dagster (`raw/cafef_pdfs`, `HOSE_ACB`, `year_min/max: 2009`) left the index
+**byte-identical** — CafeF still lists 4 PDFs for 2009.
+
+**So the reason is DATA now**, by the same argument `layer_errors` was made data for — *a
+WARNING is prose, and the decision downstream must not depend on matching a sentence*:
+
+- `cafef_financials.NO_SUCH_STATEMENT` is a constant, and `_parse_cascaded` publishes
+  `self.refusals` beside `self.layer_errors`. **No gate, threshold or layer ordering moved.**
+- `DocumentResult.absent_reasons` → `{report: [(layer, why)]}` in each document JSON, collapsed
+  to **distinct reasons only, first layer that gave each**, exactly as the log prints them.
+  Only statements that ended up ABSENT are recorded: a reason a later layer overturned is a step
+  in the cascade, not a verdict on the filing.
+- `pdf_ocr_job.settled_absences(reports_root, exchange, symbol)` reads it back out of past run
+  folders → `{YYYY-QQ: {report: run_id}}`.
+
+⚠️ **IT ANSWERS ONLY FROM RECORDED REASONS.** A folder older than **schema v4** carries none and
+contributes **nothing** — never *"nothing was permanently absent"* (§5 rule 2). So a quarter it
+returns has been MEASURED unproducible; a quarter it omits has not been measured either way.
+
+⚠️ **KEYED `YYYY-QQ` THOUGH THE ARTEFACT STORES `QQ-YYYY`.** The caller compares against a batch
+filter a person wrote, and `normalise_quarter` — the only way one gets in — yields the sortable
+form. Returning the artefact's spelling would put `as_quarter` at every call site, which is one
+place per caller to forget; comparing the two spellings directly matches **nothing** and looks
+exactly like *"nothing is settled"*.
+
+⚠️ **AND IT REPORTS RATHER THAN FILTERS.** A filing can be re-uploaded — CafeF published a BID
+Q2-2026 after that ticker was parsed (CLAUDE.md §6-2-quindecies) — so a settled absence is
+settled about the **document that was read**, not about the ticker forever. The control
+notebooks print it *before* any OCR is spent and the person decides.
+
+⚠️ **A separate finding this turned up and NOBODY HAS ACTED ON: ACB Q1-2009 is `missing` in all
+three statements because its only filing is a `.rar`** (`ACB_09Q1_BCTC.rar`), dropped by
+`_is_pdf_link`. Not an OCR failure, and §5 rule 24 says nothing about an archive the company
+itself filed.
+
+**`test_pdf_ocr_settled_absences.py` — 7 tests, no PDF, no network, no OCR engine**, including
+the one that matters most: a pre-v4 folder must contribute nothing rather than a guess.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

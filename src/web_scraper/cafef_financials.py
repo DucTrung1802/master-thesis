@@ -362,6 +362,21 @@ def ocr_key(layer: ParseLayer) -> tuple:
     return (layer.engine, layer.dpi, layer.crop_pad)
 
 
+# ⚠️ **THE ONE REFUSAL THAT IS NOT A FAILURE, AND IT IS A CONSTANT SO NOBODY RE-TYPES IT.**
+# Every other reason `_parse_cascaded` records is a verdict on a PARSE — a total that would not
+# balance, a magnitude the guard refused, a label it could not map — and a later layer, a better
+# crop or a fixed anchor can overturn any of them. This one is a verdict on the DOCUMENT: the
+# filing does not contain that statement, so no layer, no engine and no re-run can produce it,
+# and `missing` is the correct and permanent answer (§5 rule 24).
+#
+# ⚠️ It is the reason a **BÁO CÁO TÀI CHÍNH TÓM TẮT** (Mẫu CBTT-03, Thông tư 38/2007/TT-BTC)
+# yields no cash flow: that form carries a condensed balance sheet and a four-line P&L and
+# nothing else. ACB's Q2-2009 and Q3-2009 are three pages each and are exactly this — measured
+# 2026-08-30, both from the filing's own text layer and through the OCR scan — and their cash
+# flow was re-run four times in one day because only prose said so.
+NO_SUCH_STATEMENT = "no such statement on any page of this filing"
+
+
 class FinancialsBuilder:
     """Build quarterly financial statements for a ticker from its LOCAL PDF archive.
 
@@ -921,7 +936,19 @@ class FinancialsBuilder:
         accepted: Dict[str, tuple] = {}
         # {report: [(layer name, why it was refused)]} — kept so an absent statement can say
         # WHY. Populated even for reports that later succeed; only the absent ones are printed.
+        #
+        # ⚠️ **ALSO PUBLISHED ON THE BUILDER, FOR THE SAME REASON `layer_errors` IS.** The
+        # reason a statement is absent was reported through `_warn` ONLY until 2026-08-31, so
+        # every reader downstream had to match a sentence in a log to learn it — and the one
+        # sentence that matters most, `no such statement on any page of this filing`, is the
+        # difference between a PERMANENT `missing` (the filing does not contain that
+        # statement, §5 rule 24) and a refusal a later layer might still overturn. ACB's 2009
+        # quarterlies are a **BÁO CÁO TÀI CHÍNH TÓM TẮT** (Mẫu CBTT-03) carrying a balance
+        # sheet and a four-line P&L and NO cash flow at all, and their cash flow was re-OCR'd
+        # four times in one day because nothing but prose said so. A run whose artefact
+        # records the reason cannot cost that again.
         refused: Dict[str, List[Tuple[str, str]]] = {}
+        self.refusals = refused
         # ⚠️ **A LAYER THAT RAISES IS NOT A LAYER THAT REFUSED, AND THE DIFFERENCE DECIDES
         # WHETHER A RESULT MAY BE BELIEVED.** A refusal is a measurement of the document; an
         # exception is a broken tool, and the cascade's answer then comes from whichever layer
@@ -1005,7 +1032,7 @@ class FinancialsBuilder:
                 st = statements.get(report)
                 if st is None:
                     refused.setdefault(report, []).append(
-                        (layer.name, "no such statement on any page of this filing"))
+                        (layer.name, NO_SUCH_STATEMENT))
                     continue
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals,
                                          relax_split_tail=layer.relax_split_tail,

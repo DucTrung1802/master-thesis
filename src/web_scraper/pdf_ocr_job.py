@@ -925,6 +925,13 @@ class DocumentResult:
     # verdict on the filing. A run with any of these was decided by whichever layer the broken
     # tool did not reach, so `pdf_ocr_merge` refuses to write from it.
     engine_errors: List[tuple] = field(default_factory=list)
+    # ⚠️ `{report: [(layer, why)]}` for every statement the cascade REFUSED — distinct reasons
+    # only, each attributed to the first layer that gave it, exactly as the log prints them.
+    # It is here because one of those reasons is not a failure at all: `no such statement on
+    # any page of this filing` says the filing does not CONTAIN that statement, which makes
+    # `missing` permanent and correct (§5 rule 24) and every re-run of it waste. Kept as DATA
+    # rather than left in the prose of `log`, so a reader does not have to match a sentence.
+    absent_reasons: Dict[str, List[tuple]] = field(default_factory=dict)
 
     def to_json(self) -> dict:
         return {
@@ -940,6 +947,8 @@ class DocumentResult:
             "accepted": self.accepted,
             "absent": self.absent,
             "engine_errors": [list(e) for e in self.engine_errors],
+            "absent_reasons": {r: [list(x) for x in v]
+                               for r, v in self.absent_reasons.items()},
             "facts": self.facts,
             "error": self.error,
             "log": self.log,
@@ -998,6 +1007,19 @@ def run_document(builder: FinancialsBuilder, task: DocumentTask,
     # decision downstream ("was this parse decided by a broken tool?") must not depend on
     # matching a sentence.
     result.engine_errors = list(getattr(builder, "layer_errors", []))
+    # ⚠️ Collapsed exactly as `_parse_cascaded` prints it — DISTINCT reasons only, each
+    # attributed to the FIRST layer that gave it. 50 layers usually refuse the same two or
+    # three ways, and an artefact carrying all 50 buries the one that matters. Only the
+    # statements that ended up ABSENT are recorded: a reason a later layer overturned is a
+    # step in the cascade, not a verdict on the filing.
+    for _report, _tried in getattr(builder, "refusals", {}).items():
+        if _report in accepted:
+            continue
+        _first: Dict[str, str] = {}
+        for _layer, _why in _tried:
+            _first.setdefault(_why, _layer)
+        result.absent_reasons[_report] = [(_layer, _why)
+                                          for _why, _layer in _first.items()]
     if result.engine_errors:
         engines = sorted({name.split("@")[0] for name, _ in result.engine_errors})
         logger.log_warning(
@@ -1155,7 +1177,15 @@ def compare(builder: FinancialsBuilder, result: DocumentResult) -> Dict[str, dic
 #           126 statements and one that upserted none carried the identical artefact. On a v2
 #           folder the absent block means "this run predates the field", never "nothing was
 #           written" — which is exactly the distinction the version exists for.
-SCHEMA_VERSION = 3
+#   v4 (2026-08-31) — `absent_reasons` on each document JSON: `{report: [(layer, why)]}` for
+#           the statements the cascade REFUSED, distinct reasons only, first layer that gave
+#           each. The reason lived in `run.log` prose alone, so no reader could separate *"this
+#           filing does not CONTAIN a cash flow"* from *"the OCR could not read it"* — and the
+#           two print the same word. ACB's Q2/Q3-2009 cash flows were re-run through all 50
+#           layers four times on 2026-08-30 for want of that distinction. ⚠️ On a v<4 folder an
+#           absent `absent_reasons` means "this run predates the field", never "nothing was
+#           permanently absent" — `settled_absences` reads it that way and contributes nothing.
+SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -1313,6 +1343,54 @@ class PreparedJob:
 NO_VIETOCR_CONFIG = ("⚠️ NONE — vietocr will FETCH base.yml from vocr.vn on every "
                      "Predictor build, and a failure there falls the cascade through to "
                      "tesseract")
+
+
+def settled_absences(reports_root: os.PathLike, exchange: str, symbol: str,
+                     ) -> Dict[str, Dict[str, str]]:
+    """`{YYYY-QQ: {report: run_id}}` for statements a PAST run proved the filing does not hold.
+
+    ⚠️ **THIS EXISTS TO STOP A RE-RUN THAT CANNOT WORK, AND THE LOOP IT STOPS WAS REAL.** The
+    cascade's refusal for *"this filing contains no cash flow"* and its refusal for *"the OCR
+    could not read this scan"* are both the word `absent` in the period line, and only the
+    reason separates them — which lived in prose until 2026-08-31. ACB's Q2-2009 and Q3-2009
+    cash flows were re-OCR'd through all 50 layers four times on 2026-08-30 alone; the filings
+    are three-page **BÁO CÁO TÀI CHÍNH TÓM TẮT** forms (Mẫu CBTT-03) carrying a balance sheet
+    and a four-line P&L, and no run could ever have produced a cash flow from them.
+
+    ⚠️ **IT ANSWERS ONLY FROM RECORDED REASONS, NEVER BY INFERENCE.** A run predating
+    `absent_reasons` (schema < 4) contributes NOTHING rather than a guess — an absent record is
+    absent, not evidence either way (§5 rule 2). So a quarter this returns has been MEASURED to
+    be unproducible; a quarter it omits has not been measured to be producible.
+
+    ⚠️ And it is deliberately not a filter. It reports, the caller decides — a filing can be
+    re-uploaded (§6-2-quindecies: CafeF published a BID Q2-2026 after that ticker was parsed),
+    so a settled absence is settled about the DOCUMENT that was read, not about the ticker
+    forever.
+
+    ⚠️ **KEYED `YYYY-QQ`, THOUGH THE ARTEFACT STORES `QQ-YYYY`.** The caller is comparing
+    against a batch filter a person wrote, and `normalise_quarter` — the only way one gets in —
+    yields the sortable form. Returning the artefact's own spelling would put the conversion at
+    every call site, which is one place per caller to get wrong and to forget; `as_quarter` is
+    the converter and it runs here, once.
+    """
+    settled: Dict[str, Dict[str, str]] = {}
+    pattern = f"*__{exchange.lower()}_{symbol.lower()}__pdf_ocr"
+    for folder in sorted(Path(reports_root).glob(pattern), key=lambda f: f.name):
+        for doc in sorted((folder / "documents").glob("*.json")):
+            try:
+                data = json.loads(doc.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            # ⚠️ `.get` with no default-to-guess: a run that recorded no reasons says nothing,
+            # and must not be read as "nothing was permanently absent".
+            for report, tried in (data.get("absent_reasons") or {}).items():
+                if any(why == fin.NO_SUCH_STATEMENT for _layer, why in tried):
+                    try:
+                        quarter = as_quarter(data.get("period", ""))
+                    except Exception:  # noqa: BLE001 — an unreadable period names no quarter
+                        continue
+                    settled.setdefault(quarter, {})[report] = folder.name
+    return settled
 
 
 def _name(path: Optional[str]) -> str:

@@ -1152,7 +1152,7 @@ R² −0.90 → −0.059 on the same ticker, target and splits, at 4,961 paramet
 `pool__basic` build; a rebuild of the 750-channel table would INNER-join back down to
 2026-06-25 **and look unchanged**. `status_data` reports it as `pools_behind`.
 
-## 6. State today (2026-08-30)
+## 6. State today (2026-08-31)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section
 is the bug.** It was 7 days stale once already.
@@ -5965,6 +5965,58 @@ two are independent. ⚠️ **ACB Q1-2008 is now probably recoverable and was NO
 fourth VNI filing, in range, and every one of its cells reads `missing` today. ⚠️ And these
 figures passed **no magnitude guard**: `force_empty_band` was unavoidable (`BND-1`), so the
 arithmetic above is what replaced it.
+
+### ✅ 6-2-septquadragies. THE SAME TWO QUARTERS, A FOURTH AND FIFTH TIME — and the artefact never said WHY
+
+Asked 2026-08-31 to make ACB's Q2-2009 and Q3-2009 cash flows parse. **They cannot, they never
+could, and §6-2-sesquadragies had already measured that** — the filings are three-page
+`BÁO CÁO TÀI CHÍNH TÓM TẮT` forms (Mẫu CBTT-03) carrying a condensed balance sheet and a
+four-line P&L and no cash flow at all. The value of the session is the second half: **why that
+finding did not stop the re-runs**, and what now does.
+
+**Re-measured before anything was changed, three independent ways plus a live check:**
+
+| | |
+|---|---|
+| Q3-2009's own TEXT LAYER | 3 pages — `I.B. BẢNG CÂN ĐỐI KẾ TOÁN` (1-2), `II.B. KẾT QUẢ HOẠT ĐỘNG KINH DOANH` (3, four lines, then the signature). **0 occurrences** of `LƯU CHUYỂN` or `TIỀN TỆ` |
+| Q2-2009 (a scan) through `PdfParser.scan` itself | `balance_sheet, balance_sheet, income_statement`; page 1 reads `Mẫu CBTT - 03 … (Quý 02/2009)` |
+| the cascade | **all 50 layers, ONE reason**: `no such statement on any page of this filing` |
+| `documents()` | exactly one document per quarter, **no alternate** |
+| a LIVE re-enumeration through Dagster (`raw/cafef_pdfs`, `HOSE_ACB`, `year_min/max: 2009`) | index **byte-identical**; CafeF still lists 4 PDFs for 2009 |
+
+⚠️ **THE REFUSAL THAT IS PERMANENT AND THE REFUSAL THAT IS RECOVERABLE PRINT THE SAME WORD.**
+`absent` covers both *"the filing does not CONTAIN this statement"* — a verdict on the DOCUMENT,
+which no layer, engine or DPI can overturn, and where `missing` is correct and permanent (§5
+rule 24) — and *"every layer refused the one it found"*, which a later layer might still take.
+**The reason lived in `run.log` prose alone**, so the notebook, the merge and every reader had
+to match a sentence to learn which kind they had. The run folders record **four full 50-layer
+runs of these two quarters on 2026-08-30**, and this request was the fifth.
+
+✅ **So the reason is DATA now** — by the argument `layer_errors` was already made data for,
+*a WARNING is prose and the decision downstream must not depend on matching a sentence*:
+`NO_SUCH_STATEMENT` is a constant, `_parse_cascaded` publishes `self.refusals`, each document
+JSON carries `absent_reasons` (**artefact schema v3 → v4**), and
+`pdf_ocr_job.settled_absences()` reads it back → `{YYYY-QQ: {report: run_id}}`. Both control
+notebooks print it **before any OCR is spent**. ⚠️ **No gate, threshold or layer ordering
+moved**, and `raw_data/` did not change by a byte — verified by `git status` after two full
+notebook runs with `MERGE_INTO_CSV = True`, where the existing refusals correctly wrote nothing.
+
+⚠️ **IT ANSWERS ONLY FROM RECORDED REASONS.** A run folder older than v4 carries none and
+contributes **nothing** — never *"nothing was permanently absent"* (§5 rule 2). A quarter it
+returns has been MEASURED unproducible; a quarter it omits has not been measured either way.
+⚠️ **And it reports rather than filters**: a filing can be re-uploaded (§6-2-quindecies), so a
+settled absence is settled about the DOCUMENT that was read, not about the ticker forever.
+
+⚠️ **THE GENERAL LESSON, and it is `DEP-1`/`SAN-1`/`CWD-1`'s for the seventh time: a measurement
+that exists only as prose is a measurement the next session cannot act on.** §6-2-sesquadragies
+stated this conclusion in as many words on 2026-08-30 and it did not prevent one re-run, because
+nothing a person or a notebook reads at the moment of deciding carried it. **The register that
+stops a repeat is the ARTEFACT, not the write-up.**
+
+⚠️ **One finding turned up on the way and is NOT acted on: ACB Q1-2009 is `missing` in all three
+statements because its only filing is a `.rar`** (`ACB_09Q1_BCTC.rar`), dropped by
+`_is_pdf_link`. Not an OCR failure, and §5 rule 24 is silent on an archive the company itself
+filed. `web_scraper/CONTEXT.md` §3e.
 
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
