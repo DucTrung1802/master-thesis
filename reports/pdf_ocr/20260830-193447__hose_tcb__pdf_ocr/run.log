@@ -1,0 +1,106 @@
+  0.0% - HOSE_TCB - plan - overall %    : documents finished + OCR passes done of the 7 this 49-layer cascade can cost, over 1 document(s) — a POSITION IN THE PLAN, never a fraction of the time
+  0.0% - HOSE_TCB - plan - symbol       : HOSE_TCB
+  0.0% - HOSE_TCB - plan - template     : bank   (detect_template (CafeF fingerprint, over the network))
+  0.0% - HOSE_TCB - plan - documents    : 1  (Q1-2014)
+  0.0% - HOSE_TCB - plan - quarters     : ['2014-Q1']   selected ['2014-Q1']
+  0.0% - HOSE_TCB - plan - skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]
+  0.0% - HOSE_TCB - plan - cascade      : 49 of 49 layers
+  0.0% - HOSE_TCB - plan - data root    : D:\GIT\master-thesis\raw_data\cafef
+  0.0% - HOSE_TCB - plan - models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+  0.0% - HOSE_TCB - plan - vietocr cfg  : D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml
+  0.0% - doc 1/1 HOSE_TCB Q1-2014 - open - Q1-2014_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2014.pdf  2.9 MB  bank/consolidated
+  0.0% - doc 1/1 HOSE_TCB Q1-2014 - band - balance 7, income 9, cash 7   open_ref=17196728000000
+  0.0% - doc 1/1 HOSE_TCB Q1-2014 - layer 1/49 onnx@200 - OCR pass 1/7
+  0.2% - doc 1/1 HOSE_TCB Q1-2014 - layer 1/49 onnx@200 - page 1/63   1% of this pass
+  1.6% - doc 1/1 HOSE_TCB Q1-2014 - layer 1/49 onnx@200 - page 7/63  11% of this pass   ~48 s left
+ 14.3% - doc 1/1 HOSE_TCB Q1-2014 - layer 2/49 onnx@300 - OCR pass 2/7
+ 14.5% - doc 1/1 HOSE_TCB Q1-2014 - layer 2/49 onnx@300 - page 1/63   1% of this pass
+ 15.9% - doc 1/1 HOSE_TCB Q1-2014 - layer 2/49 onnx@300 - page 7/63  11% of this pass   ~36 s left
+ 28.6% - doc 1/1 HOSE_TCB Q1-2014 - layer 3/49 onnx@400 - OCR pass 3/7
+ 28.8% - doc 1/1 HOSE_TCB Q1-2014 - layer 3/49 onnx@400 - page 1/63   1% of this pass
+ 30.2% - doc 1/1 HOSE_TCB Q1-2014 - layer 3/49 onnx@400 - page 7/63  11% of this pass   ~42 s left
+ 42.9% - doc 1/1 HOSE_TCB Q1-2014 - layer 4/49 tesseract@200 - OCR pass 4/7
+ 43.1% - doc 1/1 HOSE_TCB Q1-2014 - layer 4/49 tesseract@200 - page 1/63   1% of this pass
+ 44.4% - doc 1/1 HOSE_TCB Q1-2014 - layer 4/49 tesseract@200 - page 7/63  11% of this pass   ~76 s left
+ 45.4% - doc 1/1 HOSE_TCB Q1-2014 - layer 5/49 onnx@200+relax - cached parse, re-map only
+ 45.4% - doc 1/1 HOSE_TCB Q1-2014 - layer 6/49 onnx@300+relax - cached parse, re-map only
+ 57.1% - doc 1/1 HOSE_TCB Q1-2014 - layer 7/49 tesseract@400+relax - OCR pass 5/7
+ 57.4% - doc 1/1 HOSE_TCB Q1-2014 - layer 7/49 tesseract@400+relax - page 1/63   1% of this pass
+ 58.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 7/49 tesseract@400+relax - page 7/63  11% of this pass   ~86 s left
+ 59.6% - doc 1/1 HOSE_TCB Q1-2014 - layer 8/49 onnx@200+components - cached parse, re-map only
+ 59.6% - doc 1/1 HOSE_TCB Q1-2014 - layer 9/49 onnx@300+components - cached parse, re-map only
+ 59.6% - doc 1/1 HOSE_TCB Q1-2014 - layer 10/49 onnx@200+relax+components - cached parse, re-map only
+ 71.4% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - OCR pass 6/7
+ 71.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 1/63   1% of this pass
+ 73.0% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 7/63  11% of this pass   ~35 s left
+ 74.6% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 14/63  22% of this pass   ~44 s left
+ 76.2% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 21/63  33% of this pass   ~47 s left
+ 77.8% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 28/63  44% of this pass   ~41 s left
+ 79.4% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 35/63  55% of this pass   ~31 s left
+ 80.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 41/63  65% of this pass   ~23 s left
+ 81.2% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 43: text lines are vertical (28/28 boxes) — reading it at /Rotate 90
+ 82.3% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 48/63  76% of this pass   ~16 s left
+ 83.9% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 55/63  87% of this pass   ~8 s left
+ 84.4% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 57: text lines are vertical (38/38 boxes) — reading it at /Rotate 90
+ 84.8% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 59: text lines are vertical (29/29 boxes) — reading it at /Rotate 90
+ 85.5% - doc 1/1 HOSE_TCB Q1-2014 - layer 11/49 onnx@200+pad6+components - page 62/63  98% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 12/49 onnx@200+pad6+relax+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 13/49 onnx@300+split - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 14/49 onnx@300+split+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 15/49 onnx@200+join+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 15/49 onnx@200+join+components - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 15/49 onnx@200+join+components - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 16/49 onnx@200+join+relax+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 17/49 onnx@200+title - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 17/49 onnx@200+title - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 17/49 onnx@200+title - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 18/49 onnx@200+title+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 19/49 onnx@200+loose - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 19/49 onnx@200+loose - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 19/49 onnx@200+loose - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 20/49 onnx@200+loose+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 21/49 onnx@400+loose - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 21/49 onnx@400+loose - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 21/49 onnx@400+loose - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 22/49 onnx@400+loose+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 23/49 onnx@300+loose - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 23/49 onnx@300+loose - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 23/49 onnx@300+loose - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 24/49 onnx@300+loose+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 25/49 onnx@200+title+loose - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 25/49 onnx@200+title+loose - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 25/49 onnx@200+title+loose - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 26/49 onnx@200+title+loose+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 27/49 onnx@200+realign - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 27/49 onnx@200+realign - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 27/49 onnx@200+realign - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 28/49 onnx@200+realign+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 29/49 onnx@300+realign - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 29/49 onnx@300+realign - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 29/49 onnx@300+realign - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 30/49 onnx@300+realign+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 31/49 onnx@200+realign+relax+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 32/49 onnx@200+notes+seam - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 32/49 onnx@200+notes+seam - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 32/49 onnx@200+notes+seam - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 33/49 onnx@200+notes+seam+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 34/49 onnx@300+notes+seam - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 34/49 onnx@300+notes+seam - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 34/49 onnx@300+notes+seam - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 35/49 onnx@200+notes+seam+realign - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 35/49 onnx@200+notes+seam+realign - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 35/49 onnx@200+notes+seam+realign - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 36/49 onnx@200+notes - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 37/49 onnx@200+tail - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 37/49 onnx@200+tail - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 37/49 onnx@200+tail - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 38/49 onnx@200+tail+relax - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 39/49 onnx@300+tail - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 39/49 onnx@300+tail - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 39/49 onnx@300+tail - page 7/63  11% of this pass   ~1 s left
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 40/49 onnx@200+tail+relax+components - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 41/49 onnx@200+unit+tail - cached parse, re-map only
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 41/49 onnx@200+unit+tail - page 1/63   1% of this pass
+ 85.7% - doc 1/1 HOSE_TCB Q1-2014 - layer 41/49 onnx@200+unit+tail - page 7/63  11% of this pass   ~1 s left
+100.0% - doc 1/1 HOSE_TCB Q1-2014 - accepted - Q1-2014: balance_sheet=44 items [onnx@200]; income_statement=21 items [onnx@200+unit+tail]; cash_flow=17 items [onnx@200]  (9.5 min)
+100.0% - HOSE_TCB - done - run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260830-193447__hose_tcb__pdf_ocr

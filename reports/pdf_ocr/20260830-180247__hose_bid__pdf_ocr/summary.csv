@@ -1,0 +1,4 @@
+period,report,layer,items,status,verdict,seconds
+Q4-2011,balance_sheet,onnx@200,55,pdf,REPRODUCED,118.34
+Q4-2011,income_statement,onnx@200,22,pdf,no pdf row on disk to compare against,118.34
+Q4-2011,cash_flow,onnx@200,27,pdf,DIFFERS,118.34

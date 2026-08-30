@@ -1,0 +1,182 @@
+{
+  "schema_version": 3,
+  "run_id": "20260830-192841__hose_bid__pdf_ocr",
+  "stage": "web_scraper.pdf_ocr_job",
+  "created": "2026-08-30T19:29:13+07:00",
+  "git_commit": "73aa74ae",
+  "notes": "",
+  "inputs": {
+    "exchange": "HOSE",
+    "symbol": "BID",
+    "periods": null,
+    "quarters": [
+      "2011-Q3"
+    ],
+    "allow_parent": false,
+    "period_min": "Q1-2008",
+    "overwrite": false,
+    "merge_into_csv": false,
+    "force_empty_band": false,
+    "template_requested": null,
+    "layers_requested": null,
+    "compare_with_disk": true,
+    "notes": "",
+    "template": "bank",
+    "template_how": "templates.csv",
+    "data_root": "D:\\GIT\\master-thesis\\raw_data\\cafef",
+    "models": {
+      "det": "D:\\GIT\\master-thesis\\src\\web_scraper\\models\\deepdoc_det.onnx",
+      "vietocr": "D:\\GIT\\master-thesis\\experiment\\experiment_9\\vendor\\deepdoc_vietocr\\vietocr\\weight\\vgg_seq2seq.pth",
+      "vietocr_config": "D:\\GIT\\master-thesis\\src\\web_scraper\\models\\vietocr_vgg_seq2seq.yml"
+    },
+    "documents": [
+      "HOSE_BID__Q3-2011"
+    ],
+    "layers": [
+      "onnx@200",
+      "onnx@300",
+      "onnx@400",
+      "tesseract@200",
+      "onnx@200+relax",
+      "onnx@300+relax",
+      "tesseract@400+relax",
+      "onnx@200+components",
+      "onnx@300+components",
+      "onnx@200+relax+components",
+      "onnx@200+pad6+components",
+      "onnx@200+pad6+relax+components",
+      "onnx@300+split",
+      "onnx@300+split+components",
+      "onnx@200+join+components",
+      "onnx@200+join+relax+components",
+      "onnx@200+title",
+      "onnx@200+title+relax",
+      "onnx@200+loose",
+      "onnx@200+loose+relax",
+      "onnx@400+loose",
+      "onnx@400+loose+relax",
+      "onnx@300+loose",
+      "onnx@300+loose+relax",
+      "onnx@200+title+loose",
+      "onnx@200+title+loose+relax",
+      "onnx@200+realign",
+      "onnx@200+realign+relax",
+      "onnx@300+realign",
+      "onnx@300+realign+relax",
+      "onnx@200+realign+relax+components",
+      "onnx@200+notes+seam",
+      "onnx@200+notes+seam+relax",
+      "onnx@300+notes+seam",
+      "onnx@200+notes+seam+realign",
+      "onnx@200+notes",
+      "onnx@200+tail",
+      "onnx@200+tail+relax",
+      "onnx@300+tail",
+      "onnx@200+tail+relax+components",
+      "onnx@200+unit+tail",
+      "onnx@200+unit+tail+relax",
+      "onnx@200+unit",
+      "onnx@300+unit+tail",
+      "onnx@300+unit",
+      "onnx@200+annual+relax",
+      "onnx@200+pad6+annual+extra",
+      "onnx@200+pad6+extra",
+      "onnx@300+pad6+annual+extra"
+    ],
+    "layers_are_the_full_cascade": true,
+    "skipped_already_parsed": [],
+    "merged_into_csv": false,
+    "merge_backup": null
+  },
+  "environment": {
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "count": 1,
+      "vram_total_mb": 4096,
+      "vram_free_mb": 2083,
+      "cuda": "12.1",
+      "torch": "2.5.1+cu121"
+    },
+    "host": "DESKTOP-TRDFIML",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "timezone": "GMT+7",
+    "ocr": {
+      "det_providers": [
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ],
+      "recognizer_device": "cuda",
+      "stack": {
+        "onnxruntime-gpu": "1.22.0",
+        "pymupdf": "1.28.0",
+        "vietocr": "0.3.13",
+        "opencv-python-headless": "4.13.0.92",
+        "opencv-python": "4.13.0.92",
+        "shapely": "2.1.2",
+        "pyclipper": "1.4.0",
+        "numpy": "2.2.6",
+        "einops": "0.2.0",
+        "torch": "2.5.1+cu121"
+      },
+      "stack_fingerprint": "e6b778e294b4",
+      "pin_violations": {},
+      "onnxruntime": "1.22.0",
+      "onnxruntime_advertises": [
+        "TensorrtExecutionProvider",
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider"
+      ]
+    }
+  },
+  "execution": {
+    "started_at": "2026-08-30T19:28:43+07:00",
+    "finished_at": "2026-08-30T19:29:13+07:00",
+    "timezone": "GMT+7",
+    "runtime_seconds": 30.68,
+    "runtime": "30.7 s",
+    "device": "cuda",
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "count": 1,
+      "vram_total_mb": 4096,
+      "vram_free_mb": 2079,
+      "cuda": "12.1",
+      "torch": "2.5.1+cu121"
+    },
+    "host": "DESKTOP-TRDFIML",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "results": [
+    {
+      "period": "Q3-2011",
+      "report": "balance_sheet",
+      "layer": "onnx@200",
+      "items": 55,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 30.56
+    },
+    {
+      "period": "Q3-2011",
+      "report": "income_statement",
+      "layer": "onnx@200",
+      "items": 20,
+      "status": "pdf",
+      "verdict": "no pdf row on disk to compare against",
+      "seconds": 30.56
+    },
+    {
+      "period": "Q3-2011",
+      "report": "cash_flow",
+      "layer": "onnx@200",
+      "items": 18,
+      "status": "pdf",
+      "verdict": "DIFFERS",
+      "seconds": 30.56
+    }
+  ]
+}

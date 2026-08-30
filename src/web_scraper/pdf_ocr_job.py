@@ -1735,12 +1735,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--out", default=str(DEFAULT_OUT_ROOT))
     parser.add_argument("--notes", default="")
     parser.add_argument("--no-compare", action="store_true")
-    args = parser.parse_args(argv)
-
-    try:                                    # ⚠️ §5 rule 18 — the cascade logs Vietnamese
+    # ⚠️ §5 rule 18, and BEFORE `parse_args` rather than after it: `--help` prints from
+    # INSIDE the parser and exits there, so a cp1252 console met the ⚠️ in this file's own
+    # help text and died with a UnicodeEncodeError instead of printing the usage.
+    try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
+    args = parser.parse_args(argv)
 
     # ⚠️ ONE input object, the same one the notebook and `kgpu` build. The CLI parses
     # arguments and constructs it; it does not resolve anything itself.

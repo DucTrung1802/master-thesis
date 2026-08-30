@@ -254,6 +254,38 @@ class PdfParser:
     TITLE_MATCH = 0.80      # how close an OCR'd title must be to count as that statement
     MIN_TABLE_WORDS = 15    # a page with fewer figures than this is not a statement page
 
+    # ⚠️ **A LANDSCAPE STATEMENT SCANNED INTO A PORTRAIT PAGE READS AS NOTHING, AND THE PDF
+    # SAYS `/Rotate 0`.** BID's Q3-2011 consolidated income statement is page 6 of 32, its
+    # image turned 90°, and every layer of the cascade reported `no such statement on any page
+    # of this filing` — the quarter had been `missing` since the ticker was first parsed. The
+    # page's own `/Rotate` cannot help: it is 0, like every other page of that scan.
+    #
+    # The DETECTOR alone settles it, because a text LINE is wide and a rotated one is tall.
+    # Measured over all 32 pages of that filing (2026-08-30), share of boxes taller than wide:
+    #
+    #     upright pages   0-19 %,  median w/h 4.3 … 7.8
+    #     rotated pages  92-100 %, median w/h 0.16 … 0.25
+    #
+    # Two orders of magnitude apart with nothing in between, so 0.70 is a cut with room on
+    # both sides rather than a tuned threshold. ⚠️ **AND IT COSTS NOTHING TO ASK**: the boxes
+    # are the ones the upright read has ALREADY returned, so an upright page pays not one
+    # extra pixel. Only a page the signal condemns is read again.
+    VERTICAL_LINES_SHARE = 0.70
+    # …of at least this many recognised boxes. A page holding a handful of stray marks must not
+    # be turned on the strength of three of them; every rotated page measured carried 46+.
+    MIN_ROT_WORDS = 20
+    # ⚠️ **THE DETECTOR CANNOT TELL 90 FROM 270** — both make the lines horizontal — so the
+    # direction is decided by READING the page each way and counting the tokens that parse as
+    # numbers. Upside down, digits do not: on BID's Q3-2011 income statement that is 100
+    # against 7. ⚠️ **AND IT IS NOT ONE DIRECTION PER DOCUMENT**: in that same filing the
+    # income statement needs 90 and all eleven rotated NOTES pages need 270 (measured, which
+    # is the only reason this is a per-page decision).
+    #
+    # The probe renders at a low DPI because it is counting numbers, not reading them, and the
+    # answer is cached for the life of the document — so it is paid once per rotated page, not
+    # once per OCR pass.
+    ROT_PROBE_DPI = 100
+
     # ⚠️ A STATEMENT'S FINAL PAGE IS LEGITIMATELY SPARSE, AND `MIN_TABLE_WORDS` REFUSES IT.
     # The last page holds the closing rows and then the signature block, so it carries a
     # fraction of a full page's figures — and for the CASH FLOW that is the one page that must
@@ -288,7 +320,22 @@ class PdfParser:
     # `label_wrap` only.
     CARRY_GAP = 24.0
 
-    NUM_RE = re.compile(r"^\(?-?[\d][\d.,]*\)?$|^[-–—]$")
+    # ⚠️ **THE OPENING BRACKET OF A NEGATIVE FIGURE COMES BACK AS A QUOTE MARK.** A `(` printed
+    # tight against a digit is a thin arc, and on BID's Q3-2011 income statement the recogniser
+    # returned `"9,797,589,605,016)` and `"299,126,415,190)` — the CLOSING bracket intact, so
+    # nothing is ambiguous about the sign. `parse_num` refused both, `table_rows` left column 0
+    # empty, and `_first_value` then took the **prior-period** column instead: interest expense
+    # read 5,417,947,722,487 where the filing prints 9,797,589,605,016, and it RECONCILED,
+    # because the only anchor an income statement is checked on is PBT and that cell was sound.
+    # `SLD-1`'s shape once more — a wrong figure every gate passes.
+    #
+    # The second branch is deliberately narrow: the mark stands in for `(` only where the
+    # matching `)` is there to prove a bracket was printed. A token that merely STARTS with a
+    # quote is not a number, then or now. `parse_num` does the same substitution.
+    QUOTE_FOR_BRACKET = "\"'`´|"
+    NUM_RE = re.compile(r"^\(?-?[\d][\d.,]*\)?$"
+                        r"|^[" + QUOTE_FOR_BRACKET + r"]+\(?[\d][\d.,]*\)$"
+                        r"|^[-–—]$")
     # The filing's own row numbering, in the left margin.
     NUMBER_RE = re.compile(r"^[IVXLC]+$|^\d{1,2}$|^[a-z]$|^[A-Z]$", re.I)
 
@@ -372,6 +419,10 @@ class PdfParser:
         # cache would otherwise grow without bound. `TODO.md` `P41`/`P42`.
         self._ocr_cache: Dict[tuple, tuple] = {}
         self._ocr_cache_path: Optional[str] = None
+        # The absolute `/Rotate` each page is read at, decided ONCE per document — see
+        # `VERTICAL_LINES_SHARE`. Scoped to one filing like `_ocr_cache`, and for the same
+        # reason: a parser instance outlives the document.
+        self._page_rot: Dict[int, int] = {}
         self.ocr_ready = self._init_ocr()
 
     def _ocr_config(self) -> tuple:
@@ -383,6 +434,7 @@ class PdfParser:
         """Point the page cache at one filing, discarding the previous one's pages."""
         if self._ocr_cache_path != pdf_path:
             self._ocr_cache = {}
+            self._page_rot = {}
             self._ocr_cache_path = pdf_path
 
     def set_dpi(self, dpi: int) -> None:
@@ -561,6 +613,10 @@ class PdfParser:
         t = (t or "").strip()
         if t in ("-", "–", "—"):
             return 0
+        # See `NUM_RE`: an opening bracket the recogniser read as a quote. Only where the
+        # closing one survived, so the bracket is evidence and not a guess.
+        if t.endswith(")"):
+            t = re.sub(r"^[" + cls.QUOTE_FOR_BRACKET + r"]+(?=\(?\d)", "(", t)
         neg = t.startswith("(") and t.endswith(")")
         t = t.strip("()")
         if not re.fullmatch(r"-?[\d.,]+", t):
@@ -1011,7 +1067,17 @@ class PdfParser:
 
         Returns word tuples shaped like PyMuPDF's "words": (x0,y0,x1,y1, word, b, l, n).
         """
-        key = (page.number,) + self._ocr_config()
+        # ⚠️ **THE ROTATION IS APPLIED HERE, OUTSIDE THE CACHE, BECAUSE IT IS NOT ONLY THE
+        # PIXELS IT CHANGES.** `scan` reads `page.rect.width` after this returns and every
+        # column measurement downstream is taken against it, so a page whose rotation was set
+        # on the first pass and skipped on the second — a cache HIT — would be measured 585pt
+        # wide having been read 842pt wide. Setting it before the lookup makes the two agree
+        # whether or not the read is cached, and `page.rotation` in the key keeps the upright
+        # read and the rotated one apart.
+        rot = self._page_rot.get(page.number)
+        if rot is not None and page.rotation != rot:
+            page.set_rotation(rot)
+        key = (page.number, page.rotation) + self._ocr_config()
         hit = self._ocr_cache.get(key)
         if hit is None:
             hit = self._read_page(page, native)
@@ -1091,6 +1157,48 @@ class PdfParser:
             lines.append(txt.strip())
         return " ".join(lines), words
 
+    def _page_rotation(self, page, words: list) -> int:
+        """The absolute `/Rotate` this page should be READ at — `page.rotation` unless its scan
+        is turned, in which case 90° or 270° on top of it.
+
+        Two questions, and only the second costs anything. **Are the lines vertical?** is
+        answered from `words`, which the caller has already paid for: a text line is far wider
+        than it is tall, and a turned one is far taller than it is wide (see
+        `VERTICAL_LINES_SHARE` for the measurement). **Which way up?** cannot be answered from
+        geometry — 90 and 270 both lay the lines flat — so the page is read at the probe DPI
+        each way and the direction that yields more parseable NUMBERS wins. That is the right
+        discriminator here and not a general one: these are financial statements, and a column
+        of digits read upside down stops being digits.
+        """
+        base = page.rotation
+        # Only the onnx path: Tesseract's boxes come back through `_to_visual`, the native-text
+        # path has no boxes of its own, and neither has ever met this defect.
+        if self.engine != "onnx" or self._onnx is None or len(words) < self.MIN_ROT_WORDS:
+            return base
+        tall = sum(1 for w in words if (w[3] - w[1]) > (w[2] - w[0]))
+        if tall / len(words) < self.VERTICAL_LINES_SHARE:
+            return base
+
+        dpi = self.dpi
+        best, best_key = base, None
+        try:
+            self.set_dpi(self.ROT_PROBE_DPI)
+            for extra in (90, 270):
+                page.set_rotation((base + extra) % 360)
+                _, probe = self._onnx.read_page(page)
+                # Numbers first, then sheer recognised length as the tie-break, so a page with
+                # no figures either way still resolves the same way every time it is asked.
+                key = (sum(1 for w in probe if self.parse_num(w[4]) is not None),
+                       sum(len(w[4]) for w in probe))
+                if best_key is None or key > best_key:
+                    best, best_key = (base + extra) % 360, key
+        finally:
+            self.set_dpi(dpi)
+            page.set_rotation(base)
+        self._log(f"page {page.number + 1}: text lines are vertical "
+                  f"({tall}/{len(words)} boxes) — reading it at /Rotate {best}")
+        return best
+
     def scan(self, doc) -> Dict[int, dict]:
         """Read each page ONCE — OCR only the pages that need it — and cache text + words."""
         pages: Dict[int, dict] = {}
@@ -1109,6 +1217,13 @@ class PdfParser:
             # the notes and image-only statement pages.
             native = page.get_text()
             text, words = self._ocr_page(page, native)
+            # ⚠️ Decided from the boxes the read above ALREADY returned, so an upright page
+            # costs nothing; only a page whose text lines are vertical is read a second time.
+            # `_ocr_page` applies the answer on every later pass, from the cache.
+            if page.number not in self._page_rot:
+                self._page_rot[page.number] = self._page_rotation(page, words)
+                if page.rotation != self._page_rot[page.number]:
+                    text, words = self._ocr_page(page, native)
 
             kind, from_form = self._page_kind(text)
             pages[i] = {"text": text, "words": words, "kind": kind,
@@ -1227,15 +1342,27 @@ class PdfParser:
             start = first.get(report)
             if start is None:
                 continue
-            if start < floor:                 # out of order -> not this statement
-                for i in list(pages):
-                    if pages[i]["kind"] == report and i < floor and not pages[i]["from_form"]:
+            if start < floor:                 # out of order -> suspect, but see below
+                early = [i for i in pages if pages[i]["kind"] == report
+                         and i < floor and not pages[i]["from_form"]]
+                rest = [i for i in pages if pages[i]["kind"] == report and i not in set(early)]
+                # ⚠️ **AND THE PAGES ARE ONLY DROPPED WHEN THE STATEMENT SURVIVES SOMEWHERE
+                # ELSE.** The defect this guards against is a DUPLICATE: a page that merely
+                # NAMES a statement matches its title early, while the statement itself is
+                # printed further on — so clearing the early match loses nothing. A report
+                # whose only pages are the early ones is a different thing entirely, and BID's
+                # Q3-2011 is it: that filing prints its balance sheet (pages 1-2), then its
+                # CASH FLOW (3-5), then its income statement (6). Nothing is wrong with it —
+                # the canonical order is a convention, not a rule — and enforcing the order
+                # here deleted the cash flow outright, after which `_fill_continuations`
+                # handed its two pages to the balance sheet running above them. Measured
+                # 2026-08-30, the moment the rotated income statement on page 6 became
+                # visible: 55 balance-sheet rows became 55 balance-sheet-plus-cash-flow rows.
+                if rest:
+                    for i in early:
                         pages[i]["kind"] = None
-                start = min((i for i in pages
-                             if pages[i]["kind"] == report), default=None)
-                if start is None:
-                    continue
-            floor = start
+                    start = min(rest)
+            floor = max(floor, start)
 
     def _fill_continuations(self, pages: Dict[int, dict]) -> None:
         """Give an unidentifiable page to the statement it sits inside.

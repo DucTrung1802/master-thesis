@@ -1,0 +1,36 @@
+  0.0% - HOSE_VIC - plan - overall %    : documents finished + OCR passes done of the 7 this 49-layer cascade can cost, over 1 document(s) — a POSITION IN THE PLAN, never a fraction of the time
+  0.0% - HOSE_VIC - plan - symbol       : HOSE_VIC
+  0.0% - HOSE_VIC - plan - template     : corp   (detect_template (CafeF fingerprint, over the network))
+  0.0% - HOSE_VIC - plan - documents    : 1  (Q3-2014)
+  0.0% - HOSE_VIC - plan - quarters     : ['2014-Q3']   selected ['2014-Q3']
+  0.0% - HOSE_VIC - plan - skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]
+  0.0% - HOSE_VIC - plan - cascade      : 49 of 49 layers
+  0.0% - HOSE_VIC - plan - data root    : D:\GIT\master-thesis\raw_data\cafef
+  0.0% - HOSE_VIC - plan - models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+  0.0% - HOSE_VIC - plan - vietocr cfg  : D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml
+  0.0% - doc 1/1 HOSE_VIC Q3-2014 - open - Q3-2014_bao_cao_tai_chinh_hop_nhat_quy_3_nam_2014.pdf  1.4 MB  corp/consolidated
+  0.0% - doc 1/1 HOSE_VIC Q3-2014 - band - balance 18, income 12, cash 15   open_ref=—
+  0.0% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - OCR pass 1/7
+  0.3% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 1/41   2% of this pass
+  1.7% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 5/41  12% of this pass   ~34 s left
+  3.5% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 10/41  24% of this pass   ~28 s left
+  4.9% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 14/41  34% of this pass   ~29 s left
+  6.6% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 19/41  46% of this pass   ~24 s left
+  8.0% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 23/41  56% of this pass   ~20 s left
+  9.8% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 28/41  68% of this pass   ~15 s left
+ 11.1% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 32/41  78% of this pass   ~11 s left
+ 12.9% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 37/41  90% of this pass   ~5 s left
+ 14.3% - doc 1/1 HOSE_VIC Q3-2014 - layer 1/49 onnx@200 - page 41/41 100% of this pass   ~0 s left
+ 14.3% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - OCR pass 2/7
+ 14.6% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 1/41   2% of this pass
+ 16.0% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 5/41  12% of this pass   ~26 s left
+ 17.8% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 10/41  24% of this pass   ~25 s left
+ 19.2% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 14/41  34% of this pass   ~27 s left
+ 20.9% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 19/41  46% of this pass   ~23 s left
+ 22.3% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 23/41  56% of this pass   ~20 s left
+ 24.0% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 28/41  68% of this pass   ~15 s left
+ 25.4% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 32/41  78% of this pass   ~11 s left
+ 27.2% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 37/41  90% of this pass   ~5 s left
+ 28.6% - doc 1/1 HOSE_VIC Q3-2014 - layer 2/49 onnx@300 - page 41/41 100% of this pass   ~0 s left
+100.0% - doc 1/1 HOSE_VIC Q3-2014 - accepted - Q3-2014: balance_sheet=45 items [onnx@300]; income_statement=16 items [onnx@300]; cash_flow=19 items [onnx@200]  (1.8 min)
+100.0% - HOSE_VIC - done - run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260830-194712__hose_vic__pdf_ocr

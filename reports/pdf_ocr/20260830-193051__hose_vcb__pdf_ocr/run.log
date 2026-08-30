@@ -1,0 +1,18 @@
+  0.0% - HOSE_VCB - plan - overall %    : documents finished + OCR passes done of the 7 this 49-layer cascade can cost, over 1 document(s) — a POSITION IN THE PLAN, never a fraction of the time
+  0.0% - HOSE_VCB - plan - symbol       : HOSE_VCB
+  0.0% - HOSE_VCB - plan - template     : bank   (templates.csv)
+  0.0% - HOSE_VCB - plan - documents    : 1  (Q1-2026)
+  0.0% - HOSE_VCB - plan - quarters     : ['2026-Q1']   selected ['2026-Q1']
+  0.0% - HOSE_VCB - plan - skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]
+  0.0% - HOSE_VCB - plan - cascade      : 49 of 49 layers
+  0.0% - HOSE_VCB - plan - data root    : D:\GIT\master-thesis\raw_data\cafef
+  0.0% - HOSE_VCB - plan - models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth
+  0.0% - HOSE_VCB - plan - vietocr cfg  : D:\GIT\master-thesis\src\web_scraper\models\vietocr_vgg_seq2seq.yml
+  0.0% - doc 1/1 HOSE_VCB Q1-2026 - open - Q1-2026_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2026.pdf  8.1 MB  bank/consolidated
+  0.0% - doc 1/1 HOSE_VCB Q1-2026 - band - balance 67, income 68, cash 68   open_ref=541688802000000
+  0.0% - doc 1/1 HOSE_VCB Q1-2026 - layer 1/49 onnx@200 - OCR pass 1/7
+  0.3% - doc 1/1 HOSE_VCB Q1-2026 - layer 1/49 onnx@200 - page 1/53   1% of this pass
+  1.6% - doc 1/1 HOSE_VCB Q1-2026 - layer 1/49 onnx@200 - page 6/53  11% of this pass   ~76 s left
+  3.2% - doc 1/1 HOSE_VCB Q1-2026 - layer 1/49 onnx@200 - page 12/53  22% of this pass   ~58 s left
+100.0% - doc 1/1 HOSE_VCB Q1-2026 - accepted - Q1-2026: balance_sheet=59 items [onnx@200]; income_statement=22 items [onnx@200]; cash_flow=17 items [onnx@200]  (0.8 min)
+100.0% - HOSE_VCB - done - run folder -> D:\GIT\master-thesis\reports\pdf_ocr\20260830-193051__hose_vcb__pdf_ocr

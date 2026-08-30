@@ -35,10 +35,16 @@ _WORD = (100.0, 10.0, 140.0, 20.0, "1.234", 0, 0, 0)
 
 
 class _Page:
-    """The one attribute `_ocr_page` reads before it reaches the engine."""
+    """What `_ocr_page` reads before it reaches the engine. `rotation` joined `number` in the
+    cache key on 2026-08-30: a page whose scan is turned is read at a different `/Rotate`, and
+    the upright reading and the turned one are two different answers about the same page."""
 
-    def __init__(self, number=0):
+    def __init__(self, number=0, rotation=0):
         self.number = number
+        self.rotation = rotation
+
+    def set_rotation(self, r):
+        self.rotation = r
 
 
 def _parser(**kw):
@@ -51,6 +57,7 @@ def _parser(**kw):
     p.ocr_ready = True
     p._ocr_cache = {}
     p._ocr_cache_path = None
+    p._page_rot = {}
     p.reads = []
     return p
 

@@ -1,0 +1,1534 @@
+{
+  "exchange": "HOSE",
+  "symbol": "VCB",
+  "period": "Q1-2021",
+  "template": "bank",
+  "document": "Q1-2021_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2021.pdf",
+  "consolidated": "True",
+  "assurance": "unaudited",
+  "cumulative": false,
+  "seconds": 41.59,
+  "accepted": {
+    "balance_sheet": {
+      "layer": "onnx@200",
+      "items": 54,
+      "rows": 70,
+      "rows_sha": "fe6912d51132",
+      "row_dump": [
+        [
+          "",
+          "tai_san_a",
+          "TÀI SẢN A",
+          [
+            12277634000000,
+            15095394000000
+          ]
+        ],
+        [
+          "",
+          "tien_mat_vang_bac_da_quy",
+          "Tiền mặt, vàng bạc, đá quý",
+          [
+            24008360000000,
+            33139373000000
+          ]
+        ],
+        [
+          "",
+          "tien_gui_tai_ngan_hang_nha_nuoc_tien_gui_tai_va_cho_vay_cac",
+          "Tiền gửi tại Ngân hàng Nhà nước Tiền gửi tại và cho vay các tổ chức tín dụng khác",
+          [
+            203604117000000,
+            267969645000000
+          ]
+        ],
+        [
+          "III",
+          "iii",
+          "III",
+          [
+            167652939000000,
+            204713783000000
+          ]
+        ],
+        [
+          "",
+          "tien_gui_tai_cac_to_chuc_tin_dung_khac",
+          "Tiền gửi tại các tổ chức tín dụng khác",
+          [
+            36951178000000,
+            64255862000000
+          ]
+        ],
+        [
+          "",
+          "cho_vay_cac_to_chuc_tin_dung_khac",
+          "Cho vay các tổ chức tín dụng khác",
+          [
+            -1000000000000,
+            -1000000000000
+          ]
+        ],
+        [
+          "",
+          "du_phong_rui_ro",
+          "Dự phòng rùi ro",
+          [
+            null,
+            1954061000000
+          ]
+        ],
+        [
+          "IV",
+          "chung_khoan_kinh_doanh",
+          "IV Chứng khoán kinh doanh",
+          [
+            3866240000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "chung_khoan_kinh_doanh",
+          "Chứng khoán kinh doanh",
+          [
+            3906378000000,
+            1991861000000
+          ]
+        ],
+        [
+          "",
+          "du_phong_rui_ro_chung_khoan_kinh_doanh",
+          "Dự phòng rùi ro chứng khoán kinh doanh",
+          [
+            -40138000000,
+            -37800000000
+          ]
+        ],
+        [
+          "v",
+          "cho_vay_khach_hang",
+          "v Cho vay khách hàng",
+          [
+            850460935000000,
+            820545467000000
+          ]
+        ],
+        [
+          "",
+          "cho_vay_khach_hang",
+          "Cho vay khách hàng",
+          [
+            871937942000000,
+            839788261000000
+          ]
+        ],
+        [
+          "",
+          "du_phong_rui_ro_cho_vay_khach_hang",
+          "Dự phòng rùi ro cho vay khách hàng",
+          [
+            -21477007000000,
+            -19242794000000
+          ]
+        ],
+        [
+          "VI",
+          "chung_khoan_dau_tu",
+          "VI Chứng khoán đầu tư",
+          [
+            149886637000000,
+            156931097000000
+          ]
+        ],
+        [
+          "",
+          "chung_khoan_dau_tu_san_sang_de_ban",
+          "Chứng khoán đấu tư sắn sàng để bán",
+          [
+            46062651000000,
+            42148831000000
+          ]
+        ],
+        [
+          "",
+          "chung_khoan_dau_tu_giu_den_ngay_dao_han",
+          "Chứng khoán đầu tư giữ đến ngày đáo hạn",
+          [
+            104464547000000,
+            115382544000000
+          ]
+        ],
+        [
+          "",
+          "du_phong_rui_ro_chung_khoan_dau_tu",
+          "Dự phòng rùi ro chứng khoán đầu tư",
+          [
+            -640561000000,
+            -600278000000
+          ]
+        ],
+        [
+          "VII",
+          "gop_von_dau_tu_dai_han",
+          "VII Góp vốn, đầu tư dài hạn",
+          [
+            2261397000000,
+            2239006000000
+          ]
+        ],
+        [
+          "",
+          "a",
+          "8(a)",
+          [
+            736278000000,
+            714935000000
+          ]
+        ],
+        [
+          "",
+          "von_gop_lien_doanh",
+          "Vốn góp liên doanh",
+          [
+            12296000000,
+            11248000000
+          ]
+        ],
+        [
+          "",
+          "dau_tu_vao_cong_ty_lien_ket_8_b",
+          "Đầu tư vào công ty liên kết 8(b)",
+          [
+            1587823000000,
+            1587823000000
+          ]
+        ],
+        [
+          "",
+          "dau_tu_dai_han_khac_du_phong_giam_gia_dau_tu_dai_han",
+          "Đầu tư dài hạn khác Dự phòng giảm giá đầu tư dài hạn",
+          [
+            -75000000000,
+            -75000000000
+          ]
+        ],
+        [
+          "VIII",
+          "tai_san_co_dinh",
+          "VIII Tài sản cố định",
+          [
+            8333301000000,
+            8539362000000
+          ]
+        ],
+        [
+          "",
+          "tai_san_co_dinh_huu_hinh",
+          "Tài sản cố định hữu hình",
+          [
+            5292741000000,
+            5411139000000
+          ]
+        ],
+        [
+          "",
+          "nguyen_gia",
+          "Nguyên giá",
+          [
+            12930147000000,
+            12866189000000
+          ]
+        ],
+        [
+          "a",
+          "a",
+          "a",
+          [
+            null,
+            -7455050000000
+          ]
+        ],
+        [
+          "b",
+          "hao_mon_tai_san_co_dinh",
+          "b Hao mòn tài sản cổ định",
+          [
+            -7637406000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tai_san_co_dinh_vo_hinh",
+          "Tài sản cố định vô hình",
+          [
+            3040560000000,
+            null
+          ]
+        ],
+        [
+          "a",
+          "nguyen_gia",
+          "a Nguyên giá",
+          [
+            4211425000000,
+            4211880000000
+          ]
+        ],
+        [
+          "b",
+          "hao_mon_tai_san_co_dinh",
+          "b Hao mòn tài sản cổ định",
+          [
+            -1170865000000,
+            -1083657000000
+          ]
+        ],
+        [
+          "IX",
+          "tai_san_co_khac",
+          "IX Tài săn Có khác",
+          [
+            24267237000000,
+            19816687000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_phai_thu",
+          "Các khoản phải thu",
+          [
+            8546642000000,
+            6668595000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_lai_phi_phai_thu",
+          "Các khoản lãi, phí phải thu",
+          [
+            8421916000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tai_san_thue_thu_nhap_doanh_nghiep_hoan_lai",
+          "Tài sản thuế thu nhập doanh nghiệp hoãn lại",
+          [
+            909571000000,
+            909263000000
+          ]
+        ],
+        [
+          "",
+          "tai_san_co_khac",
+          "Tải sản Có khác",
+          [
+            6393042000000,
+            5036638000000
+          ]
+        ],
+        [
+          "",
+          "noi_bang_khac",
+          "nội bảng khác",
+          [
+            -3934000000,
+            -3934000000
+          ]
+        ],
+        [
+          "",
+          "tong_tai_san_co",
+          "TÔNG TÀI SẢN CÓ",
+          [
+            1278965858000000,
+            1326230092000000
+          ]
+        ],
+        [
+          "",
+          "no_phai_tra_va_von_chu_so_huu_b_cac_khoan_no_chinh_phu_va_nh",
+          "NỢ PHẢI TRẢ VÀ VÓN CHỦ SỞ HỮU B Các khoản nợ Chính phủ và NHNN TH",
+          [
+            18538368000000,
+            41176995000000
+          ]
+        ],
+        [
+          "",
+          "tien_gui_va_vay_cac_to_chuc_tin_dung_khac",
+          "Tiền gửi và vay các tổ chức tín dụng khác",
+          [
+            80758597000000,
+            103583833000000
+          ]
+        ],
+        [
+          "",
+          "hi",
+          "HI",
+          [
+            78270597000000,
+            100916433000000
+          ]
+        ],
+        [
+          "",
+          "tien_gui_cua_cac_to_chuc_tin_dung_khac",
+          "Tiền gửi của các tổ chức tín dụng khác",
+          [
+            2488000000000,
+            2667400000000
+          ]
+        ],
+        [
+          "",
+          "vay_cac_to_chuc_tin_dung_khac",
+          "Vay các tổ chức tín dụng khác",
+          [
+            1025547607000000,
+            1032113567000000
+          ]
+        ],
+        [
+          "",
+          "hi_tien_gui_cua_khach_hang_iv_cac_cong_cu_tai_chinh_phai_sin",
+          "HI Tiền gửi của khách hàng IV Các công cụ tài chính phái sinh và các khoản nợ",
+          [
+            63982000000,
+            52031000000
+          ]
+        ],
+        [
+          "",
+          "tai_chinh_khac_von_tai_tro_uy_thac_dau_tu_cho_vay_tctd_chiu",
+          "tài chính khác Vốn tài trợ, uỹ thác đầu tư, cho vay TCTD chịu V",
+          [
+            10984000000,
+            14679000000
+          ]
+        ],
+        [
+          "",
+          "rui_ro",
+          "rủi ro",
+          [
+            21408307000000,
+            21240197000000
+          ]
+        ],
+        [
+          "VI",
+          "phat_hanh_giay_to_co_gia",
+          "VI Phát hành giấy tờ có giá",
+          [
+            31630334000000,
+            33953811000000
+          ]
+        ],
+        [
+          "VII",
+          "cac_khoan_no_khac",
+          "VII Các khoản nợ khác",
+          [
+            9420234000000,
+            9797834000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_lai_phi_phai_tra",
+          "Các khoản lãi, phi phải trả",
+          [
+            22210100000000,
+            24155977000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_phai_tra_va_cong_no_khac_tong_no_phai_tra",
+          "Các khoản phải trà và công nợ khác TỔNG NỢ PHẢI TRẢ",
+          [
+            1177958179000000,
+            1232135113000000
+          ]
+        ],
+        [
+          "VIII",
+          "von_va_cac_quy",
+          "VIII Vốn và các quỹ",
+          [
+            42428821000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "von_cua_to_chuc_tin_dung",
+          "Vốn của tổ chức tín dụng",
+          [
+            null,
+            42428821000000
+          ]
+        ],
+        [
+          "a",
+          "von_dieu_le",
+          "a Vốn điều lệ",
+          [
+            37088774000000,
+            37088774000000
+          ]
+        ],
+        [
+          "b",
+          "thang_du_von_co_phan",
+          "b Thặng dư vốn cổ phần",
+          [
+            4995389000000,
+            4995389000000
+          ]
+        ],
+        [
+          "",
+          "von_khac",
+          "Vốn khác",
+          [
+            344658000000,
+            344658000000
+          ]
+        ],
+        [
+          "c",
+          "quy_cua_to_chuc_tin_dung",
+          "c Quỹ của tố chức tín dụng",
+          [
+            14925755000000,
+            14925803000000
+          ]
+        ],
+        [
+          "",
+          "chenh_lech_ty_gia_hoi_doai",
+          "Chênh lệch tỷ giá hối đoái",
+          [
+            10387000000,
+            5103000000
+          ]
+        ],
+        [
+          "",
+          "loi_nhuan_chua_phan_phoi",
+          "Lợi nhuận chưa phân phối",
+          [
+            43552776000000,
+            36650228000000
+          ]
+        ],
+        [
+          "a",
+          "loi_nhuan_de_lai_nam_truoc",
+          "a Lợi nhuận để lại năm trước",
+          [
+            36650198000000,
+            null
+          ]
+        ],
+        [
+          "b",
+          "loi_nhuan_nam_nay",
+          "b Lợi nhuận năm nay",
+          [
+            6902578000000,
+            13846698000000
+          ]
+        ],
+        [
+          "",
+          "loi_ich_co_dong_thieu_so",
+          "Lợi ích cổ đông thiểu số",
+          [
+            89940000000,
+            85024000000
+          ]
+        ],
+        [
+          "",
+          "tong_von_chu_so_huu",
+          "TỔNG VỐN CHỦ SỞ HỮU",
+          [
+            101007679000000,
+            94094979000000
+          ]
+        ],
+        [
+          "",
+          "tong_no_phai_tra_va_von_chu_so_huu",
+          "TỔNG NỢ PHẢI TRẢ VÀ VÓN CHỦ SỞ HỮU",
+          [
+            1278965858000000,
+            1326230092000000
+          ]
+        ],
+        [
+          "",
+          "cac_chi_tieu_ngoai_bang_can_do_toan_hop_nhat_stt",
+          "CÁC CHÍ TIÊU NGOÀI BẢNG CÂN ĐÓ TOÁN HỢP NHẤT STT",
+          [
+            1503777000000,
+            654296000000
+          ]
+        ],
+        [
+          "",
+          "bao_lanh_vay_von",
+          "Bảo lãnh vay vốn",
+          [
+            124606684000000,
+            116656912000000
+          ]
+        ],
+        [
+          "",
+          "cam_ket_giao_dich_hoi_doai",
+          "Cam kết giao dịch hối đoái",
+          [
+            null,
+            53984032000000
+          ]
+        ],
+        [
+          "",
+          "cam_ket_mua_ngoai_te",
+          "Cam kết mua ngoại tệ",
+          [
+            57697306000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "cam_ket_ban_ngoai_te",
+          "Cam kết bán ngoại tệ",
+          [
+            66909378000000,
+            62672880000000
+          ]
+        ],
+        [
+          "",
+          "cam_ket_trong_nghiep_vu_thu_tin_dung",
+          "Cam kết trong nghiệp vụ thư tín dụng",
+          [
+            52342187000000,
+            45980494000000
+          ]
+        ],
+        [
+          "",
+          "bao_lanh_khac",
+          "Bảo lãnh khác",
+          [
+            53210638000000,
+            50892327000000
+          ]
+        ],
+        [
+          "",
+          "cam_ket_khac",
+          "Cam kết khác",
+          [
+            782875000000,
+            680372000000
+          ]
+        ]
+      ],
+      "pages": [
+        4,
+        5,
+        6
+      ],
+      "unit": 1000000,
+      "n_columns": 2,
+      "cash_flow_method": "",
+      "quarter_column": false,
+      "months": null,
+      "values": {
+        "6_cac_cam_ket_khac": 782875000000,
+        "5_bao_lanh_khac": 53210638000000,
+        "2_cam_ket_ban_ngoai_te": 66909378000000,
+        "2_cam_ket_mua_ngoai_te": 57697306000000,
+        "1_bao_lanh_vay_von": 124606684000000,
+        "tong_no_phai_tra_va_von_chu_so_huu": 1278965858000000,
+        "ix_loi_ich_cua_co_dong_thieu_so": 89940000000,
+        "viii_5_a_loi_nhuan_nam_nay": 6902578000000,
+        "viii_5_loi_nhuan_chua_phan_phoi": 43552776000000,
+        "viii_3_chenh_lech_ty_gia_hoi_doai": 10387000000,
+        "viii_2_quy_cua_tctd": 14925755000000,
+        "viii_1_b_thang_du_von_co_phan": 4995389000000,
+        "viii_1_a_von_dieu_le": 37088774000000,
+        "vii_1_cac_khoan_lai_phi_phai_tra": 22210100000000,
+        "vii_cac_khoan_no_khac": 9420234000000,
+        "vi_phat_hanh_giay_to_co_gia": 31630334000000,
+        "v_von_tai_tro_uy_thac_dau_tu_cho_vay_to_chuc_tin_dung_chiu_rui_ro": 21408307000000,
+        "iv_cac_cong_cu_tai_chinh_phai_sinh_va_cac_khoan_no_tai_chinh_khac": 63982000000,
+        "ii_2_vay_cac_to_chuc_tin_dung_khac": 1025547607000000,
+        "ii_1_tien_gui_cua_cac_to_chuc_tin_dung_khac": 2488000000000,
+        "ii_tien_gui_va_vay_cac_tctd_khac": 80758597000000,
+        "b_no_phai_tra_va_von_chu_so_huu": 18538368000000,
+        "tong_tai_san": 1278965858000000,
+        "xii_5_cac_khoan_du_phong_rui_ro_cho_cac_tai_san_co_noi_bang_khac": -3934000000,
+        "xii_4_tai_san_co_khac": 6393042000000,
+        "xii_3_tai_san_thue_thu_nhap_doanh_nghiep_hoan_lai": 909571000000,
+        "xii_2_cac_khoan_lai_phi_phai_thu": 8421916000000,
+        "xii_1_cac_khoan_phai_thu": 8546642000000,
+        "xii_tai_san_co_khac": 24267237000000,
+        "x_3_b_hao_mon_tai_san_co_dinh": -1170865000000,
+        "x_3_a_nguyen_gia_tai_san_co_dinh": 4211425000000,
+        "x_3_tai_san_co_dinh_vo_hinh": 3040560000000,
+        "x_1_b_hao_mon_tai_san_co_dinh": -7637406000000,
+        "x_1_a_nguyen_gia_tai_san_co_dinh": 12930147000000,
+        "x_1_tai_san_co_dinh_huu_hinh": 5292741000000,
+        "x_tai_san_co_dinh": 8333301000000,
+        "ix_4_dau_tu_dai_han_khac": -75000000000,
+        "ix_3_dau_tu_vao_cong_ty_lien_ket": 1587823000000,
+        "ix_2_von_gop_lien_doanh": 12296000000,
+        "ix_gop_von_dau_tu_dai_han": 2261397000000,
+        "viii_3_du_phong_rui_ro_chung_khoan_dau_tu": -640561000000,
+        "viii_2_chung_khoan_dau_tu_giu_den_ngay_dao_han": 104464547000000,
+        "viii_1_chung_khoan_dau_tu_san_sang_de_ban": 46062651000000,
+        "viii_chung_khoan_dau_tu": 149886637000000,
+        "vi_cho_vay_khach_hang": 850460935000000,
+        "iv_2_du_phong_rui_ro_chung_khoan_kinh_doanh": -40138000000,
+        "iv_1_chung_khoan_kinh_doanh": 3906378000000,
+        "iv_chung_khoan_kinh_doanh": 3866240000000,
+        "iii_2_cho_vay_cac_tctd_khac": -1000000000000,
+        "iii_1_tien_gui_tai_cac_tctd_khac": 36951178000000,
+        "ii_tien_gui_tai_nhnn": 203604117000000,
+        "i_tien_mat_vang_bac_da_quy": 24008360000000,
+        "viii_von_chu_so_huu": 101007679000000,
+        "tong_no_phai_tra": 1177958179000000
+      }
+    },
+    "income_statement": {
+      "layer": "onnx@200",
+      "items": 21,
+      "rows": 29,
+      "rows_sha": "c8b58a7403c2",
+      "row_dump": [
+        [
+          "",
+          "thu_nhap_lai_va_cac_khoan",
+          "Thu nhập lãi và các khoản",
+          [
+            null,
+            null,
+            17201110000000,
+            18104035000000
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tuong_tu",
+          "thu nhập tương tự",
+          [
+            17201110000000,
+            18104035000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "chi_phi_lai_va_cac_chi_phi_tuong_tu",
+          "Chi phí lãi và các chỉ phi tương tự",
+          [
+            -7119377000000,
+            -9069714000000,
+            -7119377000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_lai_thuan",
+          "Thu nhập lãi thuần",
+          [
+            10081733000000,
+            9034321000000,
+            10081733000000,
+            9034321000000
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_dich_vu",
+          "Thu nhập từ hoạt động dịch vụ",
+          [
+            4317820000000,
+            null,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "chi_phi_hoat_dong_dich_vu",
+          "Chi phi hoạt động dịch vụ",
+          [
+            -880039000000,
+            -980495000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "II",
+          "lai_thuan_tu_hoat_dong_dich_vu",
+          "II Lãi thuần từ hoạt động dịch vụ",
+          [
+            3437781000000,
+            1127210000000,
+            3437781000000,
+            null
+          ]
+        ],
+        [
+          "III",
+          "lai_thuan_tu_hoat_dong",
+          "III Lãi thuần từ hoạt động",
+          [
+            null,
+            null,
+            null,
+            1107545000000
+          ]
+        ],
+        [
+          "",
+          "kinh_doanh_ngoai_hoi",
+          "kinh doanh ngoại hối",
+          [
+            1042270000000,
+            1107545000000,
+            1042270000000,
+            null
+          ]
+        ],
+        [
+          "IV",
+          "lai_oo_thuan_tu_mua_ban_chung_khoan_kinh_doanh",
+          "IV Lãi/(ỗỗ thuần từ mua bán chứng khoán kinh doanh",
+          [
+            80773000000,
+            -54447000000,
+            80773000000,
+            -54447000000
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_khac",
+          "Thu nhập từ hoạt động khác",
+          [
+            1136573000000,
+            1144844000000,
+            null,
+            1144844000000
+          ]
+        ],
+        [
+          "",
+          "chi_phi_hoat_dong_khac",
+          "Chi phí hoạt động khác",
+          [
+            -124204000000,
+            -105617000000,
+            -124204000000,
+            -105617000000
+          ]
+        ],
+        [
+          "v",
+          "lai_thuan_tu_hoat_dong_khac",
+          "v Lãi thuần từ hoạt động khác",
+          [
+            1012369000000,
+            null,
+            1012369000000,
+            null
+          ]
+        ],
+        [
+          "VI",
+          "thu_nhap_tu_gop_von_mua_co_phan",
+          "VI Thu nhập từ góp vốn, mua cổ phần",
+          [
+            30670000000,
+            31629000000,
+            30670000000,
+            31629000000
+          ]
+        ],
+        [
+          "VII",
+          "chi_phi_hoat_dong",
+          "VII Chi phí hoạt động",
+          [
+            -4779221000000,
+            -4910290000000,
+            -4779221000000,
+            null
+          ]
+        ],
+        [
+          "VIII",
+          "loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truoc_chi_phi_du_pho",
+          "VIII Lợi nhuận thuần từ hoạt động kinh doanh trước chi phí dự phòng rủi ro tín dụng",
+          [
+            10906375000000,
+            7375195000000,
+            10906375000000,
+            7375195000000
+          ]
+        ],
+        [
+          "IX",
+          "chi_phi_du_phong_rui_ro",
+          "IX Chi phí dự phòng rủi ro",
+          [
+            null,
+            null,
+            null,
+            -2152448000000
+          ]
+        ],
+        [
+          "",
+          "tin_dung",
+          "tín dụng",
+          [
+            -2274909000000,
+            -2152448000000,
+            -2274909000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tong_loi_nhuan_truoc_thue",
+          "Tổng lợi nhuận trước thuế",
+          [
+            null,
+            5222747000000,
+            8631466000000,
+            5222747000000
+          ]
+        ],
+        [
+          "x",
+          "x",
+          "x",
+          [
+            8631466000000,
+            null,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "chi_phi_thue_tndn_hien_hanh",
+          "Chi phí thuế TNDN hiện hành",
+          [
+            -1724252000000,
+            -1042687000000,
+            -1724252000000,
+            -1042687000000
+          ]
+        ],
+        [
+          "",
+          "chi_phi_thue_tndn_hoan_lai",
+          "Chi phí thuế TNDN hoãn lại",
+          [
+            308000000,
+            2595000000,
+            null,
+            null
+          ]
+        ],
+        [
+          "XI",
+          "chi_phi_thue_tndn",
+          "XI Chi phí thuế TNDN",
+          [
+            -1723944000000,
+            null,
+            null,
+            null
+          ]
+        ],
+        [
+          "XII",
+          "loi_nhuan_sau_thue",
+          "XII Lợi nhuận sau thuế",
+          [
+            6907522000000,
+            4182655000000,
+            6907522000000,
+            4182655000000
+          ]
+        ],
+        [
+          "",
+          "loi_ich_cua_co_dong_khong_xiii",
+          "Lợi ích của cổ đông không XIII",
+          [
+            null,
+            null,
+            null,
+            -4740000000
+          ]
+        ],
+        [
+          "",
+          "kiem_soat",
+          "kiếm soát",
+          [
+            -4944000000,
+            -4740000000,
+            -4944000000,
+            null
+          ]
+        ],
+        [
+          "XIV",
+          "loi_nhuan_thuan_trong_ky_phan_bo_cho_co_dong_cua",
+          "XIV Lợi nhuận thuần trong kỳ phân bồ cho cổ đông của",
+          [
+            6902578000000,
+            4177915000000,
+            6902578000000,
+            4177915000000
+          ]
+        ],
+        [
+          "",
+          "ngan_hang",
+          "Ngân hàng",
+          [
+            null,
+            1129000000,
+            null,
+            1129000000
+          ]
+        ],
+        [
+          "xv",
+          "lai_co_ban_tren_co_phieu_vnd",
+          "xv Lãi cơ bản trên cổ phiếu (VND)",
+          [
+            1861000000,
+            null,
+            1861000000,
+            null
+          ]
+        ]
+      ],
+      "pages": [
+        7,
+        8
+      ],
+      "unit": 1000000,
+      "n_columns": 4,
+      "cash_flow_method": "",
+      "quarter_column": true,
+      "months": 3,
+      "values": {
+        "xv_loi_nhuan_sau_thue_cua_co_dong_cua_ngan_hang_me": 1129000000,
+        "xiii_loi_nhuan_sau_thue": 6907522000000,
+        "xii_chi_phi_thue_tndn": -1723944000000,
+        "8_chi_phi_thue_tndn_hoan_lai": 308000000,
+        "7_chi_phi_thue_tndn_hien_hanh": -1724252000000,
+        "xi_tong_loi_nhuan_truoc_thue": 5222747000000,
+        "x_chi_phi_du_phong_rui_ro_tin_dung": -2152448000000,
+        "ix_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truoc_chi_phi_du_phong_rui_ro_tin_dung": 10906375000000,
+        "viii_chi_phi_hoat_dong": -4779221000000,
+        "vii_thu_nhap_tu_gop_von_mua_co_phan": 30670000000,
+        "vi_lai_lo_thuan_tu_hoat_dong_khac": 1012369000000,
+        "6_chi_phi_hoat_dong_khac": -124204000000,
+        "5_thu_nhap_tu_hoat_dong_khac": 1136573000000,
+        "iv_lai_lo_thuan_tu_mua_ban_chung_khoan_kinh_doanh": 80773000000,
+        "iii_lai_lo_thuan_tu_hoat_dong_kinh_doanh_ngoai_hoi_va_vang": 1042270000000,
+        "ii_lai_lo_thuan_tu_hoat_dong_dich_vu": 3437781000000,
+        "4_chi_phi_hoat_dong_dich_vu": -880039000000,
+        "3_thu_nhap_tu_hoat_dong_dich_vu": 4317820000000,
+        "i_thu_nhap_lai_thuan": 10081733000000,
+        "2_chi_phi_lai_va_cac_chi_phi_tuong_tu": -7119377000000,
+        "1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu": 17201110000000
+      }
+    },
+    "cash_flow": {
+      "layer": "onnx@200",
+      "items": 17,
+      "rows": 35,
+      "rows_sha": "5c9975433b87",
+      "row_dump": [
+        [
+          "",
+          "luu_chuyen_tien_tu_hoat_dong_kinh_doanh_thu_nhap_lai_va_cac",
+          "LƯU CHUYỀN TIỀN TỪ HOẠT ĐỘNG KINH DOANH Thu nhập lãi và các khoản thu nhập tương tự nhận được",
+          [
+            15985319000000,
+            17708639000000
+          ]
+        ],
+        [
+          "",
+          "chi_phi_lai_va_cac_chi_phi_tuong_tu_da_tra",
+          "Chi phí lãi và các chi phi tương tự đã trà",
+          [
+            -7496977000000,
+            -8621541000000
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_dich_vu_nhan_duoc",
+          "Thu nhập từ hoạt động dịch vụ nhận được",
+          [
+            1758681000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "chenh_lech_so_tien_thuc_thu_tu_hoat_dong_kinh_doanh_ngoai_te",
+          "Chênh lệch số tiền thực thu từ hoạt động kinh doanh (ngoại tệ, vàng bạc, chứng khoán)",
+          [
+            1026971000000,
+            923451000000
+          ]
+        ],
+        [
+          "",
+          "chi_phi_thu_nhap_khac",
+          "(Chi phí)/ Thu nhập khác",
+          [
+            -100199000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "nguon_rui_ro",
+          "nguồn rủi ro",
+          [
+            1111427000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tien_chi_tra_cho_nhan_vien_va_hoat_dong_quan_ly_cong_vu",
+          "Tiền chi trả cho nhân viên và hoạt động quản lý công vụ",
+          [
+            -4403617000000,
+            -3368926000000
+          ]
+        ],
+        [
+          "",
+          "tien_thue_thu_nhap_thuc_nop_trong_ky",
+          "Tiền thuế thu nhập thực nộp trong kỳ",
+          [
+            null,
+            -1512351000000
+          ]
+        ],
+        [
+          "",
+          "tien_thuan_tu_hoat_dong_kinh_doanh_truoc_nhung",
+          "Tiền thuần từ hoạt động kinh doanh trước những",
+          [
+            5969277000000,
+            7294900000000
+          ]
+        ],
+        [
+          "",
+          "thay_doi_ve_tai_san_va_von_luu_dong_tang_giam_ve_tai_san_hoa",
+          "thay đối về tài sản và vốn lưu động (Tăng)/Giăm về tài sản hoạt động Các khoản tiền, vàng gửi và cho vay các tổ chức tín dụng khác",
+          [
+            18663092000000,
+            5299921000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_ve_kinh_doanh_chung_khoan",
+          "Các khoàn về kinh doanh chứng khoán",
+          [
+            5089660000000,
+            3399988000000
+          ]
+        ],
+        [
+          "",
+          "cac_cong_cu_tai_chinh_phai_sinh_va_cac_tai_san_tai_chinh_kha",
+          "Các công cụ tài chính phái sinh và các tài sản tài chính khác",
+          [
+            null,
+            98312000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_cho_vay_khach_hang",
+          "Các khoản cho vay khách hàng",
+          [
+            null,
+            -19798430000000
+          ]
+        ],
+        [
+          "",
+          "tai_san_hoat_dong_khac",
+          "Tài sản hoạt động khác",
+          [
+            -3260830000000,
+            2052726000000
+          ]
+        ],
+        [
+          "",
+          "tang_giam_ve_cong_no_hoat_dong",
+          "Tăng/(giảm) về công nợ hoạt động",
+          [
+            -22638627000000,
+            -59912717000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_no_chinh_phu_va_nhnn",
+          "Các khoản nợ Chính phủ và NHNN",
+          [
+            -22825236000000,
+            -29974633000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_tien_gui_tien_vay_cac_to_chuc_tin_dung_khac",
+          "Các khoản tiến gửi, tiền vay các tố chức tín dụng khác",
+          [
+            -6565960000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_tien_gui_cua_khach_hang",
+          "Các khoản tiền gửi của khách hàng",
+          [
+            null,
+            5597374000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_phat_hanh_giay_to_co_gia",
+          "Các khoân phát hành giấy tờ có giá",
+          [
+            168110000000,
+            -12030000000
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_von_tai_tro_uy_thac_dau_tu_cho_vay_to_chuc",
+          "Các khoản vốn tài trợ, ủy thác, đầu tư cho vay tổ chức",
+          [
+            -3695000000,
+            -1341000000
+          ]
+        ],
+        [
+          "",
+          "tin_dung_chiu_rui_ro_cac_cong_cu_tai_chinh_phai_sinh_va_cac",
+          "tin dụng chịu rủi ro Các công cụ tài chính phái sinh và các khoản nợ thuy",
+          [
+            11951000000,
+            365859000000
+          ]
+        ],
+        [
+          "",
+          "tai_chinh_khac_cong_no_hoat_dong_khac",
+          "tải chính khác Công nợ hoạt động khác",
+          [
+            1701732000000,
+            968594000000
+          ]
+        ],
+        [
+          "",
+          "chi_tu_cac_quy_cua_to_chuc_tin_dung",
+          "Chi từ các quỹ của tổ chức tín dụng",
+          [
+            -1009299000000,
+            -838703000000
+          ]
+        ],
+        [
+          "",
+          "tien_thuan_su_dung_cho_hoat_dong_kinh_doanh",
+          "Tiền thuần (sử dụng cho) hoạt động kinh doanh",
+          [
+            -56849506000000,
+            -85460180000000
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_tu_hoat_dong_dau_tu",
+          "LƯU CHUYỂN TIỀN TỪ HOẠT ĐỘNG ĐẦU TƯ",
+          [
+            null,
+            -44809000000
+          ]
+        ],
+        [
+          "",
+          "mua_sam_tai_san_co_dinh",
+          "1 Mua sắm tài sản cố định",
+          [
+            -63503000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "tien_thu_tu_thanh_ly_nhuong_ban_tai_san_co_dinh",
+          "2 Tiền thu từ thanh lý, nhượng bán tài sản cố định",
+          [
+            1356000000,
+            867000000
+          ]
+        ],
+        [
+          "",
+          "tien_chi_tu_thanh_ly_nhuong_ban_tai_san_co_dinh",
+          "3 Tiền chi từ thanh lý, nhượng bán tài sản cố định",
+          [
+            -215000000,
+            -58000000
+          ]
+        ],
+        [
+          "",
+          "tien_thu_co_tuc_va_loi_nhuan_duoc_chia_tu_cac_khoan_dau_tu_g",
+          "4 Tiền thu cổ tức và lợi nhuận được chia từ các khoản đầu tư, góp vốn dài hạn",
+          [
+            8278000000,
+            10732000000
+          ]
+        ],
+        [
+          "",
+          "tien_thuan_su_dung_cho_hoat_dong_dau_tu",
+          "11 Tiền thuần (sử dụng cho) hoạt động đầu tư",
+          [
+            -54084000000,
+            -33268000000
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_tu_hoat_dong_tai_chinh",
+          "LƯU CHUYỀN TIỀN TỪ HOẠT ĐỘNG TÀI CHÍNH",
+          [
+            -747619000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "co_tuc_da_tra_iii_tien_thuan_su_dung_cho_hoat_dong_tai_chinh",
+          "1 Cổ tức đã trả III Tiền thuần (sử dụng cho) hoạt động tài chính",
+          [
+            -747619000000,
+            null
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_thuan_trong_ky",
+          "VV Lưu chuyển tiền thuần trong kỳ",
+          [
+            -57651209000000,
+            -85493448000000
+          ]
+        ],
+        [
+          "",
+          "tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky",
+          "Tiền và các khoản tương đương tiền tại thời điểm đầu kỳ",
+          [
+            292582702000000,
+            272270535000000
+          ]
+        ],
+        [
+          "",
+          "vit_vi_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi",
+          "VIT VI Tiền và các khoăn tương đương tiền tại thời điểm cuối kỳ",
+          [
+            234931493000000,
+            186777087000000
+          ]
+        ]
+      ],
+      "pages": [
+        9,
+        10
+      ],
+      "unit": 1000000,
+      "n_columns": 2,
+      "cash_flow_method": "direct",
+      "quarter_column": false,
+      "months": 3,
+      "values": {
+        "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky": 234931493000000,
+        "hdtc_v_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky": 292582702000000,
+        "hdtc_iv_luu_chuyen_tien_thuan_trong_ky": -57651209000000,
+        "hdtc_iii_luu_chuyen_tien_thuan_tu_hd_tai_chinh": -747619000000,
+        "hddt_tien_thu_co_tuc_va_loi_nhuan_duoc_chia_tu_cac_khoan_dau_tu_gop_von_dai_han": 8278000000,
+        "hddt_tien_chi_ve_thanh_ly_nhuong_ban_tscd": -215000000,
+        "hddt_tien_thu_tu_thanh_ly_nhuong_ban_tscd": 1356000000,
+        "hddt_mua_sam_tai_san_co_dinh": -63503000000,
+        "hdkd_22_chi_tu_cac_quy_cua_tctd": -1009299000000,
+        "hdkd_16_tang_giam_cac_khoan_tien_gui_tien_vay_cac_tctd": -6565960000000,
+        "hdkd_15_tang_giam_cac_khoan_no_chinh_phu_va_nhnn": -22825236000000,
+        "hdkd_10_tang_giam_cac_khoan_ve_kinh_doanh_chung_khoan": 5089660000000,
+        "hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_truoc_nhung_thay_doi_ve_tai_san_va_von_luu_dong": 5969277000000,
+        "hdkd_7_tien_chi_tra_cho_nhan_vien_va_hoat_dong_quan_ly_cong_vu": -4403617000000,
+        "hdkd_4_chenh_lech_so_tien_thuc_thu_thuc_chi_tu_hoat_dong_kinh_doanh_chung_khoan_vang_bac_ngoai_te": 1026971000000,
+        "hdkd_3_thu_nhap_tu_hoat_dong_dich_vu": 1758681000000,
+        "hdkd_2_chi_phi_lai_va_cac_chi_phi_tuong_tu_da_tra": -7496977000000
+      }
+    }
+  },
+  "absent": [],
+  "engine_errors": [],
+  "facts": {
+    "publish_date": "2021-04-29",
+    "shares_authorized": null,
+    "shares_issued": 3708877448,
+    "shares_outstanding": 3708877448
+  },
+  "error": null,
+  "log": [
+    "  0.0% - HOSE_VCB - plan - overall %    : documents finished + OCR passes done of the 7 this 49-layer cascade can cost, over 1 document(s) — a POSITION IN THE PLAN, never a fraction of the time",
+    "  0.0% - HOSE_VCB - plan - symbol       : HOSE_VCB",
+    "  0.0% - HOSE_VCB - plan - template     : bank   (templates.csv)",
+    "  0.0% - HOSE_VCB - plan - documents    : 1  (Q1-2021)",
+    "  0.0% - HOSE_VCB - plan - quarters     : ['2021-Q1']   selected ['2021-Q1']",
+    "  0.0% - HOSE_VCB - plan - skipped      : 0 quarter(s) already `pdf` in all three statements   [overwrite=True — nothing is skipped]",
+    "  0.0% - HOSE_VCB - plan - cascade      : 49 of 49 layers",
+    "  0.0% - HOSE_VCB - plan - data root    : D:\\GIT\\master-thesis\\raw_data\\cafef",
+    "  0.0% - HOSE_VCB - plan - models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth",
+    "  0.0% - HOSE_VCB - plan - vietocr cfg  : D:\\GIT\\master-thesis\\src\\web_scraper\\models\\vietocr_vgg_seq2seq.yml",
+    "  0.0% - doc 1/1 HOSE_VCB Q1-2021 - open - Q1-2021_bao_cao_tai_chinh_hop_nhat_quy_1_nam_2021.pdf  6.0 MB  bank/consolidated",
+    "  0.0% - doc 1/1 HOSE_VCB Q1-2021 - band - balance 47, income 48, cash 48   open_ref=292582702000000",
+    "  0.0% - doc 1/1 HOSE_VCB Q1-2021 - layer 1/49 onnx@200 - OCR pass 1/7",
+    "  0.3% - doc 1/1 HOSE_VCB Q1-2021 - layer 1/49 onnx@200 - page 1/50   2% of this pass",
+    "  1.7% - doc 1/1 HOSE_VCB Q1-2021 - layer 1/49 onnx@200 - page 6/50  12% of this pass   ~64 s left",
+    "  3.1% - doc 1/1 HOSE_VCB Q1-2021 - layer 1/49 onnx@200 - page 11/50  22% of this pass   ~53 s left"
+  ],
+  "history_sizes": {
+    "balance_sheet": {
+      "True": 47,
+      "False": 0
+    },
+    "income_statement": {
+      "True": 48,
+      "False": 0
+    },
+    "cash_flow": {
+      "True": 48,
+      "False": 0
+    }
+  },
+  "open_ref": 292582702000000,
+  "template_how": "templates.csv",
+  "compare": {
+    "balance_sheet": {
+      "on_disk": "pdf",
+      "disk_layer": "onnx@200",
+      "run_layer": "onnx@200",
+      "cells_disk": 54,
+      "cells_run": 54,
+      "identical": 54,
+      "changed": {},
+      "only_on_disk": [],
+      "only_in_run": [],
+      "same_layer": true,
+      "same_unit": true,
+      "same_publish_date": true,
+      "verdict": "REPRODUCED"
+    },
+    "income_statement": {
+      "on_disk": "pdf",
+      "disk_layer": "onnx@200",
+      "run_layer": "onnx@200",
+      "cells_disk": 21,
+      "cells_run": 21,
+      "identical": 21,
+      "changed": {},
+      "only_on_disk": [],
+      "only_in_run": [],
+      "same_layer": true,
+      "same_unit": true,
+      "same_publish_date": true,
+      "verdict": "REPRODUCED"
+    },
+    "cash_flow": {
+      "on_disk": "pdf",
+      "disk_layer": "tesseract@200",
+      "run_layer": "onnx@200",
+      "cells_disk": 17,
+      "cells_run": 17,
+      "identical": 12,
+      "changed": {
+        "hdkd_16_tang_giam_cac_khoan_tien_gui_tien_vay_cac_tctd": [
+          -22825236000000,
+          -6565960000000
+        ],
+        "hdkd_15_tang_giam_cac_khoan_no_chinh_phu_va_nhnn": [
+          -22638627000000,
+          -22825236000000
+        ]
+      },
+      "only_on_disk": [
+        "hdkd_12_tang_giam_cac_khoan_cho_vay_khach_hang",
+        "hdkd_6_tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap_bang_nguon_du_phong_rui_ro",
+        "hdkd_8_tien_thue_thu_nhap_thuc_nop_trong_ky"
+      ],
+      "only_in_run": [
+        "hdkd_4_chenh_lech_so_tien_thuc_thu_thuc_chi_tu_hoat_dong_kinh_doanh_chung_khoan_vang_bac_ngoai_te",
+        "hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_truoc_nhung_thay_doi_ve_tai_san_va_von_luu_dong",
+        "hdtc_iii_luu_chuyen_tien_thuan_tu_hd_tai_chinh"
+      ],
+      "same_layer": false,
+      "same_unit": true,
+      "same_publish_date": true,
+      "verdict": "DIFFERS"
+    }
+  }
+}

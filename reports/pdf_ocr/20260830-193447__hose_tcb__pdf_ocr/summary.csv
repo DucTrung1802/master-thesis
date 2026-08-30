@@ -1,0 +1,4 @@
+period,report,layer,items,status,verdict,seconds
+Q1-2014,balance_sheet,onnx@200,44,pdf,REPRODUCED,568.29
+Q1-2014,income_statement,onnx@200+unit+tail,21,pdf,REPRODUCED,568.29
+Q1-2014,cash_flow,onnx@200,17,pdf,REPRODUCED,568.29

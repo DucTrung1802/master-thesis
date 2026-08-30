@@ -1,0 +1,1389 @@
+{
+  "exchange": "HOSE",
+  "symbol": "BID",
+  "period": "Q3-2011",
+  "template": "bank",
+  "document": "Q3-2011_bao_cao_tai_chinh_hop_nhat_quy_3_nam_2011.pdf",
+  "consolidated": "True",
+  "assurance": "unaudited",
+  "cumulative": false,
+  "seconds": 153.65,
+  "accepted": {
+    "balance_sheet": {
+      "layer": "onnx@200",
+      "items": 55,
+      "rows": 60,
+      "rows_sha": "db175cbaab76",
+      "row_dump": [
+        [
+          "A",
+          "tai_san_tien_mat_vang_bac_da_quy",
+          "A Tài sản Tiền mặt, vàng bạc, đá quý",
+          [
+            null,
+            3664645691136,
+            null,
+            3253383899845
+          ]
+        ],
+        [
+          "II",
+          "tien_gui_tai_nhnn",
+          "II Tiền gửi tại NHNN",
+          [
+            null,
+            11956424528849,
+            null,
+            8109791774893
+          ]
+        ],
+        [
+          "III",
+          "tien_vang_gui_tai_va_cho_vay_tctd_khac",
+          "III Tiền, vàng gửi tại và cho vày TCTD khác",
+          [
+            null,
+            59231311536415,
+            null,
+            57788691257436
+          ]
+        ],
+        [
+          "",
+          "tien_vang_gui_tai_tctd_khac",
+          "Tiền, vàng gửi tại TCTD khác",
+          [
+            null,
+            50966214895990,
+            null,
+            52696235534622
+          ]
+        ],
+        [
+          "",
+          "cho_vay_cac_tctd_khac",
+          "Cho vay các TCTD khác",
+          [
+            null,
+            8512200221705,
+            null,
+            5214675694262
+          ]
+        ],
+        [
+          "",
+          "du_phong_rui_ro_cho_vay_cac_tctd_khac",
+          "Dự phòng rủi ro cho vay các TCTD khác",
+          [
+            null,
+            -247103581281,
+            null,
+            -122219971448
+          ]
+        ],
+        [
+          "IV",
+          "chung_khoan_kinh_doanh",
+          "IV Chứng khoán kinh doanh",
+          [
+            null,
+            1219698390626,
+            null,
+            1336206778102
+          ]
+        ],
+        [
+          "",
+          "chung_khoan_kinh_doanh",
+          "Chứng khoán kinh doanh",
+          [
+            null,
+            1381172660899,
+            null,
+            1367462081600
+          ]
+        ],
+        [
+          "",
+          "du_phong_giam_gia_chung_khoan_kinh_doanh",
+          "Dự phòng giảm giá chứng khoán kinh doanh",
+          [
+            null,
+            -161474270273,
+            null,
+            -31255303498
+          ]
+        ],
+        [
+          "v",
+          "cac_cong_cu_tai_chinh_phai_sinh_va_cac_tai",
+          "v Các công cụ tài chính phái sinh và các tài",
+          [
+            null,
+            29905599475,
+            null,
+            32909895952
+          ]
+        ],
+        [
+          "",
+          "san_tai_chinh_khac_vi_cho_vay_khach_hang",
+          "sản tài chính khác VI Cho vay khách hàng",
+          [
+            null,
+            269367018825725,
+            null,
+            248898483140542
+          ]
+        ],
+        [
+          "",
+          "cho_vay_khach_hang",
+          "Cho vay khách hàng",
+          [
+            null,
+            277054380659084,
+            null,
+            254191574802637
+          ]
+        ],
+        [
+          "",
+          "du_phong_rui_ro_cho_vay_khach_hang_vii_chung_khoan_dau_tu",
+          "Dự phòng rúi ro cho vay khách hàng VII Chúng khoán đầu tư",
+          [
+            null,
+            30798366978190,
+            null,
+            31020304438811
+          ]
+        ],
+        [
+          "",
+          "chung_khoan_dau_tu_san_sang_de_ban",
+          "Chứng khoán đầu tư sắn sảng để bán",
+          [
+            null,
+            29379080645093,
+            null,
+            29540331796076
+          ]
+        ],
+        [
+          "",
+          "chung_khoan_dau_tu_giu_den_ngay_dao_han",
+          "Chứng khoán dầu tư giữ đến ngày đáo hạn",
+          [
+            null,
+            1715457301366,
+            null,
+            1773270164381
+          ]
+        ],
+        [
+          "",
+          "du_phong_giam_gia_chung_khoan_dau_tu",
+          "Dự phòng giảm giá chứng khoán đầu tư",
+          [
+            null,
+            -296170968269,
+            null,
+            -293297521646
+          ]
+        ],
+        [
+          "VIII",
+          "gop_von_dau_tu_dai_han",
+          "VIII Góp vốn, đầu tư dài hạn",
+          [
+            null,
+            3991640533921,
+            null,
+            2497449072939
+          ]
+        ],
+        [
+          "",
+          "dau_tu_vao_cong_ty_con_von_gop_lien_doanh",
+          "Đầu tư vào công ty con Vốn góp liên doanh",
+          [
+            null,
+            2759805686479,
+            null,
+            1534921347702
+          ]
+        ],
+        [
+          "",
+          "dau_tu_vao_cong_ty_lien_ket",
+          "Đầu tư vào công ty liên kết",
+          [
+            null,
+            433516202656,
+            null,
+            205242393131
+          ]
+        ],
+        [
+          "",
+          "dau_tu_dai_han_khac",
+          "Đầu tư dài hạn khác",
+          [
+            null,
+            999738606849,
+            null,
+            952258615709
+          ]
+        ],
+        [
+          "",
+          "du_phong_giam_gia_dau_tu_dai_han",
+          "Dự phòng giảm giá đầu tư dài hạn",
+          [
+            null,
+            -201419962063,
+            null,
+            -194973283603
+          ]
+        ],
+        [
+          "IX",
+          "tai_san_co_dinh",
+          "IX Tài sân cố định",
+          [
+            null,
+            3246791765386,
+            null,
+            3496768464820
+          ]
+        ],
+        [
+          "",
+          "tai_san_co_dinh_huu_hinh",
+          "Tài sản cố định hữu hình",
+          [
+            null,
+            1341811946010,
+            null,
+            1486505798175
+          ]
+        ],
+        [
+          "a",
+          "nguyen_gia_tscd",
+          "a Nguyên giá TSCĐ",
+          [
+            null,
+            3003947713740,
+            null,
+            2874951843180
+          ]
+        ],
+        [
+          "b",
+          "hao_mon_tscd",
+          "b Hao mòn TSCĐ",
+          [
+            null,
+            -1662135767730,
+            null,
+            -1388446045005
+          ]
+        ],
+        [
+          "",
+          "tai_san_co_dinh_thue_tai_chinh",
+          "Tài sản cố định thuê tài chính",
+          [
+            null,
+            342803701600,
+            null,
+            451961233650
+          ]
+        ],
+        [
+          "a",
+          "nguyen_gia_tscd",
+          "a Nguyên giá TSCĐ",
+          [
+            null,
+            687987841875,
+            null,
+            788606787292
+          ]
+        ],
+        [
+          "b",
+          "hao_mon_tscd",
+          "b Hao mòn TSCĐ",
+          [
+            null,
+            -345184140275,
+            null,
+            -336645553642
+          ]
+        ],
+        [
+          "",
+          "tai_san_co_dinh_vo_hinh",
+          "Tài sân cố định vô hình",
+          [
+            null,
+            1562176117776,
+            null,
+            1558301432995
+          ]
+        ],
+        [
+          "",
+          "nguyen_gia_tscd",
+          "Nguyên giá TSCĐ",
+          [
+            null,
+            1806626042342,
+            null,
+            1779584962497
+          ]
+        ],
+        [
+          "b",
+          "hao_mon_tscd",
+          "b Hao mòn TSCĐ",
+          [
+            null,
+            -244449924566,
+            null,
+            -221283529502
+          ]
+        ],
+        [
+          "x",
+          "bat_dong_san_dau_tu_a_nguyen_gia_bdsdt_b_hao_mon_bdsdt_xi_ta",
+          "x Bất động săn đầu tư a Nguyên giá BĐSĐT b Hao mòn BĐSĐT XI Tài sản có khác",
+          [
+            null,
+            15078084768187,
+            null,
+            9833780542222
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_phai_thu",
+          "Các khoán phải thu",
+          [
+            null,
+            null,
+            null,
+            6091657106870
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_lai_phi_phai_thu",
+          "Các khoản lãi, phí phái thu",
+          [
+            null,
+            4481410379660,
+            null,
+            3089871596337
+          ]
+        ],
+        [
+          "",
+          "tai_san_thue_tndn_hoan_lai_tai_san_co_khac",
+          "Tài sản thuế TNDN hoăn lại Tài sản Có khác",
+          [
+            null,
+            2748348144640,
+            null,
+            677852898946
+          ]
+        ],
+        [
+          "",
+          "trong_do_loi_the_thuong_mai",
+          "Trong đó: Lợi thế thương mại",
+          [
+            2436246582,
+            null,
+            3373743175,
+            null
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_du_phong_rui_ro_cho_cac_tai_san_co",
+          "Các khoản dự phòng rùi ro cho các tài sản Có",
+          [
+            -27250499962,
+            null,
+            -25601059931,
+            null
+          ]
+        ],
+        [
+          "",
+          "noi_bang_khac_tong_tai_san_co",
+          "nội bảng khác TÓNG TÀI SẢN CÓ",
+          [
+            398583888617909,
+            null,
+            366267769265562,
+            null
+          ]
+        ],
+        [
+          "B",
+          "no_phai_tra_va_von_chu_so_huu_cac_khoan_no_chinh_phu_va_nhnn",
+          "B Nợ phải trả và vốn chủ sở hữu Các khoản nợ Chính phủ và NHNN",
+          [
+            26066466352671,
+            null,
+            16665293498181,
+            null
+          ]
+        ],
+        [
+          "II",
+          "tien_gui_va_vay_cac_tctd_khac",
+          "II Tiền gửi và vay các TCTD khác",
+          [
+            27709065247883,
+            null,
+            28282278685359,
+            null
+          ]
+        ],
+        [
+          "",
+          "tien_gui_cua_cac_tctd_khac",
+          "Tiền gửi của các TCTD khác",
+          [
+            9348058936706,
+            null,
+            15994893925650,
+            null
+          ]
+        ],
+        [
+          "",
+          "vay_cac_tctd_khac",
+          "Vay các TCTD khác",
+          [
+            18361006311176,
+            null,
+            12287384759709,
+            null
+          ]
+        ],
+        [
+          "III",
+          "tien_gui_cua_khach_hang",
+          "III Tiền gửi của khách hàng",
+          [
+            243632916608368,
+            null,
+            244700635016920,
+            null
+          ]
+        ],
+        [
+          "IV",
+          "cac_cong_cu_tai_chinh_phai_sinh_va_cac_tai_san_tai_chinh_kha",
+          "IV Các công cụ tài chính phái sinh và các tài sản tài chính khác v Vốn tài trợ, uỷ thác đầu tư, cho vay mà",
+          [
+            60787127280262,
+            null,
+            36449571669845,
+            null
+          ]
+        ],
+        [
+          "",
+          "tctd_chiu_rui_ro_vi_phat_hanh_giay_to_co_gia",
+          "TCTD chịu rủi ro VI Phát hành giấy tờ có giá",
+          [
+            5325854586310,
+            null,
+            7223089465233,
+            null
+          ]
+        ],
+        [
+          "VII",
+          "cac_khoan_no_khac",
+          "VII Các khoản nợ khác",
+          [
+            10195069811425,
+            null,
+            8577743706688,
+            null
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_lai_phi_phai_tra",
+          "Các khoản lãi, phí phải trả",
+          [
+            5101740944748,
+            null,
+            3514869509363,
+            null
+          ]
+        ],
+        [
+          "",
+          "thue_tndn_hoan_lai_phai_tra_cac_khoan_phai_tra_va_cong_no_kh",
+          "Thuế TNDN hoãn lại phải trả Các khoản phải trà và công nợ khác",
+          [
+            4082681526300,
+            null,
+            4198923075985,
+            null
+          ]
+        ],
+        [
+          "",
+          "du_phong_rui_ro_khac_du_phong_cho_cong_no",
+          "Dự phòng rúi ro khác (Dự phòng cho công nợ",
+          [
+            1010647340377,
+            null,
+            863951121340,
+            null
+          ]
+        ],
+        [
+          "",
+          "tiem_an_va_cam_ket_ngoai_bang_vm_von_va_cac_quy",
+          "tiềm ần và cam kết ngoại bảng) vm vốn và các quỹ",
+          [
+            24648189279105,
+            null,
+            24219730157318,
+            null
+          ]
+        ],
+        [
+          "",
+          "von_cua_tctd",
+          "Vốn của TCTD",
+          [
+            14969963004976,
+            null,
+            16559859404976,
+            null
+          ]
+        ],
+        [
+          "",
+          "von_dieu_le_a",
+          "Vốn diều lệ a",
+          [
+            12947563369930,
+            null,
+            14599713369930,
+            null
+          ]
+        ],
+        [
+          "b",
+          "von_dau_tu_xdcb",
+          "b Vốn đầu tư XDCB",
+          [
+            1916971245046,
+            null,
+            1916971245046,
+            null
+          ]
+        ],
+        [
+          "c",
+          "thang_du_von_co_phan_d_co_phieu_quy_co_phieu_uu_dai_e_g_von",
+          "c Thặng dư vốn cổ phần d Cổ phiếu quỹ Cổ phiếu ưu đãi e g Vốn khác",
+          [
+            105428390000,
+            null,
+            43174790000,
+            null
+          ]
+        ],
+        [
+          "",
+          "quy_cua_tctd",
+          "Quỹ của TCTD",
+          [
+            6510473186583,
+            null,
+            null,
+            null
+          ]
+        ],
+        [
+          "",
+          "chenh_lech_ty_gia_hoi_doai",
+          "Chênh lệch tỷ giá hối đoái",
+          [
+            349214386349,
+            null,
+            383626154058,
+            null
+          ]
+        ],
+        [
+          "",
+          "chenh_lech_danh_gia_lai_tai_san",
+          "Chênh lệch đánh giá lại tài sản",
+          [
+            null,
+            null,
+            11226929690,
+            null
+          ]
+        ],
+        [
+          "",
+          "loi_nhuan_chua_phan_phoi_lo_luy_ke",
+          "Lợi nhuận chưa phân phối/ Lỗ luỹ kế",
+          [
+            2818538701197,
+            null,
+            1369101851976,
+            null
+          ]
+        ],
+        [
+          "IX",
+          "loi_ich_cua_co_dong_thieu_so",
+          "IX Lợi ích của cổ đông thiểu số",
+          [
+            219199451886,
+            null,
+            149427066018,
+            null
+          ]
+        ],
+        [
+          "",
+          "tong_no_phai_tra_va_von_chu_so",
+          "TỔNG NỢ PHẢI TRẢ VÀ VÓN CHỦ SỞ",
+          [
+            398583888617909,
+            null,
+            366267769265562,
+            null
+          ]
+        ]
+      ],
+      "pages": [
+        1,
+        2
+      ],
+      "unit": 1,
+      "n_columns": 4,
+      "cash_flow_method": "",
+      "quarter_column": false,
+      "months": null,
+      "values": {
+        "tong_no_phai_tra_va_von_chu_so_huu": 398583888617909,
+        "ix_loi_ich_cua_co_dong_thieu_so": 219199451886,
+        "viii_5_loi_nhuan_chua_phan_phoi": 2818538701197,
+        "viii_4_chenh_lech_danh_gia_lai_tai_san": 11226929690,
+        "viii_3_chenh_lech_ty_gia_hoi_doai": 349214386349,
+        "viii_2_quy_cua_tctd": 6510473186583,
+        "viii_1_b_thang_du_von_co_phan": 105428390000,
+        "viii_1_a_von_dieu_le": 12947563369930,
+        "viii_1_von_cua_tctd": 14969963004976,
+        "vii_3_du_phong_rui_ro_khac": 1010647340377,
+        "vii_1_cac_khoan_lai_phi_phai_tra": 5101740944748,
+        "vii_cac_khoan_no_khac": 10195069811425,
+        "vi_phat_hanh_giay_to_co_gia": 5325854586310,
+        "iv_cac_cong_cu_tai_chinh_phai_sinh_va_cac_khoan_no_tai_chinh_khac": 60787127280262,
+        "iii_tien_gui_cua_khach_hang": 243632916608368,
+        "ii_2_vay_cac_to_chuc_tin_dung_khac": 18361006311176,
+        "ii_1_tien_gui_cua_cac_to_chuc_tin_dung_khac": 9348058936706,
+        "ii_tien_gui_va_vay_cac_tctd_khac": 27709065247883,
+        "b_no_phai_tra_va_von_chu_so_huu": 26066466352671,
+        "tong_tai_san": 398583888617909,
+        "xii_5_cac_khoan_du_phong_rui_ro_cho_cac_tai_san_co_noi_bang_khac": -27250499962,
+        "xii_4_trong_do_loi_the_thuong_mai": 2436246582,
+        "xii_3_tai_san_thue_thu_nhap_doanh_nghiep_hoan_lai": 2748348144640,
+        "xii_2_cac_khoan_lai_phi_phai_thu": 4481410379660,
+        "xii_1_cac_khoan_phai_thu": 6091657106870,
+        "xii_tai_san_co_khac": 15078084768187,
+        "x_3_b_hao_mon_tai_san_co_dinh": -244449924566,
+        "x_3_a_nguyen_gia_tai_san_co_dinh": 1806626042342,
+        "x_3_tai_san_co_dinh_vo_hinh": 1562176117776,
+        "x_2_b_hao_mon_tai_san_co_dinh": -345184140275,
+        "x_2_a_nguyen_gia_tai_san_co_dinh": 687987841875,
+        "x_2_tai_san_co_dinh_thue_tai_chinh": 342803701600,
+        "x_1_b_hao_mon_tai_san_co_dinh": -1662135767730,
+        "x_1_a_nguyen_gia_tai_san_co_dinh": 3003947713740,
+        "x_1_tai_san_co_dinh_huu_hinh": 1341811946010,
+        "x_tai_san_co_dinh": 3246791765386,
+        "ix_5_du_phong_giam_gia_dau_tu_dai_han": -201419962063,
+        "ix_4_dau_tu_dai_han_khac": 999738606849,
+        "ix_3_dau_tu_vao_cong_ty_lien_ket": 433516202656,
+        "ix_1_dau_tu_vao_cong_ty_con": 2759805686479,
+        "ix_gop_von_dau_tu_dai_han": 3991640533921,
+        "viii_3_du_phong_rui_ro_chung_khoan_dau_tu": -296170968269,
+        "viii_2_chung_khoan_dau_tu_giu_den_ngay_dao_han": 1715457301366,
+        "viii_1_chung_khoan_dau_tu_san_sang_de_ban": 29379080645093,
+        "viii_chung_khoan_dau_tu": 30798366978190,
+        "vi_cho_vay_khach_hang": 269367018825725,
+        "v_cac_cong_cu_tai_chinh_phai_sinh_va_cac_tai_san_tai_chinh_khac": 29905599475,
+        "iv_2_du_phong_rui_ro_chung_khoan_kinh_doanh": -161474270273,
+        "iv_1_chung_khoan_kinh_doanh": 1381172660899,
+        "iv_chung_khoan_kinh_doanh": 1219698390626,
+        "iii_3_du_phong_rui_ro_cho_vay_cac_tctd_khac": -247103581281,
+        "iii_2_cho_vay_cac_tctd_khac": 8512200221705,
+        "iii_1_tien_gui_tai_cac_tctd_khac": 50966214895990,
+        "ii_tien_gui_tai_nhnn": 11956424528849,
+        "i_tien_mat_vang_bac_da_quy": 3664645691136
+      }
+    },
+    "cash_flow": {
+      "layer": "onnx@200",
+      "items": 15,
+      "rows": 31,
+      "rows_sha": "b0acda8c0bd4",
+      "row_dump": [
+        [
+          "",
+          "doanh_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong",
+          "doanh Thu nhập lãi và các khoản thu nhập tương",
+          [
+            32128328102226,
+            19925866618601
+          ]
+        ],
+        [
+          "",
+          "duong",
+          "đương",
+          [
+            -23457326032339,
+            -13652039412100
+          ]
+        ],
+        [
+          "",
+          "thu_nhap_tu_hoat_dong_dich_vu_nhan_duoc",
+          "Thu nhập từ hoạt động dịch vụ nhận được",
+          [
+            1419909670526,
+            1177535331412
+          ]
+        ],
+        [
+          "",
+          "chenh_lech_so_tien_thuc_thu_thuc_chi_tu_hoat_dong_kinh_doanh",
+          "Chênh lệch số tiền thực thu/thực chi từ hoạt động kinh doanh chứng khoán, vàng",
+          [
+            93455651960,
+            -23732654679
+          ]
+        ],
+        [
+          "",
+          "bac_ngoai_te_thu_nhap_khac",
+          "bạc, ngoại tệ Thu nhập khác",
+          [
+            12101571673,
+            -68327628209
+          ]
+        ],
+        [
+          "",
+          "bu_dap_bang_nguon_du_phong_rui_ro",
+          "bù đắp bằng nguồn dự phòng rùi ro",
+          [
+            297229482806,
+            251661134712
+          ]
+        ],
+        [
+          "",
+          "quan_ly_cong_vu_tien_thue_thu_nhap_doanh_nghiep_thuc_nop",
+          "quản lý công vụ Tiền thuế thu nhập doanh nghiệp thực nộp",
+          [
+            null,
+            -630265707679
+          ]
+        ],
+        [
+          "",
+          "trong_ky_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh_truoc",
+          "trong kỳ Lưu chuyển tiền thuần từ hoạt động kinh doanh trước những thay đổi về tài",
+          [
+            5377600926349,
+            4299551264403
+          ]
+        ],
+        [
+          "",
+          "san_va_von_luu_dong_nhung_thay_doi_ve_tai_san_hoat_dong_tang",
+          "sản và vốn lưu động Những thay đối về tài sản hoạt động (Tăng)/ Giảm các khoản tiền, vàng gửi và",
+          [
+            -2707091727443,
+            -707730630026
+          ]
+        ],
+        [
+          "",
+          "cho_vay_cac_tctd_khac_tang_giam_cac_khoan_ve_kinh_doanh",
+          "cho vay các TCTD khác (Tăng)/ Giảm các khoản về kinh doanh",
+          [
+            -795313231968,
+            null
+          ]
+        ],
+        [
+          "",
+          "chung_khoan",
+          "chứng khoán",
+          [
+            null,
+            2723720965101
+          ]
+        ],
+        [
+          "",
+          "sinh_va_cac_tai_san_tai_chinh_khac_tang_giam_cac_khoan_cho_v",
+          "sinh và các tài sản tài chính khác (Tăng)/ Giảm các khoản cho vay khách",
+          [
+            null,
+            -34179310561295
+          ]
+        ],
+        [
+          "",
+          "hang_giam_nguon_du_phong_de_bu_dap_ton_that_cac_khoan_tin_du",
+          "hàng Giảm nguồn dự phòng để bù đắp tồn thất các khoản (tín dụng, chứng khoán, đầu tư dài hạn) Tăng)/ Giàm khác về tài sản hoạt động",
+          [
+            -3270862134652,
+            -3137354273359
+          ]
+        ],
+        [
+          "",
+          "nhnn",
+          "NHNN",
+          [
+            -1581144451350,
+            -13351471035460
+          ]
+        ],
+        [
+          "",
+          "cac_tctd",
+          "các TCTD",
+          [
+            -573213437476,
+            13911869363531
+          ]
+        ],
+        [
+          "",
+          "tang_giam_tien_gui_cua_khach_hang",
+          "Tăng/ (Giảm) tiền gửi của khách hàng",
+          [
+            9914599797288,
+            43716164969998
+          ]
+        ],
+        [
+          "",
+          "bao_gom_ca_kbnn_tang_giam_phat_hanh_giay_to_co_gia_ngoai_tru",
+          "(bao gồm cả KBNN) Tăng/ (Giảm) phát hành giấy tờ có giá (ngoại trừ giấy tờ có giá phát hành được",
+          [
+            null,
+            -10326763355160
+          ]
+        ],
+        [
+          "",
+          "tinh_vao_hoat_dong_tai_chinh_tang_giam_von_tai_tro_uy_thac_d",
+          "tính vào hoạt động tài chính) Tăng/ (Giảm) vốn tài trợ, uỷ thác đầu tư,",
+          [
+            22274755610417,
+            null
+          ]
+        ],
+        [
+          "",
+          "cho_vay_ma_tctd_chiu_rui_ro_tang_giam_cac_cong_cu_tai_chinh",
+          "cho vay mà TCTD chịu rùi ro Tăng/ (Giảm) các công cụ tài chính phái",
+          [
+            3004296477,
+            -234886994845
+          ]
+        ],
+        [
+          "",
+          "sinh_va_cac_khoan_no_tai_chinh_khac_tang_giam_cong_no_khac",
+          "sinh và các khoản nợ tài chính khác Tăng/ (Giảm) công nợ khác",
+          [
+            433531686113,
+            103410322817
+          ]
+        ],
+        [
+          "",
+          "chi_tu_cac_quy_cua_tctd",
+          "Chỉ từ các quỹ của TCTD (?)",
+          [
+            -424076306,
+            -1268293439247
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_thuan_tu_hoat_dong_i",
+          "Lưu chuyển tiền thuần từ hoạt động I",
+          [
+            3308307288351,
+            null
+          ]
+        ],
+        [
+          "",
+          "kinh_doanh_luu_chuyen_tien_tu_hoat_dong_dau_tu_mua_sam_tai_s",
+          "kinh doanh Lưu chuyển tiền từ hoạt động đầu tư Mua sắm tài sản cố định (?)",
+          [
+            -124520917195,
+            -64464487303
+          ]
+        ],
+        [
+          "",
+          "tien_thu_tu_thanh_ly_nhuong_ban_tscd",
+          "Tiền thu từ thanh lý, nhượng bán TSCĐ",
+          [
+            1534238720,
+            1702431548
+          ]
+        ],
+        [
+          "",
+          "tien_chi_tu_thanh_ly_nhuong_ban_tscd",
+          "Tiền chi từ thanh lý, nhượng bán TSCĐ",
+          [
+            -996917232,
+            -490675820
+          ]
+        ],
+        [
+          "",
+          "khac",
+          "khác",
+          [
+            5620000000,
+            29874374422
+          ]
+        ],
+        [
+          "",
+          "tien_thu_co_tuc_va_loi_nhuan_duoc_chia_tu",
+          "Tiền thu cổ tức và lợi nhuận được chia từ",
+          [
+            99821975113,
+            162056476971
+          ]
+        ],
+        [
+          "",
+          "cac_khoan_dau_tu_gop_von_dai_han_luu_chuyen_tien_thuan_tu_ho",
+          "các khoản đầu tư, góp vốn dài hạn Lưu chuyến tiền thuần từ hoạt động II đầu tư Lưu chuyển tiền từ hoạt động tài chính Tăng /Giảm vốn điều lệ",
+          [
+            44550300000,
+            3388850000000
+          ]
+        ],
+        [
+          "",
+          "tien_chi_ra_mua_co_phieu_ngan_quy_tien_thu_duoc_do_ban_co_ph",
+          "(?) Tiền chi ra mua cổ phiếu ngân quỹ (-) Tiền thu được do bán cổ phiếu ngân quỹ Lưu chuyến tiền thuần từ hoạt động tài III",
+          [
+            44550300000,
+            null
+          ]
+        ],
+        [
+          "",
+          "chinh",
+          "chính",
+          [
+            null,
+            3388850000000
+          ]
+        ],
+        [
+          "",
+          "luu_chuyen_tien_thuan_trong_ky",
+          "Lưu chuyển tiền thuần trong kỳ",
+          [
+            2117639606617,
+            2277175850946
+          ]
+        ]
+      ],
+      "pages": [
+        3,
+        4
+      ],
+      "unit": 1,
+      "n_columns": 2,
+      "cash_flow_method": "direct",
+      "quarter_column": false,
+      "months": 9,
+      "values": {
+        "hdtc_iv_luu_chuyen_tien_thuan_trong_ky": 2117639606617,
+        "hddt_tien_thu_co_tuc_va_loi_nhuan_duoc_chia_tu_cac_khoan_dau_tu_gop_von_dai_han": 99821975113,
+        "hddt_tien_chi_ve_thanh_ly_nhuong_ban_tscd": -996917232,
+        "hddt_tien_thu_tu_thanh_ly_nhuong_ban_tscd": 1534238720,
+        "hdkd_i_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh": 3308307288351,
+        "hdkd_22_chi_tu_cac_quy_cua_tctd": -424076306,
+        "hdkd_17_tang_giam_tien_gui_cua_khach_hang": 9914599797288,
+        "hdkd_16_tang_giam_cac_khoan_tien_gui_tien_vay_cac_tctd": -573213437476,
+        "hdkd_15_tang_giam_cac_khoan_no_chinh_phu_va_nhnn": -1581144451350,
+        "hdkd_nhung_thay_doi_ve_tai_san_hoat_dong": -2707091727443,
+        "hdkd_6_tien_thu_cac_khoan_no_da_duoc_xu_ly_xoa_bu_dap_bang_nguon_du_phong_rui_ro": 297229482806,
+        "hdkd_4_chenh_lech_so_tien_thuc_thu_thuc_chi_tu_hoat_dong_kinh_doanh_chung_khoan_vang_bac_ngoai_te": 93455651960,
+        "hdkd_3_thu_nhap_tu_hoat_dong_dich_vu": 1419909670526,
+        "hdkd_1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu_nhan_duoc": 32128328102226,
+        "hdtc_vii_tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky": -23457326032339
+      }
+    }
+  },
+  "absent": [
+    "income_statement"
+  ],
+  "engine_errors": [],
+  "facts": {
+    "publish_date": "2011-10-01",
+    "shares_authorized": null,
+    "shares_issued": null,
+    "shares_outstanding": null
+  },
+  "error": null,
+  "log": [
+    "  0.0% - HOSE_BID - plan - overall %    : documents finished + OCR passes done of the 7 this 49-layer cascade can cost, over 1 document(s) — a POSITION IN THE PLAN, never a fraction of the time",
+    "  0.0% - HOSE_BID - plan - symbol       : HOSE_BID",
+    "  0.0% - HOSE_BID - plan - template     : bank   (templates.csv)",
+    "  0.0% - HOSE_BID - plan - documents    : 1  (Q3-2011)",
+    "  0.0% - HOSE_BID - plan - quarters     : ['2011-Q3']   selected ['2011-Q3']",
+    "  0.0% - HOSE_BID - plan - skipped      : 0 quarter(s) already `pdf` in all three statements",
+    "  0.0% - HOSE_BID - plan - cascade      : 49 of 49 layers",
+    "  0.0% - HOSE_BID - plan - data root    : /kaggle/input/datasets/lyductrung/mt-cafef-filings-bid-2011-q3/documents/data/cafef",
+    "  0.0% - HOSE_BID - plan - models       : det=deepdoc_det.onnx vietocr=vgg_seq2seq.pth",
+    "  0.0% - HOSE_BID - plan - vietocr cfg  : /kaggle/input/datasets/lyductrung/mt-cafef-filings-bid-2011-q3/documents/models/vietocr_vgg_seq2seq.yml",
+    "  0.0% - doc 1/1 HOSE_BID Q3-2011 - open - Q3-2011_bao_cao_tai_chinh_hop_nhat_quy_3_nam_2011.pdf  4.0 MB  bank/consolidated",
+    "  0.0% - doc 1/1 HOSE_BID Q3-2011 - band - balance 3, income 0, cash 2   open_ref=—",
+    "  0.0% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - OCR pass 1/7",
+    "  0.4% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 1/32   3% of this pass",
+    "  1.3% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 3/32   9% of this pass   ~151 s left",
+    "  3.1% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 7/32  21% of this pass   ~73 s left",
+    "  4.5% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 10/32  31% of this pass   ~53 s left",
+    "  6.2% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 14/32  43% of this pass   ~35 s left",
+    "  7.6% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 17/32  53% of this pass   ~26 s left",
+    "  9.4% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 21/32  65% of this pass   ~17 s left",
+    " 10.7% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 24/32  75% of this pass   ~11 s left",
+    " 12.5% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 28/32  87% of this pass   ~5 s left",
+    " 14.3% - doc 1/1 HOSE_BID Q3-2011 - layer 1/49 onnx@200 - page 32/32 100% of this pass   ~0 s left",
+    " 14.3% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - OCR pass 2/7",
+    " 14.7% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - page 1/32   3% of this pass",
+    " 16.5% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - page 5/32  15% of this pass   ~35 s left",
+    " 17.9% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - page 8/32  25% of this pass   ~28 s left",
+    " 19.6% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - page 12/32  37% of this pass   ~21 s left",
+    " 21.4% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - page 16/32  50% of this pass   ~16 s left",
+    " 23.2% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - page 20/32  62% of this pass   ~11 s left",
+    " 25.0% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - page 24/32  75% of this pass   ~7 s left",
+    " 26.8% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - page 28/32  87% of this pass   ~4 s left",
+    " 28.6% - doc 1/1 HOSE_BID Q3-2011 - layer 2/49 onnx@300 - page 32/32 100% of this pass   ~0 s left",
+    " 28.6% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - OCR pass 3/7",
+    " 29.0% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - page 1/32   3% of this pass",
+    " 30.8% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - page 5/32  15% of this pass   ~36 s left",
+    " 32.1% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - page 8/32  25% of this pass   ~30 s left",
+    " 33.9% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - page 12/32  37% of this pass   ~22 s left",
+    " 35.7% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - page 16/32  50% of this pass   ~17 s left",
+    " 37.5% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - page 20/32  62% of this pass   ~12 s left",
+    " 39.3% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - page 24/32  75% of this pass   ~8 s left",
+    " 41.1% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - page 28/32  87% of this pass   ~4 s left",
+    " 42.9% - doc 1/1 HOSE_BID Q3-2011 - layer 3/49 onnx@400 - page 32/32 100% of this pass   ~0 s left",
+    " 42.9% - doc 1/1 HOSE_BID Q3-2011 - layer 5/49 onnx@200+relax - cached parse, re-map only",
+    " 42.9% - doc 1/1 HOSE_BID Q3-2011 - layer 6/49 onnx@300+relax - cached parse, re-map only",
+    " 42.9% - doc 1/1 HOSE_BID Q3-2011 - layer 8/49 onnx@200+components - cached parse, re-map only",
+    " 42.9% - doc 1/1 HOSE_BID Q3-2011 - layer 9/49 onnx@300+components - cached parse, re-map only",
+    " 42.9% - doc 1/1 HOSE_BID Q3-2011 - layer 10/49 onnx@200+relax+components - cached parse, re-map only",
+    " 42.9% - doc 1/1 HOSE_BID Q3-2011 - layer 11/49 onnx@200+pad6+components - OCR pass 4/7",
+    " 43.3% - doc 1/1 HOSE_BID Q3-2011 - layer 11/49 onnx@200+pad6+components - page 1/32   3% of this pass",
+    " 45.1% - doc 1/1 HOSE_BID Q3-2011 - layer 11/49 onnx@200+pad6+components - page 5/32  15% of this pass   ~28 s left",
+    " 46.4% - doc 1/1 HOSE_BID Q3-2011 - layer 11/49 onnx@200+pad6+components - page 8/32  25% of this pass   ~23 s left",
+    " 48.2% - doc 1/1 HOSE_BID Q3-2011 - layer 11/49 onnx@200+pad6+components - page 12/32  37% of this pass   ~17 s left",
+    " 50.0% - doc 1/1 HOSE_BID Q3-2011 - layer 11/49 onnx@200+pad6+components - page 16/32  50% of this pass   ~14 s left",
+    " 51.8% - doc 1/1 HOSE_BID Q3-2011 - layer 11/49 onnx@200+pad6+components - page 20/32  62% of this pass   ~10 s left",
+    " 53.6% - doc 1/1 HOSE_BID Q3-2011 - layer 11/49 onnx@200+pad6+components - page 24/32  75% of this pass   ~6 s left",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 12/49 onnx@200+pad6+relax+components - cached parse, re-map only",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 13/49 onnx@300+split - cached parse, re-map only",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 14/49 onnx@300+split+components - cached parse, re-map only",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - cached parse, re-map only",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - page 1/32   3% of this pass",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - page 5/32  15% of this pass   ~1 s left",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - page 8/32  25% of this pass   ~0 s left",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - page 12/32  37% of this pass   ~0 s left",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - page 16/32  50% of this pass   ~0 s left",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - page 20/32  62% of this pass   ~0 s left",
+    " 54.5% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - page 24/32  75% of this pass   ~0 s left",
+    " 55.4% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 15/49 onnx@200+join+components - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 16/49 onnx@200+join+relax+components - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - page 8/32  25% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 17/49 onnx@200+title - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 18/49 onnx@200+title+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 19/49 onnx@200+loose - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 20/49 onnx@200+loose+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 21/49 onnx@400+loose - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 22/49 onnx@400+loose+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 23/49 onnx@300+loose - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 24/49 onnx@300+loose+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - page 8/32  25% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 25/49 onnx@200+title+loose - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 26/49 onnx@200+title+loose+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 27/49 onnx@200+realign - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 28/49 onnx@200+realign+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 29/49 onnx@300+realign - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 30/49 onnx@300+realign+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 31/49 onnx@200+realign+relax+components - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 32/49 onnx@200+notes+seam - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 33/49 onnx@200+notes+seam+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 34/49 onnx@300+notes+seam - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 35/49 onnx@200+notes+seam+realign - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 36/49 onnx@200+notes - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 37/49 onnx@200+tail - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 38/49 onnx@200+tail+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 39/49 onnx@300+tail - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 40/49 onnx@200+tail+relax+components - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 41/49 onnx@200+unit+tail - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 42/49 onnx@200+unit+tail+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 43/49 onnx@200+unit - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 44/49 onnx@300+unit+tail - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - page 1/32   3% of this pass",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - page 5/32  15% of this pass   ~1 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - page 8/32  25% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - page 12/32  37% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - page 16/32  50% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - page 20/32  62% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - page 24/32  75% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - page 28/32  87% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 45/49 onnx@300+unit - page 32/32 100% of this pass   ~0 s left",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 46/49 onnx@200+annual+relax - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 47/49 onnx@200+pad6+annual+extra - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 48/49 onnx@200+pad6+extra - cached parse, re-map only",
+    " 57.1% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - OCR pass 5/7",
+    " 57.6% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - page 1/32   3% of this pass",
+    " 59.4% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - page 5/32  15% of this pass   ~30 s left",
+    " 60.7% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - page 8/32  25% of this pass   ~25 s left",
+    " 62.5% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - page 12/32  37% of this pass   ~19 s left",
+    " 64.3% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - page 16/32  50% of this pass   ~15 s left",
+    " 66.1% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - page 20/32  62% of this pass   ~11 s left",
+    " 67.9% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - page 24/32  75% of this pass   ~7 s left",
+    " 68.3% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:     income_statement absent after 47 layer(s):",
+    " 68.3% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@200] no such statement on any page of this filing",
+    " 68.3% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@200+pad6+components] reconcile: only 8 rows parsed",
+    " 68.3% - doc 1/1 HOSE_BID Q3-2011 - layer 49/49 onnx@300+pad6+annual+extra - WARNING:       [onnx@300+pad6+annual+extra] reconcile: only 4 rows parsed"
+  ],
+  "history_sizes": {
+    "balance_sheet": {
+      "True": 3,
+      "False": 0
+    },
+    "income_statement": {
+      "True": 0,
+      "False": 0
+    },
+    "cash_flow": {
+      "True": 2,
+      "False": 0
+    }
+  },
+  "open_ref": null,
+  "template_how": "templates.csv",
+  "compare": {
+    "balance_sheet": {
+      "on_disk": "pdf",
+      "disk_layer": "onnx@200",
+      "run_layer": "onnx@200",
+      "cells_disk": 55,
+      "cells_run": 55,
+      "identical": 54,
+      "changed": {},
+      "only_on_disk": [
+        "viii_von_chu_so_huu"
+      ],
+      "only_in_run": [
+        "b_no_phai_tra_va_von_chu_so_huu"
+      ],
+      "same_layer": true,
+      "same_unit": true,
+      "same_publish_date": true,
+      "verdict": "DIFFERS"
+    },
+    "income_statement": {
+      "on_disk": "missing",
+      "disk_layer": "",
+      "run_layer": "",
+      "verdict": "absent in this run"
+    },
+    "cash_flow": {
+      "on_disk": "pdf",
+      "disk_layer": "onnx@200",
+      "run_layer": "onnx@200",
+      "cells_disk": 15,
+      "cells_run": 15,
+      "identical": 15,
+      "changed": {},
+      "only_on_disk": [],
+      "only_in_run": [],
+      "same_layer": true,
+      "same_unit": true,
+      "same_publish_date": true,
+      "verdict": "REPRODUCED"
+    }
+  }
+}
