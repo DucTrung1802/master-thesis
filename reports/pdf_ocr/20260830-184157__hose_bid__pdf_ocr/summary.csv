@@ -1,4 +1,0 @@
-period,report,layer,items,status,verdict,seconds
-Q3-2011,balance_sheet,onnx@200,55,pdf,DIFFERS,153.65
-Q3-2011,income_statement,,0,absent,absent in this run,153.65
-Q3-2011,cash_flow,onnx@200,15,pdf,REPRODUCED,153.65

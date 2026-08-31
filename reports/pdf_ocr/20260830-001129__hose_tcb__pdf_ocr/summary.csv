@@ -1,4 +1,0 @@
-period,report,layer,items,status,verdict,seconds
-Q4-2013,balance_sheet,onnx@200,43,pdf,REPRODUCED,167.08
-Q4-2013,income_statement,onnx@300,22,pdf,skipped — the filing is cumulative and the row on disk is de-cumulated,167.08
-Q4-2013,cash_flow,onnx@200,19,pdf,REPRODUCED,167.08
