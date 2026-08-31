@@ -163,11 +163,37 @@ def _rehearse_documents(payload, work, manifest: dict) -> int:
     models = job.use_models()
     for name, path in models.items():
         if path is None:
+            # ⚠️ TWO DIFFERENT CONSEQUENCES, ONE ASSERTION — because both are invisible on the
+            # worker. An absent onnx file is a DOWNLOAD a kernel with enable_internet: false
+            # cannot make; an absent `vie.traineddata` is a SMALLER CASCADE, executed in
+            # silence, and that one produced a real disagreement between the two machines.
             raise AssertionError(
-                f"the {name} model did not travel — the engine would DOWNLOAD it, which a "
-                f"kernel with enable_internet: false cannot do at all."
+                f"the {name} file ({job.MODEL_FILES[name]}) did not travel — the worker would "
+                f"either DOWNLOAD it, which a kernel with enable_internet: false cannot do, or "
+                f"run a SMALLER cascade: without the language model the two tesseract layers "
+                f"are dropped and the worker executes 53 of the 55 layers this machine does "
+                f"(CLAUDE.md §6-2-quinquagies)."
             )
     print(f"  models                       : OK ({', '.join(Path(p).name for p in models.values())})")
+
+    # ⚠️ **THE CASCADE'S OWN QUESTION, ASKED HERE WHERE IT IS FREE.** `_parse_cascaded` skips a
+    # layer whose engine is not ready, so "the file travelled" and "the layer will run" are two
+    # facts and only the second one matters. The md5 is what makes the two machines comparable:
+    # the ENGINE is embedded in a pinned pymupdf, so the language model is the only half that
+    # can differ, and a version number cannot tell two builds of it apart.
+    tess = job.tesseract_report()
+    # ⚠️ **THREE STATES, NOT TWO, AND THE THIRD ONE FIRED ON ITS FIRST RUN.** A rehearsal
+    # executes the PAYLOAD's copy of the repo, so a payload staged before `TESSDATA_MD5`
+    # existed reports no `matches_pin` at all — and reading that absence as False printed
+    # "NOT the pinned model" over the pinned model. §5 rule 2 at a progress line: an absent
+    # measurement is absent, never a failing one.
+    _PIN = {True: "", False: " ⚠️ NOT the pinned model",
+            None: " (this payload's code predates the pin)"}
+    model = tess.get("language_model") or {}
+    print(f"  tesseract layers             : "
+          f"{'READY' if tess.get('ready') is True else 'NOT READY — 53 of 55 layers'}"
+          + (f" ({job.MODEL_FILES['tessdata']} md5 {model['md5']}{_PIN[model.get('matches_pin')]}"
+             f", {model['bytes'] / 1024 ** 2:.1f} MB)" if model else ""))
 
     builder = FinancialsBuilder(logger=None)
     # ⚠️ **EVERY FILTER THE EXPORT APPLIED, OR THIS CHECK CANNOT PASS.** It read only

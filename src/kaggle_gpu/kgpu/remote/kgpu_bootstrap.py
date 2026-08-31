@@ -265,13 +265,22 @@ def _documents_base(payload: Path) -> Path:
 def _setup_documents(payload: Path, work: Path, manifest: dict) -> dict:
     """Point the CafeF PDF parse at the shipped files. Returns what it set, for the log.
 
-    Three environment variables and nothing else — no import, no monkey-patch. `pdf_ocr_job`
+    Four environment variables and nothing else — no import, no monkey-patch. `pdf_ocr_job`
     reads them (`use_data_root`, `use_models`) and the parse then behaves exactly as it does on
     a machine with the repo's own `raw_data/cafef`.
 
     ⚠️ `CAFEF_OCR_ENGINE` is set so a default-constructed `PdfParser` is the onnx one. Every
-    `ParseLayer` names its engine explicitly, so this changes no layer's behaviour — it only
-    stops `FinancialsBuilder.__init__` probing for a Tesseract that is not installed here.
+    `ParseLayer` names its engine explicitly, so this changes no layer's behaviour.
+
+    ⚠️ **`TESSDATA_PREFIX` IS THE ONE THAT MAKES THE CASCADE THE SAME LENGTH ON BOTH
+    MACHINES.** `cafef_pdf_parser.TESSDATA_DIR` is evaluated at IMPORT time from that variable,
+    falling back to `%LOCALAPPDATA%\\tessdata` — a Windows shape that answers False on a Linux
+    worker — so `_parse_cascaded` dropped `tesseract@200` (layer 4 of 55) and
+    `tesseract@400+relax` (layer 7) with a bare `continue`, and a T4 ran 53 layers where this
+    repo's machine runs 55 (CLAUDE.md §6-2-quinquagies). ⚠️ It is ASSIGNED and not
+    `setdefault`: the payload's copy is the one this repo parses with, and an image that
+    happens to export its own `TESSDATA_PREFIX` would point the parse at a DIFFERENT build of
+    the language model — a different reading under the same version number.
     """
     base = _documents_base(payload)
     data_root = base / "data" / "cafef"
@@ -284,6 +293,7 @@ def _setup_documents(payload: Path, work: Path, manifest: dict) -> dict:
         )
     os.environ[DATA_ROOT_ENV] = str(data_root)
     os.environ[MODELS_DIR_ENV] = str(models)
+    os.environ["TESSDATA_PREFIX"] = str(models)
     os.environ.setdefault("CAFEF_OCR_ENGINE", "onnx")
 
     spec = manifest.get("documents", {})

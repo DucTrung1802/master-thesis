@@ -1,0 +1,125 @@
+# src\web_scraper\requirements-ocr.txt
+#
+# THE OCR STACK, PINNED ONCE, FOR BOTH MACHINES.
+#
+#     .\mt_env\Scripts\python.exe -m pip install -r src/web_scraper/requirements-ocr.txt
+#
+# and `RUN__pdf_ocr.ipynb` installs this same file on a Kaggle worker. One file, so the two
+# machines cannot drift apart quietly — which is what they had done: measured 2026-08-28, a
+# local run and a T4 run of the identical filing differed in `torch` (2.5.1+cu121 against
+# 2.10.0+cu128) AND `onnxruntime` (1.20.1 against 1.22.0), so a 1.25×/page gap between the two
+# machines could not be attributed to the CARD rather than to the libraries.
+#
+# ⚠️ EVERY LINE HERE CHANGES PIXELS, BOXES OR CHARACTERS. This is not a convenience list:
+#
+#   pymupdf        rasterises the page. A different rasteriser is different input to the OCR.
+#   onnxruntime    runs the DeepDoc DB detector — where the text boxes come from.
+#   vietocr        reads the crops. It IS the recogniser.
+#   opencv         resizes and normalises the page before detection (`_deepdoc/operators.py`).
+#   shapely        unclips the DB polygons; pyclipper offsets them (`_deepdoc/postprocess.py`).
+#   numpy          every array operation between those steps.
+#
+# ⚠️ **`onnxruntime-gpu==1.20.1` WAS THIS MACHINE'S VERSION AND IT IS NOT PUBLISHED ON PyPI.**
+# The index offers 1.20.0 and 1.20.2 and no 1.20.1 — measured against the PyPI JSON API and
+# confirmed by a Kaggle `pip install` that listed every available version. So aligning meant
+# moving BOTH sides, not pinning Kaggle to us. ✅ The move was GUARDED rather than assumed:
+# VCB Q1-2026 was re-parsed under 1.20.2 and reproduced all **98 of 98** cells written under
+# 1.20.1, same layer, same unit, same publish_date. The 1.20.1 tree is archived at
+# `D:\GIT\_archive\onnxruntime-gpu-1.20.1-backup` because pip cannot fetch it back.
+#
+# ⚠️ **1.19–1.22 IS THE CUDA 12 / cuDNN 9 LINE AND THE PIN MUST STAY INSIDE IT.** A bare
+# `onnxruntime-gpu` resolves to 1.29.0, which requires CUDA **13**; on Kaggle's CUDA 12.8 image
+# `get_available_providers()` still ADVERTISES `CUDAExecutionProvider`, the session then fails
+# to create it, and DB detection silently runs on the worker's CPU — correct output, 21 %
+# slower, one warning inside a wall of onnxruntime noise. `ISSUES.md` `ORT-1`.
+#
+# ─────────────────────────────────────────────────────────────────────────────────────────
+# ⚠️ WHAT CANNOT BE ALIGNED, AND WHY IT IS RECORDED INSTEAD
+#
+#   torch     Kaggle's image ships 2.10.0+cu128 preinstalled. Forcing 2.5.1+cu121 onto a
+#             worker is a ~2.5 GB download per run against an unknown driver; and moving THIS
+#             machine to 2.10 would invalidate the entire modelling stack, whose runs record
+#             `env_fingerprint` in `feature_selection.contract.SETUP_KEYS` precisely because a
+#             library change makes two runs two different procedures. It is left alone.
+#   python    3.12.10 here, 3.12.13 on the worker. Patch level, not choosable.
+#   OS        Windows against Linux. Not choosable.
+#
+# So `pdf_ocr_job.engine_report()` records the WHOLE stack and a 12-character fingerprint into
+# every run's `metadata.json`, and two runs whose fingerprints differ are two runs. Pinning
+# what can be pinned narrows the gap; the fingerprint is what stops the remainder being
+# invisible. §5 rule 2 — an unrecorded difference is not an absent one.
+# ─────────────────────────────────────────────────────────────────────────────────────────
+
+# ⚠️ **A LINE, NOT A VERSION — AND THAT IS THE MEASUREMENT, NOT A COMPROMISE.**
+# Pinning both machines to `==1.20.2` BROKE THE WORKER. Measured 2026-08-28 over four T4 runs
+# of one filing, with opencv varied to exonerate it:
+#
+#   ort 1.22.0, Kaggle's own opencv        -> onnx@200   REPRODUCED, 98/98
+#   ort 1.20.2, headless upgraded to 5.x   -> onnx@300   DIFFERS
+#   ort 1.20.2, opencv-python  to 5.x      -> onnx@300   DIFFERS
+#   ort 1.20.2, BOTH left at Kaggle's 4.13 -> onnx@300   DIFFERS      <- opencv exonerated
+#
+# On Linux, 1.20.2's DB detector returns boxes that FAIL the `onnx@200` parse where 1.22.0
+# passes; the cascade then escalates to `onnx@300`, and THAT layer writes a ROW-SLID income
+# statement — four cells carrying their neighbour's figure — which `reconcile` and `sane` both
+# accept. `ISSUES.md` `ORT-2`.
+#
+# ⚠️ **SO "SAME VERSION" IS NOT THE GOAL; "SAME OUTPUT" IS.** Aligning the version number here
+# made the outputs DIVERGE. The rule this earns: pin only what is verified to reproduce on BOTH
+# machines, pin the supported LINE where a version is not, and let the fingerprint carry the
+# rest. Verified today: Windows 1.20.2, Linux 1.22.0 — both reproduce, both inside the line.
+# ✅ **ONE VERSION AFTER ALL — MEASURED 2026-08-28, BY TRYING THE OTHER DIRECTION.**
+# The first attempt aligned DOWNWARD (Kaggle to this machine's 1.20.2) and broke the worker's
+# `onnx@200` parse (`ORT-2`). Aligning UPWARD was never tried until it was: moving THIS machine
+# to **1.22.0** — the version Kaggle already reproduced on — and VCB Q1-2026 still reproduces
+# 98 of 98 cells at `onnx@200` here. Both machines now hold ONE version and the range-pin is
+# withdrawn. ⚠️ **The lesson is the method, not the number: "we cannot align" was an inference
+# drawn from ONE direction, and the second direction cost four minutes to test.**
+onnxruntime-gpu==1.22.0
+pymupdf==1.28.0
+# ⚠️ **PINNING pymupdf ALSO PINS TESSERACT, WHICH IS WHY THERE IS NO apt LINE ANYWHERE.**
+# Measured 2026-08-31: the wheel STATICALLY EMBEDS Tesseract and Leptonica — `libmupdf.so.29.0`
+# in `pymupdf-1.28.0-cp310-abi3-manylinux_2_28_x86_64.whl` carries `thirdparty/tesseract`,
+# `traineddata` and `TESSDATA_PREFIX`, exactly as `mupdfcpp64.dll` does on Windows. Probed here
+# with `C:\Program Files\Tesseract-OCR` off PATH and a tessdata folder holding ONLY
+# vie.traineddata, `get_textpage_ocr` returned correct Vietnamese. So the two tesseract layers
+# need NO apt package, NO binary and no osd.traineddata; one pymupdf version is one mupdf build
+# is one embedded tesseract, on both machines.
+#
+# ⚠️ **WHAT THEY DO NEED IS A LANGUAGE MODEL, AND IT IS SHIPPED AS A FILE, NOT INSTALLED.**
+# `vie.traineddata` (12.4 MB) travels in the kgpu payload beside the two onnx binaries —
+# `pdf_ocr_job.MODEL_FILES["tessdata"]` — and `engine_report()` records its md5 in every run.
+# `apt-get install tesseract-ocr-vie` is REFUSED on the rule this file exists for: Ubuntu's
+# build is a different model under the same name, so it would align the package and diverge the
+# characters. Same version is not the goal; same output is.
+#
+# ⚠️ **ITS PIN IS A DIGEST AND IT LIVES IN CODE, NOT HERE** — `pdf_ocr_job.TESSDATA_MD5`, because
+# this file is parsed for `name==version` lines and a 12.4 MB data file has no version. Every
+# run records the md5 of the model it actually read, and whether it matched.
+# ⚠️ **`opencv-python`, NOT `-headless`, AND THAT COST A RUN.** Pinning the headless
+# distribution installed it BESIDE Kaggle's preinstalled `opencv-python` 4.13.0.92 — two
+# distributions both providing `cv2`, with which one wins decided by install order. That is a
+# COLLISION, not an alignment. Measured 2026-08-28: under the headless pin the worker's
+# `onnx@200` FAILED where it had always passed, the cascade escalated to `onnx@300`, and that
+# layer wrote a ROW-SLID income statement (4 cells carrying their neighbour's figure) which
+# `reconcile` and `sane` both accepted. Pin the distribution the other machine ACTUALLY HAS.
+# ✅ **BOTH DISTRIBUTIONS, BOTH PINNED — measured the same way.** Kaggle ships
+# `opencv-python` AND `opencv-python-headless`, both at 4.13.0.92, and either can win the
+# `cv2` import; pinning one and leaving the other is a COLLISION rather than an alignment,
+# which is why the first attempt pinned neither. Moving THIS machine down to 4.13.0.92 on both
+# was then measured — VCB Q1-2026 reproduces 98 of 98 at `onnx@200` — so both are pinned and
+# the two environments hold the same `cv2` whichever way the import resolves.
+opencv-python==4.13.0.92
+opencv-python-headless==4.13.0.92
+shapely==2.1.2
+pyclipper==1.4.0
+numpy==2.2.6
+einops==0.2.0
+
+# ⚠️ `--no-deps` AT THE INSTALL SITE, NOT HERE — a requirements file cannot express it.
+# vietocr's metadata pins `pillow==10.2.0` and `albumentations==1.4.2`, which pip will happily
+# downgrade a whole image to satisfy, and the predictor path needs neither: torch, torchvision,
+# numpy, PIL, yaml, einops, gdown, tqdm and requests, all of which both machines already have.
+# The notebook installs it separately with `--no-deps`; do the same by hand:
+#     python -m pip install --no-deps vietocr==0.3.13
+vietocr==0.3.13

@@ -1,0 +1,34 @@
+# src\web_scraper\requirements-ocr-torch.txt
+#
+# ⚠️ **OPTIONAL, AND OFF BY DEFAULT.** This is the last library separating the two machines,
+# and it is the expensive one: Kaggle's image ships `torch 2.10.0+cu128` preinstalled, so
+# aligning it means downloading ~2.5 GB into every kernel run. `RUN__pdf_ocr.ipynb` installs
+# this file only when `ALIGN_TORCH = True`.
+#
+# ⚠️ **THE DIRECTION IS FORCED, AND NOT BY PREFERENCE.** Aligning UP — moving THIS machine to
+# 2.10 — would change the library stack every model run in this repo was measured under;
+# `feature_selection.contract.SETUP_KEYS` carries `env_fingerprint` precisely so that two such
+# runs can never be unioned into one table. So the only direction available is down, on the
+# worker, per run.
+#
+# ⚠️ `torchvision` MUST move with `torch` — vietocr's backbone imports `torchvision.models`,
+# and 0.20.1 is the release paired with 2.5.1. Moving one alone is how a CUDA/ABI mismatch
+# appears three cells later as an opaque symbol error.
+#
+# ❌ **MEASURED 2026-08-28 AND IT DOES NOT WORK — THE KERNEL DIES.** `ALIGN_TORCH=True` was
+# pushed once: pip reported success, the very next cell still printed `torch 2.10.0+cu128`
+# because **a running interpreter cannot be handed a different torch** (the old shared objects
+# are already mapped), and the kernel then died with `DeadKernelError` after 4.7 minutes.
+# Replacing it would need the install to happen before any import and then a RESTART, which a
+# papermill batch run does not offer. **So torch is the one library that cannot be aligned, and
+# that is now a measurement rather than an argument.** Kept, off, so the next person does not
+# have to spend the run to learn it. CLAUDE.md §6-2-undetricies.
+#
+# ⚠️ **cu121 WHEELS ON A cu128 IMAGE ARE A FORWARD-COMPATIBILITY BET, AND IT IS MEASURED
+# RATHER THAN ASSUMED**: the notebook re-probes `torch.cuda.is_available()` and the parse is
+# scored by `compare()` against the 98 cells on disk, so a bet that does not pay shows up as a
+# failed run and not as a quiet CPU fallback (`ORT-1`'s lesson, one library over).
+
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121

@@ -112,8 +112,12 @@ def test_use_models_resolves_exactly_the_files_MODEL_FILES_names(tmp_path, monke
     # it records the ORIGINAL at this call and puts it back at teardown, whatever happens in
     # between. Without it a test would leak this tmp path into every later one.
     for var in ("CAFEF_ONNX_DET", "CAFEF_ONNX_VIETOCR_WEIGHTS", "CAFEF_ONNX_VIETOCR_CONFIG",
-                job.MODELS_DIR_ENV):
+                "CAFEF_TESSDATA", "TESSDATA_PREFIX", job.MODELS_DIR_ENV):
         monkeypatch.setenv(var, "")
+    # ⚠️ AND THE MODULE GLOBAL, which `use_models` rebinds so the tesseract layers read the
+    # payload's copy. Left alone it would point every later test in the session at a tmp_path
+    # pytest has already deleted.
+    monkeypatch.setattr(job.pdfp, "TESSDATA_DIR", job.pdfp.TESSDATA_DIR)
     for name in job.MODEL_FILES.values():
         (tmp_path / name).write_bytes(b"x")
 
@@ -151,6 +155,102 @@ def test_the_kgpu_payload_stages_every_model_file_from_the_one_constant():
 
     for key in job.MODEL_FILES:
         assert f'job.MODEL_FILES["{key}"]' in source, key
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# the tesseract half
+#
+# ⚠️ **A KAGGLE WORKER RAN 53 OF THE 55 LAYERS AND NOTHING SAID SO.** `_init_ocr` asks one
+# question — is there a `vie.traineddata` in `TESSDATA_DIR` — and that directory was
+# `$TESSDATA_PREFIX` or `%LOCALAPPDATA%\tessdata`, a Windows shape that answers False on Linux;
+# `_parse_cascaded` then drops both tesseract layers with a bare `continue`. Measured
+# 2026-08-31 on HOSE_BSR: 0 tesseract lines in the T4 run's log against 40 in the local one, and
+# the two machines disagreed on Q3-2019. The ENGINE was never the problem — pymupdf embeds
+# Tesseract in the manylinux wheel too — the LANGUAGE MODEL was.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_use_models_points_the_tesseract_layers_at_the_shipped_language_model(
+        tmp_path, monkeypatch):
+    """The env var AND the module global, because `TESSDATA_DIR` is read at IMPORT time and
+    `cafef_pdf_parser` is always imported before this runs."""
+    for var in ("CAFEF_ONNX_DET", "CAFEF_ONNX_VIETOCR_WEIGHTS", "CAFEF_ONNX_VIETOCR_CONFIG",
+                "CAFEF_TESSDATA", "TESSDATA_PREFIX", job.MODELS_DIR_ENV):
+        monkeypatch.setenv(var, "")
+    monkeypatch.setattr(job.pdfp, "TESSDATA_DIR", job.pdfp.TESSDATA_DIR)
+    for name in job.MODEL_FILES.values():
+        (tmp_path / name).write_bytes(b"x")
+
+    chosen = job.use_models(tmp_path)
+
+    assert chosen["tessdata"] == str(tmp_path / job.MODEL_FILES["tessdata"])
+    assert job.pdfp.TESSDATA_DIR == str(tmp_path)
+    # `_ocr_page` passes this directory to mupdf as `tessdata=`, and `_init_ocr` probes it.
+    import os
+
+    assert os.environ["TESSDATA_PREFIX"] == str(tmp_path)
+
+
+def test_a_named_language_model_may_be_a_file_or_a_directory(tmp_path, monkeypatch):
+    """⚠️ Both forms are honoured because the alternative is SILENT: a directory handed to a
+    file check simply misses, and the next candidate — a different copy of the model — wins
+    without a word."""
+    name = job.MODEL_FILES["tessdata"]
+    (tmp_path / name).write_bytes(b"x")
+
+    monkeypatch.setenv("CAFEF_TESSDATA", str(tmp_path))
+    assert job.find_tessdata() == tmp_path / name
+    monkeypatch.setenv("CAFEF_TESSDATA", str(tmp_path / name))
+    assert job.find_tessdata() == tmp_path / name
+
+
+def test_no_system_tessdata_directory_is_a_candidate(monkeypatch):
+    """⚠️ THE DECISION, RECORDED SO IT IS NOT 'FIXED' LATER. `/usr/share/tesseract-ocr/.../
+    vie.traineddata` is a DIFFERENT build of the model: picking one up would align the package
+    name and diverge the characters, which is the failure §6-2-duodetricies measured on
+    onnxruntime. A machine that wants another copy names it in `CAFEF_TESSDATA`, where
+    `engine_report`'s md5 then shows which one ran."""
+    monkeypatch.delenv("CAFEF_TESSDATA", raising=False)
+    monkeypatch.delenv("TESSDATA_PREFIX", raising=False)
+
+    # `as_posix` so one comparison covers both separators.
+    for candidate in job.tessdata_candidates():
+        assert "usr/share" not in candidate.as_posix()
+
+
+def test_the_language_model_is_pinned_by_DIGEST_and_the_pin_is_reported(tmp_path, monkeypatch):
+    """⚠️ A VERSION NUMBER CANNOT TELL TWO BUILDS OF `vie.traineddata` APART, so the pin is a
+    digest — and it is REPORTED, never enforced: a worker that read another model has still
+    done work worth collecting, and what must not happen is nobody noticing which model it
+    was (the rule `pin_violations` already follows for the pip stack)."""
+    monkeypatch.setattr(job.pdfp, "TESSDATA_DIR", str(tmp_path))
+    (tmp_path / f"{job.pdfp.OCR_LANG}.traineddata").write_bytes(b"not the pinned model")
+
+    model = job.tesseract_report()["language_model"]
+
+    assert model["matches_pin"] is False
+    assert len(job.TESSDATA_MD5) == 32
+
+
+def test_the_worker_bootstrap_points_TESSDATA_PREFIX_at_the_payload():
+    """⚠️ STRUCTURAL, and ASSIGNED rather than `setdefault`: an image that exports its own
+    `TESSDATA_PREFIX` would otherwise win, and point the parse at a language model this repo
+    has never read a filing with."""
+    bootstrap = (job.REPO_ROOT / "src" / "kaggle_gpu" / "kgpu" / "remote"
+                 / "kgpu_bootstrap.py").read_text(encoding="utf-8")
+
+    assert 'os.environ["TESSDATA_PREFIX"] = str(models)' in bootstrap
+
+
+def test_the_tesseract_layers_are_early_enough_to_matter():
+    """⚠️ WHY SHIPPING 12.4 MB IS WORTH IT AT ALL: they are layers 4 and 7 of 55, AHEAD of every
+    relaxed onnx layer, so on a machine that can run them they decide statements — BSR Q3-2019
+    was won by `tesseract@200` here and by `onnx@300+tail` on a T4, with different figures. A
+    layer sitting at 50 would be unreachable in practice and this would be cosmetic."""
+    positions = {layer.name: i for i, layer in enumerate(FinancialsBuilder.LAYERS, start=1)
+                 if layer.engine == "tesseract"}
+
+    assert positions == {"tesseract@200": 4, "tesseract@400+relax": 7}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

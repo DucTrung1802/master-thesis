@@ -21,6 +21,11 @@ src/web_scraper/models/*.onnx
 # tracked on purpose: without it every onnx layer fetches it from vocr.vn on every
 # Predictor build, and an unreachable host turns the cascade into tesseract (`VCR-1`).
 src/web_scraper/models/*.pth
+# and the Vietnamese language model for the two tesseract layers (vie.traineddata, 12.4 MB),
+# which `find_tessdata` looks for here before falling back to this machine's own tessdata dir.
+# ⚠️ The ENGINE needs no file: pymupdf statically embeds Tesseract (measured in the manylinux
+# wheel as well as here), so this data file is the whole tesseract half of a Kaggle payload.
+src/web_scraper/models/*.traineddata
 
 bronze_data/
 
@@ -82,6 +87,15 @@ experiment/experiment_7/pdf_pages/
 # committed nothing, which is the same failure this file warns about below for
 # loose files under reports/.
 !src/kaggle_gpu/requirements.txt
+# ⚠️ AND THE SAME RULE SWALLOWED THE OCR PINS FOR AS LONG AS THEY HAVE EXISTED — found
+# 2026-08-31. `requirements-ocr.txt` calls itself "THE OCR STACK, PINNED ONCE, FOR BOTH
+# MACHINES", the Kaggle worker installs that same file, and `pdf_ocr_job.requirement_pins`
+# reads it — but it was never in the repo, so a fresh checkout has NO pins: `requirement_pins`
+# returns `{}` on an absent file and `pin_violations` then reports nothing, which reads exactly
+# like a machine that honours every pin. A check that cannot run must not look like one that
+# passed (`DEP-1`, `SAN-1`, `CWD-1`).
+!src/web_scraper/requirements-ocr.txt
+!src/web_scraper/requirements-ocr-torch.txt
 
 # Model run outputs (checkpoints, tensorboard, plots) — reproducible, data referenced
 src/model/runs/*/

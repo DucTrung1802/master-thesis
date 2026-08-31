@@ -138,6 +138,7 @@ from typing import Dict, List, Optional, Sequence
 from utils import progress
 from web_scraper import cafef_financials as fin
 from web_scraper.cafef_financials import FinancialsBuilder, ParseLayer
+from web_scraper import cafef_pdf_parser as pdfp
 from web_scraper.cafef_pdf_parser import REPORTS
 
 # ⚠️ **THE ENV VAR IS THE SEAM BETWEEN THIS MODULE AND `kgpu_bootstrap`, WHICH CANNOT IMPORT
@@ -164,6 +165,20 @@ MODEL_FILES = {
     "det": "deepdoc_det.onnx",              # the DeepDoc DB detector, gitignored (4.7 MB)
     "vietocr": "vgg_seq2seq.pth",           # the recogniser's checkpoint, gitignored (90 MB)
     "vietocr_config": "vietocr_vgg_seq2seq.yml",   # its config — TRACKED, 3 KB, see VCR-1
+    # ⚠️ **THE FOURTH FILE IS THE TESSERACT HALF, AND IT IS A LANGUAGE MODEL AND NOT AN
+    # ENGINE — MEASURED 2026-08-31.** `pymupdf` STATICALLY EMBEDS Tesseract and Leptonica:
+    # the manylinux wheel's `libmupdf.so.29.0` carries `thirdparty/tesseract`, `traineddata`
+    # and `TESSDATA_PREFIX`, exactly as `mupdfcpp64.dll` does on this machine. Probed here
+    # with `C:\Program Files\Tesseract-OCR` off PATH and a tessdata folder holding ONLY this
+    # file, `get_textpage_ocr` returned correct Vietnamese — so a worker needs no apt package,
+    # no binary and no `osd.traineddata`. It needs THIS file (12.4 MB), and until it travelled
+    # a Kaggle run silently executed 53 of the 55 layers (`tesseract@200` is layer 4 and
+    # `tesseract@400+relax` layer 7; CLAUDE.md §6-2-quinquagies).
+    # ⚠️ **AND IT MUST BE OUR BYTES, NOT `apt-get install tesseract-ocr-vie`.** Ubuntu ships a
+    # different build of the model, which reads different characters — aligning the package
+    # name and diverging the output is exactly the failure §6-2-duodetricies measured on
+    # onnxruntime: *same version is not the goal; same output is*.
+    "tessdata": "vie.traineddata",
 }
 
 # The columns of a statement CSV that describe the ROW rather than the statement. Taken from
@@ -256,6 +271,25 @@ def use_models(models_dir: Optional[os.PathLike] = None) -> Dict[str, Optional[s
         os.environ["CAFEF_ONNX_VIETOCR_CONFIG"] = str(config)
         chosen["vietocr_config"] = str(config)
 
+    # ⚠️ **THE TESSERACT LAYERS ARE SKIPPED IN SILENCE WITHOUT THIS, AND THE ARTEFACT USED TO
+    # SAY NOTHING.** `_init_ocr` asks one question — is there a `vie.traineddata` in
+    # `TESSDATA_DIR` — and that directory defaulted to `$TESSDATA_PREFIX` or
+    # `%LOCALAPPDATA%\tessdata`, a Windows shape which answers False on any Linux worker.
+    # `_parse_cascaded` then drops layers 4 and 7 with a bare `continue`, so one filing ran a
+    # 55-layer cascade here and a 53-layer one on Kaggle (CLAUDE.md §6-2-quinquagies).
+    # ⚠️ **THE MODULE GLOBAL IS REBOUND, NOT ONLY THE ENV VAR.** `TESSDATA_DIR` is read at
+    # IMPORT time and `cafef_pdf_parser` is imported by `cafef_financials`, i.e. always before
+    # this runs — the same ordering trap this docstring records for the onnx engine. Both
+    # readers are globals evaluated at call time (`_init_ocr`'s probe and `_ocr_page`'s
+    # `tessdata=` argument), so rebinding is a redirect and not a monkey-patch.
+    tessdata = models / MODEL_FILES["tessdata"]
+    tessdata = tessdata if tessdata.is_file() else find_tessdata()
+    if tessdata is not None:
+        os.environ["TESSDATA_PREFIX"] = str(tessdata.parent)
+        os.environ["CAFEF_TESSDATA"] = str(tessdata)
+        pdfp.TESSDATA_DIR = str(tessdata.parent)
+        chosen["tessdata"] = str(tessdata)
+
     engine = sys.modules.get("web_scraper.onnx_ocr")
     if engine is not None:
         if chosen["det"]:
@@ -288,6 +322,35 @@ def vietocr_weight_candidates() -> List[Path]:
 def find_vietocr_weights() -> Optional[Path]:
     """The VietOCR checkpoint to SHIP, or None. Never downloads — the caller decides that."""
     return next((p for p in vietocr_weight_candidates() if p.is_file()), None)
+
+
+# Where a Vietnamese language model may already be, best first. ⚠️ **NO SYSTEM DIRECTORY IS
+# SCANNED, AND THAT IS THE POINT.** `/usr/share/tesseract-ocr/*/tessdata/vie.traineddata` is a
+# DIFFERENT build of the model, so picking one up would align the package name and diverge the
+# characters — the failure §6-2-duodetricies measured on onnxruntime. A machine that wants
+# another copy NAMES it in `CAFEF_TESSDATA`, and `engine_report` then records the md5 of
+# whatever actually ran, so the substitution is visible rather than silent.
+def tessdata_candidates() -> List[Path]:
+    """⚠️ `CAFEF_TESSDATA` may name the FILE or its DIRECTORY, and both are honoured. The
+    alternative is a silent fall-through: a directory handed to a file check simply misses,
+    and the next candidate — a different copy — wins without a word."""
+    name = MODEL_FILES["tessdata"]
+    env = Path(os.environ["CAFEF_TESSDATA"]) if os.environ.get("CAFEF_TESSDATA") else None
+    if env is not None and env.is_dir():
+        env = env / name
+    prefix = os.environ.get("TESSDATA_PREFIX", "")
+    local = os.environ.get("LOCALAPPDATA", "")
+    return [p for p in (
+        env,
+        DEFAULT_MODELS_DIR / name,
+        Path(prefix) / name if prefix else None,
+        Path(local) / "tessdata" / name if local else None,
+    ) if p is not None]
+
+
+def find_tessdata() -> Optional[Path]:
+    """The `vie.traineddata` to SHIP, or None. Never downloads — the caller decides that."""
+    return next((p for p in tessdata_candidates() if p.is_file()), None)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1654,6 +1717,15 @@ FINGERPRINTED_LIBRARIES = (
 
 REQUIREMENTS = Path(__file__).resolve().parent / "requirements-ocr.txt"
 
+# ⚠️ **THE LANGUAGE MODEL IS NOT A PIP PACKAGE, SO ITS PIN IS A DIGEST.** `requirements-ocr.txt`
+# aligns the nine packages that decide what the OCR reads; the tenth input to the tesseract
+# layers is a 12.4 MB file that no version number describes — `apt-get install
+# tesseract-ocr-vie` and this copy are both "vie.traineddata" and read different characters.
+# This is the copy every `pdf` row produced by a tesseract layer in this repo was read with,
+# measured on 2026-08-31; `tesseract_report` records the digest of whatever actually ran and
+# whether it matched, so a substitution is visible rather than silent (§5 rule 2).
+TESSDATA_MD5 = "d4d5bd4f9864702c44d059205ba82270"     # vie.traineddata, 12,435,550 bytes
+
 
 def ocr_stack() -> Dict[str, Optional[str]]:
     """`{package: version or None}` for everything that decides what the OCR reads."""
@@ -1736,6 +1808,8 @@ def engine_report() -> Dict[str, object]:
         "stack": stack,
         "stack_fingerprint": stack_fingerprint(stack),
         "pin_violations": pin_violations(),
+        # ⚠️ THE THIRD ENGINE, AND THE ONE NOTHING USED TO RECORD — see `tesseract_report`.
+        "tesseract": tesseract_report(),
     }
     try:
         import onnxruntime as ort
@@ -1751,6 +1825,78 @@ def engine_report() -> Dict[str, object]:
         out["det_providers"] = list(OnnxOcr().detector.session.get_providers())
     except Exception as exc:  # noqa: BLE001 — a probe must not take down a run
         out["det_providers"] = f"unavailable: {type(exc).__name__}: {exc}"
+    return out
+
+
+def _file_md5(path: Path) -> str:
+    """md5 of a file, in 1 MB blocks — what makes "the same language model" checkable."""
+    import hashlib
+
+    digest = hashlib.md5()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def tesseract_report() -> Dict[str, object]:
+    """Whether the tesseract HALF of the cascade can run here, and on WHICH language model.
+
+    ⚠️ **`stack_fingerprint` RECORDS THE PIP STACK AND SAID NOTHING ABOUT WHICH ENGINES WERE
+    REACHABLE.** `tesseract@200` is layer 4 of 55 and `tesseract@400+relax` layer 7, and on a
+    machine with no `vie.traineddata` both are dropped by `_parse_cascaded` with a bare
+    `continue` — so one filing ran a 55-layer cascade here and a 53-layer one on a Kaggle T4,
+    the two disagreed, and no artefact on either side said why (CLAUDE.md §6-2-quinquagies).
+    Two runs may only be compared on their cascade if this block matches.
+
+    ⚠️ **MEASURED, NOT INFERRED, AND THE MEASUREMENT IS THE CASCADE'S OWN QUESTION.**
+    `ocr_ready` is what `_parse_cascaded` tests, so this constructs a parser and reads it back
+    rather than re-implementing the probe — the `session.get_providers()` lesson from `ORT-1`,
+    one engine over.
+
+    ⚠️ **THE md5 IS THE POINT OF THE `language_model` BLOCK.** The engine is embedded in
+    `pymupdf`, which is pinned to one version on both machines, so the ENGINE is identical by
+    construction; the language model is a loose file and `apt-get install tesseract-ocr-vie`
+    would put a different build of it under the same name. A version number could not tell
+    those apart. A digest can.
+    """
+    from web_scraper.cafef_pdf_parser import PdfParser
+
+    out: Dict[str, object] = {
+        "ready": False,
+        "tessdata": pdfp.TESSDATA_DIR,
+        "language_model": None,
+        "engine": None,
+    }
+    try:
+        out["ready"] = bool(PdfParser(engine="tesseract").ocr_ready)
+    except Exception as exc:  # noqa: BLE001 — a probe must not take down a run
+        out["ready"] = f"unavailable: {type(exc).__name__}: {exc}"
+    # ⚠️ A PROBE MAY NOT TAKE DOWN A RUN — the same rule the `det_providers` branch follows.
+    # Reading a 12 MB file can fail for reasons that have nothing to do with the parse.
+    try:
+        model = Path(pdfp.TESSDATA_DIR) / f"{pdfp.OCR_LANG}.traineddata"
+        digest = _file_md5(model) if model.is_file() else None
+    except Exception as exc:  # noqa: BLE001
+        model, digest = None, None
+        out["language_model"] = f"unreadable: {type(exc).__name__}: {exc}"
+    if model is not None and digest is not None:
+        out["language_model"] = {"file": str(model), "bytes": model.stat().st_size,
+                                 "md5": digest,
+                                 # ⚠️ REPORTED, NEVER ENFORCED — the same rule `pin_violations`
+                                 # follows. A worker that read a different model has still done
+                                 # work worth collecting; what must not happen is nobody
+                                 # noticing which model it was.
+                                 "matches_pin": digest == TESSDATA_MD5}
+    try:
+        import pymupdf
+
+        # ⚠️ The tesseract SOURCE version is not exposed by mupdf, and pinning pymupdf is what
+        # fixes it: one pymupdf version is one mupdf build is one embedded tesseract.
+        out["engine"] = (f"tesseract embedded in pymupdf {pymupdf.version[0]} "
+                         f"/ mupdf {pymupdf.version[1]}")
+    except Exception:  # noqa: BLE001
+        pass
     return out
 
 

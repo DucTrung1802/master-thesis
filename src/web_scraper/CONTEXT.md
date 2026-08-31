@@ -2373,10 +2373,39 @@ Q3-2019, same document, same commit:
 11 of 56 balance-sheet cells differ, and 11 of 24 cash-flow cells. ✅ The merge refuses all of
 it as DIFFERS. ⚠️ **So a local re-parse of a Kaggle-parsed ticker is not a re-run of that
 parse** — a structural difference, not the diacritic-level drift §"Is the output identical on
-both machines?" measured. **To reproduce a Kaggle parse locally, restrict the cascade to the
-onnx layers** (`--layers`, 53 of 55); cherry-picking the single winning layer is a different
-claim. ⚠️ `stack_fingerprint` records the library versions and does NOT record which ENGINES
-were reachable.
+both machines?" measured. To reproduce one of those older Kaggle parses locally, restrict the
+cascade to the onnx layers (`--layers`, 53 of 55); cherry-picking the single winning layer is a
+different claim.
+
+### ✅ AND THE CASCADE IS THE SAME LENGTH ON BOTH MACHINES SINCE 2026-08-31 — `TSS-1`
+
+⚠️ **"KAGGLE HAS NO TESSERACT" WAS AN INFERENCE AND IT WAS WRONG.** `pymupdf` STATICALLY
+EMBEDS Tesseract and Leptonica — measured in `pymupdf-1.28.0-cp310-abi3-manylinux_2_28_x86_64
+.whl` (`libmupdf.so.29.0` carries `thirdparty/tesseract`, `traineddata`, `TESSDATA_PREFIX`) as
+well as in `mupdfcpp64.dll` here, and probed with the Tesseract-OCR directory off PATH and a
+tessdata folder holding ONLY `vie.traineddata`: **1,594 characters of correct Vietnamese**. No
+binary, no apt package, no `osd.traineddata`.
+
+What was missing was the **12.4 MB language model** and a probe that is not Windows-shaped:
+`ocr_ready` looks for `vie.traineddata` in `TESSDATA_DIR`, which was `$TESSDATA_PREFIX` or
+`%LOCALAPPDATA%\tessdata` and therefore resolved to the RELATIVE path `tessdata` on a worker.
+The evidence had been on disk unread — the 2026-08-31 Kaggle BSR run's `run.log` holds **0**
+lines containing `tesseract` against **40** in the local run of the same ticker that day.
+
+| what shipped | |
+|---|---|
+| `pdf_ocr_job.MODEL_FILES["tessdata"]` | the fourth payload file; `kgpu.export` stages it and RAISES rather than shipping fewer |
+| `kgpu_bootstrap` | **ASSIGNS** `TESSDATA_PREFIX` at the payload — not `setdefault`, or an image exporting its own would win |
+| `use_models` | rebinds the module global as well as the env var: `TESSDATA_DIR` is read at IMPORT time and `cafef_pdf_parser` is always imported first |
+| `pdf_ocr_job.TESSDATA_MD5` | ⚠️ **the pin is a DIGEST because a data file has no version.** `apt-get install tesseract-ocr-vie` is refused on the alignment rule — Ubuntu's build reads different characters — and `tessdata_candidates()` scans no system directory for the same reason |
+| `environment.ocr.tesseract` | the half of the artefact that was missing: `stack_fingerprint` records the pip stack and said nothing about which ENGINES were reachable |
+
+✅ Verified without spending quota: the worker CONDITION simulated (ready False before, True
+after, and a real page OCR'd to 200 word boxes from the shipped file), both mount layouts
+rehearse `READY` at `cascade: 55 layers`, and the LOCAL default path re-parsed VCB Q1-2026
+**3 of 3 REPRODUCED at `onnx@200`**. ⚠️ **No Kaggle run has been made**, and this repairs no row
+on disk: it closes a PROVENANCE gap, and it also lets a worker win on the layer that invented a
+leading digit above. CLAUDE.md §6-2-unquinquagies.
 
 ## 4. Source specialization (why 3 price sources)
 

@@ -502,6 +502,26 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
             _add(config, "models/" + job.MODEL_FILES["vietocr_config"])
             models["vietocr_config"] = config.name
 
+            # ⚠️ **THE LANGUAGE MODEL, AND WITHOUT IT THE WORKER RUNS A SMALLER CASCADE IN
+            # SILENCE.** `tesseract@200` is layer 4 of 55 and `tesseract@400+relax` layer 7;
+            # `_parse_cascaded` drops a layer whose engine is not ready with a bare `continue`,
+            # so a T4 run executed 53 layers where this machine runs 55 and the two disagreed
+            # on BSR Q3-2019 with nothing saying why (CLAUDE.md §6-2-quinquagies). The ENGINE
+            # itself needs no shipping — `pymupdf` embeds Tesseract, measured in the manylinux
+            # wheel — and `apt-get install tesseract-ocr-vie` would put a DIFFERENT build of
+            # the model on the worker, which is a version alignment and an output divergence.
+            tessdata = job.find_tessdata()
+            if tessdata is None:
+                raise FileNotFoundError(
+                    f"no {job.MODEL_FILES['tessdata']} found. Looked at:\n  "
+                    + "\n  ".join(str(t) for t in job.tessdata_candidates())
+                    + "\n  It is the Vietnamese language model the two tesseract layers "
+                      "read; without it the worker silently runs 53 of the 55 layers. Copy "
+                      "the one this machine parses with, or set CAFEF_TESSDATA."
+                )
+            _add(tessdata, "models/" + job.MODEL_FILES["tessdata"])
+            models["tessdata"] = tessdata.name
+
             # ⚠️ **EVERY FILE `use_models` LOOKS FOR, OR THE WORKER DOWNLOADS THE REST.** The
             # rehearsal asserts this from the other side; asserting it here is what makes a
             # fourth model file a build error instead of a silent shortfall.
