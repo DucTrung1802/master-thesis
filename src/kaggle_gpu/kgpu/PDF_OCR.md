@@ -53,8 +53,8 @@ cases below.
 jupyter lab src\kaggle_gpu\RUN__pdf_ocr_control.ipynb
 ```
 
-Edit cell 1, run everything. That is the whole procedure, and `ENVIRONMENT` is the only thing
-that decides which machine does the OCR.
+Edit **1 · Parameters**, run everything. That is the whole procedure, and
+`ENVIRONMENT` is the only thing that decides which machine does the OCR.
 
 ```python
 ENVIRONMENT = "LOCAL"        # "LOCAL" = parse here | "KAGGLE" = ship it to a T4
@@ -93,7 +93,7 @@ win on an earlier, poorer layer.** Measured on ACB 2026-08-30 — Q2-2009's bala
 **33 items at `onnx@200+relax`** on disk and **19 at `onnx@200`** in a seeded run, because the
 thinner band lets layer 1 pass where the full run's band refused it. Repairing that filing's
 income statement with the global knob would have overwritten the balance sheet in the same run,
-saying only *"DIFFERS in 2 columns"*. The last cell of the notebook takes explicit
+saying only *"DIFFERS in 2 columns"*. The notebook's **10 · Repair one row** takes explicit
 `(quarter, statement)` pairs and scopes the write through `merge_run`'s own `periods`/`reports`
 filter, so nothing outside the list can move.
 
@@ -185,8 +185,8 @@ annual report against 2.5 on a quarterly, both running the full cascade (§6-2-n
 ## 4. Reading the result
 
 `kgpu` merges the run folder into `reports/pdf_ocr/<run_id>__<exchange>_<symbol>__pdf_ocr/`.
-The notebook's last two cells read it; `metadata.json` carries the whole scorecard in
-`results`, one row per `(period, report)`.
+The notebook's **7 · The result** and **8 · Refused vs written** read it; `metadata.json`
+carries the whole scorecard in `results`, one row per `(period, report)`.
 
 | verdict | what it means |
 |---|---|
@@ -206,13 +206,13 @@ the point.** They came apart twice: HOSE_BSR (14 documents) and HOSE_CTG (**8 h 
 accepted cells**) both finished green, wrote complete run folders and created **no statement
 CSV at all**, because every statement was refused for an empty `sane` band (`BND-1`).
 
-Since 2026-08-30 there are three places to look, and the notebook's last three cells are them:
+Since 2026-08-30 there are three places to look, and the notebook's sections **7-9** are them:
 
 | | says |
 |---|---|
 | `metadata.json` -> **`merge`** (schema **v3**) | one event per upsert plus their union — `statements_written`, `statements_skipped`, `periods_written`, and every decision with its reason |
 | `inputs.merged_into_csv` | ⚠️ **what HAPPENED, not what was asked for.** True only if something was actually written. The request is still there, as `inputs.merge_into_csv` |
-| the CSVs themselves | the notebook's last cell reads `bs_/is_/cf_<EXCHANGE>_<SYMBOL>.csv` and prints `pdf`/`missing`/`cafef` per report, and how many rows came from this run |
+| the CSVs themselves | the notebook's **9 · Did it land?** reads `bs_/is_/cf_<EXCHANGE>_<SYMBOL>.csv` and prints `pdf`/`missing`/`cafef` per report, and how many rows came from this run |
 
 ⚠️ **UNTIL THAT BLOCK EXISTED, `merged_into_csv` READ `false` ON EVERY KAGGLE RUN AND COULD NOT
 HAVE READ ANYTHING ELSE** — `metadata.json` is written by the WORKER, which has no path to this
