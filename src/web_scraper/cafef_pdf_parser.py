@@ -389,6 +389,7 @@ class PdfParser:
         self._onnx = None
         # set per PARSE LAYER; see _join_split_number
         self.join_split_digits = False
+        self.join_lost_separator = False
         # set per PARSE LAYER; see _page_kind
         self.title_over_form = False
         # set per PARSE LAYER; see FORM_RE_LOOSE
@@ -461,6 +462,13 @@ class PdfParser:
         """Treat a lost thousands SEPARATOR as one number rather than several (see
         `_join_split_number`). Set per parse layer, off by default."""
         self.join_split_digits = bool(on)
+
+    def set_join_lost_separator(self, on: bool) -> None:
+        """Treat a whitespace-separated numeric run as ONE figure whenever joining ALL of its
+        parts yields a well-formed grouped figure — a thousands separator read as a space,
+        anywhere in the number (see `_split_number_runs`). Wider than `set_join_split`, which
+        only covers a bare 1-3 digit head. Set per parse layer, off by default."""
+        self.join_lost_separator = bool(on)
 
     def set_loose_form_code(self, on: bool) -> None:
         """Tolerate junk characters OCR appends to a form code, so the page keeps its ANCHOR and
@@ -931,7 +939,8 @@ class PdfParser:
         return ".".join(parts)
 
     @classmethod
-    def _split_number_runs(cls, words: list, join_split: bool = False) -> list:
+    def _split_number_runs(cls, words: list, join_split: bool = False,
+                           join_lost: bool = False) -> list:
         """Split a box holding SEVERAL period figures into one box per figure.
 
         The onnx engine detects text LINES, not words, and on some rows it boxes both period
@@ -975,6 +984,30 @@ class PdfParser:
                     and "(" not in txt[1:] and ")" not in txt[:-1]):
                 joined = ".".join(parts)
                 if cls.MERGE_JOIN_RE.match(joined):
+                    out.append((w[0], w[1], w[2], w[3], joined) + tuple(w[5:]))
+                    continue
+            # ⚠️ **THE SAME DEFECT AS `join_split`, WITHOUT ITS ASSUMPTION ABOUT WHERE.** That
+            # rule requires the HEAD to be a bare 1-3 digit group, because '3 396.864' is the
+            # shape it was measured on. BSR's scans lose a separator anywhere in the number —
+            # '9.964.924.167 838', '10 982 779.849.642', '46.625 723 403.018' — and each is cut
+            # into pieces that land on no column, so `split_figures` counts the fragments and
+            # `reconcile` refuses the whole statement (`SPL-1`). Measured 2026-08-31 across four
+            # BSR filings: 69 of 76 runs join into one well-formed figure, and the SAME boxes
+            # come back WHOLE at 300 and 400 dpi over the identical x-range, which is what
+            # establishes they are one figure rather than two.
+            #
+            # ⚠️ **AND IT CANNOT BE DISTINGUISHED HERE FROM THE OPPOSITE CASE — MEASURED.** ACB
+            # Q1-2025 genuinely boxes two period figures together ('135.272.610 126.501.216'),
+            # which also joins well-formed; its character density is 1.03x its own page's
+            # median, i.e. identical to a clean single box. Nothing inside the box separates
+            # them, so this is confined to the LAST layers of the cascade, where only a
+            # statement every other reading has already refused can reach it — ACB Q1-2025 is
+            # accepted at layer 6. `reconcile` and `sane` still judge whatever it recovers.
+            if join_lost:
+                joined = ".".join(q.strip("()") for q in parts)
+                if cls.MERGE_JOIN_RE.match(joined):
+                    if txt.strip().endswith(")") or txt.strip().startswith("("):
+                        joined = f"({joined})"
                     out.append((w[0], w[1], w[2], w[3], joined) + tuple(w[5:]))
                     continue
             if join_split:
@@ -1101,7 +1134,8 @@ class PdfParser:
         # list, so replaying it over the cached words is the same operation on the same input
         # that ran here before the cache existed. The native-text and Tesseract paths never
         # took it and still do not (`split` says which).
-        return (text, self._split_number_runs(words, self.join_split_digits) if split
+        return (text, self._split_number_runs(words, self.join_split_digits,
+                                             self.join_lost_separator) if split
                 else words)
 
     def _read_page(self, page, native: str):

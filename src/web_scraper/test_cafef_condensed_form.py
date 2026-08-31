@@ -187,13 +187,23 @@ def test_the_condensed_layer_carries_the_document_unit_and_there_is_no_bare_one(
 
 def test_the_condensed_layer_runs_last():
     """It widens what may be accepted, so only a statement that defeated every other layer
-    reaches it."""
+    reaches it.
+
+    ⚠️ This asserted `cond[-1] == len(layers) - 1` until 2026-08-31 — that the condensed layer
+    is literally the last element. That is the same POSITION assertion
+    `test_the_span_layers_run_late_and_relaxed` records having already outgrown once: appending
+    the `+joinlost` layers broke it while changing nothing about when the condensed floor
+    applies. The property being guarded is the ORDER relative to the strict layers, so that is
+    what is asserted; a widening layer appended after this one is legitimate, another STRICT
+    layer appended after it is not, and only the second now fails.
+    """
     layers = FinancialsBuilder.LAYERS
     cond = [i for i, l in enumerate(layers) if l.condensed_income]
-    assert cond[-1] == len(layers) - 1
+    assert cond, "no layer carries condensed_income"
     strict = [i for i, l in enumerate(layers)
               if not (l.relax_totals or l.relax_components or l.relax_split_tail
-                      or l.relax_merged_seam or l.condensed_income)]
+                      or l.relax_merged_seam or l.condensed_income
+                      or l.join_lost_separator)]
     assert min(cond) > max(strict)
 
 

@@ -103,6 +103,12 @@ class Decision:
     # A caveat printed beside a WRITE. A write with a note is still a write — what the note
     # says is what a reader would otherwise have to reconstruct from the PDF index.
     note: str = ""
+    # ⚠️ **THE FIGURES TO WRITE, WHEN THEY ARE NOT THE RUN'S OWN.** Set only where refusal 1
+    # DE-CUMULATED a year-to-date income statement into its standalone quarter; `None`
+    # everywhere else, and `merge_run` then takes the run's `values` unchanged. It lives on the
+    # decision so the numbers the plan prints are the numbers the write uses — one computation,
+    # not two, which is the same reason `changed` is computed here rather than at write time.
+    values: Optional[Dict[str, int]] = None
 
     @property
     def writing(self) -> bool:
@@ -215,6 +221,72 @@ def _unfiled_priors(builder: FinancialsBuilder, exchange: str, symbol: str,
     return [p for p in (f"Q{i}-{year}" for i in range(1, quarter)) if p not in filed]
 
 
+def _quarter_priors(builder: FinancialsBuilder, exchange: str, symbol: str, template: str,
+                    period: str,
+                    pending: Dict[str, Dict[str, int]]) -> Tuple[Optional[Dict[str, Dict[str, int]]],
+                                                                 str]:
+    """`({prior period: figures}, "")` for Q1..Q(q-1) of `period`'s year, or `(None, why not)`.
+
+    The operands of `_decumulate`'s subtraction, gathered from the two places a merge can
+    honestly reach: the `pdf` rows already on disk, and the quarters THIS plan has already
+    decided to write (`pending`) — which is what lets a Q4 be split once the Q2 it needs has
+    been recovered in the same pass. `build()` accumulates exactly the same two sets, from its
+    own run rather than from disk.
+
+    ⚠️ **EVERY PRIOR MUST BE A THREE-MONTH ROW, AND "UNRECORDED" IS NOT THREE.** Subtracting a
+    six-month row from a twelve-month one yields a number that is neither, and nothing
+    downstream could tell — the failure this module exists to prevent. So the span has to be
+    KNOWN, and there are exactly two ways to know it:
+
+      * `months == 3` on the row, recorded by the run that wrote it; or
+      * the prior is **Q1**, which is three months by construction — a first quarter's
+        year-to-date IS the quarter, which is why `_decumulate` skips `q == 1` outright.
+
+    A blank `months` on any other quarter is `§5 rule 2` at the column: the corpus predates
+    that field, and reading the blank as 3 would be inferring a measurement nobody took. Those
+    quarters refuse, and re-parsing them records the span (the merge's `fills_span` branch
+    writes it with no figure moving), after which the Q4 becomes splittable.
+
+    ⚠️ **A PRIOR MUST BE `source == 'pdf'`.** A `missing` row is a blank, and subtracting a
+    blank silently returns the year-to-date figure unchanged — the exact wrong write.
+    """
+    year, quarter = int(period.split("-")[1]), int(period[1])
+    on_disk = builder._existing(exchange, symbol, template, fin.INCOME_STATEMENT)
+    out: Dict[str, Dict[str, int]] = {}
+    for i in range(1, quarter):
+        prior = f"Q{i}-{year}"
+        if prior in pending:
+            out[prior] = pending[prior]
+            continue
+        row = on_disk.get(prior)
+        if not row or row.get("source") != "pdf":
+            return None, f"{prior} is `{(row or {}).get('source', 'absent')}` on disk"
+        span = str(row.get("months", "")).strip()
+        if i != 1 and span != "3":
+            return None, (f"{prior} covers `months={span or 'unrecorded'}` — only a THREE-month "
+                          f"prior may be subtracted, and a blank is unrecorded, not 3")
+        out[prior] = job._line_items(row)
+    return out, ""
+
+
+def _decumulate(ytd: Dict[str, int],
+                priors: Dict[str, Dict[str, int]]) -> Dict[str, int]:
+    """The standalone quarter: year-to-date minus the quarters before it, column by column.
+
+    A column any prior does not carry is DROPPED rather than treated as zero — the same rule
+    `FinancialsBuilder._decumulate` applies, and for the same reason: a line the prior filing
+    printed and this parse missed would otherwise have its whole year-to-date value written
+    into a three-month cell.
+    """
+    out: Dict[str, int] = {}
+    for column, total in ytd.items():
+        parts = [p.get(column) for p in priors.values()]
+        if any(v is None for v in parts):
+            continue
+        out[column] = total - sum(parts)
+    return out
+
+
 def plan_merge(folder: os.PathLike | str,
                *,
                reports: Optional[Sequence[str]] = None,
@@ -267,6 +339,12 @@ def plan_merge(folder: os.PathLike | str,
     report = MergeReport(folder=folder, exchange=exchange, symbol=symbol, template=template)
 
     wanted_reports = set(reports) if reports else set(REPORTS)
+
+    # Quarters this pass has already de-cumulated, keyed by period — the second source of
+    # operands for `_quarter_priors`. ⚠️ `_documents` yields oldest first, which is what makes
+    # a Q4 splittable once the Q2 it needs has been recovered earlier in the SAME pass; BSR's
+    # Q4-2019 needs Q2-2019, and Q2-2019 is `missing` on disk until this run writes it.
+    decumulated: Dict[str, Dict[str, int]] = {}
 
     for doc in docs:
         period = doc["period"]
@@ -322,25 +400,61 @@ def plan_merge(folder: os.PathLike | str,
             if name == fin.INCOME_STATEMENT and cumulative and not force_cumulative:
                 unfiled = _unfiled_priors(builder, exchange, symbol, period)
                 if not unfiled:
-                    # Every prior quarter WAS filed, so an authoritative `build()` over the
-                    # whole ticker can subtract them and produce the real quarter. Writing the
-                    # year-to-date figure now would pre-empt a better answer with a worse one.
-                    decision.action = "skip"
-                    decision.reason = (
-                        "cumulative income statement — this module does not de-cumulate, and "
-                        f"Q1..Q{int(period[1]) - 1}-{period.split('-')[1]} WERE filed, so a "
-                        f"full `build()` can subtract them")
-                    report.decisions.append(decision)
-                    continue
-                # ⚠️ NOTHING WILL EVER SUBTRACT QUARTERS THAT WERE NEVER REPORTED, so the
-                # choice here is not "cumulative now or a quarter later" — it is "cumulative
-                # now or nothing, ever". The row is written with `months` saying what it is,
-                # which is the whole reason that column exists; see `DATA_COLS`.
-                decision.months = months if months is not None else 3 * int(period[1])
-                decision.note = (f"{decision.months}-month figure — {', '.join(unfiled)} "
-                                 f"{'was' if len(unfiled) == 1 else 'were'} never filed, so "
-                                 f"no run can ever split it. Written with `months="
-                                 f"{decision.months}`")
+                    # ⚠️ **EVERY PRIOR WAS FILED, SO THE QUARTER IS RECOVERABLE — AND SINCE
+                    # 2026-08-31 THIS MODULE RECOVERS IT RATHER THAN DEFERRING.** The
+                    # subtraction is `_decumulate`'s, on operands that are already `pdf` rows
+                    # on disk (or quarters this same pass has just recovered), so it needs no
+                    # OCR and no second reading of anything. What it replaces is a refusal that
+                    # left the row `missing` until somebody ran a multi-hour authoritative
+                    # `build()` over the whole ticker — which is why BSR's Q2/Q4 income
+                    # statements sat unwritten while their figures were in the run folder.
+                    #
+                    # ⚠️ It is still REFUSED when a prior is not on disk as a `pdf` row, or when
+                    # its span is anything but a KNOWN three months. Those are the two ways the
+                    # subtraction could be wrong, and neither is inferred — see
+                    # `_quarter_priors`.
+                    priors, why = _quarter_priors(builder, exchange, symbol, template,
+                                                  period, decumulated)
+                    if priors is None:
+                        decision.action = "skip"
+                        decision.reason = (
+                            "cumulative income statement — cannot de-cumulate here because "
+                            f"{why}. Q1..Q{int(period[1]) - 1}-{period.split('-')[1]} WERE "
+                            f"filed, so a full `build()` can still subtract them")
+                        report.decisions.append(decision)
+                        continue
+                    quarter_values = _decumulate(
+                        {k: int(v) for k, v in (got.get("values") or {}).items()}, priors)
+                    if not quarter_values:
+                        decision.action = "skip"
+                        decision.reason = (
+                            "cumulative income statement — no column survives the "
+                            "subtraction (the priors on disk share none of its lines)")
+                        report.decisions.append(decision)
+                        continue
+                    decision.values = quarter_values
+                    decision.months = 3
+                    decision.items = len(quarter_values)
+                    decision.note = (
+                        f"de-cumulated: {months}-month figure minus "
+                        f"{', '.join(sorted(priors))} -> the standalone quarter, "
+                        f"{len(quarter_values)} of {len(got.get('values') or {})} columns")
+                    # The row now covers three months like any other, so the span-fill and
+                    # DIFFERS checks below judge it exactly as they judge a quarterly filing.
+                    # ⚠️ It becomes an OPERAND for a later quarter only if it survives them —
+                    # see where `decumulated` is written, at the foot of this loop.
+                    months, cumulative = 3, False
+                elif unfiled:
+                    # ⚠️ NOTHING WILL EVER SUBTRACT QUARTERS THAT WERE NEVER REPORTED, so the
+                    # choice here is not "cumulative now or a quarter later" — it is
+                    # "cumulative now or nothing, ever". The row is written with `months`
+                    # saying what it is, which is the whole reason that column exists; see
+                    # `DATA_COLS`.
+                    decision.months = months if months is not None else 3 * int(period[1])
+                    decision.note = (f"{decision.months}-month figure — {', '.join(unfiled)} "
+                                     f"{'was' if len(unfiled) == 1 else 'were'} never filed, "
+                                     f"so no run can ever split it. Written with `months="
+                                     f"{decision.months}`")
 
             # ── refusal 2: `sane` had no band, so it could not have refused anything ──
             band = (bands.get(name) or {}).get(doc.get("consolidated", "True"), 0)
@@ -352,7 +466,11 @@ def plan_merge(folder: os.PathLike | str,
                 continue
 
             # ── refusal 3: two runs disagree about a figure already on disk ───────────
-            values = {k: int(v) for k, v in (got.get("values") or {}).items()}
+            # ⚠️ THE FIGURES THIS DECISION WOULD WRITE — which is the run's own set unless
+            # refusal 1 de-cumulated it. Comparing the YEAR-TO-DATE figures against disk
+            # would report a difference in every column and refuse a row that is right.
+            values = (decision.values if decision.values is not None
+                      else {k: int(v) for k, v in (got.get("values") or {}).items()})
             if on_disk == "pdf":
                 # ⚠️ **THE LINE-ITEM RULE IS `pdf_ocr_job`'s, IMPORTED RATHER THAN RESTATED.**
                 # `compare()` scored this very quarter with it, so a merge reading the row by a
@@ -372,7 +490,15 @@ def plan_merge(folder: os.PathLike | str,
                 # ⚠️ Only ever in that direction: when THIS run has no span (a folder written
                 # before the field) disk's value stands, because a blank overwriting a known
                 # 12 would destroy the one thing the column exists to say.
-                span_known = "" if got.get("months") is None else str(got["months"])
+                # ⚠️ **THE SPAN THIS DECISION WILL WRITE, WHICH IS NOT ALWAYS THE RUN'S.** A
+                # quarter refusal 1 de-cumulated covers THREE months where the filing printed
+                # 6 or 12, and `_write` takes `Decision.months` for exactly that reason. Reading
+                # the run's span here instead compared disk's correct `3` against the filing's
+                # `6`, so the row was "filling" a span it already had: rewritten on every merge,
+                # for ever, under a message that named a figure it was not writing.
+                span_will_write = (decision.months if decision.months is not None
+                                   else got.get("months"))
+                span_known = "" if span_will_write is None else str(span_will_write)
                 span_on_disk = str(disk.get("months", "")).strip()
                 fills_span = bool(span_known) and span_on_disk != span_known
                 if not changed and disk.get("method") == got.get("layer") and not fills_span:
@@ -397,6 +523,14 @@ def plan_merge(folder: os.PathLike | str,
             decision.reason = ("recovers a quarter disk records as "
                                f"`{on_disk}`" if on_disk != "pdf" else "re-writes a `pdf` row")
             report.decisions.append(decision)
+            # ⚠️ **ONLY A QUARTER THAT WILL ACTUALLY BE WRITTEN MAY BE SUBTRACTED FROM A LATER
+            # ONE.** Refusals 2-4 run after the de-cumulation, so a Q2 that was split here and
+            # then refused — an empty band, or a figure that DIFFERS from disk — must not
+            # become Q4's operand: disk would still hold the other value, and the two would
+            # disagree about the same year. Recorded here, where the decision is final, the
+            # fallback is `_quarter_priors`' disk read, which is what a reader can check.
+            if decision.writing and decision.values is not None:
+                decumulated[period] = decision.values
 
     return report
 
@@ -439,6 +573,7 @@ def merge_run(folder: os.PathLike | str,
         builder = FinancialsBuilder(logger=None)
         docs = {d["period"]: d for d in _documents(Path(folder), periods)}
         writing = {(d.period, d.report) for d in result.to_write}
+        decided = {(d.period, d.report): d for d in result.to_write}
         periods_written = sorted({d.period for d in result.to_write}, key=fin._period_key)
 
         data: Dict[str, Dict[str, dict]] = {r: {} for r in REPORTS}
@@ -459,7 +594,13 @@ def merge_run(folder: os.PathLike | str,
                 if (period, name) not in writing:
                     continue
                 got = doc["accepted"][name]
-                values = {k: int(v) for k, v in (got.get("values") or {}).items()}
+                # ⚠️ THE PLAN'S OWN NUMBERS, so a de-cumulated quarter is written as the
+                # figures the plan printed and not as the year-to-date ones it started from.
+                # One computation, one place — the alternative is a second `_decumulate` call
+                # here that could disagree with the one the operator read.
+                chosen = decided[(period, name)]
+                values = (chosen.values if chosen.values is not None
+                          else {k: int(v) for k, v in (got.get("values") or {}).items()})
                 data[name][period] = values
                 items[name] += [c for c in values if c not in items[name]]
                 # ⚠️ The provenance `_write` reads. `source` is `pdf` and nothing else: rule 24
@@ -477,7 +618,11 @@ def merge_run(folder: os.PathLike | str,
                     # overrules it). A run folder written before this field simply has no
                     # span recorded, and a blank is the only honest reading of that — §5
                     # rule 2, never a default of 3.
-                    "months": got.get("months"),
+                    # ⚠️ `Decision.months` OVERRULES the run's span where refusal 1 set one:
+                    # 3 for a quarter this pass de-cumulated, 6/12 for a year-to-date row
+                    # whose priors were never filed. Absent, the run's own value stands.
+                    "months": (chosen.months if chosen.months is not None
+                               else got.get("months")),
                     "document": doc.get("document", ""),
                     "assurance": doc.get("assurance", "") or "",
                 }

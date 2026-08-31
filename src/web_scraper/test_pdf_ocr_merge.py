@@ -736,3 +736,211 @@ def test_the_event_names_the_file_total_for_what_it_is(root, tmp_path):
     assert "written" not in event
     assert event["pdf_rows_on_disk"][fin.BALANCE_SHEET] == 2    # the file holds two
     assert merge.merge_block([event])["statements_written"] == 1  # this run wrote one
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# refusal 1, the other half — DE-CUMULATING a year-to-date P&L from the rows on disk
+#
+# ⚠️ Refusal 1 used to be the end of the road: a cumulative income statement whose priors WERE
+# filed was left `missing` until somebody ran a multi-hour authoritative `build()` over the
+# whole ticker. BSR's Q2/Q4 income statements sat that way with their figures already in a run
+# folder. Since 2026-08-31 the merge does the subtraction itself — on operands that are already
+# `pdf` rows on disk, so it needs no OCR — and refuses only when an operand is missing or its
+# SPAN is not a known three months.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _disk_rows(report, rows):
+    """Several rows already on disk. `_write_disk` writes one and truncates; a de-cumulation
+    needs Q1..Q(q-1) present at once."""
+    path = fin.statement_path(TEMPLATE, report, "HOSE", "TST")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    columns = list(fin.DATA_COLS)
+    for _, values in rows:
+        columns += [c for c in values if c not in columns]
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        for period, values in rows:
+            writer.writerow({"symbol": "TST", "exchange": "HOSE", "template": TEMPLATE,
+                             "period": period, "year": period.split("-")[1],
+                             "quarter": period[1], "method": "onnx@200", "source": "pdf",
+                             **values})
+    return path
+
+
+def test_a_half_year_pnl_is_de_cumulated_against_the_Q1_on_disk(root, tmp_path):
+    """The whole point: Q2 = the six-month figure minus Q1, and Q1 needs no recorded span
+    because a first quarter's year-to-date IS the quarter."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=6, **{PBT: 1_000})})
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+    decision = _reason(report, fin.INCOME_STATEMENT)
+
+    assert decision.writing
+    assert decision.values == {PBT: 600}
+    assert decision.months == 3
+    assert "de-cumulated" in decision.note
+    assert _rows(fin.INCOME_STATEMENT)["Q2-2014"][PBT] == "600"
+    assert _rows(fin.INCOME_STATEMENT)["Q2-2014"]["months"] == "3"
+
+
+def test_a_Q4_is_de_cumulated_against_a_Q2_THIS_PASS_recovered(root, tmp_path):
+    """⚠️ The chain, and the reason `_documents` yields oldest first. BSR's Q4-2019 needs
+    Q2-2019, which is `missing` on disk until the same merge writes it — so the operand comes
+    from `decumulated`, the quarters this pass has already decided."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2019", {PBT: 100, "months": 3}),
+                                      ("Q3-2019", {PBT: 300, "months": 3})])
+    folder = tmp_path / "20260829-000000__hose_tst__pdf_ocr"
+    for period, months, pbt in (("Q2-2019", 6, 300), ("Q4-2019", 12, 1_000)):
+        sub = _run_folder(tmp_path, period=period, cumulative=True, accepted={
+            fin.INCOME_STATEMENT: _statement(months=months, **{PBT: pbt})})
+        assert sub == folder
+
+    report = merge.merge_run(folder, apply=True, quiet=True)
+    written = {d.period: d for d in report.to_write}
+
+    assert written["Q2-2019"].values == {PBT: 200}          # 300 - Q1 100
+    assert written["Q4-2019"].values == {PBT: 400}          # 1000 - (100 + 200 + 300)
+    assert _rows(fin.INCOME_STATEMENT)["Q4-2019"][PBT] == "400"
+
+
+def test_a_prior_whose_span_is_UNRECORDED_refuses(root, tmp_path):
+    """⚠️ §5 rule 2 at the column. Most of the corpus predates `months`, and reading a blank as
+    3 would infer a measurement nobody took — a six-month prior subtracted from a twelve-month
+    figure yields a number that is neither, and nothing downstream could tell. Re-parsing the
+    prior records its span, after which this same merge succeeds."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 100}), ("Q2-2014", {PBT: 200}),
+                                      ("Q3-2014", {PBT: 300})])
+    folder = _run_folder(tmp_path, period="Q4-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=12, **{PBT: 1_000})})
+
+    decision = _reason(merge.merge_run(folder, quiet=True), fin.INCOME_STATEMENT)
+
+    assert not decision.writing
+    assert "unrecorded" in decision.reason and "Q2-2014" in decision.reason
+
+
+def test_a_prior_that_is_MISSING_on_disk_refuses(root, tmp_path):
+    """Subtracting a blank returns the year-to-date figure unchanged — the exact wrong write,
+    and it would look like an ordinary quarter."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 100, "months": 3})])
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {"source": "missing"})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=6, **{PBT: 1_000})})
+
+    decision = _reason(merge.merge_run(folder, quiet=True), fin.INCOME_STATEMENT)
+
+    assert not decision.writing
+    assert "Q1-2014" in decision.reason
+
+
+def test_a_column_no_prior_carries_is_DROPPED_not_treated_as_zero(root, tmp_path):
+    """`FinancialsBuilder._decumulate`'s own rule: a line the prior filing printed and this
+    parse missed would otherwise have its whole year-to-date value land in a 3-month cell."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=6, **{PBT: 1_000, "i_1_tien": 55})})
+
+    decision = _reason(merge.merge_run(folder, quiet=True), fin.INCOME_STATEMENT)
+
+    assert decision.values == {PBT: 600}
+    assert "i_1_tien" not in decision.values
+
+
+def test_a_year_to_date_row_whose_priors_were_NEVER_filed_is_still_kept_and_labelled(
+        root, tmp_path, monkeypatch):
+    """The other branch is untouched: nothing will ever subtract quarters that were not
+    reported, so the choice is "cumulative now or nothing, ever" and the span says which."""
+    monkeypatch.setattr(merge, "_unfiled_priors",
+                        lambda builder, exchange, symbol, period: ["Q1-2014"])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=6, **{PBT: 1_000})})
+
+    decision = _reason(merge.merge_run(folder, apply=True, quiet=True), fin.INCOME_STATEMENT)
+
+    assert decision.writing and decision.months == 6
+    assert decision.values is None            # the run's own figures, unchanged
+    assert _rows(fin.INCOME_STATEMENT)["Q2-2014"][PBT] == "1000"
+
+
+def test_the_DIFFERS_check_scores_the_DE_CUMULATED_figures_not_the_year_to_date_ones(
+        root, tmp_path):
+    """⚠️ Comparing the six-month figure against a disk row holding the quarter would report a
+    difference in every column and refuse a row that is right.
+
+    Here the two AGREE (1,000 - 400 = 600, which is what disk holds), so `changed` is empty —
+    and the write that remains is the span-fill branch recording `months=3` on a row that
+    predates the column. A figures-only disagreement would have refused."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400}),
+                                      ("Q2-2014", {PBT: 600})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=6, **{PBT: 1_000})})
+
+    decision = _reason(merge.merge_run(folder, quiet=True), fin.INCOME_STATEMENT)
+
+    assert decision.changed == {}, "the year-to-date figures were compared against the quarter"
+    assert "recording the span" in decision.reason
+
+
+def test_a_de_cumulated_figure_that_DISAGREES_with_disk_is_still_refused(root, tmp_path):
+    """Refusal 3 judges the de-cumulated row exactly as it judges any other: two runs
+    disagreeing about a quarter is not settled by preferring the newer one."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400, "months": 3}),
+                                      ("Q2-2014", {PBT: 999, "months": 3})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=6, **{PBT: 1_000})})
+
+    decision = _reason(merge.merge_run(folder, quiet=True), fin.INCOME_STATEMENT)
+
+    assert not decision.writing
+    assert "DIFFERS" in decision.reason
+    assert decision.changed == {PBT: (999, 600)}
+
+
+def test_a_de_cumulated_quarter_REFUSED_by_a_later_gate_is_not_a_later_quarter_s_operand(
+        root, tmp_path):
+    """⚠️ Refusals 2-4 run AFTER refusal 1 has done the subtraction, so a Q2 that was split and
+    then refused must not be subtracted from Q4 — disk still holds the other value, and the two
+    would disagree about the same year. Q4 falls back to the disk read, which is what a reader
+    can check.
+
+    Here Q2-2019 de-cumulates to 200 and is refused as DIFFERS against a disk row of 999. Q4
+    must then use 999, not 200."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2019", {PBT: 100, "months": 3}),
+                                      ("Q2-2019", {PBT: 999, "months": 3}),
+                                      ("Q3-2019", {PBT: 300, "months": 3})])
+    folder = tmp_path / "20260829-000000__hose_tst__pdf_ocr"
+    for period, months, pbt in (("Q2-2019", 6, 300), ("Q4-2019", 12, 2_000)):
+        assert _run_folder(tmp_path, period=period, cumulative=True, accepted={
+            fin.INCOME_STATEMENT: _statement(months=months, **{PBT: pbt})}) == folder
+
+    report = merge.merge_run(folder, apply=False, quiet=True)
+    def pick(period):
+        return next(d for d in report.decisions
+                    if d.period == period and d.report == fin.INCOME_STATEMENT)
+
+    q2, q4 = pick("Q2-2019"), pick("Q4-2019")
+
+    assert not q2.writing and "DIFFERS" in q2.reason
+    assert q4.values == {PBT: 601}, "Q4 must subtract disk's 999, not the refused 200"
+
+
+def test_a_de_cumulated_row_is_not_rewritten_on_every_later_merge(root, tmp_path):
+    """⚠️ THE SPAN COMPARED MUST BE THE ONE THIS DECISION WILL WRITE, NOT THE RUN'S. A quarter
+    refusal 1 de-cumulated covers THREE months where the filing printed 6, and `_write` uses
+    `Decision.months`. Comparing the RUN's span instead made a correct `months=3` row look like
+    it was missing the filing's `6`, so it was "filled" on every merge for ever, under a
+    message naming a figure it was not writing. Measured on BSR 2026-08-31."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400, "months": 3}),
+                                      ("Q2-2014", {PBT: 600, "months": 3})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=6, **{PBT: 1_000})})
+
+    decision = _reason(merge.merge_run(folder, apply=False, quiet=True),
+                       fin.INCOME_STATEMENT)
+
+    assert not decision.writing, "a de-cumulated row already on disk must settle"
+    assert decision.reason == "identical to the row already on disk"

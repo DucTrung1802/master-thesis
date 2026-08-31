@@ -2296,6 +2296,88 @@ itself filed.
 **`test_pdf_ocr_settled_absences.py` — 7 tests, no PDF, no network, no OCR engine**, including
 the one that matters most: a pre-v4 folder must contribute nothing rather than a guess.
 
+### ⚠️ 3f. THE SPLITTER MANUFACTURED THE FRAGMENTATION THE GUARD REFUSES — `LSP-1` (2026-08-31)
+
+`SPL-1` is the DETECTOR emitting one printed figure as two boxes. **This is the mirror image:
+the detector emits ONE box and `_split_number_runs` cuts it** — and because a single guard
+(`split_figures`) fires on both, the reason line reads `N figure(s) split across two boxes`
+either way and sends you to the wrong half of the pipeline.
+
+BSR's Q3-2018 balance sheet returns `'9.964.924.167 838'` as one box for a printed
+9.964.924.167.838: a thousands separator recognised as a space. Split, the left half lands on
+no column and is dropped, so the row would carry **838** for a cash line of 9.96 nghìn tỷ.
+
+⚠️ **`join_digits` COVERS ONE SHAPE OF THIS AND ONLY ONE.** `_join_split_number` needs a bare
+1-3 digit HEAD — `'3 396.864'`, ACB Q2-2012 — because that is the shape it was measured on.
+BSR loses separators anywhere in the number: `'382.080.998 409'`, `'10 982 779.849.642'`,
+`'46.625 723 403.018'`.
+
+✅ **The ground truth is the same document at a higher DPI**: at `onnx@300` and `onnx@400` the
+detector returns that box WHOLE, over the identical x-range [347.8, 423.4]. Measured across
+four BSR filings — **76 whitespace runs in the value zone, 69 of which join into one
+well-formed grouped figure**; the other 7 are OCR damage and must stay split.
+
+#### ⚠️ The discriminator was measured and DISPROVEN — record it so it is not re-made
+
+ACB's Q1-2025 cash flow genuinely boxes two period figures together
+(`'135.272.610 126.501.216'`), and that joins well-formed too. The obvious separator is
+character density — a lost separator costs one character where an inter-column gap costs none:
+
+| pt/char, against that page's own median clean box | |
+|---|---|
+| BSR's lost separator | **1.00x** |
+| **ACB's genuine two-figure box** | **1.03x** |
+
+**No signal.** Nothing inside the box tells the two populations apart.
+
+#### ✅ So the separation is CASCADE POSITION, and the blast radius is a count
+
+`join_lost_separator` is a `ParseLayer` flag, off by default, on **five layers at 51-55 of
+55**; ACB Q1-2025 is accepted at layer 6. ⚠️ **Across all 1,023 `pdf` rows on disk the latest
+winning layer is position 50**, and the cascade stops at the first acceptance — so no row now
+on disk can move, and the reach is exactly the 159 `missing` rows. ✅ No extra OCR pass:
+`ocr_key` stays at 7 distinct values (the flag is a per-layer post-step on cached words), so
+the run log reads `cached parse, re-map only` for all five.
+
+✅ **BSR Q3-2018's balance sheet recovered at `onnx@300+joinlost`, 46 items** — verified
+against the filing's own arithmetic, because `reconcile` on `corp` only tests the trivial
+`assets == resources` (`CRP-1`): **9 of 9 internal identities exact**, four over figures that
+were being split. ⚠️ **BSR Q3-2017 and Q4-2017 are NOT fixed** — their refusals are total-LABEL
+ones, a second defect in `TPL-1`'s territory stacked on this one.
+
+### ⚠️ 3g. THE MERGE DE-CUMULATES NOW, AND `tesseract@200` IS LAYER 4 HERE AND ABSENT ON KAGGLE
+
+Two things from the same session, and the second is the one that will bite again.
+
+**`pdf_ocr_merge` de-cumulates.** Refusal 1 turned away a cumulative Q2/Q4 income statement
+whose priors WERE filed, correctly — `pdf_ocr_job` cannot de-cumulate — and the row then sat
+`missing` until somebody ran a multi-hour authoritative `build()`. The merge now does the
+subtraction itself, with `_decumulate`'s arithmetic, on the `pdf` rows already on disk plus the
+quarters this same pass has just recovered (`_documents` yields oldest first, which is what
+lets a Q4 be split once its Q2 is in). No OCR. ⚠️ It still refuses when a prior is not a `pdf`
+row, or when its span is anything but a KNOWN three months — `months == 3` on the row, or the
+prior is **Q1**, three months by construction. **A blank `months` is UNRECORDED, not 3.**
+⚠️ And a quarter this pass de-cumulated becomes a later quarter's operand only if it survives
+refusals 2-4, which run after it.
+
+⚠️ **`tesseract@200` SITS AT POSITION 4 OF 55 AND KAGGLE HAS NO TESSERACT.** §6-2-duodetricies
+priced that as wall clock (*"the T4 entered 45 layers, not 47"*); what it also means is that
+**the two machines run different cascades and a statement can win on a different layer.** BSR
+Q3-2019, same document, same commit:
+
+| | winning layer | `hdtc_4_tien_chi_tra_no_goc_vay` |
+|---|---|---|
+| Kaggle (wrote the disk row) | `onnx@300+tail` | −1,070,886,323,063 |
+| this laptop | **`tesseract@200`** | **−11,070,886,323,063** — a leading digit invented |
+
+11 of 56 balance-sheet cells differ, and 11 of 24 cash-flow cells. ✅ The merge refuses all of
+it as DIFFERS. ⚠️ **So a local re-parse of a Kaggle-parsed ticker is not a re-run of that
+parse** — a structural difference, not the diacritic-level drift §"Is the output identical on
+both machines?" measured. **To reproduce a Kaggle parse locally, restrict the cascade to the
+onnx layers** (`--layers`, 53 of 55); cherry-picking the single winning layer is a different
+claim. ⚠️ `stack_fingerprint` records the library versions and does NOT record which ENGINES
+were reachable.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

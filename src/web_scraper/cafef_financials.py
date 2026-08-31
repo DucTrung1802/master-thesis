@@ -52,6 +52,31 @@ class ParseLayer:
         set would re-judge all 65 quarters at once, and a component wrongly swept in makes the
         sum OVERSHOOT, turning a passing quarter into a rejected one. Here only a statement that
         has already failed every existing layer is ever judged this way.
+      * `join_lost_separator` — treat a whitespace-separated numeric run as ONE figure whose
+        thousands separator the recogniser read as a space, whenever joining ALL of its parts
+        yields a well-formed grouped figure. `join_digits` already does this for the ONE shape
+        it was measured on — a bare 1-3 digit HEAD, `'3 396.864'` — and BSR's scans lose
+        separators anywhere in the number: `'9.964.924.167 838'`, `'10 982 779.849.642'`,
+        `'46.625 723 403.018'`. `_split_number_runs` then cuts each into pieces that land on no
+        column, `split_figures` counts the fragments and `reconcile` refuses the statement
+        (`SPL-1`). Measured 2026-08-31 over four BSR filings: **69 of 76 runs join into one
+        well-formed figure**, and at 300/400 dpi the detector returns those same boxes WHOLE —
+        `'9.964.924.167 838'` reads `'9.964.924.167.838'` over the identical x-range — which is
+        what settles that they are one figure and not two.
+
+        ⚠️ **IT CANNOT BE TOLD FROM THE OPPOSITE CASE BY TEXT OR BY GEOMETRY, AND THAT WAS
+        MEASURED RATHER THAN ASSUMED.** ACB's Q1-2025 cash flow really does box two period
+        figures together — `'135.272.610 126.501.216'` — and that joins to a well-formed figure
+        too. A character-density test was tried first, on the theory that a lost separator costs
+        one character where an inter-column gap costs none: ACB's genuine pair came back at
+        **1.03× its own page's median pt/char**, indistinguishable from a clean single box. So
+        nothing inside the box separates the two populations.
+
+        ⚠️ **WHAT SEPARATES THEM IS CASCADE POSITION, WHICH IS WHY THESE LAYERS ARE LAST.** ACB
+        Q1-2025's cash flow is accepted at `onnx@300+relax`, layer 6; only a statement that has
+        defeated every earlier layer reaches this one, and `reconcile` and `sane` still judge
+        what it recovers. A run whose join is MALFORMED (7 of the 76 — `'25 1961177.684.364'`,
+        `'697 188.266,449'`) is left to the splitter exactly as before.
       * `realign_rows` — re-pair labels with figures when the scan puts every numeric box a
         CONSTANT distance above the text box of its own printed line. Past `Y_TOL` the two never
         group, and `table_rows` then hands each figure to the label line ABOVE it, sliding the
@@ -154,6 +179,7 @@ class ParseLayer:
     relax_components: bool = False
     relax_split_tail: bool = False
     join_digits: bool = False
+    join_lost_separator: bool = False
     title_over_form: bool = False
     loose_form_code: bool = False
     realign_rows: bool = False
@@ -337,6 +363,7 @@ def parse_key(layer: ParseLayer) -> tuple:
     `ParseLayer` field moved between "changes the parse" and "changes the mapping".
     """
     return (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
+            layer.join_lost_separator,
             layer.title_over_form, layer.loose_form_code, layer.realign_rows,
             layer.notes_boundary, layer.tail_continuation, layer.label_wrap,
             layer.unit_from_document)
@@ -888,6 +915,30 @@ class FinancialsBuilder:
         # not also be the layer that reads the wrong unit.
         ParseLayer("onnx@200+unit+condensed", "onnx", 200,
                    unit_from_document=True, condensed_income=True),
+        # A THOUSANDS SEPARATOR READ AS A SPACE, ANYWHERE IN THE NUMBER (`join_lost_separator`)
+        # — `join_digits` above covers only the one shape it was measured on, a bare 1-3 digit
+        # head. BSR's scans lose separators throughout: its Q3-2018 balance sheet returns
+        # '9.964.924.167 838' for a printed 9.964.924.167.838, and 76 such runs sit across four
+        # of its filings. Each is cut into pieces that land on no column, so `split_figures`
+        # counts them and `reconcile` refuses the statement — which is why raising the DPI does
+        # not rescue these quarters either: onnx@300 fixes some rows and breaks others, and no
+        # existing layer ever reaches zero fragments.
+        #
+        # ⚠️ **LAST OF ALL, AND THE POSITION IS THE ONLY THING SEPARATING THIS FROM A WRONG
+        # JOIN.** ACB's Q1-2025 cash flow genuinely boxes two period figures together and joins
+        # just as well-formed; measured 2026-08-31, its character density is 1.03x its own
+        # page's median, so no test on the box itself tells the two apart. It is accepted at
+        # `onnx@300+relax`, layer 6, and can therefore never reach here. What does reach here is
+        # a statement every one of the ~50 readings above refused, and `reconcile` + `sane`
+        # still judge what this recovers.
+        ParseLayer("onnx@200+joinlost", "onnx", 200, join_lost_separator=True),
+        ParseLayer("onnx@200+joinlost+relax", "onnx", 200,
+                   join_lost_separator=True, relax_totals=True),
+        ParseLayer("onnx@300+joinlost", "onnx", 300, join_lost_separator=True),
+        ParseLayer("onnx@300+joinlost+relax", "onnx", 300,
+                   join_lost_separator=True, relax_totals=True),
+        ParseLayer("onnx@200+joinlost+relax+components", "onnx", 200,
+                   join_lost_separator=True, relax_totals=True, relax_components=True),
     ]
 
     def __init__(self, logger=None):
@@ -989,6 +1040,7 @@ class FinancialsBuilder:
                 parser.set_dpi(layer.dpi)
                 parser.set_crop_pad(layer.crop_pad)
                 parser.set_join_split(layer.join_digits)
+                parser.set_join_lost_separator(layer.join_lost_separator)
                 parser.set_title_over_form(layer.title_over_form)
                 parser.set_loose_form_code(layer.loose_form_code)
                 parser.set_realign_rows(layer.realign_rows)
