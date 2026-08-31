@@ -255,3 +255,5 @@ experiment/experiment_10/_cache/
 # `git check-ignore -v`.
 !results/**/folds.csv
 !results/**/per_fold.csv
+
+reports/pdf_ocr/
