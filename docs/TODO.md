@@ -49,7 +49,7 @@ structural code comes last because it only pays off for runs that are currently 
 >
 > | group | items | what it is |
 > |---|---|---|
-> | **0 · PARSER** | `P43`, `P44`, `P45`, `P46`, `P47`, `P48`, `P50`, `P51` (`P39`/`P41`/`P42`/`P49` done) | ⚠️ **ADDED 2026-08-27, ABOVE EVERYTHING** — a review of `cafef_pdf_parser.py` + `cafef_financials.py` against the parsed tickers on disk. Two classes are WRONG NUMBERS every gate passes; two are the cost `P38`/`P6` are budgeted on |
+> | **0 · PARSER** | `P43`, `P44`, `P45`, `P46`, `P47`, `P48`, `P51`, `P52`, `P53` (`P39`/`P41`/`P42`/`P49`/`P50` done) | ⚠️ **ADDED 2026-08-27, ABOVE EVERYTHING** — a review of `cafef_pdf_parser.py` + `cafef_financials.py` against the parsed tickers on disk. Two classes are WRONG NUMBERS every gate passes; two are the cost `P38`/`P6` are budgeted on |
 > | **A · DATA** | `P2` (`P1` done 2026-08-23) | per-ticker freshness shipped; what is left is the filing PDFs |
 > | **B · OCR** | `P37`, `P38`, `P6`, `P5`, `P4` | ⚠️ `P37` sits ABOVE `P6`: the builder still defaults to CafeF's HTML tabs, so running the OCR program first would import transcribed rows at 784× scale (`FIN-1`). ⚠️ `P3` (the JSON gate) is CLOSED BY DECISION, not by measurement — the source is CafeF PDFs |
 > | **C · OUTPUT** | `P7`-`P8` | ✅ unblocked 2026-08-23 — the cross-section is 771 names again, not 7 |
@@ -193,11 +193,13 @@ with a 200-draw null).
 |---|---|---|---|---|
 | | **⬛ 0 · THE PDF PARSER ITSELF — ⚠️ ADDED 2026-08-27, ABOVE EVERYTHING.** Two of these are WRONG NUMBERS every gate passes; two were the cost `P38`/`P6` are budgeted on | | | |
 | **P49** ✅ | **DONE 2026-09-01 — the income statement has an arithmetic gate** | ~3 h *actual* | ✅ | **↓ detail block** |
-| **P50** | ⚠️ **SCREEN THE CORPUS for the two classes `LNB-1`/`VAS-1` repaired — nobody knows how many rows on disk carry them** | ~4 h GPU | ✅ | every row parsed before 2026-09-01 came from the old default path. **↓ detail block** |
+| **P50** ✅ | **DONE 2026-09-02 — the corpus screen: 307 of 1,093 rows differ, and `LNB-1` is 96 % of it** | ~13 h GPU *actual* | ✅ | **↓ detail block** |
 | **P51** | ⚠️ **BUCKET WORDS BY GEOMETRY, NOT EMISSION ORDER — tried 2026-09-01, MEASURED WORSE** | ~1 day | ✅ CPU | **↓ detail block** |
 | **P46** | ⭐ ⚠️ **THE UNIT REPAIR IS UNREACHABLE WHERE IT IS NEEDED — 8 TCB statements written 10⁶ WRONG** | ~4 h | ✅ | `unit_from_document` is carried by three layers at **positions 41-43 of 47**, and a statement that reconciles at layer 1 ends the cascade — so the repair never runs where it is needed. ⚠️ **A uniform 10⁶ error reconciles against itself**, so `sane` is the only gate that sees it, and on a ticker with no history it is open (`BND-1`). Measured on TCB 2026-08-29: **8 statements read `unit=1` against a ticker norm of 1,000,000** — Q1-2014 PBT read 673,136 for a company that earned 673 tỷ. ✅ Five were repaired in 8m 58s with the cascade restricted to those layers, each at **exactly ×10⁶**. **The fix is not a new layer**: make `unit_of` return `None` for silence (it already distinguishes them internally) and consult the DOCUMENT's declared unit on the DEFAULT path when the statement is silent and the filing does not contradict itself — `declared_unit()`/`document_unit()` already exist and are wired to a flag. ⚠️ **MEASURE THE BLAST RADIUS FIRST**: re-map the stored `row_dump`s and require 0 changed cells on ACB/VCB/BID. `UNT-1` |
 | **P47** | ⚠️ **BOOTSTRAPPING A NEW TICKER — the OCR job cannot, and nothing says so until afterwards** | ~2 h | ✅ CPU | `seed_history` reads DISK and re-seeds per document while `build()` accumulates within its run, so a ticker with no CSV parses with `sane` open, `pdf_ocr_merge` refuses every empty-band statement, nothing is written and the band stays empty. TCB paid **5h 21m** to learn it; 9 of 169 cells were wrong. **(a)** `plan()` should REFUSE — or warn ONCE, up front, before GPU is spent — when the ticker has no accepted quarter and no filter narrows the run, naming the Dagster path; today the warning is per document, after the cost. **(b)** Ship the two screens that convicted TCB's nine cells as CODE (a `unit` minority screen, a total-assets continuity screen over a finished run folder) — free, no OCR, and what `sane` would have done. ⚠️ **(b) is worth more than (a)** — it also runs on tickers that DO have history. ⚠️ **NEITHER IS DONE**; what shipped 2026-08-30 is `FORCE_EMPTY_BAND`, which opens the write half of the loop and makes (b) MORE urgent, not less. `BND-1` |
 | **P43** | ⚠️ **A FREE INVARIANT NOBODY CHECKS — 10 BID cash flows ALREADY ON DISK** | ~3 h | ✅ CPU | **↓ detail block** |
+| **P52** | ⭐ ⚠️ **`EQW-1` — 20 VCB BALANCE SHEETS TAKE A SUB-LINE AS TOTAL EQUITY, and the rows on DISK are right** | ~4 h | ✅ CPU | **↓ detail block** |
+| **P53** | ⚠️ **`MPD-1` — an index-only filing raises instead of being skipped; it ended a 67-document job in 30 s** | ~1 h | ✅ CPU | **↓ detail block** |
 | **P48** | ⚠️ **A BRACKET OCR DAMAGED READS AS POSITIVE — 6 wrong cells on disk in a ticker nobody was looking at** | ~3 h | ✅ CPU | `PAR-1` and `QUO-1` are one family: a parenthesised figure whose bracket the recogniser mangled is written **positive, or from the wrong column, and it reconciles**. Three variants measured — a thousands separator read as a SPACE inside the brackets, a box the parentheses SPAN, and the OPENING bracket read as a quote — each found by accident. ⚠️ **The corpus has never been screened.** TCB Q4-2013 holds six such cells today: `Dự phòng giảm giá chứng khoán kinh doanh` **+427** where the filing prints **(1.427)** and its own subtotal settles it (921.035 − 1.427 = 919.608); `Phát hành giấy tờ có giá` +548 for (4.807.548); `Mua sắm bất động sản đầu tư` +902 for (129.902); `Tiền chi đầu tư góp vốn` +800 for (35.800) — **the current code reads all six correctly, so this is a data repair, not a code one**. **(a)** a free DISK screen: a line named `dự phòng`/`chi phí`/`hao mòn`/`chi `/`mua sắm` with a POSITIVE value is a candidate, as is any component failing its own printed subtotal. **(b)** re-parse and repair what it convicts, adjudicated by **the filing's own subtotals**, never by "the newer run wins". ⚠️ Budget the re-parse from the screen, not the ticker count |
 | **P41** ✅ | **DONE 2026-08-30 — the share-capital scan was 69-77 % of a parse, and invisible** | ~1 h *actual* | ✅ | **↓ detail block** |
 | **P44** | ⚠️ **TWO HOLES IN THE GATES THAT LET `P43`'s ROWS THROUGH** | ~2 h | ✅ CPU | **(1)** `sane`'s comparative-column gate is `if got and got in set(history)` — **exact integer equality, so a UNIT MISMATCH is blind to it** (BID Q1-2013 reads a figure equal to a stored quarter only after scaling). **(2)** `_closing_breakdown` fails OPEN when it cannot print a breakdown, so a negative closing balance passes. Both are cheap, and both are what `P43`'s screen would otherwise have to catch downstream |
@@ -380,37 +382,75 @@ rule 2) but not free, so it was measured before shipping rather than after.
 
 ---
 
-### P50 · ⚠️ HOW MANY ROWS ON DISK CARRY `LNB-1` AND `VAS-1`? ⏱ ~4 h GPU · *(opened 2026-09-01)*
+### P50 · ✅ DONE 2026-09-02 — 307 OF 1,093 ROWS DIFFER, AND `LNB-1` IS 96 % OF IT ⏱ ~13 h GPU *actual*
 
-Both were fixed 2026-09-01 **in the default path**, so every row parsed before that date came from
-the broken code. Neither can be screened from the CSVs alone, and `LNB-1` changes how WORDS become
-ROWS — it needs the words back, i.e. a re-parse.
+All seven parsed tickers re-parsed with `--overwrite`, **no merge**, onnx-only cascade (53 of 55
+layers, or `TSS-1` swamps it). **371 documents, ~13 h, nothing written to `raw_data/`.**
 
-| | reach | how it shows |
+| | REPRODUCED | DIFFERS | absent | ABSTAIN |
+|---|---|---|---|---|
+| BSR · VIC (corp) | 22 · 28 | 12 · 18 | 4 · 23 | 4 · 5 |
+| BID · CTG · TCB · VCB · ACB (bank) | 85 · 107 · 92 · 110 · 125 | 66 · 58 · 50 · 61 · 42 | 6 · 13 · 13 · 5 · 4 | 28 · 25 · 24 · 33 · 30 |
+| **total** | **569** | **307** | 68 | 149 |
+
+**The answer, split by the DISK row's own engine** — which is the only thing that separates
+`LNB-1` from `TSS-1`, since both produce a truncated figure:
+
+| | disk read by onnx → `LNB-1` | disk read by tesseract → `TSS-1` |
 |---|---|---|
-| **`VAS-1`** | **`corp` only** — the bank charts print no item-code arithmetic | ACCOUNTS SILENTLY ABSENT, never a wrong figure (on BSR Q3-2019: net revenue, gross profit, PBT, PAT) |
-| **`LNB-1`** | **any template** — it needs only a stray mark within `Y_TOL` of a value column | A WRONG FIGURE every gate passes, taken from a NEIGHBOURING line, so it is plausible |
+| accounts recovered | **212** | 66 |
+| truncated figures repaired | **192** | 8 |
 
-The parsed corpus is 7 tickers: ACB, BID, CTG, TCB, VCB (`bank`), VIC + BSR (`corp`). ⚠️ **VIC and
-BSR are the whole `VAS-1` exposure**, and VIC Q3-2014 has already been re-parsed and REPRODUCED — so
-what is left is BSR's other 15 quarters and VIC's 26 unre-parsed ones.
+⚠️ **`LNB-1` is 96 % of the damage** — and the opposite was predicted out loud when CTG and TCB
+returned 53 and 65 truncations, on the reasoning that truncation is tesseract's signature.
+⚠️ **`VAS-1` is `corp`-only as predicted, and now counted: 52 cells, 51 VIC + 1 CTG, 0 in bank.**
+VIC Q1-2011's balance sheet holds **42** item-code cells where CLAUDE.md recorded four.
 
-**The calibration set — three residues already named on BSR 2019**, which a screen should find:
-(1) Q4-2019 `11_loi_nhuan_thuan` is **+200,000** against its own components, inherited from
-Q3-2019's `10_` at `onnx@300` — `P49` is the gate that prevents it; (2) Q4-2019
-`2_cac_khoan_giam_tru_doanh_thu` is **−3,151,000**, a negative revenue deduction — ⚠️ **a
-de-cumulation artefact, not an OCR one** (the filing prints that line only cumulatively), and the
-fix is for `_decumulate` to DROP a column whose result changes sign against every operand;
-(3) Q4-2019 `tong_cong_nguon_von` reads 53,583,993,996,059 where the assets total and `I + II + D`
-both give 53,583,992,996,059 — 1,000,000 on 5.36e13, five orders inside `_equal`.
+⚠️ **26 statements where the current code is WORSE than disk** — 20 VCB (one defect, `EQW-1`),
+BID 3, CTG 2, TCB 1, ACB 0. Proven NOT to be `LNB-1`/`VAS-1`/`P49`: a re-parse under `7c3604c5`
+reproduces the wrong figure.
 
-**The work:** re-parse each ticker's quarters with `--overwrite` and NO merge, and read `compare()` —
-a `DIFFERS` naming a column that was `None` is `VAS-1` recovering an account, one that MOVES a
-figure is `LNB-1`. ⚠️ **Score against the FILING, never against recency** (the precedent is this
-repair: PBT adjudicated by `15 = 11 + 12 − 13` to the đồng, by the row's own EPS of 193 đ, and by
-the four 2019 quarters summing to the audited annual exactly). ⚠️ **Use the onnx-only cascade**
-(`--layers`, 53 names) or the difference is swamped by `TSS-1`'s — `tesseract@200` is layer 4 and on
-BSR Q3-2019 it wins with a reading that truncates 361,884,738,267 to 361,884,738.
+⚠️ **AND THE SCREEN IS BLIND TO A CLASS ITS OWN CALIBRATION SET NAMED.** Of P50's three BSR 2019
+residues it found **one** — (1) the 200,000, via `P49`. (2) sits in an ABSTAIN and is never
+scored; (3) reads **REPRODUCED**, because the current code reproduces the error faithfully.
+**`REPRODUCED` means the code agrees with disk, never that the figure is right**, so the 569
+reproduced rows are 569 rows this screen says nothing about. `P43` and `P48`'s disk screens are
+what covers them. CLAUDE.md §6-2-quaterquinquagies.
+
+---
+
+### P52 · ⚠️ `EQW-1` — 20 VCB BALANCE SHEETS TAKE A SUB-LINE AS TOTAL EQUITY ⏱ ~4 h · *(opened 2026-09-02)*
+
+Found by `P50`. On **every Q2 and Q4** VCB filing the ordered walk claims the merged
+`VIII Vốn chủ sở hữu | Vốn của tổ chức tín dụng` before the `TỔNG VỐN CHỦ SỞ HỮU 22(a)` printed
+below it — Q4-2024 reads **61,696,139 mn against a true 196,209,168**, which is `A − L` exactly,
+with assets and liabilities reproducing to the đồng at the same layer.
+
+⚠️ **THE ROWS ON DISK ARE RIGHT AND THE CODE CANNOT REPRODUCE THEM**, so this is a code repair
+and NOT a data one — the opposite of `P48`. A re-parse under `7c3604c5` gives the same wrong
+figure, so it is older than the 2026-09-01 fixes.
+
+**The fix is `MEN-1`'s discriminator applied to the ordered walk**, which `MEN-1` measured as
+changing 23 of 228 archived statements and therefore confined to `_anchor`. ⚠️ **So it cannot be
+lifted wholesale**: the walk has POSITION to keep a fuzzy match honest and `_anchor` does not.
+What is new is a bounded case — a row whose label CONTAINS the account as a prefix while a later
+row NAMES it (`tổng` + the same account) — and the blast radius is measurable for free by
+re-mapping the stored `row_dump`s of all 371 `P50` run folders. ⚠️ **Require 0 changed cells
+outside the 26 regressions**, and adjudicate each by `A = L + E`.
+
+---
+
+### P53 · ⚠️ `MPD-1` — A FILING THE INDEX LISTS AND THE DISK LACKS KILLS THE RUN ⏱ ~1 h · *(opened 2026-09-02)*
+
+`pdf_ocr_job.run` calls `os.path.getsize(task.path)` before opening each document, so ACB
+**2009-Q3** — the one index-only quarter §6-2-sexquadragies measured — raised a bare
+`FileNotFoundError` at document 3 of 69 and ended a 67-document job in ~30 s.
+
+⚠️ **It fails at the END of a plan that already succeeded**, so a queued chain reports the ticker
+done and moves on. Count it, skip it, and name it in the summary — the way a dead download link
+already is (§6-2-septies). ⚠️ **`plan()` is the better place**: a document whose file is absent
+is not a document the run can open, and the count belongs beside `documents :` before any GPU is
+spent.
 
 ---
 
