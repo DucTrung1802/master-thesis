@@ -439,7 +439,7 @@ through `FinancialsBuilder.documents()` itself, and returns one row per ticker:
 | `exchange` | the listing board, read from the CSV's own column |
 | `complete` | `bool` — **all three marks `<= first_report`**: every statement's read run reaches back at least to where the FILING chain starts. A `—` column is NaN, every comparison with NaN is False, so one unread statement drops the row on its own |
 | `first_report` | the quarter that OPENS the contiguous filing chain, read from `raw_data/cafef/pdfs/files/` — a fact about **filings**, not about the parse |
-| `balance_sheet` / `income_statement` / `cash_flow` | the FURTHEST-BACK quarter that statement has been read from without a break, anchored at its own newest quarter READ |
+| `balance_sheet` / `cash_flow` / `income_statement` | the FURTHEST-BACK quarter that statement has been read from without a break, anchored at its own newest quarter READ |
 
 Quarters print as `2008-Q4`, which sorts and is the `--quarters` / `QUARTERS` spelling
 [§2](#2-choosing-the-filings) takes — so a cell of this table pastes straight into a parse.
