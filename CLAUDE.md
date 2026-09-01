@@ -6459,6 +6459,109 @@ Q4's line 8 through the de-cumulation and nothing in this repo can adjudicate it
 still reconciles on the trivial `assets == resources`. The identities above establish that
 these FIGURES are the filing's own; they do not clear the pipeline for a non-bank ticker.
 
+### ✅ 6-2-tresquinquagies. `P49` — THE INCOME STATEMENT HAS AN ARITHMETIC GATE NOW, and the SIGN of a deduction is a property of the SCAN
+
+Shipped 2026-09-01. `reconcile` gives each statement one arithmetic test: the balance sheet
+`assets == liabilities + equity`, the cash flow `opening + movement + fx == closing`. **The
+income statement got `if get(C_PBT) is None: return "no profit before tax"` — that a PBT line
+EXISTS, and nothing about whether it is the right number.** That is why every `SLD-1`-shaped
+defect has landed there, four on record and each found BY HAND rather than by a gate: BSR
+Q3-2019 (`LNB-1`, PBT 575 bn out), TCB Q4-2013 and ACB Q1-2024 (`PAR-1`), BID Q3-2011
+(`QUO-1`, two cells from the prior-period column).
+
+**`FinancialsBuilder.OP_IDENTITY` is a table keyed by the operating-profit column** —
+`{op: (added, deducted, optional)}` — so the KEY identifies the chart and `reconcile` needs no
+template argument it does not already have:
+
+| chart | the identity | required terms |
+|---|---|---|
+| **bank** | **XI = IX + X** — the checked line is PBT itself, the figure everything downstream reads | 2 |
+| **corp** | **11 = 5 + 7 − 8 − 9 − 10** | 5 |
+| `securities`, `insurance` | ⚠️ **ABSENT ON PURPOSE** — neither has ever met a filing, so an identity written from the chart alone would be a guess that refuses real statements (§5 rule 2) | — |
+
+⚠️ **IT RUNS ON EVERY LAYER, UNLIKE `_cash_flow_identity`, AND THAT IS THE WHOLE ITEM.** BSR
+Q3-2019 is ACCEPTED at strict `onnx@300` with `10_chi_phi_quan_ly_doanh_nghiep` read 200,000
+đồng too high; the cascade stops at the first acceptance, so the exact reading at `onnx@400`
+was never reached and the error propagated into Q4-2019 through the de-cumulation. **Measured
+after the change: the quarter escalates by itself — `onnx@300` → `onnx@400`, 89,916,450,279 →
+89,916,650,279, residual EXACTLY 0**, and PBT 624,185,898,676.
+
+⚠️ **THE TOLERANCE CANNOT BE `_equal`, and the test pins that as an inequality.**
+`EQUAL_REL = 1e-5` on 599,695,236,083 is **±5,996,952** against an error of **200,000** —
+three orders of magnitude inside it. §6-2-quatervicies set the same precedent (*"the 300 dpi
+read is wrong by 23 đồng in 6.7 million"*). `OP_IDENTITY_TOL = 4`, i.e. the filing's own
+rounding and nothing else.
+
+#### ⚠️ ONE BIT OF SIGN FREEDOM IS REQUIRED, AND THE MEASUREMENT IS WHY
+
+The filing prints an expense in brackets, and whether that bracket survives OCR is exactly
+`PAR-1`/`QUO-1` — **but it survives or fails for the WHOLE STATEMENT, not line by line.**
+Replayed over the accepted income statements in `reports/pdf_ocr/` whose terms all map:
+
+| | |
+|---|---|
+| close with the deductions **as stored** | **29** |
+| close **only** once every deduction is taken as `-abs` | **12** — every BSR quarter, plus CTG Q1-2019 |
+
+So both conventions are tried and either is accepted. ⚠️ **ONE bit for the statement, never one
+per line**: a wrong DIGIT shifts both branches by the same amount and is still caught, while a
+lost bracket is not. Refusing the 12 would have been a false refusal in **29 %** of the
+answerable population.
+
+#### ⚠️ THE FALSE-REFUSAL RISK WAS MEASURED BEFORE IT SHIPPED, AND ON THE RIGHT POPULATION
+
+A gate that refuses a sound statement turns a `pdf` row into `missing`. That is the safe
+direction (§5 rule 2 — absent beats wrong) and it is not free. Replayed over the **85 accepted
+income statements** in the 16 run folders under `reports/pdf_ocr/`, from the RAW mapped values:
+
+| | |
+|---|---|
+| **answer it** | **41** |
+| **ABSTAIN** — a required term did not map | **39** |
+| **fail** | **5** — BSR Q3-2019, and **four CTG quarters** written with no magnitude band at all (`BND-1`), residuals 1.2 bn, 466.7 bn and a round **8,000,000,000,000** |
+
+⚠️ **THE STATEMENT CSVs ARE THE WRONG POPULATION AND WOULD HAVE OVERSTATED IT ~10×.** The same
+identity over the 355 `pdf` rows on disk flags **59**, because those rows are DE-CUMULATED and
+`reconcile` never sees them: a term that failed to map in one YTD filing produces a MIRRORED ±
+pair across two quarters (ACB Q1/Q2-2018 ±473,315; VCB Q3/Q4-2023 ±22,180,382 — nearly every
+bank failure is such a pair). **The population a gate is measured on has to be the population
+the gate sees.**
+
+#### The regression, and what it does NOT do
+
+⚠️ **THE BLAST RADIUS IS A FULL RE-PARSE, NOT A `row_dump` REPLAY** — this changes which
+layer ACCEPTS, so the rows themselves move. Five filings, one per parsed template family, all
+five re-parsed end to end against the rows on disk:
+
+| | winning layers | verdict |
+|---|---|---|
+| VCB Q1-2026 | `onnx@200` x3 | **REPRODUCED** 59 / 22 / 17 cells |
+| ACB Q1-2024 | `onnx@200`, `onnx@200`, `onnx@300+relax` | **REPRODUCED** 54 / 20 / 28 |
+| TCB Q1-2014 | `onnx@200`, **`onnx@200+unit+tail`**, `onnx@200` | **REPRODUCED** 44 / 21 / 17 |
+| VIC Q3-2014 (`corp`) | `onnx@300`, `onnx@300`, `onnx@200` | **REPRODUCED** 45 / 16 / 19 |
+| BID Q4-2016 | `onnx@200`, `onnx@200`, **`onnx@200+pad6+annual+extra`** | **REPRODUCED** 52 / 24; the income statement ABSTAINS by design (cumulative filing, de-cumulated row) |
+
+**14 of 15 statements reproduced at the identical winning layer, 1 abstained** — BID's cash
+flow included, which has to lose 46 layers and win on the 47th. **12 new tests; 493 pass in
+`src/web_scraper/`**, none needing a PDF, a network or an engine.
+
+⚠️ **BSR Q3-2019's OWN BALANCE SHEET AND CASH FLOW DIFFER, AND IT IS NOT THIS CHANGE** — the
+gate only runs on `INCOME_STATEMENT`. Those two rows were written by a Kaggle run at
+`onnx@300+tail` and a LOCAL run lands them on `tesseract@200`, layer 4 of 55; §6-2-quinquagies
+measured exactly that and §6-2-duoquinquagies records the same ticker.
+
+⚠️ **IT WRITES NO FIGURE TO DISK.** BSR Q3-2019's wrong cell and CTG's four are still there —
+repairing them is a merge decision, and BSR's needs Q3 and Q4 together because the 200,000
+propagates through the de-cumulation. `P50`'s corpus screen is where that lands.
+⚠️ **The four abstain rules stay abstain**: no entry for the chart, a required term unmapped,
+an unmapped statement (`reconcile`'s text-search fallback has no canonical column to read), and
+the two optional corp lines — `6_lai_lo_cua_hoat_dong_ban_thanh_ly_bat_dong_san_dau_tu` and the
+JV share — which are ADDED where mapped and never demanded, because a filing that prints one
+and a parse that missed it would fail an identity that is actually sound.
+⚠️ **The roles are deliberately NOT in `ANCHORS`** — that set drives `_anchor`'s
+position-independent re-match, and admitting five more accounts to it would change which row
+every statement claims. These are identity roles and nothing else, and a test pins it.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

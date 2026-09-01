@@ -1617,6 +1617,43 @@ multiplies every figure by a million may not also be the layer that skips the ar
 (§6-2-tervicies drew the same conclusion for `annual_tail`). The 200-dpi reading then fails
 `22,621,969 + 205 != 25,611,174` and the cascade escalates.
 
+### ⚠️ THE INCOME STATEMENT'S ONLY ARITHMETIC — `OP_IDENTITY`, `P49` (2026-09-01)
+
+Until this, `reconcile` tested the income statement on whether a PBT line EXISTS. The balance
+sheet has `assets == liabilities + equity` and the cash flow `opening + movement + fx ==
+closing`; **the income statement had nothing**, which is why every `SLD-1`-shaped defect has
+landed there — BSR Q3-2019 (`LNB-1`), TCB Q4-2013 and ACB Q1-2024 (`PAR-1`), BID Q3-2011
+(`QUO-1`), four on record and each found by hand.
+
+`FinancialsBuilder.OP_IDENTITY` is `{operating profit: (added, deducted, optional)}`, and the
+KEY identifies the chart, so `reconcile` needs no template argument it does not already have:
+**bank `XI = IX + X`** (the checked line is PBT itself) and **corp `11 = 5 + 7 − 8 − 9 − 10`**.
+`securities` and `insurance` have never met a filing and are absent on purpose — §5 rule 2.
+
+- ⚠️ **IT RUNS ON EVERY LAYER**, unlike `_cash_flow_identity`, which is confined to the relaxed
+  ones. BSR Q3-2019 is accepted at strict `onnx@300` with the admin-expense line read 200,000
+  đồng high; the cascade stops at the first acceptance, so `onnx@400`'s exact reading was
+  unreachable. With the gate the quarter escalates by itself and the residual is exactly 0.
+- ⚠️ **THE TOLERANCE IS EXACT (`OP_IDENTITY_TOL = 4`), NOT `_equal`.** `EQUAL_REL = 1e-5` on
+  599 bn is ±5,996,952 against a 200,000 error. Same precedent as the cash span's.
+- ⚠️ **BOTH SIGN CONVENTIONS FOR THE DEDUCTIONS ARE TRIED — ONE bit for the whole statement.**
+  The bracket that makes an expense negative is what `PAR-1`/`QUO-1` damage, and it fails for
+  the statement rather than for a line. Measured over the accepted income statements in
+  `reports/pdf_ocr/`: **29 close as stored, 12 only as `-abs`** (every BSR quarter, CTG
+  Q1-2019). A wrong digit shifts both branches equally and is still caught.
+- ⚠️ **IT ABSTAINS ON FOUR THINGS AND THAT IS THE DESIGN**: no entry for the chart, any
+  REQUIRED term unmapped (asking only for what turned up would let a statement pass by having
+  lost the line that would fail it), an unmapped statement, and the two optional corp lines,
+  which are added where present and never demanded.
+- ⚠️ **THE ROLES ARE NOT IN `ANCHORS`** — that set drives the position-independent re-match and
+  five more accounts in it would change which row every statement claims.
+- **Measured before shipping, on the population the gate SEES** — the raw mapped values of the
+  85 accepted income statements in the run folders, before `_decumulate`: **41 answer, 39
+  abstain, 5 fail** (BSR Q3-2019 and four CTG quarters written with no band at all, `BND-1`).
+  ⚠️ The same identity over the 355 de-cumulated `pdf` rows ON DISK flags 59 — a term missing
+  from one YTD filing makes a MIRRORED ± pair across two quarters — so that population would
+  have overstated the risk ~10×. `test_cafef_income_identity.py` (12).
+
 ### ⚠️ `PAR-1` — A NEGATIVE FIGURE CUT IN HALF, AND THE POSITIVE HALF WRITTEN (BID Q4-2016)
 
 Found by the regression for the four defects above, on the one filing in it that had not been

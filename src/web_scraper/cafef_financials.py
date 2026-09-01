@@ -503,6 +503,66 @@ class FinancialsBuilder:
                     "hdtc_vi_tien_va_cac_khoan_tuong_duong_tien_cuoi_ky",       # securities
                     "hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61")        # corp
 
+    # ⚠️ **THE OPERATING-PROFIT IDENTITY — the income statement's ONLY arithmetic gate.**
+    # The balance sheet is tested on `assets == liabilities + equity` and the cash flow on
+    # `opening + movement + fx == closing`. Until 2026-09-01 the income statement was tested
+    # on whether a PBT line EXISTS and on nothing about whether it is the right number, and
+    # that is why every `SLD-1`-shaped defect has landed there — BSR Q3-2019 (575 bn,
+    # `LNB-1`), TCB Q4-2013 and ACB Q1-2024 (`PAR-1`), BID Q3-2011 (`QUO-1`). Four on record,
+    # each found by hand and none by a gate.
+    #
+    # `{operating profit: (added, deducted, optional)}` — one entry per chart that has met a
+    # filing, and the KEY is what identifies the chart, so `reconcile` needs no template
+    # argument it does not already have.
+    #
+    # ⚠️ **`securities` AND `insurance` ARE ABSENT ON PURPOSE.** Neither has ever met a
+    # filing, so an identity written from the chart alone would be a guess that refuses real
+    # statements. §5 rule 2: a check that cannot run is recorded as absent, never as a pass.
+    #
+    # ⚠️ **AND THESE ARE DELIBERATELY NOT IN `ANCHORS`.** That set drives `_anchor`'s
+    # position-independent re-match, and admitting five more accounts to it would change which
+    # row every statement claims — a blast radius far past this gate.
+    OP_IDENTITY: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], Tuple[str, ...]]] = {
+        # bank — XI = IX + X. The checked line is PBT itself, which is the figure everything
+        # downstream reads and the one `sane` probes on.
+        "xi_tong_loi_nhuan_truoc_thue": (
+            ("ix_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truoc_chi_phi_du_phong_rui_ro_tin_dung",),
+            ("x_chi_phi_du_phong_rui_ro_tin_dung",),
+            (),
+        ),
+        # corp — 11 = 5 + 7 - 8 - 9 - 10
+        "11_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh": (
+            ("5_loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu",
+             "7_doanh_thu_hoat_dong_tai_chinh"),
+            ("8_chi_phi_tai_chinh",
+             "9_chi_phi_ban_hang",
+             "10_chi_phi_quan_ly_doanh_nghiep"),
+            # ⚠️ OPTIONAL, AND THEY ARE THE HAZARD THE ABSTAIN RULE EXISTS FOR. A filing that
+            # prints one of these and a parse that missed it would fail an identity that is
+            # actually sound, so they are ADDED WHEN MAPPED and never required. Both are
+            # `level 0` in the corp chart — lines CafeF itself treats as not always present.
+            ("6_lai_lo_cua_hoat_dong_ban_thanh_ly_bat_dong_san_dau_tu",
+             "phan_lai_lo_trong_cong_ty_lien_doanh_lien_ket"),
+        ),
+    }
+
+    # ⚠️ **THE STORED SIGN OF A DEDUCTION IS A PROPERTY OF THE SCAN, NOT OF THE ARITHMETIC.**
+    # The filing prints an expense in brackets and whether that bracket survives OCR is
+    # exactly `PAR-1`/`QUO-1` — but it survives or fails for the whole statement at once, not
+    # line by line. Measured 2026-09-01 over the 41 accepted income statements in
+    # `reports/pdf_ocr/` whose terms all map: **29 close with the signs as stored and 12 only
+    # close once every deduction is taken as `-abs`** (every BSR quarter, plus CTG Q1-2019).
+    # So both conventions are tried and either is accepted — ONE bit for the whole statement,
+    # which a wrong DIGIT survives (it shifts both branches by the same amount) and a wrong
+    # sign does not. Refusing the 12 would have been a false refusal in 29% of the population.
+    #
+    # ⚠️ **EXACT, NOT `_equal`.** `EQUAL_REL = 1e-5` on BSR Q3-2019's 599,695,236,083 is
+    # ±5,996,952 and the error to catch is **200,000** — three orders of magnitude inside it.
+    # §6-2-quatervicies set the precedent for the same reason (*"the 300 dpi read is wrong by
+    # 23 đồng in 6.7 million"*). The few đồng allowed are the filing's own rounding, of which
+    # BID's Q3-2011 income statement prints one.
+    OP_IDENTITY_TOL = 4
+
     MIN_ROWS = 12          # a statement with fewer parsed rows than this is not a statement
     # …EXCEPT for the condensed disclosure P&L, which is four printed lines and complete at
     # that length. Reached only when the layer sets `condensed_income` AND the statement's own
@@ -2511,6 +2571,14 @@ class FinancialsBuilder:
         if st.report == INCOME_STATEMENT:
             if get(self.C_PBT, *self.PBT) is None:
                 return "no profit before tax"
+            # ⚠️ AND IT RUNS ON EVERY LAYER, unlike `_cash_flow_identity`, which is confined to
+            # the relaxed ones. That is the whole point of the item: BSR Q3-2019 is ACCEPTED at
+            # `onnx@300` with `10_chi_phi_quan_ly_doanh_nghiep` read 200,000 too high, so the
+            # cascade stops there and the exact reading at `onnx@400` is never reached. A gate
+            # here refuses 300 and escalates by itself.
+            bad = self._operating_profit_identity(mapped or {})
+            if bad:
+                return bad
 
         if st.report == CASH_FLOW:
             close = get(self.C_CASH_CLOSE, *self.CASH_CLOSE,
@@ -2738,6 +2806,47 @@ class FinancialsBuilder:
             return (f"cash flow does not close: opening {open_:.6g} + movement {net:.6g} "
                     f"+ fx {fx:.6g} != closing {close:.6g}")
         return None
+
+    def _operating_profit_identity(self, mapped: Dict[str, int]) -> Optional[str]:
+        """Operating profit must equal what the statement adds and deducts to reach it.
+
+        ⚠️ **IT ABSTAINS RATHER THAN GUESSES, and that is three separate rules.** It runs only
+        where `OP_IDENTITY` has an entry (so `securities` and `insurance`, which have never met
+        a filing, are never judged); only when EVERY REQUIRED term of that entry mapped — asking
+        for "the ones that turned up" would let a statement pass by having lost the very line
+        that would fail it; and it adds the optional terms only where the parse produced them.
+        A statement that cannot answer this is judged exactly as it was before.
+
+        ⚠️ Both sign conventions for the deductions are tried and either is accepted — see
+        `OP_IDENTITY_TOL` for why, and for what it cost not to.
+
+        Measured 2026-09-01 over the 85 accepted income statements in `reports/pdf_ocr/`,
+        replayed from the RAW mapped values — before `_decumulate`, which is the population
+        this gate actually sees: **41 answer it, 39 abstain for an unmapped term, and 5 fail**.
+        One of the five is BSR Q3-2019, the case this was written for; the other four are CTG
+        quarters written with no magnitude band at all (`BND-1`), whose residuals are 1.2 bn,
+        466.7 bn and a round 8,000,000,000,000.
+        """
+        # `mapped.get(c) is not None` rather than `c in mapped` throughout: an absent column and
+        # a column present with no figure are the same thing to an identity, and only one of
+        # them raises on `abs()`.
+        entry = next(((c, e) for c, e in self.OP_IDENTITY.items()
+                      if mapped.get(c) is not None), None)
+        if entry is None:
+            return None
+        col, (plus, minus, optional) = entry
+        if any(mapped.get(c) is None for c in plus + minus):
+            return None
+        op = mapped[col]
+        base = (sum(mapped[c] for c in plus)
+                + sum(mapped[c] for c in optional if mapped.get(c) is not None))
+        as_stored = base + sum(mapped[c] for c in minus)
+        as_expense = base - sum(abs(mapped[c]) for c in minus)
+        if min(abs(as_stored - op), abs(as_expense - op)) <= self.OP_IDENTITY_TOL:
+            return None
+        return (f"operating profit does not close: components give {as_stored:.6g} "
+                f"(or {as_expense:.6g} with the deductions taken as expenses) "
+                f"against a printed {op:.6g}")
 
     def _closing_breakdown(self, st: Statement, close: int,
                            relax_components: bool = False) -> Optional[str]:
