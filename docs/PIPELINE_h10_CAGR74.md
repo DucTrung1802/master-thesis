@@ -1,27 +1,19 @@
 # PIPELINE — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr**
 
-> Written 2026-08-21. **Every number below was read from disk on that date**, not quoted
-> from another register — the pooled row was re-derived with
-> `walkforward.evaluate --draws 0` (26.1 s, no GPU) and the provenance came out of the
-> artefacts' own `metadata.json`.
+> Written 2026-08-21. **Every number below was read from disk on that date**, not quoted from another
+> register — the pooled row was re-derived with `walkforward.evaluate --draws 0` (26.1 s, no GPU) and
+> the provenance came out of the artefacts' own `metadata.json`. Registers:
+> [CLAUDE.md](../CLAUDE.md) *what is PROVED* · [RUNBOOK.md](RUNBOOK.md) *how to RUN* ·
+> [ISSUES.md](ISSUES.md) *what is BROKEN* · [TODO.md](TODO.md) *what is NEXT*.
 >
-> | file | answers |
-> |---|---|
-> | [CLAUDE.md](../CLAUDE.md) | *what is this, and what has it PROVED?* |
-> | [RUNBOOK.md](RUNBOOK.md) | *how do I RUN it?* |
-> | [ISSUES.md](ISSUES.md) | *what is BROKEN?* |
-> | [TODO.md](TODO.md) | *what is NEXT?* |
-> | **PIPELINE_h10_CAGR74.md** | ***how does ONE number get made, end to end?*** |
->
-> ⚠️ **This file explains ONE result. It is not a second RUNBOOK** — where a command is
-> given, RUNBOOK is the authority and this file is quoting it.
+> ⚠️ **This file explains ONE result. It is not a second RUNBOOK** — where a command is given,
+> RUNBOOK is the authority and this file is quoting it.
 >
 > ## ⚠️ READ §12 BEFORE QUOTING THE 74 %
 >
-> The headline is **real, out of sample, after costs, over ten folds** — and it is
-> **not** a claim that this strategy would have earned 74 %/yr. Four measured reasons are
-> in §12, and the shortest one is: **the universe contains no delisted company.**
-
+> The headline is **real, out of sample, after costs, over ten folds** — and it is **not** a claim
+> that this strategy would have earned 74 %/yr. Four measured reasons are in §12, and the shortest
+> one is: **the universe contains no delisted company.**
 ---
 
 ## 1. The headline, as it comes off disk
@@ -92,28 +84,22 @@ chain exists and gives a *different* number (§11). The 74 % is the ten folds po
 ## 3. ① — ④ · Where the data comes from
 
 **Sources.** TradingView supplies the universe and OHLCV (Selenium, because the endpoint is
-browser-gated); **CafeF** supplies the matched/negotiated turnover split, foreign and
-proprietary flow, news and financial-statement PDFs; **Simplize** supplies adjusted daily
-OHLC and foreign flow through a plain JSON endpoint; **MSCI GICS** supplies the industry
-tree that `drv_cs_ret_vs_industry` needs.
-
-**Orchestration** is Dagster, 83 assets, `src/orchestration/` — see
-[src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md). Nothing in this chain is a
+browser-gated); **CafeF** the matched/negotiated turnover split, foreign and proprietary flow, news
+and filing PDFs; **Simplize** adjusted daily OHLC and foreign flow through a plain JSON endpoint;
+**MSCI GICS** the industry tree that `drv_cs_ret_vs_industry` needs. **Orchestration** is Dagster,
+83 assets — see [src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md). Nothing here is a
 manual step.
 
-⚠️ **A green asset is not evidence of fresh data** (CLAUDE.md §5 rule 10). `landed()` asks
-*"is this folder empty?"*, not *"did this run fetch anything?"* — the honest freshness check
-is the per-series `MAX(date)`, and `FRZ-1` records the case where 755 of 781 tickers were
-37 sessions stale while the table-level max date looked current.
+⚠️ **A green asset is not evidence of fresh data** (§5 rule 10): `landed()` asks *"is this folder
+empty?"*, not *"did this run fetch anything?"* — the honest check is the per-series `MAX(date)`, and
+`FRZ-1` records the case where 755 of 781 tickers were 37 sessions stale while the table-level max
+looked current.
 
-⚠️ **`OUT-1` — one corrupt source cell manufactured a finding, and the screen that catches
-it is upstream of everything here.** `silver.stocks_basic` carried
-`prop_buy_val = 4.001e17` for VCB on 2026-01-05 against that day's entire turnover of
-2.06e11. That single cell drove a **+0.266** correlation against the forward 5-day return.
-`_helper_screen_flow_outliers` now NULLs such pairs on three rules and removes
-**611 of 2,388,975 rows (0.0256 %)**.
-
----
+⚠️ **`OUT-1` — one corrupt source cell manufactured a finding, and the screen that catches it is
+upstream of everything here.** `silver.stocks_basic` carried `prop_buy_val = 4.001e17` for VCB on
+2026-01-05 against that day's entire turnover of 2.06e11, which drove a **+0.266** correlation
+against the forward 5-day return. `_helper_screen_flow_outliers` now NULLs such pairs on three rules
+— **611 of 2,388,975 rows (0.0256 %)**.
 
 ## 4. ⑤ · `pool__basic` — the only pool this chain reads
 
@@ -168,28 +154,22 @@ would truncate the panel.
 
 ### Why a within-date RANK and not a return
 
-Three things follow, and each fixes a specific failure of the single-stock studies:
+Three things follow, each fixing a specific failure of the single-stock studies: **the market factor
+is gone by construction** (subtracting VNINDEX still leaves each stock's residual beta; a within-date
+rank removes anything common to the cross-section whatever its beta); **outliers cannot dominate**
+(`return_5day` reaches **−781** on one name with a negative `close_adjust` for 968 sessions, and one
+such row would set an MSE loss); and **it is stationary**, so there is no era to identify — which is
+what every earlier representation was groping at.
 
-1. **The market factor is gone by construction.** Subtracting VNINDEX still leaves each
-   stock's residual beta; a within-date rank removes anything common to the cross-section
-   whatever its beta.
-2. **Outliers cannot dominate.** `unified_schema_all.return_5day` reaches **−781** (VNX, a
-   negative `close_adjust` for 968 sessions). One such row would set an MSE loss. A rank is
-   invariant to it.
-3. **It is stationary.** There is no era to identify, which is what every earlier
-   representation was groping at.
+⚠️ **`liquidity_before` IS REQUIRED AND HAS NO DEFAULT.** Ranking turnover over the whole sample
+picks the names that *turned out* to be liquid — look-ahead of exactly the kind §12 is about — so the
+exporter **raises** rather than defaulting silently. **358 of 781 tickers could never enter this
+universe**, and it is *not* point-in-time.
 
-⚠️ **`liquidity_before` IS REQUIRED AND HAS NO DEFAULT.** Ranking turnover over the whole
-sample picks the names that *turned out* to be liquid — look-ahead of exactly the kind §12
-is about. The exporter **raises** rather than defaulting silently. **358 of 781 tickers
-could never enter this universe**, and it is *not* point-in-time.
-
-⚠️ **The label is NOT STORED** (`RNK-1`). A rank depends on which other names are in the
-panel, not on the row, so `pool__targets` stores `return_10day` and
-`train_test_creator._label` re-ranks at dataset build. The universe travels in the table's
-`COMMENT` so two different universes cannot be unioned into one table.
-
----
+⚠️ **The label is NOT STORED** (`RNK-1`). A rank depends on which other names are in the panel, not
+on the row, so `pool__targets` stores `return_10day` and `train_test_creator._label` re-ranks at
+dataset build. The universe travels in the table's `COMMENT`, so two different universes cannot be
+unioned into one table.
 
 ## 6. ⑦ · Feature selection — 90 → 61 → 19
 
@@ -445,71 +425,49 @@ not remove it.**
 
 ## 12. ⚠️ WHAT THE 74 % DOES **NOT** MEAN
 
-**This is the section that matters.** The `z = +18.58` is well protected. The **+74 %/yr is
-not**, and the two must never be quoted as if they carried the same weight.
+**This is the section that matters.** The `z = +18.58` is well protected. The **+74 %/yr is not**,
+and the two must never be quoted as if they carried the same weight.
 
-### 12.1 ⚠️ Survivorship protects the `z` and NOT the CAGR
+**12.1 ⚠️ Survivorship protects the `z` and NOT the CAGR.** `silver.stocks_basic` holds **no delisted
+name**. Every within-date shuffle draws from the same survivor basket, so the null is unaffected —
+but **the CAGR is computed on a basket of companies we know did not go to zero**, and a screen that
+buys recent winners is the strategy most flattered by that.
 
-`silver.stocks_basic` holds **no delisted name**. Every within-date shuffle draws from the
-same survivor basket, so the null is unaffected and `z = +18.58` stands. **The CAGR is
-computed on a basket of companies that we know did not go to zero**, and a screen that buys
-recent winners is the strategy most flattered by that.
+**12.2 ⚠️ `NUL-1` — no null here prices the SEARCH.** The within-date shuffle prices the universe,
+`k`, the cost and the schedule. It prices **none** of: the feature selection that chose the 19
+channels, the architecture search, the early-stopping epoch, or the choice of `h=10` — which was
+itself made *using* a prior result. Every one is a decision taken with the data in hand.
 
-### 12.2 ⚠️ `NUL-1` — no null here prices the SEARCH
-
-The within-date shuffle prices the universe, `k`, the cost and the schedule. It prices
-**none** of: the feature selection that chose the 19 channels, the architecture search, the
-early-stopping epoch, or the choice of `h=10` — which was itself made *using* a prior
-result. Every one of those is a decision taken with the data in hand.
-
-### 12.3 ⚠️ Execution is still kinder than the market
+**12.3 ⚠️ Execution is still kinder than the market.**
 
 | gap | status |
 |---|---|
 | ADV / size cap | ❌ not modelled — a 20-name book at real size moves a VN mid-cap |
-| **floor days on the SELL side** | ❌ the ceiling screen covers **ENTRY only**. A name at its floor on the exit date cannot be sold — and that is exactly when a loser is |
-| slippage | ❌ none |
-| the ATC auction | ❌ signals from full-day order counts settle only after the close |
+| **floor days on the SELL side** | ❌ the ceiling screen covers **ENTRY only**. A name at its floor on the exit date cannot be sold — exactly when a loser is |
+| slippage · the ATC auction | ❌ none · ❌ signals from full-day order counts settle only after the close |
 | max drawdown | ⚠️ **−55 to −58 %** at every `k` on the related h=10 screen. *Statistically tradable ≠ holdable* |
 
-### 12.4 ⚠️ The universe is not point-in-time
+**12.4 ⚠️ The universe is not point-in-time.** Top-150 by turnover **before 2014-01-01** avoids
+ranking on the future but still fixes one basket for the whole sample; **358 of 781 tickers could
+never enter it**, and before 2014 it is a forward-looking bet on which names would be liquid.
 
-Top-150 by turnover **before 2014-01-01** avoids ranking on the future, but it still fixes
-one basket for the whole sample. **358 of 781 tickers could never enter it.** Before 2014 it
-is a forward-looking bet on which names would be liquid.
+**12.5 ⚠️ `FNM-1` — the model is fed a representation the selection did not score.** The selection
+ran with **`feature_normalize=cs_rank`** — every channel ranked within its date — while
+`train_test_creator` records **19 scaled columns, 0 bounded**, standardised **globally**. So
+`close_adjust` (a raw VND price) and `drv_vwap_raw` reach the LSTM as levels, and that dataset's own
+`drift.csv` puts **7.65 %** of test rows for `drv_order_vol_imb_21` and **5.48 %** for `close_adjust`
+beyond 5 train-sigmas (test mean z **+1.10**). ✅ The *channel set* is representation-invariant
+(re-running under `feature_normalize=none` keeps 12 of 13 at h=20, +5.90 sd above chance).
+⚠️ **But the BAR does not transfer**, so `z = +13.78` is a `cs_rank` number describing a model that
+does not use `cs_rank` features. **TODO `P8`.**
 
-### 12.5 ⚠️ `FNM-1` — the model is fed a representation the selection did not score
-
-The selection ran with **`feature_normalize=cs_rank`** — every channel ranked within its
-date. `train_test_creator` does no such thing: the dataset records **19 scaled columns, 0
-bounded**, standardised **globally** by one `StandardScaler`.
-
-So `close_adjust` — a raw VND price — and `drv_vwap_raw` reach the LSTM as levels. That
-dataset's own `drift.csv`:
-
-| channel | test rows beyond 5 train-sigmas | test mean z |
-|---|---|---|
-| `drv_order_vol_imb_21` | **7.65 %** | +0.50 |
-| `close_adjust` | **5.48 %** | **+1.10** |
-
-✅ The *channel set* is representation-invariant (re-running under `feature_normalize=none`
-keeps 12 of 13 at h=20, +5.90 sd above chance). ⚠️ **But the BAR does not transfer**, so
-`z = +13.78` is a `cs_rank` number describing a model that does not use `cs_rank` features.
-**This is TODO `P8`.**
-
-### 12.6 It ranks, it does not price
-
-R² is ≈ 0 and `mase` is 0.974-0.997. **The chain cannot tell you what a stock will be
-worth** — it tells you where a stock will sit among these 150 over the next 10 sessions,
-and reading that requires scoring all 150 on the same date.
-
-⚠️ **For one specific stock the honest answer is often "no trade".** VCB took **zero
-trades in 33 periods** of the h=20 test window: its median percentile among the 150 is
-0.273 and its maximum ever reached is 0.826, so it never touches the entry band. That was
-the correct call — VCB returned +1.45 %/yr while the universe made 5.96 % — but *a correct
-"do not hold this" is not a tradable signal for that stock.*
-
----
+**12.6 It ranks, it does not price.** R² ≈ 0 and `mase` 0.974-0.997. **The chain cannot tell you what
+a stock will be worth** — it tells you where a stock will sit among these 150 over the next 10
+sessions, and reading that requires scoring all 150 on the same date. ⚠️ **For one specific stock the
+honest answer is often "no trade"**: VCB took **zero trades in 33 periods** of the h=20 test window
+(median percentile 0.273, maximum ever 0.826, so it never touches the entry band). That was the
+correct call — VCB returned +1.45 %/yr while the universe made 5.96 % — but *a correct "do not hold
+this" is not a tradable signal for that stock.*
 
 ## 13. Reproduce it
 
@@ -595,4 +553,4 @@ re-derivable from §13 in about 35 minutes.
 | [src/feature_selection/CONTEXT.md](../src/feature_selection/CONTEXT.md) | the selector, the nulls, the ranker comparison |
 | [src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md) | every asset, pool and source table above |
 | [ISSUES.md](ISSUES.md) | `NUL-1`, `FNM-1`, `COV-1`, `DRF-1`, `RPR-1`, `STA-1`, `CSP-1` — all cited above |
-| [TODO.md](TODO.md) | ⚠️ **renumbered 2026-08-23 — THREE items closed that day, so every code moved down by 3.** `FRZ-1` (the output blocker), the gold carry-up and `STA-1` are all **done**; `P3`-`P6` are the fundamentals program (the JSON gate, then OCR on Kaggle), `P7` (live scoring), `P8` (the `FNM-1` fix), `P10` (portfolio construction), `P11` (execution realism) |
+| [TODO.md](TODO.md) | `P7` (live scoring), `P8` (the `FNM-1` fix), `P10` (portfolio construction), `P11` (execution realism); the fundamentals program is `P2`/`P37`/`P38`/`P6`/`P5`. ⚠️ Codes were FROZEN 2026-08-23 — a `P<n>` written before that date resolves through that file's crosswalks |
