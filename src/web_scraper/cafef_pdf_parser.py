@@ -1639,11 +1639,29 @@ class PdfParser:
         if len(cols) < 2:
             return None                      # dropping the only column helps nobody
         leftmost = min(cols)
+        want = self.CODE_HEADER_NS
         for words in words_by_page.values():
             for w in words:
                 ns = self.norm(w[4]).replace(" ", "")
-                if not ns or SequenceMatcher(
-                        None, self.CODE_HEADER_NS, ns).ratio() < self.CODE_HEADER_MATCH:
+                if not ns:
+                    continue
+                # ⚠️ **THE WHOLE BOX, OR THE TEXT IT BEGINS WITH — because the recogniser
+                # merges neighbouring HEADER words as readily as it merges anything else.**
+                # BSR's FY-2019 balance sheet sets "Mã số" and "Thuyết minh" on the same
+                # baseline, and page 7 comes back as ONE box reading `Mã số minh`: `masominh`
+                # against `maso` is **0.667**, under the bar, so the item-code column was not
+                # dropped and `TỔNG CỘNG TÀI SẢN` read **270**. (Page 8 of the same filing
+                # splits it the other way, into `Mã` and `số`, 0.667 each — one page
+                # answering is enough, and this is why the scan does not stop at the first.)
+                #
+                # Reading the LEADING text keeps condition 1 a statement about what the box
+                # begins with rather than a containment test: `MẪU SỐ B 01-DN/HN`, the form
+                # code printed in the same band, scores 0.50 whole and **0.75** on its head,
+                # and is still refused. Conditions 2 and 3 are untouched and remain the real
+                # protection.
+                if max(SequenceMatcher(None, want, ns).ratio(),
+                       SequenceMatcher(None, want, ns[:len(want)]).ratio()) \
+                        < self.CODE_HEADER_MATCH:
                     continue
                 if w[0] - self.EDGE_TOL <= leftmost <= w[2] + self.EDGE_TOL:
                     return leftmost
@@ -1708,6 +1726,35 @@ class PdfParser:
             return best
         return 0.0
 
+    @staticmethod
+    def _line_key(lines: Dict[float, list], y: float, y_tol: float) -> float:
+        """The existing printed line this word belongs to, or `y` to open a new one.
+
+        ⚠️ **NEAREST WITHIN THE TOLERANCE, NEVER THE FIRST ONE FOUND.** `Y_TOL` is a
+        tolerance, not a line height, so on a tightly-set page TWO buckets can both sit
+        inside it — and buckets are keyed by whichever y opened them, in OCR order, which
+        has nothing to do with the page. Taking the first match then hands a figure to a
+        line it is merely *near* while the line it belongs to is closer.
+
+        ⚠️ **MEASURED, ON BSR's Q3-2019 CONSOLIDATED INCOME STATEMENT.** A stray `)` at
+        x=587 — outside the table, off the right margin — opened a bucket at y=362.16.
+        The 9-month "lợi nhuận khác" figure at y=358.56 belongs to line 14 at y=357.84
+        (**0.72pt away**) and joined the stray instead (**3.60pt away**), because the
+        stray was inserted first. Line 14 lost its 9-month column and the orphan bucket
+        then merged into line 15, so `15. Tổng lợi nhuận kế toán trước thuế` was written
+        with **48,726,111,955** — which is line 14's 9-month figure, exactly
+        (51,026,059,759 − 2,299,947,804) — against a printed **624,185,898,676**.
+
+        ⚠️ **AND EVERY GATE PASSED.** An income statement is anchored on PBT alone, so
+        `reconcile` never sums the components against it and `sane` only compares one
+        magnitude to a band. `SLD-1`'s shape again: a wrong figure written as `pdf`.
+
+        Nearest-match is a strict refinement — where one bucket is in tolerance it is also
+        the nearest, so only a page that had two candidates can move at all.
+        """
+        near = [k for k in lines if abs(k - y) <= y_tol]
+        return min(near, key=lambda k: abs(k - y)) if near else y
+
     def table_rows(self, words_by_page: Dict[int, list], columns: List[float]) -> List[Row]:
         """Rows rebuilt from word coordinates.
 
@@ -1727,11 +1774,22 @@ class PdfParser:
         out: List[Row] = []
         for page in sorted(words_by_page):
             lines: Dict[float, list] = {}
+            # ⚠️ **CONSUMED IN THE RECOGNISER'S OWN ORDER, AND SORTING BY y FIRST WAS TRIED
+            # AND REJECTED — 2026-09-01.** Bucketing in y order is the more principled shape
+            # (a bucket then always grows downward from its topmost word, so the grouping is
+            # a property of the page rather than of the emission order), and on BSR's
+            # Q3-2019 income statement it gains a row at `onnx@200`. But a bucket keyed on
+            # its topmost word CHAINS: at `onnx@400` the same change swept the deferred-tax
+            # comparative into line 18 and wrote **1,648,126,921** as post-tax profit, and at
+            # `onnx@300` it put the prior-year column into the parent-company line. Both are
+            # WRONG FIGURES that `reconcile` passes, which is worse than the row it buys.
+            # The tolerance is 4.0pt against wrapped halves 4-8pt apart on this page, so the
+            # clustering has no margin and a chain rule spends it. Left as it was.
             for w in words_by_page[page]:
                 y = w[1] + (offset if (offset and w[2] >= lo
                                        and self.NUM_RE.match(w[4]) is not None
                                        and self.parse_num(w[4]) is not None) else 0.0)
-                k = next((k for k in lines if abs(k - y) <= self.Y_TOL), y)
+                k = self._line_key(lines, y, self.Y_TOL)
                 lines.setdefault(k, []).append(w)
 
             parsed: List[tuple] = []

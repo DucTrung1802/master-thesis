@@ -418,6 +418,9 @@ re-score them paired), §13 (**44m 12s** for a 162-channel selection with no nul
 | # | item | ⏱ | local? | was | why it is here |
 |---|---|---|---|---|---|
 | | **⬛ 0 · THE PDF PARSER ITSELF — ⚠️ ADDED 2026-08-27, ABOVE EVERYTHING. Reviewed against the CODE and against the three parsed tickers ON DISK. Two of these are WRONG NUMBERS that every gate passes; two are the cost `P38` and `P6` are actually budgeted on** | | | | |
+| **P49** | ⭐ ⚠️ **THE INCOME STATEMENT HAS NO ARITHMETIC GATE — `reconcile` checks that a PBT line EXISTS and nothing else** | ~1 day | ✅ CPU + GPU regression | — | The balance sheet is gated on `assets == liabilities + equity` and the cash flow on `opening + movement + fx == closing`. **The income statement is gated on nothing**, and that is why every `SLD-1`-shaped defect lands there: BSR Q3-2019 (575 bn, `LNB-1`), TCB Q4-2013 (six cells, `PAR-1`), ACB Q1-2024, BID Q3-2011 (`QUO-1`). ⚠️ **A MEASURED CASE IS ON DISK TODAY** — BSR Q3-2019's `11 = 5+7−8−9−10` is off by **200,000** at `onnx@300` and closes **exactly** at `onnx@400`, and the cascade stops at 300 because that layer reconciles. **↓ detail block** |
+| **P50** | ⚠️ **SCREEN THE CORPUS FOR THE TWO CLASSES `LNB-1` AND `VAS-1` REPAIRED — nobody knows how many rows on disk carry them** | ~4 h GPU | ✅ | — | Both were fixed 2026-09-01 in the DEFAULT path, so **every row parsed before that date was produced by the broken code**. `VAS-1` is `corp`-only (the bank charts print no code formulas) and bounds to BSR + VIC; `LNB-1` is template-agnostic and bounds to nothing — a stray mark near a value column is all it takes. Three residues on BSR 2019 are already named and are the calibration set. **↓ detail block** |
+| **P51** | ⚠️ **BUCKET WORDS BY GEOMETRY, NOT BY EMISSION ORDER — tried 2026-09-01, MEASURED WORSE, and the reason is a chain rule** | ~1 day | ✅ CPU | — | `table_rows` walks words in the RECOGNISER's order, so which line a word joins depends on something that is not a property of the page. `LNB-1` fixed the *nearest-vs-first* half; the *ordering* half is still open and the obvious repair is disproven. **Recorded so it is not re-made blindly.** **↓ detail block** |
 | **P46** | ⭐ ⚠️ **THE UNIT REPAIR IS UNREACHABLE WHERE IT IS NEEDED — 8 TCB statements written 10⁶ WRONG** | ~4 h | ✅ | — | `unit_from_document` is carried by three layers at **positions 41-43 of 47**, and a statement that reconciles at layer 1 ends the cascade there — so the repair can never run on the statements that need it. ⚠️ **A uniform 10⁶ error reconciles perfectly against itself**, so `sane` is the only gate that sees it, and on a ticker with no history it is open (`BND-1`). **Measured on TCB 2026-08-29: 8 statements read `unit=1` against the ticker norm of 1,000,000** — Q1-2014 PBT read 673,136 for a company that earned 673 tỷ. ✅ **Five were repaired in 8m 58s** with the cascade restricted to those three layers, each at **exactly ×10⁶**. **The fix is not a new layer**: make `unit_of` return `None` for silence — it already distinguishes them internally — and consult the DOCUMENT's declared unit on the DEFAULT path when the statement is silent and the filing does not contradict itself. §6-2-unvicies already built `declared_unit()` / `document_unit()` for exactly this and wired them to a flag. ⚠️ **MEASURE THE BLAST RADIUS FIRST** — this changes `unit` on the default path for every ticker on disk; re-map the stored `row_dump`s and require 0 changed cells on ACB/VCB/BID before shipping. `UNT-1` |
 | **P47** | ⚠️ **BOOTSTRAPPING A NEW TICKER — the OCR job cannot do it and nothing says so until afterwards** | ~2 h | ✅ CPU | — | `seed_history` reads DISK and re-seeds per document; `build()` accumulates within its own run. So a ticker with no CSV runs its whole parse with `sane` open, and `pdf_ocr_merge` then refuses every empty-band statement — nothing is written, the band stays empty, and the loop closes on itself. TCB paid **5h 21m** to learn it and 9 of 169 cells were wrong. **Two pieces, and the first is cheap**: (a) `plan()` should REFUSE — or at minimum warn once, up front, before any GPU is spent — when the ticker has no accepted quarter on disk and no `periods`/`quarters` filter narrows the run, naming the Dagster path instead; today the warning is per document, after the cost. (b) Ship the two screens that convicted TCB's nine cells as CODE — a `unit` minority screen and a total-assets continuity screen over a finished run folder — because they are free, they need no OCR, and they are what `sane` would have done. ⚠️ **(b) is worth more than (a)**: it also runs on tickers that DO have history, where `sane` is on but sees only its own entity's band. ⚠️ **NEITHER (a) NOR (b) IS DONE.** What shipped 2026-08-30 is the third thing this item did not name — an explicit `FORCE_EMPTY_BAND` so the write half of the loop can be opened at all (CLAUDE.md §6-2-duodequadragies), which makes (b) MORE urgent rather than less: the knob is now the normal way a new ticker starts, and the screens are the only thing standing between it and TCB's 5.3 %. They were an ad-hoc script for BSR and must not stay one. `BND-1` |
 | **P43** | ⚠️ **A FREE INVARIANT NOBODY CHECKS — and it flags 10 BID cash flows ALREADY ON DISK** | ~3 h | ✅ CPU | — | A cumulative cash flow opens on 1 January, so **every quarter of a year shares one opening balance and it equals the prior Q4's closing**. §6-2-duovicies used exactly that by hand to revert Q4-2016 and called it *"reusable and cheap"*; it is still not code. Run over the three parsed tickers 2026-08-27, **0 s, no OCR**: **7 BID quarters carry the 1-Jan opening in the CLOSING slot** (Q1-2013, Q3-2013, Q1-2014, Q1-2016, Q1-2017, Q3-2019, Q3-2020 — ⚠️ every one accepted at `onnx@200`, a STRICT layer where `verify_cash` is off so the identity never ran), **2 carry it in the MOVEMENT slot** (Q1-2020, Q1-2021), and **BID Q3-2011 holds a closing cash balance of −23,457,326,032,339** — negative cash, passed by `reconcile` (no sign test), `sane` (`abs()`) and `_closing_breakdown` (fails open with no printed breakdown) alike. ACB **0** of every shape. ⚠️ **VCB's 17 opening mismatches are MIXED — a SCREEN, not a verdict**: Q1-Q3 2023 differ from Q4-2022 by exactly one digit (412,235,294 vs 412,135,294) while 2018 and 2024 may be genuine restatements. **↓ detail block** |
@@ -694,6 +697,155 @@ to cite in another file.**
 file's own rule, never renumbered, never reused. A TODO item may *point at* one (`P15` at
 `STA-1`, `P1` at `FRZ-1`, `P3` at `FNM-1`) and that is the relationship: **the issue is
 what is broken, the `P<n>` is what somebody is going to do about it.**
+
+---
+
+### P49 · ⭐ ⚠️ THE INCOME STATEMENT IS GATED ON NOTHING ⏱ ~1 day  ·  *(measured 2026-09-01)*
+
+`reconcile` gives each statement one arithmetic test. The balance sheet gets
+`assets == liabilities + equity`. The cash flow gets `opening + movement + fx == closing`.
+**The income statement gets `if get(C_PBT) is None: return "no profit before tax"` — that a
+PBT line EXISTS, and nothing about whether it is the right number.**
+
+⚠️ **THAT IS WHY EVERY `SLD-1`-SHAPED DEFECT LANDS IN THE INCOME STATEMENT.** Four are on
+record and each was found by hand, none by a gate:
+
+| | what was written | what the filing prints |
+|---|---|---|
+| BSR Q3-2019 (`LNB-1`) | PBT **48,726,111,955** | **624,185,898,676** — 575 bn |
+| TCB Q4-2013 (`PAR-1`) | six cells positive where the filing brackets them | e.g. **+427** for a printed **(1.427)** |
+| ACB Q1-2024 (`PAR-1`) | `6_chi_phi_hoat_dong_khac` **+907** | **−109,907** |
+| BID Q3-2011 (`QUO-1`) | two cells from the PRIOR-PERIOD column | the current quarter |
+
+**The measured case is on disk right now.** BSR Q3-2019's own components give
+`11 = 5 + 7 − 8 − 9 − 10`:
+
+```
+onnx@300   10 chi phi QLDN  89,916,450,279  ->  11 computes 599,695,436,083   printed 599,695,236,083   OFF BY 200,000
+onnx@400   10 chi phi QLDN  89,916,650,279  ->  11 computes 599,695,236,083   printed 599,695,236,083   EXACT
+```
+
+The cascade stops at `onnx@300` because that layer reconciles, so **the better reading is
+never reached**, and the 200,000 propagates into Q4-2019 through the de-cumulation. A gate on
+the operating-profit identity would have refused 300 and escalated to 400 by itself.
+
+#### The work, and the two things that make it delicate
+
+1. **A role tuple per chart, in the shape `C_ASSETS` and `C_PBT` already have** — the
+   operating-profit line and its components. `corp` is unambiguous (5, 7, 8, 9, 10 → 11);
+   `bank` has a different structure entirely (net interest income → `ix_` → `xi_`);
+   `securities` and `insurance` have never met a filing.
+2. ⚠️ **IT MUST ABSTAIN, NOT GUESS.** Run the identity only when EVERY term is mapped, and
+   where a chart defines no components, do not check at all. A chart's optional lines
+   (`6_lai_lo_cua_hoat_dong_ban_thanh_ly_bat_dong_san_dau_tu`,
+   `phan_lai_lo_trong_cong_ty_lien_doanh_lien_ket`) are the hazard: a filing that prints one
+   and a parse that misses it would fail an identity that is actually sound.
+3. ⚠️ **THE TOLERANCE CANNOT BE `_equal`.** `EQUAL_REL = 1e-5` on 599 bn is ±5,996,952 and
+   the error to catch is 200,000 — three orders of magnitude inside it. §6-2-quatervicies set
+   the precedent for this exact reason (*"the 300 dpi read is wrong by 23 đồng in 6.7 million
+   — which is why the new check is held to EXACT equality"*), with a few đồng for the filing's
+   own rounding.
+4. **The blast radius is a full re-parse**, not a `row_dump` replay: this changes which layer
+   ACCEPTS, so the rows themselves move. Budget the 5-ticker regression set (VIC `corp`, VCB,
+   ACB, TCB, BID) at ~25 min, and expect some statements to escalate a layer.
+
+⚠️ **THE RISK IS A FALSE REFUSAL, and it is the reason this is a day and not an hour.** A
+gate that refuses a sound statement turns a `pdf` row into `missing`. That is the safe
+direction (§5 rule 2 — absent beats wrong) but it is not free, and it must be measured
+before it ships rather than after.
+
+---
+
+### P50 · ⚠️ HOW MANY ROWS ON DISK CARRY `LNB-1` AND `VAS-1`? ⏱ ~4 h GPU  ·  *(opened 2026-09-01)*
+
+Both were fixed on 2026-09-01 **in the default path**, which means every statement row parsed
+before that date was produced by the broken code. Neither can be screened from the CSVs alone
+and neither can be replayed from a `row_dump` — `LNB-1` changes how WORDS become ROWS, so it
+needs the words back, i.e. a re-parse.
+
+| | reach | how it shows |
+|---|---|---|
+| **`VAS-1`** | **`corp` only** — the bank charts print no item-code arithmetic, so ACB/BID/TCB/VCB cannot carry it | ACCOUNTS SILENTLY ABSENT, never a wrong figure. On BSR Q3-2019 it was net revenue, gross profit, PBT and PAT |
+| **`LNB-1`** | **any template** — all it needs is a stray mark within `Y_TOL` of a value column | A WRONG FIGURE that every gate passes, and the figure comes from a NEIGHBOURING line, so it is plausible |
+
+**The parsed corpus is 7 tickers**: ACB, BID, BSR, CTG, TCB, VCB (`bank`, except BSR) and
+VIC + BSR (`corp`). ⚠️ **VIC and BSR are the whole `VAS-1` exposure** and VIC Q3-2014 has
+already been re-parsed and REPRODUCED — so `VAS-1`'s remaining reach is BSR's other 15
+quarters plus VIC's 26 unre-parsed ones.
+
+#### The calibration set — three residues already named, on BSR 2019
+
+They are what a screen should find, and they are the reason this is worth doing rather than
+assuming the two fixes were complete:
+
+1. **Q4-2019 `11_loi_nhuan_thuan` is +200,000 against its own components** — inherited from
+   Q3-2019's `10_` at `onnx@300`. `P49` is the gate that would prevent it.
+2. **Q4-2019 `2_cac_khoan_giam_tru_doanh_thu` is −3,151,000** — a negative revenue deduction.
+   The filing prints that line ONLY in its cumulative column, so the quarter rows carry
+   9-month figures and the subtraction goes below zero. ⚠️ **A de-cumulation artefact and not
+   an OCR one**: no parser change reaches it, and the fix is for `_decumulate` to DROP a
+   column whose result changes sign against every operand.
+3. **Q4-2019 `tong_cong_nguon_von` reads 53,583,993,996,059** where the assets total and
+   `I + II + D` both give **53,583,992,996,059** — 1,000,000 on 5.36e13, five orders of
+   magnitude inside `_equal`. The redundant grand total is the only wrong cell in an
+   otherwise exact statement.
+
+#### The work
+
+1. Re-parse each parsed ticker's quarters with `--overwrite` and NO merge, and read
+   `compare()`'s verdicts. A `DIFFERS` naming a column that was `None` before is `VAS-1`
+   recovering an account; a `DIFFERS` that MOVES a figure is `LNB-1`.
+2. ⚠️ **Score the difference against the FILING, never against recency.** The precedent is
+   this repair itself: Q3-2019's PBT was adjudicated by `15 = 11 + 12 − 13` closing to the
+   đồng, by the row's own EPS of 193 đ, and finally by the four 2019 quarters summing to the
+   audited FY-2019 annual **exactly** on both revenue and PBT.
+3. ⚠️ **Use the onnx-only cascade** (`--layers` with the 53 names) or the difference will be
+   swamped by `TSS-1`'s: both machines now run 55 layers, `tesseract@200` is layer 4, and on
+   BSR Q3-2019 it wins the balance sheet and cash flow with a reading that truncates
+   `i_6_chi_phi_phai_tra_ngan_han` from 361,884,738,267 to 361,884,738.
+
+---
+
+### P51 · ⚠️ LINE BUCKETING IS ORDER-DEPENDENT — the obvious fix is MEASURED WRONG ⏱ ~1 day  ·  *(measured 2026-09-01)*
+
+`table_rows` groups words into printed lines by walking `words_by_page[page]` **in the
+recogniser's emission order** and asking `_line_key` for a bucket. `LNB-1` fixed half of the
+consequence — the bucket is now the NEAREST within `Y_TOL` rather than the first found — but
+the other half stands: **a bucket is keyed by whichever word opened it, and which word that
+is depends on emission order, not on the page.** A word can still join a bucket 3.1pt away
+because the bucket 0.9pt away had not been opened yet.
+
+#### ⚠️ THE OBVIOUS REPAIR WAS TRIED AND IS WORSE — do not re-make it blindly
+
+Sorting the words by y before bucketing makes each bucket grow downward from its topmost
+word, which is order-independent and gains a row on BSR Q3-2019 at `onnx@200`. **It was
+reverted the same hour.** A bucket keyed on its topmost word CHAINS, and the tolerance has no
+margin to spend: rows on that page are 11-13pt apart and wrapped label halves 4-8pt.
+
+| | with y-order bucketing |
+|---|---|
+| `onnx@400` | swept the deferred-tax comparative into line 18 and wrote **1,648,126,921** as post-tax profit |
+| `onnx@300` | put the prior-year column into the parent-company line |
+| `onnx@200` | gained one row |
+
+**Two wrong figures `reconcile` passes, for one row.** That is a worse trade than the defect.
+
+#### What a real fix would need
+
+1. **A clustering with a stopping rule**, not a growing key — single-link chaining is the
+   failure above, so the criterion has to bound a bucket's SPAN and not just each word's
+   distance from the key.
+2. ⚠️ **The evidence a page offers is its own line pitch.** `_value_row_offset` already
+   measures a per-statement geometry by maximising CO-LOCATION without looking at what the
+   figures are; the same shape would give the median row pitch, and `Y_TOL` could be a
+   fraction of THAT rather than a constant 4.0pt.
+3. **`P49`'s gate is the safety net this needs to exist first.** Every failure above is a
+   wrong figure in an income statement that `reconcile` waves through, so re-attempting the
+   ordering without the arithmetic gate is re-running the experiment blind.
+
+⚠️ **AND THE SAME PATTERN SITS IN FOUR OTHER PLACES**, unmeasured: `_merge_split_figures`,
+`split_figures`, `colocated` and the share-capital scan each take the first bucket within a
+tolerance. None is known to be defective; none has been looked at.
 
 ---
 

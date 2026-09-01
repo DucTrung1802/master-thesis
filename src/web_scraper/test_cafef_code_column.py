@@ -57,17 +57,18 @@ ROWS = [("A. TÀI SẢN NGẮN HẠN", "100", "36.550.263.468.338", "39.844.677.
         ("TỔNG CỘNG NGUỒN VỐN", "440", "82.791.938.275.549", "75.772.648.425.795")]
 
 
-def _page(header=True, codes=True, header_span=CODE_HEADER):
+def _page(header=True, codes=True, header_span=CODE_HEADER, header_text="Mã số"):
     """One B01-DN statement page, rows 16pt apart.
 
     `header=False` is an unreadable heading; `codes=False` is a filing whose codes OCR merged
     into the labels instead — VIC's own income statement reads "02 Các khoản giảm trừ" — so
-    there is no code column for a heading to sit over.
+    there is no code column for a heading to sit over. `header_text` is what the recogniser
+    returned for the heading box, which is not always the heading alone.
     """
     words = []
     if header:
         words += [_box(115.9, 84.0, "TÀI SẢN", 34.5),
-                  _box(header_span[1], 84.0, "Mã số", header_span[1] - header_span[0]),
+                  _box(header_span[1], 84.0, header_text, header_span[1] - header_span[0]),
                   _box(333.4, 84.0, "Ghi chú", 31.0),
                   _box(X_NOW, 84.0, "30/9/2014", 36.0),
                   _box(X_PRIOR, 84.0, "01/01/2014", 40.0)]
@@ -163,3 +164,45 @@ def test_a_page_that_prints_no_such_heading_is_left_alone(parser):
 def test_the_last_column_is_never_dropped(parser):
     """Dropping the only column helps nobody: the caller would parse an empty statement."""
     assert parser._code_column([X_CODE], _page()) is None
+
+
+# ── The heading is not always alone in its box — BSR FY-2019 ─────────────────
+#
+# The form sets "Mã số" and "Thuyết minh" on ONE baseline, and the recogniser is as willing to
+# merge two HEADER words as any others. BSR's FY-2019 consolidated balance sheet comes back
+# with `Mã số minh` on page 7 (the "minh" of "Thuyết minh" swept in) and, on page 8 of the same
+# filing, the opposite — `Mã` and `số` as two boxes. Whole-box scoring gives 0.667 for all
+# three, under the 0.80 bar, so the code column survived and `TỔNG CỘNG TÀI SẢN` read 270.
+MERGED_HEADINGS = ["Mã số minh", "Mã số Thuyết", "Mã số  minh"]
+
+
+@pytest.mark.parametrize("heading", MERGED_HEADINGS)
+def test_a_heading_box_that_swallowed_the_next_header_still_names_the_column(parser, heading):
+    """⚠️ Asserted through `value_columns`, which is where the drop happens — calling
+    `_code_column` on its RESULT asks whether the already-filtered leftmost is the code
+    column, which is a different question and answers None on a page that worked."""
+    page = _page(header_text=heading)
+    cols = parser.value_columns(page, WIDTH)
+    assert len(cols) == 2, f"{heading!r} left the item-code column in place"
+    rows = {r.key: r.values for r in parser.table_rows(page, cols)}
+    assert rows["tong_cong_tai_san"][0] == 82_791_938_275_549
+    assert rows["tong_cong_nguon_von"][0] == 82_791_938_275_549
+
+
+@pytest.mark.parametrize("heading, whole, head", [
+    # The form code printed in the same band of every B01-DN filing. It begins with the same
+    # two syllables and is still refused: 0.50 whole, 0.75 on its leading text.
+    ("MẪU SỐ B 01-DN/HN", 0.500, 0.750),
+    # A prose label that merely CONTAINS the phrase scores 0.00 on its head — the head is
+    # scored, never searched for, which is what keeps containment out.
+    ("Chỉ tiêu và Mã số", 0.471, 0.000),
+])
+def test_a_box_that_only_resembles_the_heading_is_still_refused(parser, heading, whole, head):
+    from difflib import SequenceMatcher
+
+    ns = PdfParser.norm(heading).replace(" ", "")
+    want = PdfParser.CODE_HEADER_NS
+    assert SequenceMatcher(None, want, ns).ratio() == pytest.approx(whole, abs=0.001)
+    assert SequenceMatcher(None, want, ns[:len(want)]).ratio() == pytest.approx(head, abs=0.001)
+    assert max(whole, head) < PdfParser.CODE_HEADER_MATCH
+    assert len(parser.value_columns(_page(header_text=heading), WIDTH)) == 3

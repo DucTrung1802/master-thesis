@@ -1891,8 +1891,28 @@ class FinancialsBuilder:
     # line ends up holding another section's total. Single-letter numerals are deliberately
     # excluded: "…_v_1" and "…_v_6" are note references sitting at the end of ordinary labels,
     # and splitting on those would shred them.
+    #
+    # ⚠️ **AND THE TAIL MUST CONTAIN A LETTER, BECAUSE A VAS ITEM-CODE FORMULA IS THE SAME
+    # SHAPE AS A SEAM AND IS NOT ONE.** The corporate form prints each line's code arithmetic
+    # in the label itself — "3. Doanh thu thuần về bán hàng và cung cấp dịch vụ (10 = 01 - 02)",
+    # "15. Tổng lợi nhuận kế toán trước thuế (50 = 30 + 40)" — which slugs to
+    # `doanh_thu_thuan_..._10_01_02` and matches this pattern perfectly: a head over 12
+    # characters, a two-digit marker, five-plus characters after it. Splitting there returned
+    # `0102` and `3040`, keys that answer nothing, so the line was dropped.
+    #
+    # Measured 2026-09-01 on BSR's Q3-2019 consolidated income statement: FOUR accounts lost
+    # this way — net revenue (3), gross profit (5), pre-tax profit (15) and post-tax profit
+    # (18) — and the first two are exactly the columns BSR's Q4-2019 de-cumulation then had to
+    # drop for want of a prior. It is a `corp` defect by construction: the bank chart of
+    # accounts prints no such formulas, which is why three parsed bank tickers never showed it.
+    #
+    # A merged row's tail is a LINE ITEM'S NAME and always has letters ("tai_san_co_khac",
+    # "cac_khoan_no_chinh_phu_va_nhnn"); a formula's tail never does. The lookahead lets the
+    # engine BACKTRACK to a later marker rather than giving up, so a genuine seam that happens
+    # to sit behind a code is still found.
     MERGED_SEAM_RE = re.compile(
-        r"^(.{12,}?)_(?:\d{2}|xviii|xvii|xvi|xiv|xiii|xii|xix|xi|xv|viii|vii|vi|iv|ix|ii)_(.{5,})$")
+        r"^(.{12,}?)_(?:\d{2}|xviii|xvii|xvi|xiv|xiii|xii|xix|xi|xv|viii|vii|vi|iv|ix|ii)_"
+        r"((?=[^a-z]*[a-z]).{5,})$")
 
     # ⚠️ THE SAME SEAM, PLUS A SINGLE-LETTER NUMERAL — reached only from `relax_merged_seam`.
     # Section I is the one a bank balance sheet merges most often, because "B. NỢ PHẢI TRẢ VÀ
@@ -1906,8 +1926,11 @@ class FinancialsBuilder:
     # be: `(.{5,})$` already requires five characters after the marker, which no such reference
     # has. It stays behind a layer regardless — a seam is a guess about what OCR merged, and a
     # wrong guess moves a figure to the wrong account rather than refusing it.
+    # ⚠️ The letter requirement is on this one too, and for the same reason — a formula tail is
+    # not a line item's name whichever marker set found it.
     MERGED_SEAM_RE_LOOSE = re.compile(
-        r"^(.{12,}?)_(?:\d{2}|xviii|xvii|xvi|xiv|xiii|xii|xix|xi|xv|viii|vii|vi|iv|ix|ii|i)_(.{5,})$")
+        r"^(.{12,}?)_(?:\d{2}|xviii|xvii|xvi|xiv|xiii|xii|xix|xi|xv|viii|vii|vi|iv|ix|ii|i)_"
+        r"((?=[^a-z]*[a-z]).{5,})$")
 
     # How far to re-slug a label when hunting for the seam. `PdfParser.slug` caps a row key at
     # 60 characters, which is ample for a real line and far too short for a merged one — and a
