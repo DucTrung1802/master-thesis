@@ -1676,6 +1676,38 @@ split, **in the default path**, because the alternative is not a wrong figure bu
 statement. ⚠️ **Proven pre-existing, not caused by the four fixes**: the identical three pairs
 appear at the same gaps on stashed HEAD.
 
+### ⚠️ `NST-1` — TOTAL LIABILITIES TOOK THE GRAND TOTAL, and five disk rows say so (VCB Q2-2009)
+
+`_anchor`'s docstring names this nesting itself: "TỔNG NỢ PHẢI TRẢ" is a literal PREFIX of "TỔNG
+NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU", each scores the flat containment 0.95 against the other's row, and
+the anchors are settled by COMPETING — *"the grand-total row matches its own anchor exactly (1.00)
+and is taken there"*. ⚠️ **That premise fails where the filing ABBREVIATES.** VCB's 2009 balance
+sheets print "TỔNG NỢ PHẢI TRẢ, VỐN CSH VÀ LỢI ÍCH CỦA CỔ ĐÔNG THIỂU SỐ" — a comma where the chart
+writes "VÀ" — so the row scores **0.760** against its own account, is not a candidate at all, and
+the short anchor takes the whole balance sheet while the real total liabilities one row above gets
+nothing.
+
+⚠️ **The free disk screen is the part to reuse**: `tong_no_phai_tra` EXACTLY equal to
+`tong_tai_san` with the grand-total column blank. **5 of 355 `pdf` balance sheets** — BID Q4-2013,
+Q3-2016, Q1-2019 and CTG Q3-2009, Q1-2011 — against a neighbouring-quarter ratio of 0.94-0.96 in
+every case. A bank whose liabilities equal its assets has no equity.
+
+✅ Two halves, neither sufficient alone: `ABBREV["csh"]` (0.760 -> 0.873, over `ANCHOR_MATCH`, and
+**no chart of accounts contains "csh"**, so it can only rewrite the ROW side) and a rule that a
+PREFIX anchor may not take a row a longer nested anchor reaches with a **strictly greater length
+ratio**.
+
+⚠️ **THE LENGTH RATIO IS THE MEASUREMENT, NOT A REFINEMENT.** Containment runs in BOTH directions
+(`_contains_at_an_edge` accepts `key in account`), so on a row printed plainly as "TỔNG NỢ PHẢI
+TRẢ" the LONGER account scores 0.95 too — and the first version of the rule therefore handed total
+liabilities its OWN line away, moving **15 sound statements** the wrong way. It was found by
+re-mapping the archive, not by reading the code, and it passed every test written for the defect.
+So the rule fires only where the SCORE and the SPAN disagree: the short anchor scoring higher
+(possible only by containment) while spanning less. Where they agree the sort already settles it.
+
+⚠️ **EXACTLY ONE ANCHOR PAIR NESTS ACROSS ALL TWELVE CHARTS**, which bounds the reach as a fact
+rather than an argument, and a test asserts it. CLAUDE.md §6-2-quinquinquagies.
+
 ### GICS — `gics_scraper.py` (reference taxonomy; requests + openpyxl)
 - Downloads MSCI's published **"GICS structure & definitions eff. 17 Mar 2023"**
   `.xlsx` and parses it with `openpyxl` into a flat CSV. Independent of the other

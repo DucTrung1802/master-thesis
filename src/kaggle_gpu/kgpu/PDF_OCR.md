@@ -55,12 +55,15 @@ jupyter lab src\kaggle_gpu\RUN__pdf_ocr_control.ipynb
 
 Edit **1 · Parameters**, run everything. That is the whole procedure, and
 `ENVIRONMENT` is the only thing that decides which machine does the OCR.
+⚠️ **Run it TOP TO BOTTOM**: §2 drops this repo's modules from `sys.modules` so a long-lived
+kernel cannot execute a previous commit's parser, and **§3 is where `QUARTERS = "OUTSTANDING"`
+resolves** — the plan in §4 reads what §3 produced.
 
 ```python
 ENVIRONMENT = "LOCAL"        # "LOCAL" = parse here | "KAGGLE" = ship it to a T4
 EXCHANGE    = "HOSE"         # HOSE | HNX | UPCOM
 SYMBOL      = "VIC"
-QUARTERS = ["2014-Q3"]       # [] or None = every quarter the ticker files. YYYY-QQ.
+QUARTERS = ["2014-Q3"]       # [] or None = every quarter; "OUTSTANDING" = the gaps. YYYY-QQ.
 OVERWRITE = False            # False = fill the GAPS; True = re-parse and replace
 MERGE_INTO_CSV = True        # upsert into raw_data/.../statements/
 FORCE_EMPTY_BAND = True      # write even when `sane` had no band — the only way a
@@ -93,7 +96,7 @@ win on an earlier, poorer layer.** Measured on ACB 2026-08-30 — Q2-2009's bala
 **33 items at `onnx@200+relax`** on disk and **19 at `onnx@200`** in a seeded run, because the
 thinner band lets layer 1 pass where the full run's band refused it. Repairing that filing's
 income statement with the global knob would have overwritten the balance sheet in the same run,
-saying only *"DIFFERS in 2 columns"*. The notebook's **10 · Repair one row** takes explicit
+saying only *"DIFFERS in 2 columns"*. The notebook's **11 · Repair one row** takes explicit
 `(quarter, statement)` pairs and scopes the write through `merge_run`'s own `periods`/`reports`
 filter, so nothing outside the list can move.
 
@@ -114,10 +117,37 @@ success.
 | the repo-native form | `PERIODS = ["Q3-2014"]`, `QUARTERS = None` |
 | one quarter, stated twice | `QUARTERS = ["2014-Q3"]` **and** `PERIODS = ["Q3-2014"]` → Q3-2014 |
 | **everything** ⚠️ | `QUARTERS = []` — 70+ documents, hours of GPU |
+| **exactly the gaps** ⭐ | `QUARTERS = "OUTSTANDING"` — see below |
 
 ⚠️ **AN EMPTY LIST MEANS EVERY QUARTER, NEVER NONE.** `[]` and `None` build the identical job.
 That is `plan()`'s contract, and it is why the default is the *absence* of a filter rather than
 a list anything recomputes.
+
+### ⭐ `QUARTERS = "OUTSTANDING"` — the gaps, resolved from disk (2026-09-02)
+
+The third form. §3 reads the three statement CSVs and the PDF index, prints every
+`(quarter, statement)` cell this ticker is still missing, and fills `QUARTERS` with the quarters
+that have at least one cell a re-run could still WIN — dropping the ones already measured
+permanently absent.
+
+⚠️ **THE NOTEBOOK COULD NOT ANSWER THAT QUESTION UNTIL 2026-09-02, AND IT COST A SESSION.** A
+request to parse "VCB Q2-2009 and Q3-2009" arrived on a ticker whose Q3-2009 had read `pdf` in
+all three statements since it was first parsed, while the two cells actually missing — the
+Q1-2009 and Q2-2009 BALANCE SHEETS — went unnamed. Finding that out meant an ad-hoc script over
+the CSVs, so a request naming the wrong quarters looked exactly like one naming the right ones
+until GPU had been spent on it.
+
+⚠️ **IT IS NOT A SECOND RULE.** The quarters come from `documents()` through `plan()` — the same
+call the run makes — and "already done" is `parsed_reports()`, which is `pdf` and nothing else.
+
+⚠️ **AN EMPTY RESULT RAISES, and it has to.** `plan()` reads an empty `quarters` list as EVERY
+quarter, so a "nothing left to do" answer that fell through would open 70 filings. Name the
+quarters explicitly if you meant to re-parse something anyway. **VCB has read `OUTSTANDING` as
+this raise since 2026-09-02**, which is the sentinel working, not a fault.
+
+⚠️ **AND WHAT IS OUTSTANDING IS NOT WHAT IS WRONG.** This resolves cells that are `missing`; a
+cell that is `pdf` and WRONG looks finished to it. `EQW-1`, `NST-1` and `PAR-1` are each a set of
+`pdf` rows carrying a wrong figure, and the screens that find those live in `P47`/`P48`, not here.
 
 ⚠️ **TWO SPELLINGS, AND ONLY TWO.** `2014-Q3` and the zero-padded `2014-03` are folded onto the
 first before anything is named — the job name, the payload directory and the Kaggle kernel slug
@@ -213,7 +243,7 @@ Since 2026-08-30 there are three places to look, and the notebook's sections **7
 |---|---|
 | `metadata.json` -> **`merge`** (schema **v3**) | one event per upsert plus their union — `statements_written`, `statements_skipped`, `periods_written`, and every decision with its reason |
 | `inputs.merged_into_csv` | ⚠️ **what HAPPENED, not what was asked for.** True only if something was actually written. The request is still there, as `inputs.merge_into_csv` |
-| the CSVs themselves | the notebook's **9 · Did it land?** reads `bs_/is_/cf_<EXCHANGE>_<SYMBOL>.csv` and prints `pdf`/`missing`/`cafef` per report, and how many rows came from this run |
+| the CSVs themselves | the notebook's **10 · Did it land?** reads `bs_/is_/cf_<EXCHANGE>_<SYMBOL>.csv` and prints `pdf`/`missing`/`cafef` per report, and how many rows came from this run |
 
 ⚠️ **UNTIL THAT BLOCK EXISTED, `merged_into_csv` READ `false` ON EVERY KAGGLE RUN AND COULD NOT
 HAVE READ ANYTHING ELSE** — `metadata.json` is written by the WORKER, which has no path to this
@@ -426,6 +456,10 @@ and free; only `data`/`run` upload. CLAUDE.md §6-2-sextricies.
 
 Sections 4 and 6 are about ONE run. The question they cannot answer is the planning one:
 **which quarters are left, on every ticker that has ever been parsed?**
+
+⚠️ **FOR ONE TICKER, THE CONTROL NOTEBOOK'S §3 ANSWERS IT AND `QUARTERS = "OUTSTANDING"` ACTS ON
+IT** ([§2](#2-choosing-the-filings)). This one is the cross-ticker view: it ranks tickers, it does
+not name a cell, and it is where you decide WHICH ticker to open next.
 
 ```powershell
 jupyter lab src\kaggle_gpu\RUN__pdf_ocr_summary.ipynb    # read-only: no OCR, no network, no write

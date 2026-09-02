@@ -198,6 +198,7 @@ with a 200-draw null).
 | **P46** | ⭐ ⚠️ **THE UNIT REPAIR IS UNREACHABLE WHERE IT IS NEEDED — 8 TCB statements written 10⁶ WRONG** | ~4 h | ✅ | `unit_from_document` is carried by three layers at **positions 41-43 of 47**, and a statement that reconciles at layer 1 ends the cascade — so the repair never runs where it is needed. ⚠️ **A uniform 10⁶ error reconciles against itself**, so `sane` is the only gate that sees it, and on a ticker with no history it is open (`BND-1`). Measured on TCB 2026-08-29: **8 statements read `unit=1` against a ticker norm of 1,000,000** — Q1-2014 PBT read 673,136 for a company that earned 673 tỷ. ✅ Five were repaired in 8m 58s with the cascade restricted to those layers, each at **exactly ×10⁶**. **The fix is not a new layer**: make `unit_of` return `None` for silence (it already distinguishes them internally) and consult the DOCUMENT's declared unit on the DEFAULT path when the statement is silent and the filing does not contradict itself — `declared_unit()`/`document_unit()` already exist and are wired to a flag. ⚠️ **MEASURE THE BLAST RADIUS FIRST**: re-map the stored `row_dump`s and require 0 changed cells on ACB/VCB/BID. `UNT-1` |
 | **P47** | ⚠️ **BOOTSTRAPPING A NEW TICKER — the OCR job cannot, and nothing says so until afterwards** | ~2 h | ✅ CPU | `seed_history` reads DISK and re-seeds per document while `build()` accumulates within its run, so a ticker with no CSV parses with `sane` open, `pdf_ocr_merge` refuses every empty-band statement, nothing is written and the band stays empty. TCB paid **5h 21m** to learn it; 9 of 169 cells were wrong. **(a)** `plan()` should REFUSE — or warn ONCE, up front, before GPU is spent — when the ticker has no accepted quarter and no filter narrows the run, naming the Dagster path; today the warning is per document, after the cost. **(b)** Ship the two screens that convicted TCB's nine cells as CODE (a `unit` minority screen, a total-assets continuity screen over a finished run folder) — free, no OCR, and what `sane` would have done. ⚠️ **(b) is worth more than (a)** — it also runs on tickers that DO have history. ⚠️ **NEITHER IS DONE**; what shipped 2026-08-30 is `FORCE_EMPTY_BAND`, which opens the write half of the loop and makes (b) MORE urgent, not less. `BND-1` |
 | **P43** | ⚠️ **A FREE INVARIANT NOBODY CHECKS — 10 BID cash flows ALREADY ON DISK** | ~3 h | ✅ CPU | **↓ detail block** |
+| **P54** | ⚠️ **`NST-1`'s FIVE DISK ROWS, AND `NST-2`'s SLID ONE — the code reads four of them correctly now** | ~3 h | ✅ CPU | **↓ detail block** |
 | **P52** | ⭐ ⚠️ **`EQW-1` — 20 VCB BALANCE SHEETS TAKE A SUB-LINE AS TOTAL EQUITY, and the rows on DISK are right** | ~4 h | ✅ CPU | **↓ detail block** |
 | **P53** | ⚠️ **`MPD-1` — an index-only filing raises instead of being skipped; it ended a 67-document job in 30 s** | ~1 h | ✅ CPU | **↓ detail block** |
 | **P48** | ⚠️ **A BRACKET OCR DAMAGED READS AS POSITIVE — 6 wrong cells on disk in a ticker nobody was looking at** | ~3 h | ✅ CPU | `PAR-1` and `QUO-1` are one family: a parenthesised figure whose bracket the recogniser mangled is written **positive, or from the wrong column, and it reconciles**. Three variants measured — a thousands separator read as a SPACE inside the brackets, a box the parentheses SPAN, and the OPENING bracket read as a quote — each found by accident. ⚠️ **The corpus has never been screened.** TCB Q4-2013 holds six such cells today: `Dự phòng giảm giá chứng khoán kinh doanh` **+427** where the filing prints **(1.427)** and its own subtotal settles it (921.035 − 1.427 = 919.608); `Phát hành giấy tờ có giá` +548 for (4.807.548); `Mua sắm bất động sản đầu tư` +902 for (129.902); `Tiền chi đầu tư góp vốn` +800 for (35.800) — **the current code reads all six correctly, so this is a data repair, not a code one**. **(a)** a free DISK screen: a line named `dự phòng`/`chi phí`/`hao mòn`/`chi `/`mua sắm` with a POSITIVE value is a candidate, as is any component failing its own printed subtotal. **(b)** re-parse and repair what it convicts, adjudicated by **the filing's own subtotals**, never by "the newer run wins". ⚠️ Budget the re-parse from the screen, not the ticker count |
@@ -418,6 +419,45 @@ reproduced rows are 569 rows this screen says nothing about. `P43` and `P48`'s d
 what covers them. CLAUDE.md §6-2-quaterquinquagies.
 
 ---
+
+### P54 · ⚠️ `NST-1`/`NST-2` — FIVE WRONG DISK ROWS THE CODE NOW READS, AND ONE IT MUST NOT WRITE ⏱ ~3 h · *(opened 2026-09-02)*
+
+A free disk screen — **total liabilities EXACTLY equal to total assets, grand-total column
+blank** — convicts 5 of the 355 `pdf` balance sheets. `NST-1`'s fix changes what the CODE reads
+for four of them, measured from their archived `row_dump`s with no GPU at all:
+
+| | on disk | the current code |
+|---|---|---|
+| BID Q4-2013 | liab = assets = 548,386,083 mn | **516,093,515 mn** (0.9411, in line with its neighbours) |
+| CTG Q3-2009 | liab = assets = 226,569,995 mn | **209,986,662 mn** (0.9268 against Q2's 0.9379) |
+| BID Q1-2019 | liab = assets = 1,342,938,577 mn | **absent** — §5 rule 2, and better than wrong |
+| BID Q3-2016 | liab = assets = 950,377,914 mn | **absent** |
+| **CTG Q1-2011** | liab = assets = 395,843,604 mn | **unchanged** — see below |
+
+⚠️ **THE ROWS ON DISK ARE UNTOUCHED.** Repairing one is a `force_differs` merge, and the repo's
+rule is that the FILING adjudicates, never the newer run — the neighbour ratios above are
+corroboration, not adjudication. Budget one re-parse per filing.
+
+⚠️ **CTG Q1-2011 IS THE SAME DEFECT ONE WORDING FURTHER, and it is measured**: it prints
+"TỔNG NỢ PHẢI TRẢ, VỐN CHỦ SỞ HỮU VÀ LỢI ÍCH CỦA CỔ ĐÔNG" — no abbreviation, but the same comma
+for "VÀ" plus a long tail — which scores **0.774** against a bar of 0.86, and its genuine
+liabilities row carries **no current-period figure at all** (`[None, 349,339,915,000,000]`). So
+two things are wrong there and only one of them is this. The general repair is the CONNECTOR:
+"A, B và C" and "A và B và C" name one total, and the information is destroyed by
+`account.replace("_", "")` before any score is taken.
+
+⚠️ **AND `NST-2` IS NOW A ROW ON DISK, NOT A ROW REFUSED.** VCB Q1-2009's balance sheet was
+WRITTEN on 2026-09-02 by the owner's decision, with the slide measured and recommended against.
+Its three grand totals are right; its ~40 line items are their neighbours'. **So this item is a
+REPAIR, not a decision: either read the quarter correctly (the cascade reaches only
+`onnx@400+loose`, and no later layer is tried once it accepts) or revert the row to `missing`.**
+⚠️ Until then, nothing may quote a VCB Q1-2009 LINE ITEM; the three totals are sound. The proof itself is free and reusable: two consecutive interim filings print the SAME
+prior-year comparative column, so their readings must agree line for line — 37 of 57 do not.
+
+⚠️ **A half-empty-row screen is NOT the general detector.** On a 2-column balance sheet every
+real line prints both columns, and Q1-2009 carries only one figure on 38.2 % of its rows against
+a corpus median of 5.6 % — but the worst in the corpus is a WRITTEN statement at 46.9 %, so it
+ranks and does not separate. Recorded so it is not re-tried as a gate.
 
 ### P52 · ⚠️ `EQW-1` — 20 VCB BALANCE SHEETS TAKE A SUB-LINE AS TOTAL EQUITY ⏱ ~4 h · *(opened 2026-09-02)*
 

@@ -1647,6 +1647,20 @@ class FinancialsBuilder:
         # ⚠️ Verified to introduce **0 new account collisions** across all 12 charts (31 before,
         # 31 after — the ordered walk already disambiguates those by position).
         "tongcong": "tong",
+        # ⚠️ **A FILING MAY ABBREVIATE THE ONE WORD THAT SEPARATES TWO NESTED ANCHORS.**
+        # VCB's 2009 balance sheets print the grand total as "TỔNG NỢ PHẢI TRẢ, VỐN CSH VÀ
+        # LỢI ÍCH CỦA CỔ ĐÔNG THIỂU SỐ" where the chart of accounts spells "TỔNG NỢ PHẢI TRẢ
+        # VÀ VỐN CHỦ SỞ HỮU", so the row scores **0.760** against its own account and never
+        # becomes an anchor candidate at all — while `tong_no_phai_tra` is a literal PREFIX of
+        # it and takes the whole grand total by containment (0.95). Expanded, the same row
+        # scores **0.873**, over ANCHOR_MATCH, and the nested-anchor rule in `_anchor` can then
+        # settle the two against each other. ⚠️ **NEITHER HALF WORKS ALONE**: without the
+        # expansion there is nothing for `tong_no_phai_tra` to yield to, and without the rule
+        # the containment floor still outranks 0.873.
+        # ⚠️ Verified to introduce **0 new account collisions** — 411 pairs scoring
+        # >= SCHEMA_MATCH across all 12 charts, before and after — and NO chart of accounts
+        # contains "csh" at all, so this can only ever rewrite the ROW side.
+        "csh": "chusohuu",
     }
 
     @classmethod
@@ -2471,10 +2485,51 @@ class FinancialsBuilder:
         # Q1-2022 reads "Dự phòng rủi ro khác" and "TỔNG NỢ PHẢI TRẢ" as ONE row: both
         # accounts score 0.95 by containment, so the anchor still wins the tie and still takes
         # the row — which is the behaviour that case exists to pin.
+        #
+        # ⚠️ **AND AN ANCHOR WHOSE ACCOUNT IS A PREFIX OF A LONGER ANCHOR MAY NOT TAKE A ROW
+        # THAT LONGER ONE ALSO REACHES.** The competition above settles the nesting only when
+        # the grand-total row matches its OWN anchor well enough to be a candidate. VCB's
+        # Q2-2009 is the case where it does not: the row reads "TỔNG NỢ PHẢI TRẢ, VỐN CSH VÀ
+        # LỢI…", so `tong_no_phai_tra` scores the containment floor 0.95 on it against
+        # `tong_no_phai_tra_va_von_chu_so_huu`'s 0.873, and the sort hands the SHORT anchor
+        # 215,651,790,234,750 — the whole balance sheet — while the real total liabilities
+        # (200,472,828,741,799, one row up) is left with nothing and the grand total is left
+        # ABSENT. `reconcile` then compares assets against itself plus whatever the text
+        # fallback calls equity and refuses the statement on all 55 layers.
+        #
+        # The discriminator is structural, not a threshold: **0.95 is a FLOOR, not a
+        # measurement** — it says the account appears in this label, never that the label is
+        # that account. A longer anchor of the SAME chart that independently reaches the bar on
+        # the same row is the measurement, and a prefix cannot outrank the line that spans it.
+        # ⚠️ **ONE PAIR NESTS IN THE WHOLE CORPUS OF CHARTS** — measured over all 12:
+        # `tong_no_phai_tra` ⊂ `tong_no_phai_tra_va_von_chu_so_huu`, on the bank balance sheet,
+        # which is the pair this docstring already names. So the rule can only ever move a row
+        # that BOTH of those reach, and it moves nothing anywhere else.
+        # ⚠️ It yields the ROW, never the anchor: `tong_no_phai_tra` goes on to claim its own
+        # line lower in the ranking, which is how Q2-2009 recovers both figures rather than one.
+        # ⚠️ **AND IT YIELDS ONLY WHERE THE LONGER ACCOUNT SPANS MORE OF THE ROW — measured, the
+        # hard way.** Containment runs in BOTH directions (`_contains_at_an_edge` accepts
+        # `key in account` too), so on a row printed plainly as "TỔNG NỢ PHẢI TRẢ" the LONGER
+        # account also scores the flat 0.95. A rule that yielded on the bare existence of a
+        # candidate therefore handed total liabilities' OWN line away: re-mapping the archive
+        # moved **15 sound statements** — CTG Q2-2009 went from liabilities 204,985,759 mn and a
+        # grand total of 218,561,995 mn to liabilities 218,561,995 mn and no grand total at all,
+        # which is the very defect this rule exists to remove, in reverse.
+        # The length ratio is what separates them, and it is the same discriminator the sort
+        # already leans on: on VCB's Q2-2009 grand total the short account spans **0.45** of the
+        # label and the long one **0.90**, while on a plain "TỔNG NỢ PHẢI TRẢ" row the short one
+        # spans **1.00** and the long one 0.50. A prefix that spans the whole label IS the line.
+        nested = {c1: [c2 for c2, a2 in accounts.items()
+                       if c2 != c1 and a2.startswith(a1) and len(a2) > len(a1)]
+                  for c1, a1 in accounts.items()}
+        reached = {(c, i): l for _, l, c, i, _ in cands}
         held_account = {c: a.replace("_", "") for c, a in schema}
         taken_col, taken_row = set(), set()
         for r, ln, col, ri, val in cands:
             if col in taken_col or ri in taken_row:
+                continue
+            if any(c2 not in taken_col and reached.get((c2, ri), -1.0) > ln
+                   for c2 in nested.get(col, ())):
                 continue
             if src:
                 other = next((c for c, i in src.items() if i == ri and c != col), None)
