@@ -2542,6 +2542,101 @@ once any earlier test has imported the real module — so a stub placed in `sys.
 when the file runs alone and is **ignored in the full suite**. Patch the module's functions, not
 `sys.modules`. CLAUDE.md §6-2-sexquinquagies.
 
+### ⚠️ 3i. FOUR DEFECTS BETWEEN A CORRECT OCR READ AND THE CSV — CTG, 2026-09-02
+
+CTG held seven outstanding cells and **not one of them was an OCR failure**: every figure below
+was read correctly at `onnx@200` and then discarded by page classification, by the number
+splitter, by a page test or by the anchor matcher. Five went in, two are refusals with reasons.
+CLAUDE.md §6-2-septquinquagies has the full write-up; this is what a future reader of THIS
+package needs.
+
+| flag / constant | what it repairs | where |
+|---|---|---|
+| `column_header_blind` (`NOT-1`) | the table's own column heading classifying a CONTINUATION page as NOTES | `PdfParser.COLUMN_HEADER_NS`, `_page_kind` |
+| `SLASH_GAP_RE` (`SLH-1`) | a `/` the recogniser puts in the COLUMN GAP | `PdfParser._split_number_runs`, **default path** |
+| `TAIL` + `MIN_TAIL_WORDS` (`TAI-1`) | the closing line's other spelling, and a tail page carrying only that line | `PdfParser._is_tail_page`, inside `tail_continuation` |
+| `merged_tail` (`MTL-1`) | a grand total OCR merged onto the line above it | `FinancialsBuilder._anchor_keys`, `_anchor` |
+| `_filed_before_period_end` (`PYR-1`) | CafeF filing one period's report under another | `FinancialsBuilder.documents` / `alternates`, **default path** |
+
+#### The two that are in the DEFAULT path, and why each is allowed to be
+
+**`SLH-1`** can only ADD figures: a box carrying a slash parses as no number today, so nothing
+downstream is reading one. ⚠️ Two properties are load-bearing and both are pinned by tests —
+the substitution fires **only where the slash touches whitespace** (these pages print
+`30/06/2011 01/01/2011` in the header, and a date has no space beside its slashes), and it is
+**length-preserving**, because `_split_number_runs` apportions the box by CHARACTER OFFSET and
+the right edge is what the column clustering reads.
+
+**`PYR-1`** reads a field that was already in the index and never consulted. ⚠️ Measured before
+it shipped: of the **248** (period, entity, assurance) groups holding more than one filing
+across all 784 tickers, four carry one dated before the period ended, and **3 of 26,040
+quarterly documents move**. The rule sits BEHIND entity and AHEAD of assurance in `_pref`, and
+an absent `file_date` claims nothing.
+
+#### `merged_tail` — three guards, and each one was earned by a wrong figure
+
+`_anchor_keys` offers every word-boundary SUFFIX of the row's full re-slugged label, which
+bypasses `slug`'s 60-character cap for free. It **proposes**; `ANCHOR_MATCH` disposes.
+
+1. **`cut_fragment` makes containment ONE WAY.** `key in account` is evidence when the key is a
+   label the parser produced and OCR cut down; a suffix WE cut is a guess. `"khoan"`, cut from
+   "chứng khoán", scored the flat **0.95** against `tien_va_cac_khoan_tuong_duong_tien_tai_thoi_
+   diem_cuoi_ky` on two unrelated CTG rows.
+2. **`CUT_FRAGMENT_SLACK = 3`** — a cut creates edges the printed line does not have, so a cut
+   beginning exactly at "vốn chủ sở hữu" re-made `MEN-1`'s hazard and took 801,866,507,464 of
+   government debt as equity. The legitimate case needs **two** characters (the classifier "có"
+   in "TỔNG CỘNG TÀI SẢN CÓ") against **25** for that impostor.
+3. **The eviction guard is skipped when the anchor's claim is a CUT.** A merged row is
+   `carry + label`, so its figures belong to the LAST line, while the account the ordered walk
+   holds the row on printed no figure of its own. On CTG Q3-2010 the head matches the provision
+   account at **0.99** against the assets anchor's 0.950, and TỔNG TÀI SẢN was refused on every
+   layer because of it.
+
+`NST-1`'s `nested` relation widens from a PREFIX to CONTAINMENT under the same flag —
+`von_chu_so_huu` sits inside `tong_no_phai_tra_va_von_chu_so_huu` without being its prefix — and
+⚠️ **neither half works alone**: the longer account must independently reach the row, which on
+CTG Q1-2009 it does only through the suffixes.
+
+⚠️ **THE FOUR `+merged` LAYERS ARE 56-59 OF 59, AND THE POSITION IS THE SAFETY ARGUMENT.**
+Measured over all **1,168 `pdf` rows on disk**, the latest cascade position any of them was won
+at is **53**. They add no OCR pass — 28 distinct `parse_key`, still 7 `ocr_key`.
+
+#### The regression this shipped on, and the one thing it settles
+
+⚠️ **12 filings re-parsed end to end** — the five the repo uses for any default-path change, plus
+every filing that WINS a row at a `+tail` layer and every one that wins at `+joinlost`:
+**29 REPRODUCED, 8 DIFFERS, 2 abstained.** ⚠️ **All eight DIFFERS reproduce identically on
+stashed HEAD** — same winning layer, same changed cells, same extra columns — so none is this
+change's. They are rows written before `LNB-1`/`VAS-1`/`NST-1` shipped on 2026-09-01/02, three of
+them on a Kaggle worker. *"The output changed" and "my change did it" are different claims.*
+
+⚠️ **AND THREE EXISTING TESTS PINNED A CASCADE POSITION.** *"The +joinlost layers are the last of
+the cascade"* breaks the first time anything legitimate is appended, while changing nothing about
+when a lost separator may be rejoined — the third instance of a lesson
+`test_the_span_layers_run_late_and_relaxed` recorded first. The guard is the ORDER relative to
+the STRICT layers, and every widening flag has to be in that list or the next one to be added
+breaks it again. ⚠️ The fourth, `MIN_TAIL_WORDS = 4`, was a real behaviour change and is restated
+with the measurement rather than relaxed to make a test pass.
+
+#### ⚠️ What CTG still cannot produce, with the figures to check a fix against
+
+**208 of 210 cells**, cash flow 70/70. The two refusals:
+
+* **Q3-2010 balance sheet** — the grand total's label wraps over THREE OCR lines with its two
+  period figures interleaved between the halves (`TỔNG NỢ PHÁI TRÁ, VỐN CHỦ` at y=136.8, the
+  PRIOR column at 144.7, `SỞ HỮU VÀ LỢI ÍCH CỦA CÓ` at 148.3, the CURRENT column at 149.8,
+  `ĐÔNG THIỀU SÓ` at 160.9). `onnx@300` does not join it. `merged_tail` now finds assets and
+  liabilities, so the refusal moved from `no total assets` to `assets != liabilities + equity`:
+  equity comes from `Statement.find`, which returns a MENTION because the filing prints
+  "VIII Vốn và các quỹ", a name the bank chart does not have. **Assets 321,339,286,721,871 =
+  liabilities 303,973,587,730,206 + equity 17,174,049,474,868 + minority 191,649,516,797,
+  exactly.**
+* **Q4-2014 income statement** — a cumulative Q4 needs Q1..Q3 with a recorded three-month span,
+  and **Q3-2014's row on disk fails `P49`'s operating-profit identity** (IX − X = 1,585,880
+  against a printed XI of 1,607,459 mn). It was written before that gate shipped, so the parser
+  refuses to reproduce it and the span cannot be recorded. ⚠️ CTG Q1-2009's income statement is
+  in the same state (out by 1,240 mn). Both are suspect rows the gate is pointing at.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

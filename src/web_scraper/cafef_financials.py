@@ -191,6 +191,8 @@ class ParseLayer:
     annual_tail: bool = False
     cash_extra_terms: bool = False
     condensed_income: bool = False
+    column_header_blind: bool = False
+    merged_tail: bool = False
     crop_pad: Optional[float] = None
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
@@ -366,7 +368,11 @@ def parse_key(layer: ParseLayer) -> tuple:
             layer.join_lost_separator,
             layer.title_over_form, layer.loose_form_code, layer.realign_rows,
             layer.notes_boundary, layer.tail_continuation, layer.label_wrap,
-            layer.unit_from_document)
+            layer.unit_from_document,
+            # `column_header_blind` moves which page is a NOTE, so it changes the PARSE;
+            # `merged_tail` is a mapping rule and is deliberately absent, like
+            # `relax_merged_seam` and `annual_tail` above it.
+            layer.column_header_blind)
 
 
 def ocr_key(layer: ParseLayer) -> tuple:
@@ -433,6 +439,45 @@ class FinancialsBuilder:
     # covers a different entity. Prefer the reviewed/audited version when a quarter was filed
     # twice, since the later document restates the earlier.
     ASSURANCE_RANK = {"audited": 0, "reviewed": 1, "unaudited": 2}
+
+    # The last day of each quarter -- what a filing claiming to report that quarter cannot
+    # predate. See `_filed_before_period_end`.
+    QUARTER_END = {1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
+
+    @classmethod
+    def _filed_before_period_end(cls, row: dict) -> bool:
+        """Was this document PUBLISHED before the quarter it claims to report had ended?
+
+        ⚠️ **A QUARTERLY REPORT CANNOT BE FILED BEFORE ITS QUARTER IS OVER, AND CafeF FILES
+        SOME UNDER THE WRONG PERIOD.** CTG's Q1-2024 has TWO consolidated unaudited filings,
+        identical in name, entity and assurance; the one `documents` chose is dated
+        **2024-03-29**, two days before the quarter ended, and it is the FY-2023 report --
+        every figure in it is the full year. Its pre-tax profit, 24,989,525 mn, equals the sum
+        of CTG's four 2023 quarters to the dong, so de-cumulating Q4-2024 against it produced a
+        NEGATIVE quarter (`PYR-1`). Nothing in the parser could see it: the document is
+        internally consistent and reconciles perfectly.
+
+        ⚠️ **MEASURED OVER THE WHOLE ARCHIVE BEFORE IT SHIPPED — 4 DOCUMENTS OF 784 TICKERS.**
+        Of the 248 (period, entity, assurance) groups holding more than one filing, exactly four
+        carry one dated before the period ended, and in all four that one is the CURRENT pick:
+        CTG Q1-2024 and ANV Q1-2024 (both 2024-03-29, a CafeF batch), and HSG's Q3-2023 pair
+        dated 2023-07-28 -- whose own FILENAME reads `..._quy_2_nam_2023`. The other 244 groups
+        do not move, and a group of one is never consulted.
+
+        ⚠️ An absent or unparseable `file_date` returns False: the claim "this was filed too
+        early" needs the evidence for it (§5 rule 2), so a row with no date is ranked exactly
+        as it is today.
+        """
+        from datetime import date
+
+        raw = str(row.get("file_date") or "").strip()
+        try:
+            filed = date(*(int(x) for x in raw.split("-")))
+            q = int(str(row["quarter"]))
+            end = date(int(row["year"]), *cls.QUARTER_END[q])
+        except Exception:
+            return False
+        return filed < end
 
     # Subtotals used to reconcile, by the words the filing prints. Matched with spaces and
     # underscores stripped, so OCR losing a space cannot defeat them.
@@ -999,6 +1044,32 @@ class FinancialsBuilder:
                    join_lost_separator=True, relax_totals=True),
         ParseLayer("onnx@200+joinlost+relax+components", "onnx", 200,
                    join_lost_separator=True, relax_totals=True, relax_components=True),
+        # A CONTINUATION PAGE READ AS A NOTE (`column_header_blind`) and A GRAND TOTAL MERGED
+        # ONTO THE LINE ABOVE IT (`merged_tail`) -- see `PdfParser.COLUMN_HEADER_NS` and
+        # `_anchor_keys`. Both widen what may be found rather than what may be believed:
+        # the first hands a statement back the pages it was printed on, the second offers an
+        # anchor a suffix of a merged label, and `reconcile` and `sane` judge the result
+        # exactly as before.
+        #
+        # ⚠️ **LAST, AND THE POSITION IS WHAT BOUNDS THEM.** Measured 2026-09-02 over all
+        # **1,168 `pdf` rows on disk**: the latest cascade position any of them was won at is
+        # **53** of 55, so a layer at 56 or beyond is unreachable for every row this repo has
+        # already written -- the same argument `join_lost_separator` shipped on. What can
+        # reach here is a statement all 55 readings above have refused.
+        #
+        # ⚠️ The two travel together and are not split into four layers: they were measured
+        # on the same three CTG quarters, where a statement needs both -- Q1-2009's balance
+        # sheet is truncated to one page by the first defect AND has its grand total merged by
+        # the second, and fixing either alone leaves it refused or, worse, accepted with the
+        # equity column holding the whole balance sheet.
+        ParseLayer("onnx@200+merged", "onnx", 200,
+                   column_header_blind=True, merged_tail=True),
+        ParseLayer("onnx@200+merged+relax", "onnx", 200,
+                   column_header_blind=True, merged_tail=True, relax_totals=True),
+        ParseLayer("onnx@300+merged", "onnx", 300,
+                   column_header_blind=True, merged_tail=True),
+        ParseLayer("onnx@300+merged+relax", "onnx", 300,
+                   column_header_blind=True, merged_tail=True, relax_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -1115,6 +1186,7 @@ class FinancialsBuilder:
                 parser.set_tail_continuation(layer.tail_continuation)
                 parser.set_label_wrap(layer.label_wrap)
                 parser.set_unit_from_document(layer.unit_from_document)
+                parser.set_column_header_blind(layer.column_header_blind)
                 try:
                     # ⚠️ **THE CAPITAL-NOTE SCAN IS REQUESTED ONLY WHILE THE FACTS ARE STILL
                     # OPEN, AND THAT IS THE SAME CONDITION THE BLOCK BELOW READS THEM UNDER.**
@@ -1158,7 +1230,8 @@ class FinancialsBuilder:
                 row = self.map_to_schema(st, template, relax_totals=layer.relax_totals,
                                          relax_split_tail=layer.relax_split_tail,
                                          relax_merged_seam=layer.relax_merged_seam,
-                                         annual_tail=layer.annual_tail)
+                                         annual_tail=layer.annual_tail,
+                                         merged_tail=layer.merged_tail)
                 # ⚠️ THE SHORT-CIRCUIT IS LOAD-BEARING AND IS PRESERVED EXACTLY: `sane` runs
                 # only when `reconcile` passed, as it always has. What is new is that the
                 # refusal is KEPT rather than discarded — see the report below the loop.
@@ -1446,8 +1519,14 @@ class FinancialsBuilder:
         # ⚠️ CONSOLIDATED FIRST, ASSURANCE SECOND. Ordering the tuple the other way would let
         # an AUDITED standalone report displace an UNAUDITED consolidated one — a change of
         # entity bought for a change of assurance, which is not a trade this method may make.
+        # ⚠️ AND A DOCUMENT FILED BEFORE ITS PERIOD ENDED RANKS BEHIND ONE THAT WAS NOT --
+        # between entity and assurance. Behind entity, because a wrong period is still not a
+        # reason to change which company the row describes; AHEAD of assurance, because a
+        # filing that predates its own quarter is not that quarter's report at all, which is a
+        # stronger objection than how well it was produced. See `_filed_before_period_end`.
         def _pref(r: dict) -> tuple:
             return (0 if r["consolidated"] == "True" else 1,
+                    1 if self._filed_before_period_end(r) else 0,
                     self.ASSURANCE_RANK.get(r["assurance"], 9))
 
         best: Dict[str, dict] = {}
@@ -1533,7 +1612,10 @@ class FinancialsBuilder:
                if serves(r)
                and r.get("consolidated", "True") == entity
                and r["path"] != chosen["path"]]
-        out.sort(key=lambda r: self.ASSURANCE_RANK.get(r["assurance"], 9))
+        # Same order as `_pref`'s tail: an alternate that predates its own quarter is tried
+        # last, not first.
+        out.sort(key=lambda r: (1 if self._filed_before_period_end(r) else 0,
+                                self.ASSURANCE_RANK.get(r["assurance"], 9)))
         return [{**r, "period": period, "year": year, "quarter": quarter,
                  "annual": "True" if str(r["quarter"]) == "5" else "False"}
                 for r in out]
@@ -1571,6 +1653,22 @@ class FinancialsBuilder:
     # word, not a numeral — that is what this floor asserts, and it is deliberately NOT
     # MIN_CONTAINS, which answers a different question about the account side.
     MIN_CONTAINS_FRAGMENT = 5
+    # How much longer than the account a CUT may be and still count as containing it.
+    #
+    # ⚠️ **A CUT CREATES EDGES THAT THE PRINTED LINE DOES NOT HAVE.** `_contains_at_an_edge`
+    # separates a line from a mention by asking whether the account is the label's beginning or
+    # its end -- but a suffix generated by `_anchor_keys` can be cut to begin exactly at the
+    # account, so "vốn chủ sở hữu" turns into an edge wherever it appears. Measured on CTG's
+    # Q1-2009: the row "B NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU | 1-Các khoản nợ Chính phủ và NHNN"
+    # offers a cut starting at VỐN, and the EQUITY anchor took 801,866,507,464 of government
+    # debt -- `MEN-1`'s hazard, re-created by the very mechanism meant to reach past a merge.
+    #
+    # The extent is the discriminator, and three characters is what the legitimate case needs:
+    # CTG's Q3-2010 prints "TỔNG CỘNG TÀI SẢN CÓ" where the chart says "TỔNG TÀI SẢN", so the
+    # cut carries the two-character classifier "có" and nothing else, while the equity cut above
+    # carries **25** characters of somebody else's line item. A cut that is the account plus a
+    # whole line is not that account's line.
+    CUT_FRAGMENT_SLACK = 3
 
     # The cash-flow section prefixes, and the method tags the union adds. Only these may be
     # stripped from the front of a column — a blanket "drop the first word" also eats the
@@ -1755,7 +1853,8 @@ class FinancialsBuilder:
 
     def _label_score(self, account: str, key: str, relax: bool = False,
                      annual_tail: bool = False,
-                     edge_containment: bool = False) -> float:
+                     edge_containment: bool = False,
+                     cut_fragment: bool = False) -> float:
         """How alike a schema account and a parsed row label are, both separator-stripped.
 
         One measure shared by the ordered walk and `_anchor`, so a line is scored the same way
@@ -1810,9 +1909,19 @@ class FinancialsBuilder:
 
         account, key = self._expand(account), self._expand(key)
         r = SequenceMatcher(None, account, key).ratio()
+        # ⚠️ **CONTAINMENT RUNS ONE WAY ON A FRAGMENT THIS CODE CUT ITSELF.** `key in account`
+        # is evidence when the KEY is a label the parser produced and OCR cut down -- that is
+        # what `MIN_CONTAINS_FRAGMENT` is for. A word-boundary SUFFIX generated by `_anchor_keys`
+        # is not such a label: it is a guess, and every long account has a five-character guess
+        # inside it. Measured on CTG's Q2-2011 cash flow, the suffix "khoan" (from "chung
+        # khoan") scored the flat **0.95** against "tien va cac khoan tuong duong tien tai thoi
+        # diem cuoi ky" on two unrelated rows. The other direction is untouched, and it is the
+        # one that pays: CTG Q3-2010's "TONG CONG TAI SAN CO" SPANS `tong_tai_san`.
+        contains = (account in key
+                    and len(key) - len(account) <= self.CUT_FRAGMENT_SLACK)             if cut_fragment else (account in key or key in account)
         if (len(account) >= self.MIN_CONTAINS
                 and min(len(account), len(key)) >= self.MIN_CONTAINS_FRAGMENT
-                and (account in key or key in account)
+                and contains
                 # ⚠️ ANCHORS ONLY. An account buried inside a merged row is a MENTION and
                 # not that row's line item — see `_contains_at_an_edge`. The ORDERED WALK
                 # keeps the flat score, because position already keeps it honest: gating
@@ -1855,7 +1964,8 @@ class FinancialsBuilder:
                      relax_totals: bool = False,
                      relax_split_tail: bool = False,
                      relax_merged_seam: bool = False,
-                     annual_tail: bool = False) -> Dict[str, int]:
+                     annual_tail: bool = False,
+                     merged_tail: bool = False) -> Dict[str, int]:
         """Parsed rows -> canonical columns.
 
         This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
@@ -1908,7 +2018,8 @@ class FinancialsBuilder:
                                  annual_tail).items():
             self._claim(out, src, schema[j][0], rows[ri][0], rows[ri][1])
 
-        self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail)
+        self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail,
+                     merged_tail)
         self._split_fx_from_balance(out, src, st, schema)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
@@ -2077,6 +2188,60 @@ class FinancialsBuilder:
             if m:
                 return m.group(2)
         return key
+
+    # How many leading WORDS a merged row may carry in front of the line that owns its figure.
+    # Not a tuning knob in practice -- the suffix has to answer an ANCHOR account before it is
+    # used, so a wrong cut simply scores nothing -- but bounded so a 400-character label does
+    # not cost 60 SequenceMatcher calls per anchor.
+    MERGED_TAIL_WORDS = 14
+
+    def _anchor_keys(self, row, relax_merged_seam: bool, merged_tail: bool):
+        """The keys an anchor may score this row on: the seam-split key, and -- under
+        `merged_tail` -- every word-boundary SUFFIX of the row's FULL re-slugged label.
+
+        ⚠️ **THE 60-CHARACTER SLUG CAP THROWS AWAY THE HALF THAT OWNS THE FIGURE.** A merged
+        row is long BY DEFINITION, so the line OCR glued on the END is exactly what `slug` cuts:
+        CTG's Q2-2011 cash flow reads three printed lines as one and keys them
+        `tien_nhan_chuyen_giao_tu_doanh_nghiep_truoc_co_phan_hoa_dieu`, while the full label
+        ends `..._tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky` -- the closing
+        balance's account, VERBATIM. `map_to_schema` already re-slugs the full label under
+        `annual_tail` for this reason; `_anchor` never did.
+
+        ⚠️ **AND CONTAINMENT NEEDS THE ACCOUNT AT AN EDGE, WHICH A MERGED ROW OFTEN DENIES.**
+        Three measured shapes, none of which `_split_merged` can cut (no numeral at the seam):
+
+          * CTG Q3-2010: `...noi_bang_khac_t44_TONG_CONG_TAI_SAN_CO` -- the account is at the
+            end except for a trailing "CO", so neither `startswith` nor `endswith` holds;
+          * CTG Q1-2009: `loi_ich_cua_co_dong_thieu_so_tong_no_phai_tra_von_chu_so_huu` -- OCR
+            dropped the "VA" from the grand total, so its own account scores 0.667 and the
+            SHORT `von_chu_so_huu` takes the whole balance sheet by containment instead;
+          * CTG Q2-2011: the 60-character cap above.
+
+        A suffix is scored exactly like any other key and must still clear `ANCHOR_MATCH`, so
+        this PROPOSES and the existing bar DISPOSES: "Tien gui tai NHNN II" offers `nhnn_ii`,
+        which answers no anchor account and costs nothing. `ln` is deliberately still measured
+        against the FULL key -- see the nesting rule in `_anchor`, which needs it.
+        -> (keys, tails) -- `tails` are the cuts, scored under `cut_fragment`.
+        """
+        from web_scraper.cafef_pdf_parser import PdfParser
+
+        split = self._split_merged(row.key, row.label, relax_merged_seam)
+        keys = [split.replace("_", "")]
+        tails: List[str] = []
+        if not merged_tail:
+            return keys, tails
+        full = PdfParser.slug(row.label, maxlen=self.SEAM_SLUG_LEN) if row.label else row.key
+        parts = full.split("_")
+        # Counted from the END, not the front: what OCR glued on is the TAIL, and the longest
+        # anchor account in any of the twelve charts is eleven words ("Tien va cac khoan tuong
+        # duong tien tai thoi diem cuoi ky"). Bounding the prefix instead would make the reach
+        # depend on how long somebody else's words happen to be -- CTG's Q3-2010 carries
+        # fourteen of them in front of "TONG CONG TAI SAN CO".
+        for k in range(1, min(self.MERGED_TAIL_WORDS, len(parts) - 1) + 1):
+            cand = "".join(parts[-k:])
+            if cand and cand not in keys and cand not in tails:
+                tails.append(cand)
+        return keys, tails
 
     @staticmethod
     def _claim(out: Dict[str, int], src: Dict[str, int], col: str,
@@ -2446,7 +2611,8 @@ class FinancialsBuilder:
                 st: Statement, relax: bool = False,
                 src: Optional[Dict[str, int]] = None,
                 relax_merged_seam: bool = False,
-                annual_tail: bool = False) -> None:
+                annual_tail: bool = False,
+                merged_tail: bool = False) -> None:
         """Re-match the subtotals without regard to position.
 
         The ordered walk drifts. Once it has advanced past a column, a row that belongs there
@@ -2486,10 +2652,19 @@ class FinancialsBuilder:
                 # government-debt line. Split, that row answers `i_cac_khoan_no_chinh_phu_va_nhnn`
                 # and equity is left ABSENT, which is the correct answer for a figure the
                 # statement never printed on its own line (CLAUDE.md §5 rule 2).
+                # ⚠️ THE SEAM-SPLIT KEY, AND -- under `merged_tail` -- EVERY SUFFIX OF THE
+                # FULL LABEL. See `_anchor_keys` for the three measured shapes a merged row
+                # takes that containment on the capped key cannot reach.
                 k = self._split_merged(row.key, row.label,
                                        relax_merged_seam).replace("_", "")
-                r = self._label_score(a, k, relax, annual_tail,
-                                      edge_containment=True)
+                keys, tails = self._anchor_keys(row, relax_merged_seam, merged_tail)
+                r = max(self._label_score(a, cand, relax, annual_tail,
+                                          edge_containment=True) for cand in keys)
+                r_cut = max([self._label_score(a, cand, relax, annual_tail,
+                                               edge_containment=True, cut_fragment=True)
+                             for cand in tails], default=0.0)
+                from_cut = r_cut > r
+                r = max(r, r_cut)
                 # Length ratio: how much of the target the OCR'd label actually spans (min/max
                 # so a too-long label is penalised too). It also ranks the ties containment
                 # creates, since 0.95 is awarded flat to the line itself AND to anything that
@@ -2498,7 +2673,7 @@ class FinancialsBuilder:
                 ln = min(len(a), len(k)) / max(len(a), len(k))
                 if r >= self.ANCHOR_MATCH or (r >= self.ANCHOR_MATCH_LONG
                                               and ln >= self.ANCHOR_LEN_RATIO):
-                    cands.append((r, ln, col, ri, val))
+                    cands.append((r, ln, col, ri, val, from_cut))
 
         # Ranked by score, then by how much of the account the label spans, then by POSITION —
         # later wins. The last is what separates the cash flow's two dated balance lines, which
@@ -2559,25 +2734,60 @@ class FinancialsBuilder:
         # already leans on: on VCB's Q2-2009 grand total the short account spans **0.45** of the
         # label and the long one **0.90**, while on a plain "TỔNG NỢ PHẢI TRẢ" row the short one
         # spans **1.00** and the long one 0.50. A prefix that spans the whole label IS the line.
+        # ⚠️ **AND UNDER `merged_tail` THE NESTING IS CONTAINMENT, NOT ONLY A PREFIX.** The
+        # rule above is stated on the prefix pair this chart already had; nothing in its
+        # reasoning is about prefixes. `von_chu_so_huu` sits INSIDE
+        # `tong_no_phai_tra_va_von_chu_so_huu` exactly as `tong_no_phai_tra` sits in front of
+        # it, and CTG's Q1-2009 is the case: the grand total is merged onto the
+        # minority-interest line and OCR dropped its "VA", so its own account cannot reach the
+        # row while the SHORT equity account ends it and takes 193,280,787,212,094 -- the whole
+        # balance sheet -- as CTG's equity. Both gates pass, because `reconcile` falls through
+        # to `Statement.find`, which reads the grand total out of the same row.
+        # ⚠️ Widened only WITH the suffix keys, and it has to be: the longer account must
+        # independently REACH the row for the rule to fire at all, which on this row it does
+        # only through them. Neither half works alone -- the same shape `NST-1` records.
         nested = {c1: [c2 for c2, a2 in accounts.items()
-                       if c2 != c1 and a2.startswith(a1) and len(a2) > len(a1)]
+                       if c2 != c1 and len(a2) > len(a1)
+                       and (a1 in a2 if merged_tail else a2.startswith(a1))]
                   for c1, a1 in accounts.items()}
-        reached = {(c, i): l for _, l, c, i, _ in cands}
+        reached = {(c, i): l for _, l, c, i, _, _ in cands}
         held_account = {c: a.replace("_", "") for c, a in schema}
         taken_col, taken_row = set(), set()
-        for r, ln, col, ri, val in cands:
+        for r, ln, col, ri, val, from_cut in cands:
             if col in taken_col or ri in taken_row:
                 continue
             if any(c2 not in taken_col and reached.get((c2, ri), -1.0) > ln
                    for c2 in nested.get(col, ())):
                 continue
-            if src:
+            # ⚠️ **AND THE GUARD DOES NOT APPLY WHEN THIS ANCHOR'S CLAIM IS A CUT.** A merged
+            # row is `carry + label`, so its figures belong to the LAST line OCR swept in --
+            # that is `_split_merged`'s premise and `table_rows` builds it that way. When the
+            # anchor matched a CUT it is claiming exactly that line, while the account the
+            # ordered walk holds the row on is a line that printed NO figure of its own, so
+            # defending it here defends the wrong half. Measured on CTG's Q3-2010: the row is
+            # "Các khoản dự phòng rủi ro cho các tài sản có nội bảng khác | TỔNG CỘNG TÀI SẢN
+            # CÓ", its head matches the provision account at **0.99** against the assets
+            # anchor's 0.950, and TỔNG TÀI SẢN was refused on every layer.
+            if src and not from_cut:
                 other = next((c for c, i in src.items() if i == ri and c != col), None)
                 if other is not None and other in held_account:
-                    k = self._split_merged(st.rows[ri].key, st.rows[ri].label,
-                                           relax_merged_seam).replace("_", "")
-                    if self._label_score(held_account[other], k, relax, annual_tail,
-                                         edge_containment=True) > r:
+                    # ⚠️ **THE OTHER ACCOUNT IS SCORED ON THE ROW'S OWN LABEL, NEVER ON A
+                    # CUT.** This guard asks whether the row ALREADY sits on the account its
+                    # own printed line belongs to. A cut is a claim about a DIFFERENT printed
+                    # line inside the same merged row, so scoring the other account on one
+                    # would let the two halves of a merge defend each other -- and on CTG's
+                    # Q3-2010 they did: the row is "Các khoản dự phòng rủi ro cho các tài sản
+                    # có nội bảng khác | TỔNG CỘNG TÀI SẢN CÓ", the ordered walk holds it on
+                    # the provision line, and a cut equal to that provision account scores
+                    # 1.000 against the assets anchor's 0.950 -- so TỔNG TÀI SẢN was refused
+                    # and the quarter stayed `missing` for `no total assets`.
+                    # ⚠️ A TIE STILL GOES TO THE ANCHOR, which is the case `_claim` exists
+                    # to pin (ACB Q1-2022, both 0.95).
+                    o_keys, _ = self._anchor_keys(st.rows[ri], relax_merged_seam,
+                                                  merged_tail)
+                    held = max(self._label_score(held_account[other], c, relax, annual_tail,
+                                                 edge_containment=True) for c in o_keys)
+                    if held > r:
                         continue
             # through _claim, so winning an anchor also RELEASES whatever else this row had
             # been given by the alignment pass — one printed line, one line item

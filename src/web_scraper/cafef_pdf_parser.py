@@ -255,6 +255,26 @@ class PdfParser:
     }
     NOTES_NS = "thuyetminhbaocao"
 
+    # ⚠️ **THE STATEMENT TABLE'S OWN COLUMN HEADING CARRIES THE NOTES TITLE'S FIRST TEN
+    # CHARACTERS, AND THAT IS ENOUGH TO CLASSIFY A CONTINUATION PAGE AS A NOTE.** The standard
+    # VAS forms print `Chi tieu | Thuyet minh | So cuoi quy | So dau nam` at the top of every
+    # page of every statement, and a CONTINUATION page has no title of its own -- so that row
+    # is the whole header. Scored against `NOTES_NS` it returns **0.8125**, one hundredth over
+    # `TITLE_MATCH`, because ten of the needle's sixteen characters are the shared words
+    # "thuyet minh"; the remaining six ("bao cao") are matched three-for-six against "so cuoi".
+    #
+    # ⚠️ A NOTES page ENDS THE RUN in `_fill_continuations`, so the cost is the rest of the
+    # statement. Measured on CTG's Q1-2009 consolidated filing: the balance sheet runs pages
+    # 1-4, pages 2, 3 and 4 each read as NOTES, and the statement was truncated to page 1 --
+    # **17 rows, no TONG TAI SAN**, refused `no total assets` on all 55 layers. The quarter had
+    # been `missing` since the ticker was first parsed.
+    #
+    # The verdict is re-taken on a header with this row removed, and ONLY the notes verdict:
+    # the row can never be evidence FOR a statement title, so removing it cannot lose one, and
+    # a genuine notes page whose own title sits elsewhere in the header still scores. Both
+    # halves are required -- the flag permits it and the header must actually carry the row.
+    COLUMN_HEADER_NS = ("chitieu", "thuyetminh")
+
     # The auditor's report at the front of every filing. It is NOT a statement, but its header
     # says "Báo cáo tài chính hợp nhất…", which is close enough to the balance sheet's own
     # title ("Báo cáo TÌNH HÌNH tài chính") to fool a fuzzy match — and once it does, the
@@ -320,12 +340,27 @@ class PdfParser:
         # spaces removed like every other header test, and cut before "tại" so the phrase
         # matches whether the filing DATES the line ("tại ngày 31 tháng 3") or names the
         # period — the same split `FinancialsBuilder.CASH_TAIL` makes for the same reason.
-        CASH_FLOW: ("tienvacackhoantuongduongtien",),
+        # ⚠️ **AND THE FILING MAY DROP "CAC KHOAN" ALTOGETHER.** CTG words the same line
+        # "Tien va tuong duong tien tai thoi diem cuoi ky" from at least 2014, and the two
+        # spellings share no substring long enough to cover both -- so the needle set carries
+        # each. Measured on CTG's Q1-2014 consolidated filing: the closing balance
+        # 88.180.310.933.901 is read correctly at `onnx@200`, on a page this test then refused,
+        # and the quarter was `missing` for `no closing cash balance` on all 55 layers.
+        CASH_FLOW: ("tienvacackhoantuongduongtien", "tienvatuongduongtien"),
     }
-    # A tail page still has to be a TABLE, just a small one: the three cash-balance rows carry
-    # two period columns each. Set at 4 so a page holding a single stray figure — a page
-    # number, a date — can never qualify.
-    MIN_TAIL_WORDS = 4
+    # A tail page still has to be a TABLE, just a small one. WARN **AND THE FLOOR IS TWO, NOT
+    # FOUR: A TAIL PAGE MAY CARRY THE CLOSING LINE AND NOTHING ELSE.** This was set at 4 on the
+    # assumption that all three cash-balance rows land on it ("the three cash-balance rows carry
+    # two period columns each"); CTG's Q1-2014 breaks the page after the FX line, so its tail
+    # page holds one row -- a note reference and two period figures, **three numbers** -- and
+    # was refused for holding too few. Two period columns is what the closing line itself
+    # carries, and is therefore the true floor.
+    #
+    # ⚠️ Lowering it costs nothing, because the count was never the guard: a page qualifies
+    # only by carrying the statement's own closing line (`TAIL`), which is POSITIVE evidence a
+    # signature or narrative page cannot fake. The count only stops a page holding one stray
+    # figure -- a page number, a date -- from reaching that test at all.
+    MIN_TAIL_WORDS = 2
 
     # How far below the last line that fed it a pending wrapped label survives a line that
     # contributed nothing. Rows on these statements are set 13-32pt apart and a wrapped half
@@ -404,6 +439,8 @@ class PdfParser:
         self.label_wrap = False
         # set per PARSE LAYER; see document_unit
         self.unit_from_document = False
+        # set per PARSE LAYER; see COLUMN_HEADER_NS / _page_kind
+        self.column_header_blind = False
         # ⚠️ **PROGRESS HOOK, AND THE ONLY DENOMINATOR IN THIS FILE THAT PREDICTS TIME.**
         # `on_page(index, total)` is called once per page of `scan`, before it is read. Pages
         # of one document cost roughly the same (0.87 s/page at onnx@200, measured for `P41`),
@@ -519,6 +556,14 @@ class PdfParser:
         of that failure are repaired here; see `table_rows`.
         """
         self.label_wrap = bool(on)
+
+    def set_column_header_blind(self, on: bool) -> None:
+        """Stop the statement TABLE's own column heading from classifying a page as NOTES.
+
+        See `COLUMN_HEADER_NS`. Scoped to the notes verdict, so it can prevent a
+        classification and never destroy a statement title.
+        """
+        self.column_header_blind = bool(on)
 
     def set_unit_from_document(self, on: bool) -> None:
         """Let a statement that names no unit take the one the rest of the filing names.
@@ -710,7 +755,16 @@ class PdfParser:
         ns = self.norm(header).replace(" ", "")
         if any(a in ns for a in self.AUDIT_NS):
             return None, False              # the auditor's report is not a statement
-        if self._titled(ns, [self.NOTES_NS]):
+        # ⚠️ The NOTES verdict alone is re-taken without the table's column-heading row --
+        # see COLUMN_HEADER_NS. The three statement titles keep the FULL header, because that
+        # row can only ever add a spurious match for them, never carry a real one.
+        notes_ns = ns
+        if self.column_header_blind:
+            notes_ns = self.norm("\n".join(
+                l for l in [x for x in text.splitlines() if x.strip()][:self.HEADER_LINES]
+                if not all(n in self.norm(l).replace(" ", "")
+                           for n in self.COLUMN_HEADER_NS))).replace(" ", "")
+        if self._titled(notes_ns, [self.NOTES_NS]):
             return NOTES, False
         # The BEST-matching title wins, not the first to clear the threshold. A form code with an
         # OCR-mangled digit falls through to here — ACB's cash-flow page prints "Mẫu BO4/TCTD-HN"
@@ -914,6 +968,24 @@ class PdfParser:
     # alone.
     NUM_RUN_RE = re.compile(r"^[\s\d.,()\-–—]+$")
 
+    # ⚠️ **A SLASH THE RECOGNISER PUT IN THE COLUMN GAP MAKES THE WHOLE BOX PARSE AS NOTHING.**
+    # `NUM_RUN_RE` does not admit "/", so a box holding both period figures with one between
+    # them -- CTG's Q2-2011 balance sheet returns `'395.852.473 /367.712.191'` for the two
+    # columns of TONG TAI SAN -- is neither split nor parsed, and the row loses every value.
+    # `table_rows` then has a label with no figure, turns it into `carry`, and the grand total
+    # is gone: that quarter was refused `no total assets` on all 55 layers with both totals
+    # printed and read correctly.
+    #
+    # ⚠️ **ONLY A SLASH THAT TOUCHES WHITESPACE, WHICH IS WHAT A COLUMN GAP LOOKS LIKE.** A
+    # DATE is the reason: these pages print `30/06/2011 01/01/2011` in the header, and admitting
+    # "/" anywhere would turn each into a numeric run and split it into 30, 06, 2011. A date
+    # has no space beside its slashes and is untouched.
+    #
+    # ⚠️ The substitution is LENGTH-PRESERVING, and it has to be: `_split_number_runs`
+    # apportions the box by CHARACTER OFFSET, so a rewrite that shortened the text would move
+    # every right edge it computes -- and the right edge is what the column clustering uses.
+    SLASH_GAP_RE = re.compile(r"(?<=\s)/|/(?=\s)")
+
     # A THOUSANDS SEPARATOR READ AS A SPACE. The same box that can hold two period figures can
     # instead hold ONE whose separator the recogniser lost: ACB's Q2-2012 returns '3 396.864'
     # for a printed 3.396.864. Splitting that on whitespace keeps 396.864 and throws the leading
@@ -958,7 +1030,7 @@ class PdfParser:
         """
         out = []
         for w in words:
-            txt = w[4]
+            txt = cls.SLASH_GAP_RE.sub(" ", w[4])          # see SLASH_GAP_RE
             parts = txt.split()
             if (len(parts) < 2 or not cls.NUM_RUN_RE.match(txt)
                     or not any(c.isdigit() for c in txt)):

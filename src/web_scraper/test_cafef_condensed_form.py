@@ -203,7 +203,8 @@ def test_the_condensed_layer_runs_last():
     strict = [i for i, l in enumerate(layers)
               if not (l.relax_totals or l.relax_components or l.relax_split_tail
                       or l.relax_merged_seam or l.condensed_income
-                      or l.join_lost_separator)]
+                      or l.join_lost_separator
+                      or l.merged_tail or l.column_header_blind)]
     assert min(cond) > max(strict)
 
 

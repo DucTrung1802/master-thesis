@@ -173,8 +173,20 @@ def test_a_page_without_the_closing_line_is_never_admitted(parser):
 
 
 def test_a_tail_page_needs_some_figures(parser):
+    """⚠️ THE FLOOR IS TWO SINCE 2026-09-02, AND TWO IS WHAT THE CLOSING LINE CARRIES.
+
+    This asserted that a page holding the closing line and TWO figures is refused, which
+    pinned `MIN_TAIL_WORDS = 4`. That number came from the assumption that all three
+    cash-balance rows land on the tail page; CTG's Q1-2014 breaks the page after the FX
+    line, so its tail page holds one row -- a note reference and two period figures -- and
+    the closing balance 88.180.310.933.901, read correctly at `onnx@200`, was thrown away.
+    The count was never the guard: admission is on the closing LINE, and a page carrying it
+    with both of its period columns is a tail page.
+    """
     parser.tail_continuation = True
-    assert not parser._is_tail_page(_page(["1", "2"], CLOSING_LINE), CASH_FLOW)
+    assert parser._is_tail_page(_page(["1", "2"], CLOSING_LINE), CASH_FLOW)
+    # ...and one stray figure beside the words is still not a table
+    assert not parser._is_tail_page(_page(["1"], CLOSING_LINE), CASH_FLOW)
 
 
 def test_no_tail_marker_is_defined_for_the_other_statements(parser):

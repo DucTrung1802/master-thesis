@@ -261,7 +261,8 @@ def test_the_span_layers_run_late_and_relaxed():
     strict = [i for i, l in enumerate(layers)
               if not (l.relax_totals or l.relax_components or l.relax_split_tail
                       or l.relax_merged_seam or l.condensed_income
-                      or l.join_lost_separator)]
+                      or l.join_lost_separator
+                      or l.merged_tail or l.column_header_blind)]
     assert extra[0] > max(strict), "a span layer must not run before a strict one"
     for i in extra:
         # the identity only runs under `verify_cash`, which rides with `relax_totals`

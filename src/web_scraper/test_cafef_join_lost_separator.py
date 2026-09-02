@@ -103,12 +103,32 @@ def test_two_period_figures_ARE_wrongly_joined_under_the_flag():
         [_one("135.272.610 126.501.216")], False, True)) == ["135.272.610.126.501.216"]
 
 
-def test_the_joinlost_layers_are_the_last_of_the_cascade():
-    """The position IS the guard, so it is asserted rather than assumed."""
+def test_the_joinlost_layers_run_after_every_strict_layer():
+    """The position IS the guard, so it is asserted rather than assumed.
+
+    ⚠️ This asserted `flagged == the last len(flagged) indices` until 2026-09-02 -- that
+    the +joinlost block is literally the tail of the list. That is the SAME position
+    assertion `test_the_span_layers_run_late_and_relaxed` and
+    `test_the_condensed_layer_runs_last` have each already outgrown, and this is its THIRD
+    instance: appending the `+merged` block (`column_header_blind` / `merged_tail`) broke it
+    while changing nothing about when a lost separator may be rejoined. The property being
+    guarded is that no layer reading the box AS PRINTED runs afterwards -- another WIDENING
+    layer may.
+
+    ⚠️ AND THE COST OF THAT IS REAL AND IS RECORDED HERE: a statement `+joinlost` ACCEPTS
+    never reaches the `+merged` block, so a filing needing both a rejoined figure and a
+    merged label is out of reach. No such filing has been measured.
+    """
     layers = FinancialsBuilder.LAYERS
     flagged = [i for i, l in enumerate(layers) if l.join_lost_separator]
     assert flagged, "no +joinlost layer in the cascade"
-    assert flagged == list(range(len(layers) - len(flagged), len(layers))), \
+    assert flagged == list(range(flagged[0], flagged[-1] + 1)), "the block must be contiguous"
+    strict = [i for i, l in enumerate(layers)
+              if not (l.relax_totals or l.relax_components or l.relax_split_tail
+                      or l.relax_merged_seam or l.condensed_income
+                      or l.join_lost_separator
+                      or l.merged_tail or l.column_header_blind)]
+    assert flagged[0] > max(strict), \
         "a +joinlost layer must never run before a layer that reads the box as printed"
 
 
