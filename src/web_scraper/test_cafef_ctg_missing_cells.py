@@ -250,19 +250,34 @@ def test_the_nesting_widens_only_under_the_flag():
 
 # ── the cascade ───────────────────────────────────────────────────────────────
 def test_the_new_layers_are_last_and_reachable_by_nothing_on_disk():
-    names = [l.name for l in FinancialsBuilder.LAYERS]
-    new = [n for n in names if "+merged" in n]
-    assert len(new) == 4
-    first = min(names.index(n) for n in new)
+    """⚠️ THIS ASSERTED `names[first:] == new` -- that the +merged block is literally the
+    tail of the list -- until 2026-09-03, when the `+reseat` / `+equity` block was appended
+    after it. That is the FOURTH time a test in this repo has pinned a POSITION and broken on
+    a legitimate append (see `test_the_span_layers_run_late_and_relaxed`,
+    `test_the_condensed_layer_runs_last`, `test_the_joinlost_layers_run_after_every_strict_
+    layer`). The property being guarded is that nothing reading the box AS PRINTED runs
+    afterwards, and that a row already on disk cannot reach here.
+    """
+    layers = FinancialsBuilder.LAYERS
+    new = [i for i, l in enumerate(layers) if l.column_header_blind]
+    assert new, "no +merged layer in the cascade"
+    assert new == list(range(new[0], new[-1] + 1)), "the block must be contiguous"
     # measured 2026-09-02: the latest position any `pdf` row on disk was won at is 53
-    assert first + 1 > 53
-    assert names[first:] == new          # contiguous, at the very end
+    assert new[0] + 1 > 53
+    assert new[0] > max(i for i, l in enumerate(layers) if l.is_strict)
 
 
 def test_the_new_flags_are_off_on_every_other_layer():
+    """⚠️ `merged_tail` IS NO LONGER PRIVATE TO THE +merged BLOCK, and that is deliberate:
+    `equity_wording` needs the merged-row suffix keys to find CTG Q3-2010's grand total, so
+    the two travel together. What still holds -- and is what this guards -- is that neither
+    flag is ever on outside the two widening blocks at the end of the cascade.
+    """
     for layer in FinancialsBuilder.LAYERS:
         if "+merged" in layer.name:
             assert layer.column_header_blind and layer.merged_tail
+        elif "+equity" in layer.name:
+            assert layer.merged_tail and layer.column_header_blind and layer.equity_wording
         else:
             assert not layer.column_header_blind and not layer.merged_tail
 

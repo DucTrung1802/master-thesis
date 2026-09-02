@@ -193,7 +193,34 @@ class ParseLayer:
     condensed_income: bool = False
     column_header_blind: bool = False
     merged_tail: bool = False
+    reseat_words: bool = False
+    equity_wording: bool = False
     crop_pad: Optional[float] = None
+
+    @property
+    def is_strict(self) -> bool:
+        """Does this layer read the page AS PRINTED and believe only what already matches?
+
+        ⚠️ **ONE DEFINITION, BECAUSE FOUR TEST FILES WERE EACH KEEPING THEIR OWN COPY.**
+        Every widening block in the cascade — `cash_extra_terms`, `condensed_income`,
+        `join_lost_separator`, `merged_tail`/`column_header_blind`, and now `reseat_words` /
+        `equity_wording` — is guarded by the same property: *no layer reading the box as
+        printed may run after it*. Each guard re-listed the widening flags, so adding the
+        fifth block meant editing four lists, and forgetting one silently turns the new
+        layers into "strict" ones and moves `max(strict)` past the block it is meant to
+        bound. That is a check quietly reporting a pass it never made — `DEP-1`/`SAN-1`'s
+        shape at the level of a test.
+
+        ⚠️ **DPI, `crop_pad` AND `join_digits` ARE NOT WIDENINGS.** They change what the
+        recogniser is SHOWN, not what the matcher will believe, so `onnx@400` is strict and
+        must stay so: it is exactly the kind of layer that must never run after a widening
+        one.
+        """
+        return not (self.relax_totals or self.relax_components or self.relax_split_tail
+                    or self.relax_merged_seam or self.annual_tail or self.cash_extra_terms
+                    or self.condensed_income or self.join_lost_separator
+                    or self.merged_tail or self.column_header_blind
+                    or self.reseat_words or self.equity_wording)
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
 # Filings before Q1-2008 are blocked at the INPUT, so no pre-2008 document is ever opened and
@@ -372,7 +399,17 @@ def parse_key(layer: ParseLayer) -> tuple:
             # `column_header_blind` moves which page is a NOTE, so it changes the PARSE;
             # `merged_tail` is a mapping rule and is deliberately absent, like
             # `relax_merged_seam` and `annual_tail` above it.
-            layer.column_header_blind)
+            layer.column_header_blind,
+            # ⚠️ **`reseat_words` REBUILDS THE ROWS, SO IT IS A PARSE KEY — and leaving it out
+            # cost a run.** It changes which printed line each word belongs to, i.e. exactly
+            # what `table_rows` returns. Omitted, `onnx@300+reseat` collided with
+            # `onnx@300+tail` (identical in every other field) and was served that layer's
+            # CACHED parse: the log said `cached parse, re-map only`, the re-seat never ran,
+            # and CTG's Q3-2014 income statement was reported absent after all 63 layers by a
+            # cascade that had never actually tried the one written for it.
+            # ⚠️ It is deliberately NOT in `ocr_key`: it runs on the words `scan` has already
+            # returned and cannot change a recognised character.
+            layer.reseat_words)
 
 
 def ocr_key(layer: ParseLayer) -> tuple:
@@ -1070,6 +1107,50 @@ class FinancialsBuilder:
                    column_header_blind=True, merged_tail=True),
         ParseLayer("onnx@300+merged+relax", "onnx", 300,
                    column_header_blind=True, merged_tail=True, relax_totals=True),
+        # A FIGURE SEATED ON THE WRONG PRINTED LINE (`reseat_words`) and AN ACCOUNT THE
+        # FILING NAMES UNDER AN OLDER CIRCULAR (`equity_wording`) -- see `PdfParser._reseat`
+        # and `ACCOUNT_WORDING`. Like the block above, both widen what may be FOUND and
+        # nothing about what may be believed: the first moves a figure onto the line whose
+        # baseline it actually shares, the second offers one account a second spelling of
+        # itself, and `reconcile` and `sane` judge the result exactly as before.
+        #
+        # ⚠️ **LAST, AND THE POSITION IS WHAT BOUNDS THEM.** Measured 2026-09-03 over all
+        # **1,173 `pdf` rows on disk**: the latest cascade position any of them was won at is
+        # **56** of 59 -- `onnx@200+merged`, the two CTG rows that block shipped for -- so a
+        # layer at 60 or beyond is unreachable for every row this repo has already written,
+        # the same argument `join_lost_separator` and `merged_tail` each shipped on. What can
+        # reach here is a statement all 59 readings above have refused.
+        #
+        # ⚠️ **`reseat_words` RIDES WITH `label_wrap` AND NEVER SHIPS ALONE — measured, not
+        # argued.** The word it moves is usually the one that was pinning a label continuation
+        # in place, so on CTG's Q3-2014 the reseat ALONE left the X row keyed
+        # `x_chi_phi_du_phong_rui` and the XI row `xi_tong_loi_nhuan_truoc`: 16 mapped items
+        # became 11 and the statement went from a wrong PBT to `no profit before tax`. With
+        # `label_wrap`, `take_below` re-attaches each continuation, the same reading maps 18
+        # and reconciles exactly. §6-2-unvicies drew the rule from the other side -- *when two
+        # new layers differ by a LABEL REPAIR, the repair goes first* -- and here they cannot
+        # even be separated.
+        #
+        # ⚠️ **`equity_wording` TRAVELS WITH `merged_tail`, because the two CTG balance sheets
+        # it was measured on need both**: Q3-2010 prints its grand total across three OCR
+        # lines, so `reconcile` never sees a `resources` figure and falls to
+        # `assets == liabilities + equity` -- which needs the merged-row suffix to find TỔNG
+        # CỘNG TÀI SẢN CÓ *and* the older wording to find VỐN VÀ CÁC QUỸ. Either alone leaves
+        # the quarter refused.
+        ParseLayer("onnx@200+equity", "onnx", 200,
+                   equity_wording=True, column_header_blind=True, merged_tail=True),
+        ParseLayer("onnx@300+equity", "onnx", 300,
+                   equity_wording=True, column_header_blind=True, merged_tail=True),
+        ParseLayer("onnx@200+equity+relax", "onnx", 200,
+                   equity_wording=True, column_header_blind=True, merged_tail=True,
+                   relax_totals=True),
+        ParseLayer("onnx@300+equity+relax", "onnx", 300,
+                   equity_wording=True, column_header_blind=True, merged_tail=True,
+                   relax_totals=True),
+        ParseLayer("onnx@200+reseat", "onnx", 200,
+                   reseat_words=True, label_wrap=True, tail_continuation=True),
+        ParseLayer("onnx@300+reseat", "onnx", 300,
+                   reseat_words=True, label_wrap=True, tail_continuation=True),
     ]
 
     def __init__(self, logger=None):
@@ -1187,6 +1268,7 @@ class FinancialsBuilder:
                 parser.set_label_wrap(layer.label_wrap)
                 parser.set_unit_from_document(layer.unit_from_document)
                 parser.set_column_header_blind(layer.column_header_blind)
+                parser.set_reseat_words(layer.reseat_words)
                 try:
                     # ⚠️ **THE CAPITAL-NOTE SCAN IS REQUESTED ONLY WHILE THE FACTS ARE STILL
                     # OPEN, AND THAT IS THE SAME CONDITION THE BLOCK BELOW READS THEM UNDER.**
@@ -1231,7 +1313,8 @@ class FinancialsBuilder:
                                          relax_split_tail=layer.relax_split_tail,
                                          relax_merged_seam=layer.relax_merged_seam,
                                          annual_tail=layer.annual_tail,
-                                         merged_tail=layer.merged_tail)
+                                         merged_tail=layer.merged_tail,
+                                         equity_wording=layer.equity_wording)
                 # ⚠️ THE SHORT-CIRCUIT IS LOAD-BEARING AND IS PRESERVED EXACTLY: `sane` runs
                 # only when `reconcile` passed, as it always has. What is new is that the
                 # refusal is KEPT rather than discarded — see the report below the loop.
@@ -1822,6 +1905,31 @@ class FinancialsBuilder:
         "taithoidiemdauky": "daunam",
     }
 
+    # ⚠️ **THE SAME ACCOUNT UNDER AN OLDER CIRCULAR, AND THE FILING IS NOT WRONG — WE ARE.**
+    # A bank balance sheet filed on Decision 16/2007/QĐ-NHNN heads its equity subtotal
+    # "VIII. VỐN VÀ CÁC QUỸ"; Circular 49/2014/TT-NHNN renamed the same line "VIII. VỐN CHỦ
+    # SỞ HỮU", which is what the chart of accounts carries. The two share almost no characters
+    # — `vonvacacquy` against `vonchusohuu` scores **0.545**, nowhere near `SCHEMA_MATCH` — so
+    # on a pre-2015 filing the equity line simply does not map, and `reconcile` then falls
+    # through to `Statement.find`, whose needle "von chu so huu" is answered by the FIRST row
+    # merely MENTIONING it. On CTG's Q3-2010 that row is the merged section header
+    # "B. NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU | Các khoản nợ Chính phủ và NHNN", so equity came back
+    # as **36,516,200,435,478 of government debt** against a real 17,174,049,474,868 and the
+    # statement was refused for `assets != liabilities + equity`.
+    #
+    # ⚠️ **KEYED ON THE WHOLE ACCOUNT, NOT ON A SUBSTRING, AND THAT IS THE WHOLE SAFETY
+    # ARGUMENT.** The bank chart carries `vonchusohuu` inside two OTHER accounts —
+    # `no_phai_tra_va_von_chu_so_huu` (the B. section header) and
+    # `tong_no_phai_tra_va_von_chu_so_huu` (the grand total) — and no filing has ever printed
+    # "TỔNG NỢ PHẢI TRẢ VÀ VỐN VÀ CÁC QUỸ". A substring rewrite would invent those two names
+    # and offer the grand total a second way to be taken by a shorter account, which is
+    # `NST-1` exactly. An equality test cannot: `viii_von_chu_so_huu` is the only column in
+    # any of the twelve charts whose account text IS "von chu so huu" and nothing else, on the
+    # bank balance sheet — asserted by `test_cafef_equity_wording.py`.
+    ACCOUNT_WORDING = {
+        "vonchusohuu": ("vonvacacquy",),
+    }
+
     def _prefix_trims(self, key: str):
         """The key, then the key with 1..`MAX_TAIL_TRIM` leading words dropped.
 
@@ -1854,7 +1962,8 @@ class FinancialsBuilder:
     def _label_score(self, account: str, key: str, relax: bool = False,
                      annual_tail: bool = False,
                      edge_containment: bool = False,
-                     cut_fragment: bool = False) -> float:
+                     cut_fragment: bool = False,
+                     equity_wording: bool = False) -> float:
         """How alike a schema account and a parsed row label are, both separator-stripped.
 
         One measure shared by the ordered walk and `_anchor`, so a line is scored the same way
@@ -1875,6 +1984,20 @@ class FinancialsBuilder:
         read at all, so no quarter that already parses is touched.
         """
         from difflib import SequenceMatcher
+
+        if equity_wording:
+            # ⚠️ **EQUALITY, NEVER CONTAINMENT — see `ACCOUNT_WORDING`.** Only an account that
+            # IS this wording is offered the older one; an account that merely contains it
+            # (the "B." section header, the grand total) is left exactly as it was, because no
+            # filing prints those under the old circular either and inventing the name would
+            # hand the grand total a second short account to lose to (`NST-1`).
+            # ⚠️ The alias is scored as an ALTERNATIVE and the result is a `max`, so this can
+            # only ever raise a score. A statement whose equity line already maps is untouched.
+            alts = self.ACCOUNT_WORDING.get(account.replace("_", ""))
+            if alts:
+                return max(self._label_score(a, key, relax, annual_tail,
+                                             edge_containment, cut_fragment)
+                           for a in (account,) + tuple(alts))
 
         if annual_tail:
             # ⚠️ AN ANNUAL REPORT DATES ITS CASH BALANCES BY THE **YEAR** WHERE THE CHART OF
@@ -1965,7 +2088,8 @@ class FinancialsBuilder:
                      relax_split_tail: bool = False,
                      relax_merged_seam: bool = False,
                      annual_tail: bool = False,
-                     merged_tail: bool = False) -> Dict[str, int]:
+                     merged_tail: bool = False,
+                     equity_wording: bool = False) -> Dict[str, int]:
         """Parsed rows -> canonical columns.
 
         This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
@@ -2015,11 +2139,11 @@ class FinancialsBuilder:
         out: Dict[str, int] = {}
         src: Dict[str, int] = {}                # column -> the parsed row that filled it
         for j, ri in self._align([k for _, _, k in rows], accounts, relax_totals,
-                                 annual_tail).items():
+                                 annual_tail, equity_wording).items():
             self._claim(out, src, schema[j][0], rows[ri][0], rows[ri][1])
 
         self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail,
-                     merged_tail)
+                     merged_tail, equity_wording)
         self._split_fx_from_balance(out, src, st, schema)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
@@ -2270,7 +2394,8 @@ class FinancialsBuilder:
     SCHEMA_GAP = 0.001
 
     def _align(self, keys: List[str], accounts: List[str],
-               relax: bool, annual_tail: bool = False) -> Dict[int, int]:
+               relax: bool, annual_tail: bool = False,
+               equity_wording: bool = False) -> Dict[int, int]:
         """Best monotonic alignment of parsed rows onto schema lines -> {schema index: row index}.
 
         The ordered walk this replaces was greedy: each row took the best account still open
@@ -2304,7 +2429,8 @@ class FinancialsBuilder:
                 cand = fi[j - 1] - self.SCHEMA_GAP
                 if cand > best:
                     best, b = cand, 1
-                s = self._label_score(accounts[j - 1], key, relax, annual_tail)
+                s = self._label_score(accounts[j - 1], key, relax, annual_tail,
+                                      equity_wording=equity_wording)
                 if s >= self.SCHEMA_MATCH:
                     cand = fp[j - 1] + s
                     if cand > best:
@@ -2612,7 +2738,8 @@ class FinancialsBuilder:
                 src: Optional[Dict[str, int]] = None,
                 relax_merged_seam: bool = False,
                 annual_tail: bool = False,
-                merged_tail: bool = False) -> None:
+                merged_tail: bool = False,
+                equity_wording: bool = False) -> None:
         """Re-match the subtotals without regard to position.
 
         The ordered walk drifts. Once it has advanced past a column, a row that belongs there
@@ -2659,9 +2786,11 @@ class FinancialsBuilder:
                                        relax_merged_seam).replace("_", "")
                 keys, tails = self._anchor_keys(row, relax_merged_seam, merged_tail)
                 r = max(self._label_score(a, cand, relax, annual_tail,
-                                          edge_containment=True) for cand in keys)
+                                          edge_containment=True,
+                                          equity_wording=equity_wording) for cand in keys)
                 r_cut = max([self._label_score(a, cand, relax, annual_tail,
-                                               edge_containment=True, cut_fragment=True)
+                                               edge_containment=True, cut_fragment=True,
+                                               equity_wording=equity_wording)
                              for cand in tails], default=0.0)
                 from_cut = r_cut > r
                 r = max(r, r_cut)
@@ -2786,7 +2915,9 @@ class FinancialsBuilder:
                     o_keys, _ = self._anchor_keys(st.rows[ri], relax_merged_seam,
                                                   merged_tail)
                     held = max(self._label_score(held_account[other], c, relax, annual_tail,
-                                                 edge_containment=True) for c in o_keys)
+                                                 edge_containment=True,
+                                                 equity_wording=equity_wording)
+                               for c in o_keys)
                     if held > r:
                         continue
             # through _claim, so winning an anchor also RELEASES whatever else this row had

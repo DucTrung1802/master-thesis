@@ -70,6 +70,10 @@ def parser():
 def _rows(parser, on):
     parser.realign_rows = False
     parser.label_wrap = on
+    # This fixture builds the parser with `__new__`, so it carries no instance attributes and
+    # every per-layer flag `table_rows` reads has to be set here. `reseat_words` joined them
+    # on 2026-09-03.
+    parser.reseat_words = False
     return parser.table_rows({0: _tail_page_words()}, COLUMNS)
 
 

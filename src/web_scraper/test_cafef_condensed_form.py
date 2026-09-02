@@ -200,11 +200,11 @@ def test_the_condensed_layer_runs_last():
     layers = FinancialsBuilder.LAYERS
     cond = [i for i, l in enumerate(layers) if l.condensed_income]
     assert cond, "no layer carries condensed_income"
-    strict = [i for i, l in enumerate(layers)
-              if not (l.relax_totals or l.relax_components or l.relax_split_tail
-                      or l.relax_merged_seam or l.condensed_income
-                      or l.join_lost_separator
-                      or l.merged_tail or l.column_header_blind)]
+    # ⚠️ `ParseLayer.is_strict`, not a fifth private copy of the flag list — see its
+    # docstring. Four files kept their own and each had to be edited whenever a widening
+    # block was added; the one that was forgotten would have counted the NEW layers as
+    # strict and moved `max(strict)` past the block it exists to bound.
+    strict = [i for i, l in enumerate(layers) if l.is_strict]
     assert min(cond) > max(strict)
 
 

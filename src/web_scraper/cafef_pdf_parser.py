@@ -437,6 +437,8 @@ class PdfParser:
         self.tail_continuation = False
         # set per PARSE LAYER; see table_rows' carry
         self.label_wrap = False
+        # set per PARSE LAYER; see table_rows' second bucketing pass
+        self.reseat_words = False
         # set per PARSE LAYER; see document_unit
         self.unit_from_document = False
         # set per PARSE LAYER; see COLUMN_HEADER_NS / _page_kind
@@ -556,6 +558,18 @@ class PdfParser:
         of that failure are repaired here; see `table_rows`.
         """
         self.label_wrap = bool(on)
+
+    def set_reseat_words(self, on: bool) -> None:
+        """Re-seat every word on the NEAREST final line bucket, not merely a near one.
+
+        `_line_key` already prefers the nearest bucket -- but only among buckets that ALREADY
+        EXIST, and buckets are opened in the recogniser's emission order, which has nothing to
+        do with the page. So a word whose own line has not been opened yet joins a neighbour
+        it is merely near, and the answer depends on the order the words arrived in.
+
+        A second pass over the FINAL key set removes that dependence. See `table_rows`.
+        """
+        self.reseat_words = bool(on)
 
     def set_column_header_blind(self, on: bool) -> None:
         """Stop the statement TABLE's own column heading from classifying a page as NOTES.
@@ -1827,6 +1841,64 @@ class PdfParser:
         near = [k for k in lines if abs(k - y) <= y_tol]
         return min(near, key=lambda k: abs(k - y)) if near else y
 
+    def _reseat(self, lines: Dict[float, list], offset: float,
+                lo: float) -> Dict[float, list]:
+        """A SECOND bucketing pass: every word goes to the nearest FINAL bucket key.
+
+        ⚠️ **`_line_key` PREFERS THE NEAREST BUCKET, BUT ONLY AMONG THE ONES ALREADY OPEN.**
+        Buckets are opened in the RECOGNISER's emission order, which has nothing to do with
+        the page, so a word whose own line has not been opened yet joins a neighbour it is
+        merely near -- and which line wins then depends on the order the boxes arrived in.
+        `_line_key`'s own docstring already claims the property this restores: *"where one
+        bucket is in tolerance it is also the nearest"*. That is true of the FINAL key set and
+        was not true of the partial one.
+
+        ⚠️ **MEASURED ON CTG's Q3-2014 CONSOLIDATED INCOME STATEMENT.** The label of
+        "X. Chi phí dự phòng rủi ro tín dụng" wraps, and its continuation "ro tín dụng"
+        (y=654.24) is emitted BEFORE the figures of the row it belongs to. The prior-year
+        column at y=650.40 is 3.84pt from that continuation -- inside `Y_TOL` -- and 0.48pt
+        from y=649.92, where the other three columns land a moment later. It joined the
+        continuation, so `X` was written with **796,825,875,834**: the Q3-2013 column, not
+        Q3-2014's **775,245,756,517**. Both figures are real, both are printed on that page,
+        and the wrong one balances against nothing -- IX - X missed the printed XI by
+        21,579,895,652 while the filing's own three columns each close to the đồng.
+
+        ⚠️ **THIS IS NOT THE y-ORDER BUCKETING THAT WAS TRIED AND REJECTED ON 2026-09-01**
+        (see `table_rows`). That change keyed each bucket on its topmost word, so buckets
+        CHAIN and one wrong pairing walks down the page -- it wrote 1,648,126,921 as BSR's
+        post-tax profit. Here the key set is FIXED by the first pass and only membership is
+        revised, so nothing can chain: a word may move to a bucket that already exists and can
+        never create one, merge two, or shift a key.
+
+        ⚠️ **AND IT SHIPS ONLY BESIDE `label_wrap`, never alone -- measured, not argued.** The
+        word this moves is usually the one that was holding a label continuation in place. On
+        CTG Q3-2014 the reseat alone left the X row keyed `x_chi_phi_du_phong_rui` and the XI
+        row `xi_tong_loi_nhuan_truoc`, so BOTH the deduction and the PBT anchor stopped
+        mapping and the statement went from a wrong figure to no figure at all (16 items ->
+        11, `no profit before tax`). With `label_wrap`, `take_below` re-attaches each
+        continuation and the same reading maps 18 items and reconciles. §6-2-unvicies drew
+        this rule from the other side: *when two new layers differ by a LABEL REPAIR, the
+        repair goes first.*
+
+        `offset` and `lo` are `table_rows`' own, so a word's y is measured exactly as the
+        first pass measured it -- a `realign_rows` shift must not be applied twice, and must
+        not be dropped either.
+        """
+        keys = sorted(lines)
+        if len(keys) < 2:
+            return lines
+        out: Dict[float, list] = {k: [] for k in keys}
+        for k in keys:
+            for w in lines[k]:
+                y = w[1] + (offset if (offset and w[2] >= lo
+                                       and self.NUM_RE.match(w[4]) is not None
+                                       and self.parse_num(w[4]) is not None) else 0.0)
+                # Ties keep the bucket the word is already in: this pass exists to remove an
+                # ordering dependence, so it must not introduce one of its own.
+                best = min(keys, key=lambda kk: (abs(kk - y), abs(kk - k)))
+                out[best if abs(best - y) <= self.Y_TOL else k].append(w)
+        return {k: v for k, v in out.items() if v}
+
     def table_rows(self, words_by_page: Dict[int, list], columns: List[float]) -> List[Row]:
         """Rows rebuilt from word coordinates.
 
@@ -1863,6 +1935,9 @@ class PdfParser:
                                        and self.parse_num(w[4]) is not None) else 0.0)
                 k = self._line_key(lines, y, self.Y_TOL)
                 lines.setdefault(k, []).append(w)
+
+            if self.reseat_words:
+                lines = self._reseat(lines, offset, lo)
 
             parsed: List[tuple] = []
             for y in sorted(lines):

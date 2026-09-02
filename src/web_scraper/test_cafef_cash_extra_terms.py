@@ -258,11 +258,11 @@ def test_the_span_layers_run_late_and_relaxed():
     assert extra, "no layer carries cash_extra_terms"
     # contiguous, so the block cannot be interleaved with cheaper layers
     assert extra == list(range(extra[0], extra[-1] + 1)), "the span layers must be contiguous"
-    strict = [i for i, l in enumerate(layers)
-              if not (l.relax_totals or l.relax_components or l.relax_split_tail
-                      or l.relax_merged_seam or l.condensed_income
-                      or l.join_lost_separator
-                      or l.merged_tail or l.column_header_blind)]
+    # ⚠️ `ParseLayer.is_strict`, not a fifth private copy of the flag list — see its
+    # docstring. Four files kept their own and each had to be edited whenever a widening
+    # block was added; the one that was forgotten would have counted the NEW layers as
+    # strict and moved `max(strict)` past the block it exists to bound.
+    strict = [i for i, l in enumerate(layers) if l.is_strict]
     assert extra[0] > max(strict), "a span layer must not run before a strict one"
     for i in extra:
         # the identity only runs under `verify_cash`, which rides with `relax_totals`
