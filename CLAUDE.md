@@ -6984,9 +6984,24 @@ same-day patch.
 
 | | before | after |
 |---|---|---|
-| **CTG** income statement | 63 `pdf` / 70 | **68** — Q4-2019, Q4-2020, Q4-2021, Q4-2023, Q4-2025 recovered, plus 6 spans recorded |
-| **VIC** (Kaggle chunk 1 of 3) | 27 quarters | **30** — Q1/Q2/Q3-2015 in all three statements, plus Q4-2010 and Q1-2012 cash flows |
+| **CTG** income statement | 63 `pdf` / 70 | **68** — Q4-2019, Q4-2020, Q4-2021, Q4-2023, Q4-2025 recovered, plus 6 spans recorded. The ticker is **203 of 210 cells** |
+| **VIC**, all three Kaggle chunks | **27 quarters / 81 cells** | **70 quarters / 163 cells** — balance sheet 23 → **60**, cash flow 25 → **58**, income statement 24 → **45** |
 | TCB | unchanged | ⚠️ its two writable cells (Q3-2012 income + cash flow) are **STANDALONE** filings with an EMPTY `sane` band, and the one cross-filing figure available disagrees with the candidate (603 bn from Q3-2013's comparative against a parent-only 769 bn). **Not written** — an unguarded figure from a different ENTITY is not a coverage win |
+
+**The VIC run, which is what a whole-ticker parse costs on a free T4** — 63 documents, three
+kernels because Kaggle caps a run at 12 h, the onnx-only 53-layer cascade so the readings come
+from the same cascade the ticker's earlier rows did (`TSS-1`):
+
+| chunk | documents | wall clock | accepted | engine errors | written |
+|---|---|---|---|---|---|
+| 1 of 3 | 21 | **3 h 54 m** | 41 of 63 | 0 | 12 |
+| 2 of 3 | 21 | ~1 h | 51 of 63 | 0 | 46 |
+| 3 of 3 | 21 | **1 h 10 m** | 45 of 63 | 0 | 42 |
+
+⚠️ **THE FIRST CHUNK COST 3.5× THE THIRD FOR THE SAME 21 DOCUMENTS**, and the reason is the
+filings, not the machine: chunk 1 is 2008-2015, where a statement that defeats the cascade pays
+all 53 layers, and chunk 3 is 2021-2026, where almost everything accepts at `onnx@200`.
+✅ Total assets are continuous from 6.0 to **1,088 nghìn tỷ** with no step above 1.7×/quarter.
 
 ✅ **Every merge was two-pass, oldest first, and UNFORCED**, and diffed **column by column**
 against its own pre-merge backup: **0 columns lost, 0 periods lost, and no existing figure
@@ -6999,11 +7014,29 @@ across the three new quarters, continuous with what was already there.
 |---|---|---|
 | **CTG** | 7 | 3 balance sheets (the three defects above), 2 cash flows (`no closing cash balance`), Q4-2014 income (its Q3 operand is refused by `P49`'s identity + `SPL-1`), Q4-2024 income (`PYR-1`) |
 | **TCB** | 11, of which **4 are SETTLED** | 2 balance sheets `no total assets` (Q4-2008, Q2-2012), 1 `no total to balance against` (Q3-2012), 1 `assets != L+E` (Q1-2013), **3 cash flows `no closing cash balance`** (Q2-2019, Q3-2019, Q1-2021) |
-| **VIC** | 42 documents still unparsed | Kaggle chunks 2 and 3 of 3 were still running when this was written |
+| **VIC** | 53, of which 1 SETTLED | **27 of them are income statements**, and most name the operand they wait for: a cumulative Q2/Q4 cannot be de-cumulated while its own prior is `missing`, so the income statement lags the other two by design and unblocks in cascade as they land |
 
 ⚠️ **`no closing cash balance` IS FIVE CELLS ACROSS TWO TICKERS AND `no total assets` IS FIVE
-MORE** — those two clusters are 10 of the 14 named cells, so the next piece of work is two
-diagnoses and not fourteen. `absent_rows` now makes both free to look at.
+MORE** — those two clusters are 10 of CTG's and TCB's 22 named cells, so the next piece of work
+is two diagnoses and not twenty-two. `absent_rows` now makes both free to look at.
+
+**Where the seven parsed tickers stand at the end of the day**, `pdf` cells of the quarters
+each one files × three statements:
+
+| | VCB | ACB | BID | **CTG** | TCB | **VIC** | BSR |
+|---|---|---|---|---|---|---|---|
+| `pdf` cells of the CSV | **210/210** | 202/219 | 182/210 | **203/210** | 168/201 | **163/210** | 40/51 |
+| `complete` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
+
+⚠️ **THE DENOMINATOR IS CSV ROWS × 3 AND IT IS NOT THE SAME QUESTION AS `outstanding`** — a CSV
+carries a row for every quarter in its span, INCLUDING quarters the company never filed, which
+are `missing` and correctly so. ACB's 219 is 73 quarters against BID's 70; BSR's 51 holds nine
+cells for three quarters CafeF has no filing for. `outstanding` in the summary notebook divides
+by FILED quarters instead, which is why the two counts never match.
+
+⚠️ **`complete` IS NOT COVERAGE AND THE TWO DISAGREE HERE** — it asks whether the OCR'd chain
+reaches back to where the filing chain STARTS, so CTG reads `False` at 96.7 % of its cells while
+BSR reads `True` at 95.2 %. Read the cell count for coverage and `complete` for continuity.
 
 #### ⚠️ AND `complete` NO LONGER BREAKS ON A CELL THAT IS MEASURED UNPRODUCIBLE
 
@@ -7161,7 +7194,7 @@ what a session budgets against.
 |---|---|---|
 | [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | **47.5k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER" — screens, `filter_schema`, and why a screen is not point-in-time) |
 | [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | **26.1k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
-| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **50.4k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
+| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **51.4k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
 | [src/feature_selection/docs/RANKER_COMPARISON.md](src/feature_selection/docs/RANKER_COMPARISON.md) | **4.5k** | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
 | [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | **6.8k** | building or rebuilding a `__final__` table |
@@ -7176,7 +7209,7 @@ what a session budgets against.
 | [experiment/CONTEXT.md](experiment/CONTEXT.md) | **9.2k** | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
 | [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | **44.0k** | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
-⚠️ **[ISSUES.md](docs/ISSUES.md) (~29.1k) is the second file to open, not an afterthought.**
+⚠️ **[ISSUES.md](docs/ISSUES.md) (~30.9k) is the second file to open, not an afterthought.**
 **59** open issues — ⚠️ *(this line read "55" and "51" earlier on 2026-09-02, "48" earlier on 2026-09-01, "42" and "40" earlier on 2026-08-30, "34" and "28" earlier on 2026-08-29, "22" until 2026-08-28 and "(~4k)"/"Sixteen" until
 2026-08-25; a stale count is what a session budgets against)*. ⚠️ **CFB-1 IS THE ONE TO READ
 BEFORE QUOTING A BID FUNDAMENTAL** (opened 2026-08-28): a cash-flow anchor can hold the wrong

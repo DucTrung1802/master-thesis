@@ -2476,6 +2476,72 @@ rehearse `READY` at `cascade: 55 layers`, and the LOCAL default path re-parsed V
 on disk: it closes a PROVENANCE gap, and it also lets a worker win on the layer that invented a
 leading digit above. CLAUDE.md §6-2-unquinquagies.
 
+### ⚠️ 3h. A WHOLE TICKER IN ONE GO — `pdf_ocr_batch.py`, one process per filing (2026-09-02)
+
+`pdf_ocr_job.run()` parses every planned filing **in one process**, which is right for a repair
+of one quarter and is what dies on a 70-document ticker. `web_scraper/pdf_ocr_batch.py` is the
+driver the control notebook's LOCAL path now calls when `ISOLATE_DOCUMENTS` is on, and
+`QUARTERS = "ALL"` is the mode it exists for.
+
+| | |
+|---|---|
+| `plan_batch(tickers)` | what each ticker still owes — `job.plan` + `parsed_reports` + `settled_absences` + `span_operands`, no second rule |
+| `run_batch(plans)` | one SUBPROCESS per document, a `wait_for_vram` floor before each, a retry when layers raise, and one run folder per document |
+| `merge_batch(folders)` | the upsert, **one period per call, oldest first, UNFORCED** |
+
+#### ⚠️ WHY A SUBPROCESS, AND WHY IT IS NOT A DIFFERENT PROCEDURE
+
+Measured 2026-09-02 on the RTX 3050: an 18-document CTG run inside one process cleared three
+filings and then **every `onnx@*` layer raised `CUDA failure 2: out of memory` — 294 of them**.
+The cascade went on, the layers behind the raised one re-mapped an EMPTY cached parse, and the
+run recorded *"no such statement on any page of this filing"* for statements it had simply been
+unable to read (`GPU-1`, and `SET-1` for what that then did to the settled record). The growth
+is inside the process — the onnxruntime arena and torch's allocator both grow with the largest
+page seen — and `torch.cuda.empty_cache()` returns only torch's half.
+
+Two properties make splitting the run **semantically identical**, and both are load-bearing:
+
+* `seed_history` rebuilds `sane`'s band from the `pdf` rows **on disk** and re-seeds per
+  document. A run does not accumulate its own band — that is `build()`, and `BND-1` records the
+  difference — so no gate's verdict can move.
+* `PdfParser._ocr_cache` is keyed on the pdf path and cleared when it changes, so the page cache
+  never spanned two filings anyway.
+
+The cost is model load, ~10-20 s per document.
+
+#### ⚠️ A PRE-FLIGHT VRAM FLOOR IS NOT ENOUGH, AND THE RETRY IS WHY
+
+CTG Q1-2009 started with **3,303 MiB free** and still raised on 4 of its 53 layers, at
+`onnx@200+pad6+components` and `onnx@400+loose`. **The spike is inside the document and no check
+before it can see one.** So a document whose layers raised is retried with a smaller
+`CAFEF_ONNX_REC_BATCH` — and that lever was chosen because it is the only one that changes
+nothing about what is read:
+
+| measured 2026-09-02 | |
+|---|---|
+| CTG Q3-2019 at `REC_BATCH` **64 vs 12** | same winning layer, **IDENTICAL `rows_sha` on all three statements** (b167ec214dfb / b0b45f6c0831 / d59f7eb9b00b) — every row the OCR read, mapped or not |
+| CTG Q1-2009 at **12** | **0 engine errors**, same accepted statement at the same layer |
+| `float16`, a smaller `DET_SIDE_LEN` | both change what is read, so neither may be a retry |
+
+`_BatchedVietOcr` buckets crops by EXACT width before it chunks them (§3c), so a smaller chunk
+is the same decode on fewer images; that is what makes the equality above structural rather than
+lucky. ⚠️ **The retry fires on an ENGINE ERROR and never on a refusal** — a refusal is a
+measurement of the filing, and repeating it returns the same answer at the same cost.
+
+#### ⚠️ THE MERGE ORDER IS THE OTHER HALF
+
+`merge_run` plans a folder against disk and writes afterwards, so the `months` span a Q3 records
+reaches Q4's planner only in the NEXT call. That is `SPN-1`'s dependency, and a batch that
+re-parsed a span operand and the Q4 it unblocks gets both **only** as separate calls in calendar
+order — which a batch folder's timestamp is not. One backup per TICKER, taken by the first call
+that actually writes.
+
+**11 tests**, no PDF, no network, no engine. ⚠️ One of them caught a defect in its own suite:
+`merge_batch` does `from web_scraper import pdf_ocr_merge`, which reads the package ATTRIBUTE
+once any earlier test has imported the real module — so a stub placed in `sys.modules` passes
+when the file runs alone and is **ignored in the full suite**. Patch the module's functions, not
+`sys.modules`. CLAUDE.md §6-2-sexquinquagies.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):
