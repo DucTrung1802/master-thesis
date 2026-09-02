@@ -271,3 +271,5 @@ experiment/experiment_10/_cache/
 !results/**/per_fold.csv
 
 reports/pdf_ocr/
+# the advisory OCR device lock (`pdf_ocr_job.gpu_lock`) — a live pid, never a result
+reports/pdf_ocr/.pdf_ocr.lock

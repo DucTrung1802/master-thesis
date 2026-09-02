@@ -1080,6 +1080,13 @@ class FinancialsBuilder:
         # the parser (`PdfParser._ocr_cache`); this is only so the progress hook can say
         # whether a layer is about to pay for one. See `ocr_key`.
         ocr_done: set = set()
+        # The order parse keys were first built in, and the layer that built each — so an
+        # ABSENT statement can be dumped from the EARLIEST reading of it rather than the most
+        # relaxed one. `parsed` is a dict and insertion order would say the same thing; these
+        # say it explicitly, because relying on that is relying on a language guarantee for a
+        # decision about evidence.
+        parse_order: List[str] = []
+        layer_of_key: Dict[str, str] = {}
         for layer_index, layer in enumerate(self.LAYERS, start=1):
             if len(accepted) == len(REPORTS):
                 break
@@ -1125,6 +1132,8 @@ class FinancialsBuilder:
                     self.layer_errors.append((layer.name, f"{type(e).__name__}: {e}"))
                     parsed[key] = {}
                 ocr_done.add(ocr_key(layer))
+                parse_order.append(key)
+                layer_of_key[key] = layer.name
             statements = parsed[key]
 
             if not facts["publish_date"]:
@@ -1182,6 +1191,37 @@ class FinancialsBuilder:
         # Distinct reasons only, each attributed to the FIRST layer that gave it: 21 layers
         # usually fail the same two or three ways, and printing all 21 buries the one that
         # matters. This is pure reporting — no gate, no threshold and no ordering changes.
+        # ⚠️ **AND THE ROWS THE REFUSED STATEMENT WAS BUILT FROM — added 2026-09-02.** The
+        # reason alone names the SYMPTOM (`no total assets`) and never the CAUSE, which is
+        # always a label: what the filing prints where the chart of accounts expects an
+        # anchor. Recovering that used to need another OCR run — three CTG balance sheets all
+        # refused `no total assets` on 2026-09-02 and diagnosing them meant re-reading a
+        # 39-page scan the run had already read. This is §6-2-tricies' lesson one stage over
+        # (*the parser computed the rows and the artefact threw them away*), and the same
+        # argument `row_dump` was added for on the ACCEPTED side: ~10 KB against minutes.
+        # ⚠️ **THE FIRST LAYER THAT PRODUCED THE STATEMENT AT ALL, NOT THE LAST.** The last is
+        # always the most relaxed one, and its rows answer a question nobody asked — the same
+        # trap §6-2-duovicies records for the refusal REASON.
+        self.absent_rows = {}
+        for report in REPORTS:
+            if report in accepted:
+                continue
+            for key in parse_order:
+                st = parsed.get(key, {}).get(report)
+                # ⚠️ `getattr`, not `st.rows`: this is REPORTING and must never be the thing
+                # that ends a parse. A statement object without rows contributes no dump and
+                # no exception.
+                rows = getattr(st, "rows", None)
+                if st is None or rows is None:
+                    continue
+                self.absent_rows[report] = {
+                    "layer": layer_of_key.get(key, ""),
+                    "pages": list(getattr(st, "pages", []) or []),
+                    "rows": [{"key": r.key, "label": r.label, "values": list(r.values)[:3]}
+                             for r in rows],
+                }
+                break
+
         for report in REPORTS:
             if report in accepted or report not in refused:
                 continue

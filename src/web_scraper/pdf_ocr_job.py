@@ -120,6 +120,7 @@ from __future__ import annotations
 
 # ===== Standard Library =====
 import argparse
+import contextlib
 import csv
 import json
 import os
@@ -995,6 +996,12 @@ class DocumentResult:
     # `missing` permanent and correct (§5 rule 24) and every re-run of it waste. Kept as DATA
     # rather than left in the prose of `log`, so a reader does not have to match a sentence.
     absent_reasons: Dict[str, List[tuple]] = field(default_factory=dict)
+    # ⚠️ **THE ROWS BEHIND AN ABSENT STATEMENT — the CAUSE, where `absent_reasons` is the
+    # SYMPTOM.** `no total assets` names a missing anchor and never the label that is there
+    # instead, so diagnosing one costs a second OCR run of a scan this run already read. The
+    # dump is the EARLIEST reading of the statement, not the most relaxed one, and it is only
+    # written for reports that ended up absent. `row_dump` does the same on the accepted side.
+    absent_rows: Dict[str, dict] = field(default_factory=dict)
 
     def to_json(self) -> dict:
         return {
@@ -1010,6 +1017,7 @@ class DocumentResult:
             "accepted": self.accepted,
             "absent": self.absent,
             "engine_errors": [list(e) for e in self.engine_errors],
+            "absent_rows": self.absent_rows,
             "absent_reasons": {r: [list(x) for x in v]
                                for r, v in self.absent_reasons.items()},
             "facts": self.facts,
@@ -1070,6 +1078,7 @@ def run_document(builder: FinancialsBuilder, task: DocumentTask,
     # decision downstream ("was this parse decided by a broken tool?") must not depend on
     # matching a sentence.
     result.engine_errors = list(getattr(builder, "layer_errors", []))
+    result.absent_rows = dict(getattr(builder, "absent_rows", {}) or {})
     # ⚠️ Collapsed exactly as `_parse_cascaded` prints it — DISTINCT reasons only, each
     # attributed to the FIRST layer that gave it. 50 layers usually refuse the same two or
     # three ways, and an artefact carrying all 50 buries the one that matters. Only the
@@ -1444,16 +1453,80 @@ def settled_absences(reports_root: os.PathLike, exchange: str, symbol: str,
                 data = json.loads(doc.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
+            # ⚠️ **A DOCUMENT WHOSE LAYERS RAISED SETTLES NOTHING — measured 2026-09-02.**
+            # When a layer raises, the cascade goes on and the layers behind it re-map an
+            # EMPTY cached parse, which has no pages, which is reported as *"no such statement
+            # on any page of this filing"*. So a machine failure writes itself into the record
+            # as a fact about the FILING, and eleven CTG documents were marked permanently
+            # unproducible by one run that had simply exhausted the GPU. `pdf_ocr_merge`
+            # already refuses such a document whole for exactly this reason (`VCR-1`): an
+            # exception measures the MACHINE, not the filing.
+            if data.get("engine_errors"):
+                continue
             # ⚠️ `.get` with no default-to-guess: a run that recorded no reasons says nothing,
             # and must not be read as "nothing was permanently absent".
             for report, tried in (data.get("absent_reasons") or {}).items():
-                if any(why == fin.NO_SUCH_STATEMENT for _layer, why in tried):
+                # ⚠️ **EVERY recorded reason, not ANY of them — fixed 2026-09-02.** The
+                # cascade records DISTINCT reasons, one per kind, attributed to the first
+                # layer that gave it, so a report whose list holds a second reason is a
+                # report SOME layer found on a page and then refused on its arithmetic. That
+                # is a parse failure a later change can still win, and reading it as "the
+                # filing contains no such statement" retires a winnable cell forever — the
+                # opposite of the loop this function exists to stop. Measured on the state of
+                # 2026-09-02: CTG Q1-2009's balance sheet (`onnx@200` reconciled it as far as
+                # `no total assets`) and CTG Q1-2014's cash flow (`no closing cash balance`)
+                # were both being reported SETTLED on the strength of one later, differently
+                # cropped layer that failed to classify the page at all.
+                if tried and all(why == fin.NO_SUCH_STATEMENT for _layer, why in tried):
                     try:
                         quarter = as_quarter(data.get("period", ""))
                     except Exception:  # noqa: BLE001 — an unreadable period names no quarter
                         continue
                     settled.setdefault(quarter, {})[report] = folder.name
     return settled
+
+
+def span_operands(builder: FinancialsBuilder, exchange: str, symbol: str, template: str,
+                  quarters: Sequence[str]) -> List[str]:
+    """The EXTRA quarters that must be re-parsed before those in `quarters` can be written.
+
+    ⚠️ **A CUMULATIVE Q4 IS BLOCKED BY A BLANK COLUMN IN ANOTHER ROW, AND NOTHING SAYS SO.**
+    A Q4 income statement is the YEAR; the standalone quarter is `FY - (Q1+Q2+Q3)`, and
+    `pdf_ocr_merge._quarter_priors` will only subtract a prior whose span is a KNOWN three
+    months — `months == 3` on the row, or Q1, which is three months by construction. Most of
+    the corpus predates that column, so its priors read `unrecorded`, and **a blank is not 3**
+    (§5 rule 2 at the column: subtracting a six-month row from a twelve-month one yields a
+    number that is neither, and nothing downstream could tell).
+
+    ⚠️ **THE COST OF NOT DOING THIS IS MEASURED.** On 2026-09-02 CTG carried SEVEN Q4 income
+    statements whose parse was fine and which no re-run of the Q4 alone could ever write —
+    Q3-2014, Q3-2019, Q3-2020, Q3-2021, Q3-2023, Q2-2024 and Q3-2024 each held a blank
+    `months`. Re-parsing a prior moves NO figure: an unchanged reading goes through the
+    merge's `fills_span` branch, which writes the span and nothing else.
+
+    ⚠️ **A PRIOR THAT IS NOT A `pdf` ROW IS NOT RETURNED.** Either it is outstanding in its own
+    right — in which case the caller already has it — or the company never filed it, and no
+    re-parse of this ticker changes that.
+
+    Quarters go in and come out as the sortable `YYYY-QQ` that `QUARTERS` is written in.
+    """
+    on_disk = builder._existing(exchange, symbol, template, fin.INCOME_STATEMENT)
+    want = {normalise_quarter(q) for q in quarters}
+    extra: Dict[str, str] = {}
+    for quarter in sorted(want):
+        year, index = int(quarter[:4]), int(quarter[-1])
+        # ⚠️ FROM 2, NOT FROM 1. Q1's year-to-date IS the quarter, so `_quarter_priors` exempts
+        # it and re-parsing it would buy nothing.
+        for i in range(2, index):
+            prior = f"{year}-Q{i}"
+            if prior in want or prior in extra:
+                continue
+            row = on_disk.get(f"Q{i}-{year}")
+            if not row or row.get("source") != "pdf":
+                continue
+            if str(row.get("months", "")).strip() != "3":
+                extra[prior] = quarter
+    return sorted(extra)
 
 
 def _name(path: Optional[str]) -> str:
@@ -1492,7 +1565,104 @@ def _upsert_period(folder: Path, task: DocumentTask, *, overwrite: bool,
     return result
 
 
+def _pid_alive(pid: int) -> bool:
+    try:
+        import psutil
+
+        return psutil.pid_exists(pid)
+    except ImportError:
+        return True   # ⚠️ cannot tell -> assume alive, i.e. refuse rather than clobber
+
+
+@contextlib.contextmanager
+def gpu_lock(label: str = "", out_root: Optional[os.PathLike] = None):
+    """Exclusive claim on the OCR device, for the length of one run.
+
+    ⚠️ **THIS EXISTS BECAUSE TWO CONCURRENT RUNS SHARE ONE 4 GiB CARD AND THE LOSER IS
+    SILENT** — measured twice, and the second time it cost a 2-hour CTG run. Three control
+    notebooks were started within minutes of each other on 2026-09-02; the third ran out of
+    VRAM, so **every `onnx@*` layer RAISED with `CUDA failure 2: out of memory`** (85 of
+    them in one log) and the cascade did what a cascade does: it went on, and
+    `tesseract@200` — layer 4 of 55 — won documents that have read `onnx@200` for as long as
+    they have been parsed.
+
+    ⚠️ **THE RUN FINISHED GREEN.** `summary.csv` reported `pdf` with a real layer and a real
+    item count for 30 of 33 statements. The only thing that stopped those readings reaching
+    disk was `VCR-1`'s guard in `pdf_ocr_merge` — *a layer that RAISED measures the MACHINE,
+    not the filing, so whatever won did so by default* — which refused every affected
+    document. That guard is the last line, not the first; this is the first.
+
+    ⚠️ It claims the DEVICE, so it is one lock for the machine and not one per ticker: two
+    tickers are exactly the case that went wrong. A CPU-only run takes it too — the page
+    cache and the host RAM are shared the same way, and a lock a run can opt out of is a
+    lock the next hurried session opts out of.
+
+    ⚠️ **THE LOCK FILE LIVES IN THE RUN'S OWN `out_root`, AND THAT IS THE ONE HOLE.** Two runs
+    contend only when they write to the same root — which every real run does, because
+    `DEFAULT_OUT_ROOT` is the only root a person passes. A test harness pointing `--out` at a
+    temp directory therefore does not contend with a live parse, which is what makes the suite
+    runnable while one is going; a deliberate `--out` elsewhere escapes the guard, and that is
+    stated rather than hidden.
+
+    Advisory and self-healing: a lock whose pid is dead is taken over, or a killed run would
+    block every later one. Set `CAFEF_OCR_NO_LOCK=1` to bypass it deliberately.
+    """
+    if os.environ.get("CAFEF_OCR_NO_LOCK"):
+        yield None
+        return
+    path = Path(out_root or DEFAULT_OUT_ROOT) / ".pdf_ocr.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        try:
+            held = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            held = {}
+        pid = int(held.get("pid", -1))
+        # ⚠️ Our OWN pid is refused too. There is no legitimate re-entry: two parses inside
+        # one process contend for the same VRAM exactly as two processes do.
+        if pid > 0 and _pid_alive(pid):
+            raise RuntimeError(
+                f"another PDF-OCR run (pid {pid}, {held.get('label')}, started "
+                f"{held.get('started')}) holds the OCR device. Two runs share one GPU and "
+                f"the loser's onnx layers RAISE with CUDA out of memory — see `gpu_lock`. "
+                f"Wait for it, or kill it and delete {path}.")
+        print(f"⚠️ taking over a stale OCR lock from dead pid {pid} ({path})")
+        path.unlink(missing_ok=True)
+
+    # ⚠️ `O_CREAT | O_EXCL`, not `open(path, "w")` — the check above and the create are
+    # otherwise two steps, and two runs launched in the same second would both pass the
+    # check and both claim the lock. One atomic step at the filesystem.
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise RuntimeError(
+            f"another PDF-OCR run claimed {path} between the check and the create. "
+            f"Two runs started in the same instant; run one.") from None
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump({"pid": os.getpid(), "label": label,
+                   "started": time.strftime("%Y-%m-%dT%H:%M:%S")}, handle)
+    try:
+        yield path
+    finally:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:                        # a lock we cannot remove is not worth raising
+            pass
+
+
 def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
+    """Parse every planned filing, under an exclusive claim on the OCR device.
+
+    ⚠️ **THE LOCK IS THE WHOLE OF THIS WRAPPER, AND IT IS NOT A FORMALITY** — `gpu_lock`
+    carries the measurement. A second concurrent run does not fail; it runs its onnx layers
+    into `CUDA failure 2: out of memory`, falls through to `tesseract@200`, and reports
+    `pdf` for statements no onnx layer ever read.
+    """
+    with gpu_lock(f"{spec.exchange}_{spec.symbol}", spec.out_root):
+        return _run_locked(spec, git_commit)
+
+
+def _run_locked(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
     """Parse every planned filing, writing each document's JSON AS IT FINISHES.
 
     ⚠️ **ONE FILE PER DOCUMENT, WRITTEN BEFORE THE NEXT ONE STARTS** — §5 rule 20. This stage
@@ -1613,6 +1783,25 @@ def run(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
                     "verdict": payload.get("compare", {}).get(report, {}).get("verdict", ""),
                     "seconds": round(result.seconds, 2),
                 })
+            # ⚠️ **RELEASE THE DEVICE'S CACHED BLOCKS BETWEEN DOCUMENTS — a 4 GiB card runs
+            # out otherwise, and it does so SILENTLY.** Measured 2026-09-02: an 18-document
+            # CTG run in one process cleared three filings and then every `onnx@*` layer
+            # raised `CUDA failure 2: out of memory`; the cascade went on, the layers behind
+            # re-mapped an EMPTY cached parse, and the run recorded *"no such statement on any
+            # page of this filing"* — a machine failure written down as a fact about the
+            # FILING, which `settled_absences` then read as permanent.
+            # ⚠️ **THIS IS A MITIGATION AND NOT A FIX.** It returns torch's cached blocks and
+            # nothing of onnxruntime's own arena, so a long run on a small card should still
+            # be driven ONE DOCUMENT PER PROCESS. What makes an OOM survivable is the pair of
+            # guards, not this: `pdf_ocr_merge` refuses a document whose layers RAISED, and
+            # `settled_absences` skips it too.
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:  # noqa: BLE001 — a cache we cannot free is not worth raising
+                pass
             log.document_done(index)
             log.stage("accepted")
             log.line(task.period + ": "

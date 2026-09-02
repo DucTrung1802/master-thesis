@@ -83,7 +83,19 @@ MIN_SCORE = 0.25            # drop recognitions below this confidence (scan spec
 # badly the crops could be regrouped. Bucketed first, a chunk IS one batch. 64 rather than
 # larger because a page carries ~68 crops over ~44 widths: past that the chunk stops binding
 # and only the VRAM grows.
-REC_BATCH = 64
+# ⚠️ **HOW MANY CROPS THE RECOGNISER DECODES AT ONCE — AND IT IS THE ONE VRAM LEVER THAT DOES
+# NOT CHANGE THE OUTPUT.** `_BatchedVietOcr` buckets crops by EXACT width before it chunks them
+# (§6-2-duoquadragies: bucketing first is 1.11-1.22x faster with 0 of 542 crops changed, while
+# PADDING to a common width is 2x faster and changes 70), so every chunk already shares one
+# width and a smaller chunk is the same decode on fewer images. Lowering it costs speed and
+# nothing else — which is what makes it the right knob when a 4 GiB card is short (`GPU-1`),
+# where the alternatives (float16, a smaller `DET_SIDE_LEN`) change what is read.
+# ✅ **MEASURED, NOT ARGUED (2026-09-02).** CTG Q3-2019 parsed at 64 and at 12 gives the same
+# winning layer and the **IDENTICAL `rows_sha` on all three statements** — b167ec214dfb,
+# b0b45f6c0831, d59f7eb9b00b — i.e. every row the OCR read, mapped or not. And on CTG Q1-2009,
+# the one filing that OOMed 4 of its 53 layers with 3,303 MiB free, `REC_BATCH=12` returned
+# **0 engine errors** with the same accepted statement at the same layer.
+REC_BATCH = int(os.environ.get("CAFEF_ONNX_REC_BATCH", "64"))
 
 # Margin added around each detected box BEFORE recognition, in pdf points (scaled to pixels at
 # the render DPI). The detector returns a box hugging the glyphs, and VietOCR misreads a crop
