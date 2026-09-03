@@ -2519,7 +2519,8 @@ leading digit above. CLAUDE.md §6-2-unquinquagies.
 `pdf_ocr_job.run()` parses every planned filing **in one process**, which is right for a repair
 of one quarter and is what dies on a 70-document ticker. `web_scraper/pdf_ocr_batch.py` is the
 driver the control notebook's LOCAL path now calls when `ISOLATE_DOCUMENTS` is on, and
-`QUARTERS = "ALL"` is the mode it exists for.
+an empty `QUARTERS` — every quarter the ticker files, the string `"ALL"` until 2026-09-03 —
+is the mode it exists for.
 
 | | |
 |---|---|

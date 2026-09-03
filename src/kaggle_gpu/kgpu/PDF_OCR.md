@@ -56,7 +56,7 @@ jupyter lab src\kaggle_gpu\RUN__pdf_ocr_control.ipynb
 Edit **1 · Parameters**, run everything. That is the whole procedure, and
 `ENVIRONMENT` is the only thing that decides which machine does the OCR.
 ⚠️ **Run it TOP TO BOTTOM**: §2 drops this repo's modules from `sys.modules` so a long-lived
-kernel cannot execute a previous commit's parser, and **§3 is where `QUARTERS = "OUTSTANDING"`
+kernel cannot execute a previous commit's parser, and **§3 is where an EMPTY `QUARTERS`
 resolves** — the plan in §4 reads what §3 produced.
 
 ```python
@@ -114,18 +114,27 @@ success.
 |---|---|
 | one quarter | `QUARTERS = ["2014-Q3"]` — or `["2014-03"]`, the same quarter |
 | a batch, in any order | `QUARTERS = ["2013-Q4", "2014-Q1"]` |
-| the repo-native form | `PERIODS = ["Q3-2014"]`, `QUARTERS = None` |
+| the repo-native form | `PERIODS = ["Q3-2014"]`, `QUARTERS = []` |
 | one quarter, stated twice | `QUARTERS = ["2014-Q3"]` **and** `PERIODS = ["Q3-2014"]` → Q3-2014 |
 | **everything** ⚠️ | `QUARTERS = []` — 70+ documents, hours of GPU |
-| **exactly the gaps** ⭐ | `QUARTERS = "OUTSTANDING"` — see below |
+| **exactly the gaps** ⭐ | `QUARTERS = []` **and** `ONLY_MISSING = True` — see below |
 
-⚠️ **AN EMPTY LIST MEANS EVERY QUARTER, NEVER NONE.** `[]` and `None` build the identical job.
-That is `plan()`'s contract, and it is why the default is the *absence* of a filter rather than
-a list anything recomputes.
+⚠️ **AN EMPTY LIST MEANS EVERY QUARTER, NEVER NONE.** `[]` and `None` build the identical job
+inside `plan()`. That is its contract, and it is why the default is the *absence* of a filter
+rather than a list anything recomputes.
 
-### ⭐ `QUARTERS = "OUTSTANDING"` — the gaps, resolved from disk (2026-09-02)
+⚠️ **AND `QUARTERS` IS A LIST AND NOTHING ELSE SINCE 2026-09-03.** The control notebooks took
+the strings `"ALL"` and `"OUTSTANDING"` beside the list until then; both are REFUSED now, by one
+`TypeError` covering a string, a `None` and anything else that is not a list. **`"ALL"` is `[]`,
+and `"OUTSTANDING"` is `ONLY_MISSING = True`.** Two types in one parameter had cost three
+readings that each reported the wrong mistake: `QUARTERS = ""` is a FALSY string, so it fell
+past the sentinel test and opened every quarter SILENTLY; `"  "` fell the same way and then
+raised about the quarter FORM; and a bare `"2014-Q4"` with the brackets forgotten raised about
+the MODE.
 
-The third form. §3 reads the three statement CSVs and the PDF index, prints every
+### ⭐ `ONLY_MISSING = True` — the gaps, resolved from disk (2026-09-02)
+
+Read only when `QUARTERS` is empty. §3 reads the three statement CSVs and the PDF index, prints every
 `(quarter, statement)` cell this ticker is still missing, and fills `QUARTERS` with the quarters
 that have at least one cell a re-run could still WIN — dropping the ones already measured
 permanently absent.
@@ -457,9 +466,17 @@ and free; only `data`/`run` upload. CLAUDE.md §6-2-sextricies.
 Sections 4 and 6 are about ONE run. The question they cannot answer is the planning one:
 **which quarters are left, on every ticker that has ever been parsed?**
 
-⚠️ **FOR ONE TICKER, THE CONTROL NOTEBOOK'S §3 ANSWERS IT AND `QUARTERS = "OUTSTANDING"` ACTS ON
+⚠️ **FOR ONE TICKER, THE CONTROL NOTEBOOK'S §3 ANSWERS IT AND `ONLY_MISSING = True` ACTS ON
 IT** ([§2](#2-choosing-the-filings)). This one is the cross-ticker view: it ranks tickers, it does
 not name a cell, and it is where you decide WHICH ticker to open next.
+
+⚠️ **AND A PER-TICKER COPY OF THE CONTROL NOTEBOOK IS DELETED WHEN THIS TABLE SAYS THE TICKER IS
+DONE.** `RUN__pdf_ocr_control_<ticker>.ipynb` exists only while a ticker is being finished;
+keeping a finished one is how a session spends hours re-parsing a ticker with nothing left to
+win. `RUN__pdf_ocr_control_ctg.ipynb` went on 2026-09-03, at `complete = True` with **0
+outstanding cells** on all three statements. ⚠️ **`complete` ALONE IS NOT THE TEST** — it measures
+continuity from the START of the filing chain, so ACB, BID and BSR read `True` today with 5, 7
+and 2 cells still open. **Read `outstanding` beside it**, and delete only on both.
 
 ```powershell
 jupyter lab src\kaggle_gpu\RUN__pdf_ocr_summary.ipynb    # read-only: no OCR, no network, no write

@@ -6861,7 +6861,8 @@ quarters forever.
 
 #### ✅ AND THE WHOLE-TICKER RUN IS NOW A SUPPORTED MODE — `pdf_ocr_batch`, one process per filing
 
-`QUARTERS = "ALL"` in the control notebook opens **every quarter a ticker files** — 70 documents
+`QUARTERS = []` in the control notebook (the string `"ALL"` until 2026-09-03) opens
+**every quarter a ticker files** — 70 documents
 for CTG, ~4,500 pages — and that is the mode the goal *"OCR the whole ticker into the CSVs"*
 needs. It is possible on this card only because the LOCAL path now goes through
 `web_scraper/pdf_ocr_batch.py`: a fresh process per filing, a `wait_for_vram` floor before each,
@@ -6930,7 +6931,8 @@ reading goes through the merge's `fills_span` branch, which writes the span and 
 — so the repair was mechanical and simply invisible.
 
 ✅ **`pdf_ocr_job.span_operands()`** computes the operand set from disk, and the control
-notebook adds it to `QUARTERS = "OUTSTANDING"` under `SPAN_OPERANDS`. It reproduced the seven
+notebook adds it to the outstanding set — `QUARTERS = []` with `ONLY_MISSING = True`, the
+string `"OUTSTANDING"` until 2026-09-03 — under `SPAN_OPERANDS`. It reproduced the seven
 by hand-derivation exactly. ⚠️ It requires `OVERWRITE = True`, because an operand is by
 definition a quarter already reading `pdf` — and the notebook now REFUSES `OVERWRITE` together
 with `MERGE_INTO_CSV`, since that pair carries `force_differs` into an automatic merge.
@@ -7527,6 +7529,34 @@ which is a deduction column.
    template is resolved over the network.
 
 **938 tests pass across `src/`**, 28 of them new, none needing a PDF, a network or an OCR engine.
+
+✅ **AND THE FOUR OCR CONTROL NOTEBOOKS TOOK ONE PARAMETER SHAPE, 2026-09-03.** `QUARTERS` is a
+LIST and nothing else — `[]` is every quarter the ticker files, `["2014-Q4"]` (or the zero-padded
+`["2014-04"]`) is exactly those — and the two string sentinels are gone: **`"ALL"` is `[]`, and
+`"OUTSTANDING"` is the boolean `ONLY_MISSING`.** ⚠️ **TWO TYPES IN ONE PARAMETER HAD COST THREE
+READINGS THAT EACH REPORTED THE WRONG MISTAKE**, and all three are measured on the code as it
+stood: `QUARTERS = ""` is a FALSY string, so it fell past the sentinel test into
+`canonical_quarters`, which reads empty as `None` — it opened EVERY quarter **silently** and
+printed "ALL"; `"  "` fell the same way and then had `canonical_quarters` iterate the string
+CHARACTER BY CHARACTER, raising `' ' is not a quarter`, an error about the quarter FORM for a
+mistake in the MODE; and a bare `"2014-Q4"` with the brackets forgotten raised `must be "ALL" or
+"OUTSTANDING"`, an error about the MODE for a mistake in the LIST. One `TypeError` covers all of
+them now. ✅ **Verified by DRIVING cells 2/4/6 of the old and the new notebook against the real
+disk** — 4 notebooks × 4 cases (explicit `YYYY-QQ`, explicit zero-padded, every filed quarter,
+only-what-is-missing), **identical resolved quarter lists and identical printed lines in all
+16**, including the two that RAISE. Cells 4 and 6, which carry the whole contract, are
+**byte-identical across the four notebooks**; only the per-ticker cell 2 differs.
+
+⚠️ **AND `RUN__pdf_ocr_control_ctg.ipynb` IS DELETED — a per-ticker notebook lives only while
+its ticker is being finished.** `RUN__pdf_ocr_summary.ipynb` reads CTG `complete = True` with
+**0 outstanding cells and coverage 1.000 on all three statements**; carrying the notebook on
+would be an invitation to spend ~70 filings and hours re-parsing a ticker with nothing left to
+win. TCB (**15 open cells, 11 winnable**) and VIC (**53, 52 winnable**) keep theirs.
+⚠️ **`complete` ALONE IS NOT THAT TEST** — it measures continuity from the START of the filing
+chain, so ACB, BID and BSR also read `True` today while carrying 5, 7 and 2 open cells; CTG
+qualifies on BOTH readings and that is why it is the one that went. ⚠️ The generic
+`RUN__pdf_ocr_control.ipynb` still carries `SYMBOL = "CTG"`, which with `QUARTERS = []` is 70
+filings of a finished ticker — **point it at the next ticker before running it.**
 
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
