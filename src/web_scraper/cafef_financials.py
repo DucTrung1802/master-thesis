@@ -645,6 +645,72 @@ class FinancialsBuilder:
     # BID's Q3-2011 income statement prints one.
     OP_IDENTITY_TOL = 4
 
+    # ⚠️ **THE SIGN CONVENTION IS ONE BIT PER STATEMENT, AND DE-CUMULATION CROSSES DOCUMENTS.**
+    # `OP_IDENTITY_TOL` above records the measurement that a deduction's stored sign is a
+    # property of the SCAN — the filing prints an expense in brackets or it does not, and the
+    # bracket survives OCR for the whole statement at once. `reconcile` therefore tries both
+    # conventions and accepts either, which is right for a statement judged ALONE.
+    #
+    # ⚠️ **`_decumulate` IS THE ONE PLACE THAT JUDGES TWO STATEMENTS TOGETHER**, and there
+    # "either is fine" stops being true: `Q4 = FY - (Q1+Q2+Q3)` reads its operands out of
+    # FOUR SEPARATE DOCUMENTS, and if the annual brackets its expenses while a quarterly does
+    # not, the subtraction crosses a sign boundary and returns a number that is neither. This
+    # is `SGN-1`, and it is not hypothetical — measured 2026-09-03 over the 384 `pdf`
+    # income-statement rows on disk, **24 of them are already in that state**, every one a
+    # de-cumulated Q2 or Q4 (19 CTG, 5 VIC).
+    #
+    # These identities are the probe: a statement's own printed subtotals say which convention
+    # it was written in, so the bit is MEASURED per operand rather than assumed. Same shape as
+    # `OP_IDENTITY` — `{subtotal: (added, deducted)}` per chart — and the entry `OP_IDENTITY`
+    # already carries is folded in by `sign_identities()` rather than retyped here, the
+    # `ANCHORS` lesson from `NST-1`: a second hand-written copy disagrees with the first the
+    # day one of them moves.
+    #
+    # ⚠️ **`securities` AND `insurance` ARE ABSENT, ON `OP_IDENTITY`'s OWN GROUNDS.** Neither
+    # has ever met a filing. An absent chart makes the convention UNDETERMINABLE, which drops
+    # the affected columns — §5 rule 2, and never a guess in the permissive direction.
+    SIGN_IDENTITIES: Dict[str, Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...]] = {
+        "bank": (
+            # I = 1 + 2 · II = 3 + 4 · VI = 5 + 6 · XIII = XI + XII
+            ("i_thu_nhap_lai_thuan",
+             ("1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu",),
+             ("2_chi_phi_lai_va_cac_chi_phi_tuong_tu",)),
+            ("ii_lai_lo_thuan_tu_hoat_dong_dich_vu",
+             ("3_thu_nhap_tu_hoat_dong_dich_vu",),
+             ("4_chi_phi_hoat_dong_dich_vu",)),
+            ("vi_lai_lo_thuan_tu_hoat_dong_khac",
+             ("5_thu_nhap_tu_hoat_dong_khac",),
+             ("6_chi_phi_hoat_dong_khac",)),
+            ("xiii_loi_nhuan_sau_thue",
+             ("xi_tong_loi_nhuan_truoc_thue",),
+             ("xii_chi_phi_thue_tndn",)),
+        ),
+        "corp": (
+            # 3 = 1 + 2 · 5 = 3 + 4 · 14 = 12 + 13 · 18 = 15 + 16 + 17
+            ("3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu",
+             ("1_doanh_thu_ban_hang_va_cung_cap_dich_vu",),
+             ("2_cac_khoan_giam_tru_doanh_thu",)),
+            ("5_loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu",
+             ("3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu",),
+             ("4_gia_von_hang_ban",)),
+            ("14_loi_nhuan_khac",
+             ("12_thu_nhap_khac",),
+             ("13_chi_phi_khac",)),
+            ("18_loi_nhuan_sau_thue_thu_nhap_doanh_nghiep",
+             ("15_tong_loi_nhuan_ke_toan_truoc_thue",),
+             ("16_chi_phi_thue_tndn_hien_hanh", "17_chi_phi_thue_tndn_hoan_lai")),
+        ),
+    }
+
+    # A column whose stored sign is a CONVENTION rather than a measurement. ⚠️ **DERIVED from
+    # the chart of accounts, never listed here** — `ANCHORS` was a hand-written literal
+    # duplicating the role tuples and missed 5 of 7 roles on every non-bank chart (`TPL-1`),
+    # and the fix was to derive it. A chart names its deductions in its own account text, so
+    # this needs no per-template list and cannot fall behind a chart that gains a line:
+    # 9 columns on `bank`, 8 on `corp`, 20 on `securities`, 10 on `insurance`.
+    DEDUCTION_ACCOUNTS = ("chi_phi", "gia_von", "cac_khoan_giam_tru")
+
+
     MIN_ROWS = 12          # a statement with fewer parsed rows than this is not a statement
     # …EXCEPT for the condensed disclosure P&L, which is four printed lines and complete at
     # that length. Reached only when the layer sets `condensed_income` AND the statement's own
@@ -1158,6 +1224,10 @@ class FinancialsBuilder:
         self._parser = PdfParser(logger=logger)          # env-default engine (kept for callers)
         self._parsers: Dict[str, PdfParser] = {self._parser.engine: self._parser}
         self._schema_cache: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
+        # Both derived from `_schema_cache`'s chart and both read once per de-cumulated
+        # column, which on a 70-quarter ticker is thousands of times.
+        self._sign_identity_cache: Dict[str, tuple] = {}
+        self._deduction_cache: Dict[str, frozenset] = {}
         # ⚠️ **PROGRESS HOOK — `on_layer(index, total, layer, cached)`, called once per layer of
         # `_parse_cascaded` before it runs.** It reports a POSITION in the cascade, never a
         # fraction of the work: the layers are wildly unequal (one runs a fresh OCR pass over
@@ -1800,6 +1870,118 @@ class FinancialsBuilder:
                 items.append((col, account or rest))
         self._schema_cache[key] = items
         return items
+
+    def sign_identities(
+        self, template: str
+    ) -> Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...], Tuple[str, ...]], ...]:
+        """The subtotal identities that can be read as a SIGN PROBE for `template`.
+
+        `SIGN_IDENTITIES` plus whatever `OP_IDENTITY` already carries for this chart, folded
+        in here rather than retyped there — the `NST-1` lesson about `ANCHORS`: a second
+        hand-written copy of a table disagrees with the first the day one of them moves. An
+        `OP_IDENTITY` entry belongs to the chart whose schema names its subtotal, which is how
+        `reconcile` identifies it too.
+
+        Returned as `(subtotal, added, deducted, optional)`. ⚠️ **`OP_IDENTITY`'s OPTIONAL
+        TERMS STAY OPTIONAL, and the first draft of this got it wrong** — folding them onto the
+        ADDED side makes them required, and an identity that requires a line the filing may not
+        print abstains instead of voting. They are ADDED WHERE MAPPED, exactly as `reconcile`
+        treats them, and for the reason `OP_IDENTITY`'s own comment gives.
+        """
+        cached = self._sign_identity_cache.get(template)
+        if cached is not None:
+            return cached
+        out = [(sub, added, deducted, ())
+               for sub, added, deducted in self.SIGN_IDENTITIES.get(template, ())]
+        columns = {c for c, _ in self.schema_of(template, INCOME_STATEMENT)}
+        for col, (plus, minus, optional) in self.OP_IDENTITY.items():
+            if col in columns:
+                out.append((col, tuple(plus), tuple(minus), tuple(optional)))
+        self._sign_identity_cache[template] = tuple(out)
+        return self._sign_identity_cache[template]
+
+    def deduction_columns(self, template: str) -> frozenset:
+        """The columns of `template`'s income statement whose stored sign is a CONVENTION.
+
+        Derived from the chart of accounts by its own account text — see
+        `DEDUCTION_ACCOUNTS`. A line a filing may print bracketed or bare is one whose caption
+        already says it is a deduction; nothing else in the statement has that freedom.
+        """
+        cached = self._deduction_cache.get(template)
+        if cached is None:
+            cached = frozenset(
+                col for col, account in self.schema_of(template, INCOME_STATEMENT)
+                if account.startswith(self.DEDUCTION_ACCOUNTS))
+            self._deduction_cache[template] = cached
+        return cached
+
+    def deduction_sign(self, values: Dict[str, Optional[int]],
+                       template: str) -> Optional[int]:
+        """`+1` if this statement stores its deductions NEGATIVE, `-1` if POSITIVE, else None.
+
+        ⚠️ **MEASURED FROM THE STATEMENT'S OWN PRINTED SUBTOTALS, NOT GUESSED.** Each identity
+        of `sign_identities()` whose every term is mapped casts one vote: the subtotal either
+        equals `added + deducted` (the deductions are already negative) or `added - deducted`
+        (they are positive). Unanimity is required — an identity that votes the other way
+        means one of the two rows is misread, and a statement that cannot say which convention
+        it is in must not have one assumed for it (§5 rule 2).
+
+        ⚠️ **A ZERO DEDUCTION CASTS NO VOTE.** Both conventions agree on zero, so counting it
+        would let a statement whose only mapped deduction is 0 claim a convention it never
+        demonstrated.
+
+        ⚠️ **THE TOLERANCE IS `OP_IDENTITY_TOL`, i.e. FOUR ĐỒNG, and it is not a rounding
+        allowance.** Values leave the parser already scaled by `unit`, so a filing printed in
+        millions still closes its own subtotals exactly; four đồng is the filing's own
+        rounding, of which BID's Q3-2011 income statement prints one. Widening it here would
+        let a misread digit vote.
+
+        Measured 2026-09-03 over the 384 `pdf` income-statement rows on disk: **323 (84.1%)
+        determine a convention** — 252 negative, 71 positive — 60 abstain for want of a mapped
+        term, and exactly **1** is contradictory. Both conventions are common and real, so
+        neither may be defaulted to: ACB/BID/VCB are ~100% negative while **CTG is 35 of 36
+        POSITIVE**, which is precisely why its annual filings could not be de-cumulated
+        against its quarterlies.
+        """
+        negative = positive = 0
+        for subtotal, added, deducted, optional in self.sign_identities(template):
+            terms = [values.get(c) for c in (subtotal,) + tuple(added) + tuple(deducted)]
+            if any(v is None for v in terms):
+                continue
+            total = values[subtotal]
+            plus = (sum(values[c] for c in added)
+                    + sum(values[c] for c in optional if values.get(c) is not None))
+            minus = sum(values[c] for c in deducted)
+            if minus == 0:
+                continue
+            if abs(total - (plus + minus)) <= self.OP_IDENTITY_TOL:
+                negative += 1
+            elif abs(total - (plus - minus)) <= self.OP_IDENTITY_TOL:
+                positive += 1
+        if negative and not positive:
+            return +1
+        if positive and not negative:
+            return -1
+        return None
+
+    def align_deductions(self, values: Dict[str, Optional[int]], template: str,
+                         to_sign: int) -> Tuple[Dict[str, Optional[int]], bool]:
+        """`(values re-signed to `to_sign`, whether anything moved)`.
+
+        Only the columns `deduction_columns()` names are touched, and only their SIGN — no
+        figure is rescaled, dropped or invented. `to_sign` is the convention of the statement
+        this one is about to be subtracted FROM, so the result reads in the convention of the
+        document that produced it.
+        """
+        own = self.deduction_sign(values, template)
+        if own is None or own == to_sign:
+            return values, False
+        deductions = self.deduction_columns(template)
+        out = dict(values)
+        for column in deductions:
+            if out.get(column) is not None:
+                out[column] = -out[column]
+        return out, True
 
     def preflight(self, exchange: str, symbol: str) -> str:
         """Validate every input `build()` needs, BEFORE spending hours on OCR. Returns
@@ -3777,7 +3959,7 @@ class FinancialsBuilder:
                 self._write(exchange, symbol, data, items, meta, attempted_so_far, template,
                             published, assurance, shares, merge=merge)
 
-        self._decumulate(data, half_year, meta, filed)
+        self._decumulate(data, half_year, meta, filed, template)
 
         # Whatever the filings could not give us, take from CafeF's own tabs. Keyed by item
         # CODE, so it lands on the canonical column exactly — for a quarter whose scan is too
@@ -3908,10 +4090,148 @@ class FinancialsBuilder:
                             continue
         return out
 
+    def _subtract_priors(self, ytd: Dict[str, Optional[int]],
+                         priors: Dict[str, Dict[str, Optional[int]]],
+                         template: Optional[str]
+                         ) -> Tuple[Dict[str, int], List[str], Dict[str, str]]:
+        """The standalone quarter: `(figures, priors re-signed, {dropped column: why})`.
+
+        ⚠️ **THE DROPS CARRY THEIR REASON, because there are two and they are not the same
+        finding.** A column dropped for an unmeasurable operand is recoverable — repair that
+        prior and it comes back. A column dropped because the year-to-date's own subtotals
+        contradict it is a misread figure in the SOURCE. Reporting both as the bare word
+        "dropped" is the shape of defect this module has hit repeatedly (`absent` for both a
+        filing that lacks a statement and a cascade that refused one, §6-2-septquadragies).
+
+        ⚠️ **THE ONE PLACE THE SUBTRACTION LIVES.** `FinancialsBuilder._decumulate` and
+        `pdf_ocr_merge._decumulate` both call it, because they are the same arithmetic reached
+        two ways — the authoritative `build()` accumulating its own run, and a merge reading
+        the `pdf` rows already on disk. Two copies of it is how one of them keeps a defect the
+        other has lost.
+
+        Three rules, and only the second is new:
+
+        1. **A column any prior does not carry is DROPPED, never treated as zero.** A line the
+           prior filing printed and this parse missed would otherwise have its whole
+           year-to-date value written into a three-month cell.
+        2. ⚠️ **EVERY OPERAND IS BROUGHT INTO ONE SIGN CONVENTION FIRST — `SGN-1`.** The bit is
+           measured from each statement's OWN subtotals (`deduction_sign`) and the priors are
+           re-signed to the year-to-date's, so the row reads in the convention of the document
+           that produced it. Without this, an annual that brackets its expenses minus a
+           quarterly that does not returns a number that is neither, **with the row's headline
+           figures still correct** — CTG's Q4-2014 had PBT, PAT and net interest exact and 6 of
+           16 columns wrong.
+        3. ⚠️ **WHERE THE CONVENTION CANNOT BE MEASURED, THE DEDUCTION COLUMNS ARE DROPPED.**
+           Not defaulted, and not guessed from the corpus majority: both conventions are
+           common (252 negative against 71 positive on disk, and CTG is 35 of 36 POSITIVE
+           where ACB, BID and VCB are ~100% negative), so a default would be wrong for a whole
+           ticker at a time. §5 rule 2, and it drops a column rather than the statement
+           because that is already rule 1's answer to an operand it cannot use.
+
+        4. ⚠️ **A COLUMN THE YEAR-TO-DATE'S OWN SUBTOTALS CONTRADICT IS DROPPED.** The sign
+           identities are arithmetic checks nothing had ever run — `P49`'s gate tests only
+           `XI = IX + X`, so a filing can be accepted with another of its subtotals broken.
+           CTG's FY-2014 is the measured case: `II = 3 + 4` closes under NEITHER convention
+           because `4_chi_phi_hoat_dong_dich_vu` lost a leading digit (read -36,683 mn where
+           II implies -936,683 mn — `crop_pad`'s documented defect at the leading end), and
+           the de-cumulation then produced a service expense of **+587.8 bn, positive**.
+           ⚠️ **EVERY TERM OF THE BROKEN IDENTITY GOES, not the one that looks wrong.** One of
+           them is misread and the identity cannot say which; picking would be a guess, and §5
+           rule 2 does not allow one. Measured 2026-09-03 over the 174 cumulative income
+           statements in the archive: **18 (10.3%) carry a broken identity**, spanning 75
+           columns. ⚠️ It drops from the DE-CUMULATION only — making it a `reconcile` gate
+           would refuse whole statements, which needs `P49`'s own false-refusal measurement
+           and is not this change.
+
+        ⚠️ **ONLY A NON-ZERO CONTRIBUTION TAINTS.** Both conventions agree on zero, so a
+        column an unmeasurable prior reports as 0 is still safe to subtract.
+
+        With `template=None` the convention is unmeasurable by construction and every
+        deduction column would drop — so the alignment is skipped entirely and the behaviour
+        is exactly what it was before `SGN-1`. That keeps a caller that has not said which
+        chart it is in from silently losing columns it used to get.
+        """
+        operands: List[Dict[str, Optional[int]]] = list(priors.values())
+        flipped: List[str] = []
+        dropped: Dict[str, str] = {}
+        if template is None:
+            out = {}
+            for column, total in ytd.items():
+                parts = [p.get(column) for p in operands]
+                if total is None or any(v is None for v in parts):
+                    continue
+                out[column] = total - sum(parts)
+            return out, flipped, dropped
+
+        deductions = self.deduction_columns(template)
+        to_sign = self.deduction_sign(ytd, template)
+        blind: List[Dict[str, Optional[int]]] = []
+        if to_sign is None:
+            # The year-to-date is the one that cannot say, so nothing can be aligned TO it.
+            blind = list(priors.values())
+        else:
+            operands = []
+            for name, prior in priors.items():
+                if self.deduction_sign(prior, template) is None:
+                    blind.append(prior)
+                    operands.append(prior)
+                    continue
+                aligned, moved = self.align_deductions(prior, template, to_sign)
+                if moved:
+                    flipped.append(name)
+                operands.append(aligned)
+
+        unmeasurable = {c for c in deductions if any(p.get(c) for p in blind)}
+        contradicted = self._contradicted_columns(ytd, template)
+        out = {}
+        for column, total in ytd.items():
+            parts = [p.get(column) for p in operands]
+            if total is None or any(v is None for v in parts):
+                continue
+            if column in contradicted:
+                dropped[column] = ("the year-to-date's own subtotals contradict it — one term "
+                                   "of its identity is misread in the SOURCE")
+                continue
+            if column in unmeasurable:
+                dropped[column] = ("an operand's sign convention could not be measured; "
+                                   "repairing that prior restores this column")
+                continue
+            out[column] = total - sum(parts)
+        return out, flipped, dropped
+
+    def _contradicted_columns(self, values: Dict[str, Optional[int]],
+                              template: str) -> set:
+        """Every term of every sign identity of `values` that closes under NEITHER convention.
+
+        One of those terms is misread. Which one is not knowable from the statement alone —
+        the identity has one equation and three or more unknowns — so all of them are returned
+        and §5 rule 2 keeps the guess from being made.
+
+        ⚠️ **AN IDENTITY THAT CANNOT BE EVALUATED RETURNS NOTHING**, exactly as it casts no
+        vote in `deduction_sign`: an unmapped term and a zero deduction are both absences, and
+        an absence is not a contradiction.
+        """
+        out = set()
+        for subtotal, added, deducted, optional in self.sign_identities(template):
+            terms = (subtotal,) + tuple(added) + tuple(deducted)
+            if any(values.get(c) is None for c in terms):
+                continue
+            plus = (sum(values[c] for c in added)
+                    + sum(values[c] for c in optional if values.get(c) is not None))
+            minus = sum(values[c] for c in deducted)
+            if minus == 0:
+                continue
+            total = values[subtotal]
+            if min(abs(total - (plus + minus)),
+                   abs(total - (plus - minus))) > self.OP_IDENTITY_TOL:
+                out |= set(terms)
+        return out
+
     def _decumulate(self, data: Dict[str, Dict[str, dict]],
                     half_year: Dict[str, bool],
                     meta: Optional[Dict[str, Dict[str, dict]]] = None,
-                    filed: Optional[set] = None) -> None:
+                    filed: Optional[set] = None,
+                    template: Optional[str] = None) -> None:
         """Turn a year-to-date income statement into the standalone quarter.
 
         A semi-annual filing prints only the cumulative Jan-Jun column, so its figures are
@@ -3972,17 +4292,20 @@ class FinancialsBuilder:
                            f"quarterly row)")
                 del rows[period]
                 continue
-            out = {}
-            for col, ytd in rows[period].items():
-                vals = [p.get(col) for p in prior]
-                if any(v is None for v in vals):
-                    continue
-                out[col] = ytd - sum(vals)
+            out, flipped, dropped = self._subtract_priors(
+                rows[period], dict(zip(priors, prior)), template)
             rows[period] = out
             if meta is not None and period in meta[INCOME_STATEMENT]:
                 meta[INCOME_STATEMENT][period]["months"] = 3
             self._log(f"  {period:<8} income_statement de-cumulated "
                       f"(YTD - Q1..Q{q-1}), {len(out)} items")
+            if flipped:
+                self._log(f"           deductions re-signed to this filing's convention "
+                          f"for {', '.join(flipped)} (`SGN-1`)")
+            for why in sorted(set(dropped.values())):
+                cols = sorted(c for c, w in dropped.items() if w == why)
+                self._warn(f"  {period}: {len(cols)} column(s) DROPPED — {why}: "
+                           f"{', '.join(cols[:4])}" + (" …" if len(cols) > 4 else ""))
 
     def _write(self, exchange: str, symbol: str,
                data: Dict[str, Dict[str, dict]], items: Dict[str, List[str]],

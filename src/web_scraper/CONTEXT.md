@@ -1459,12 +1459,50 @@ the data rather than buried: **HVA** is filed under `chung-khoan-va-ngan-hang-da
     produces a table of the same shape.
   - **Nothing is written unless it reconciles** against the statement's own printed subtotals
     AND is of a sane magnitude beside its neighbours. A wrong figure is worse than a gap.
-  - **Three ways to be wrong that no single check catches:** *units* (most filings are Triệu
+  - **FOUR ways to be wrong that no single check catches:** *units* (most filings are Triệu
     VNĐ, VCB's 2009 ones plain đồng — out by 10⁶ and still reconciling); *cumulative* (a
     semi-annual filing prints ONLY the Jan-Jun column, so its income statement is not the
     standalone quarter — VCB Q2-2024 prints PBT 20,835bn where the quarter is 10,116bn, and
-    the cumulative figures balance perfectly against each other); *OCR* (a misread digit).
+    the cumulative figures balance perfectly against each other); *OCR* (a misread digit);
+    and — added 2026-09-03 — *SIGN* (`SGN-1`, below).
     The half-year case is handled by de-cumulating, YTD − the quarters already accepted.
+  - **⚠️ …AND THE DE-CUMULATION ITSELF CROSSED A SIGN CONVENTION (`SGN-1`, fixed 2026-09-03).**
+    `OP_IDENTITY_TOL` records that a deduction's stored sign is *a property of the SCAN* — the
+    filing brackets an expense or it does not, one bit for the whole statement — so `reconcile`
+    tries both and accepts either. **That is right for a statement judged ALONE and wrong for
+    `_decumulate`, which is the only place that judges FOUR DOCUMENTS TOGETHER.** CTG's annual
+    brackets its expenses where its quarterlies do not, so `Q4 = FY − (Q1+Q2+Q3)` crossed the
+    boundary and returned a row whose **PBT, PAT and net interest were EXACT and whose expense
+    columns were three times too large** — which is why it survived: a check on the headline
+    passes it.
+    - **The convention is MEASURED per statement, off its own printed subtotals**
+      (`deduction_sign` / `SIGN_IDENTITIES`, which folds in `OP_IDENTITY` rather than retyping
+      it), and the priors are re-signed to the year-to-date's before subtracting.
+    - **⚠️ NEITHER VALUE MAY BE DEFAULTED TO.** ACB 66/66, BID 53/53 and VCB 69/69 store
+      deductions NEGATIVE; **CTG is 35 of 36 POSITIVE**. A corpus majority would be wrong for a
+      whole ticker at a time. Where the convention cannot be measured the deduction columns are
+      DROPPED (§5 rule 2) — a quarantine rather than a cost, since almost every blind operand is
+      itself a corrupted row.
+    - **The deduction set is DERIVED from the chart of accounts**, never listed — 9 columns on
+      `bank`, 8 `corp`, 20 `securities`, 10 `insurance`. `ANCHORS` was a hand-written literal
+      duplicating its role tuples and missed 5 of 7 roles on every non-bank chart (`TPL-1`).
+    - **`FinancialsBuilder._subtract_priors` is now the ONE implementation**, called by both
+      `build()` and `pdf_ocr_merge`. They were two copies written apart, identical only for as
+      long as nobody changed either.
+    - **⚠️ 24 rows were already on disk in that state** — 19 CTG, 5 VIC, every one a Q2 or Q4,
+      convicted by the closed form that re-signing their priors makes every one of their own
+      identities close (OCR damage never does). De-cumulation runs at WRITE time, so the code fix
+      reaches none of them: **1 was repaired and 23 remain**, in TODO `P59`.
+    - **⚠️ And it does not make the STORED corpus uniform** (`SGN-2`) — a row is a faithful
+      transcription of its own filing, and filings differ. 45 bank rows store
+      `viii_chi_phi_hoat_dong` POSITIVE against 222 NEGATIVE, and `cost_to_income` negated it
+      unconditionally, so all 45 produced a NEGATIVE cost ratio. Fixed at the consumer with
+      `abs()`; `gold.stocks_financials_bank_fa` holds the old values until rebuilt.
+    - **A fifth check came out of it**: the sign identities are arithmetic nobody ran — `P49`'s
+      gate tests `XI = IX + X` alone — so a column any identity of the year-to-date contradicts
+      is now dropped from the de-cumulation, **every term of it**, because one equation in three
+      unknowns cannot say which is misread. 18 of 174 archived cumulative statements carry one.
+      CLAUDE.md §6-2-undesexagies.
   - **⚠️ …BUT SOME INTERIM FILINGS PRINT THE STANDALONE QUARTER TOO, and then de-cumulating
     REMOVES IT TWICE** (`Statement.quarter_column`, 2026-07-30). VCB's Q2-2014 prints four
     columns — "Quý II" (this year, last year) AND "Lũy kế từ đầu năm" (this year, last year) — so

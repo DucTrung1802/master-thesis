@@ -269,22 +269,23 @@ def _quarter_priors(builder: FinancialsBuilder, exchange: str, symbol: str, temp
     return out, ""
 
 
-def _decumulate(ytd: Dict[str, int],
-                priors: Dict[str, Dict[str, int]]) -> Dict[str, int]:
-    """The standalone quarter: year-to-date minus the quarters before it, column by column.
+def _decumulate(builder: FinancialsBuilder, template: str,
+                ytd: Dict[str, int],
+                priors: Dict[str, Dict[str, int]]
+                ) -> Tuple[Dict[str, int], List[str], List[str]]:
+    """The standalone quarter — `FinancialsBuilder._subtract_priors`, and nothing of its own.
 
-    A column any prior does not carry is DROPPED rather than treated as zero — the same rule
-    `FinancialsBuilder._decumulate` applies, and for the same reason: a line the prior filing
-    printed and this parse missed would otherwise have its whole year-to-date value written
-    into a three-month cell.
+    ⚠️ **IT USED TO BE A SECOND COPY OF THE SUBTRACTION, AND THAT IS WHY IT IS NOT ANY MORE.**
+    The two were written apart and stayed identical only for as long as nobody changed either;
+    `SGN-1` is the change that would have landed in one of them. The merge and `build()` reach
+    the same arithmetic from two directions — disk rows against a run's own accumulated ones —
+    so the arithmetic is the builder's and the reaching is each caller's.
+
+    Returns `(figures, priors re-signed, deduction columns dropped)`; the last two are
+    reported to the reader rather than swallowed, because a dropped column is a figure the
+    filing prints and this row will not carry.
     """
-    out: Dict[str, int] = {}
-    for column, total in ytd.items():
-        parts = [p.get(column) for p in priors.values()]
-        if any(v is None for v in parts):
-            continue
-        out[column] = total - sum(parts)
-    return out
+    return builder._subtract_priors(ytd, priors, template)
 
 
 def plan_merge(folder: os.PathLike | str,
@@ -423,7 +424,8 @@ def plan_merge(folder: os.PathLike | str,
                             f"filed, so a full `build()` can still subtract them")
                         report.decisions.append(decision)
                         continue
-                    quarter_values = _decumulate(
+                    quarter_values, resigned, dropped_cols = _decumulate(
+                        builder, template,
                         {k: int(v) for k, v in (got.get("values") or {}).items()}, priors)
                     if not quarter_values:
                         decision.action = "skip"
@@ -438,7 +440,13 @@ def plan_merge(folder: os.PathLike | str,
                     decision.note = (
                         f"de-cumulated: {months}-month figure minus "
                         f"{', '.join(sorted(priors))} -> the standalone quarter, "
-                        f"{len(quarter_values)} of {len(got.get('values') or {})} columns")
+                        f"{len(quarter_values)} of {len(got.get('values') or {})} columns"
+                        + (f"; deductions re-signed to this filing's convention for "
+                           f"{', '.join(sorted(resigned))} (`SGN-1`)" if resigned else "")
+                        + "".join(
+                            f"; ⚠️ {sum(1 for w in dropped_cols.values() if w == why)} "
+                            f"column(s) DROPPED — {why}"
+                            for why in sorted(set(dropped_cols.values()))))
                     # The row now covers three months like any other, so the span-fill and
                     # DIFFERS checks below judge it exactly as they judge a quarterly filing.
                     # ⚠️ It becomes an OPERAND for a later quarter only if it survives them —

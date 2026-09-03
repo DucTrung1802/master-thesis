@@ -574,8 +574,15 @@ is recorded in all three places that used to promise it.
 
 ⚠️ **`complete = False` means *at least one statement is not yet continuous to the newest filing*,
 never *the parser is broken*.** A filing may not contain that statement at all, and a cumulative
-income statement with no Q1..Q(q-1) to subtract is refused by the merge by design (CTG has 32
-such quarters).
+income statement whose Q1..Q(q-1) it cannot subtract is refused by the merge by design.
+
+⚠️ **THAT REFUSAL IS NARROWER THAN IT WAS, TWICE, AND THE "CTG HAS 32 SUCH QUARTERS" MEASURED
+HERE ON 2026-08-30 IS SPENT** — all 35 of CTG's Q2/Q4 income statements read `pdf` today. Two
+changes closed them: `SPN-1`'s `SPAN_OPERANDS`, which re-parses a prior whose `months` is blank
+so the Q4 becomes splittable (no figure moves — the merge's `fills_span` branch writes the span
+and nothing else), and `SGN-1` on 2026-09-03, which made the subtraction itself sound. ⚠️ **A
+count of refusals is a fact about the CODE on the day it was taken**, and this one outlived two
+fixes; re-measure rather than quoting it.
 
 ⚠️ **THE PDF INDEX IS NOT IN GIT** — `raw_data/` is ignored except `financials/` — so a fresh
 checkout cannot prove which quarters were filed. Those tickers read `complete = False` with a

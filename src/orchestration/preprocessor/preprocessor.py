@@ -3242,8 +3242,17 @@ class DataPreprocessor:
         q["effective_tax_rate"] = 1 - (
             q[self.BANK_FA_NET_INCOME] / q[self.BANK_FA_PRETAX]
         )
-        # Op-expense is filed negative → negate so CIR is a positive cost fraction.
-        q["cost_to_income"] = -q[self.BANK_FA_OP_EXPENSE] / q[self.BANK_FA_OP_INCOME]
+        # ⚠️ **THE OP-EXPENSE IS NOT ALWAYS FILED NEGATIVE, AND THIS LINE ASSUMED IT WAS.**
+        # The comment here read "op-expense is filed negative → negate", which is true of 222
+        # of the 267 bank rows that carry one and FALSE of 45 — the sign is the FILING's
+        # bracket convention, not a fact about the number (`SGN-1`/`SGN-2`), and CTG alone
+        # stores 35 of its 63 POSITIVE. Every one of those 45 produced a NEGATIVE
+        # cost-to-income ratio. A cost fraction is a magnitude over a magnitude, so `abs()` is
+        # the convention-independent form and the only one that is right under both.
+        # ⚠️ Measured 2026-09-03; `gold.stocks_financials_bank_fa` still holds the old values
+        # until it is rebuilt (§5 rule 14 — a code fix does not mark the table stale).
+        q["cost_to_income"] = (q[self.BANK_FA_OP_EXPENSE].abs()
+                               / q[self.BANK_FA_OP_INCOME])
 
         # Balance-sheet structure / bank health.
         q["equity_multiplier"] = q[self.BANK_FA_ASSETS] / q[self.BANK_FA_EQUITY]
