@@ -1790,6 +1790,24 @@ class FinancialsBuilder:
     # 69 balance sheets were rejected for "assets != liabilities + equity".
     SCHEMA_MATCH = 0.80
     MIN_CONTAINS = 10        # too short a name is contained in too many others to prove much
+    # ⚠️ **A ROW PRINTED "TỔNG <account>" IS THAT ACCOUNT'S OWN TOTAL LINE, and containment
+    # cannot tell it from a merged header.** `EQW-1`: a bank balance sheet prints its equity
+    # subtotal as "TỔNG VỐN CHỦ SỞ HỮU" while `table_rows` glues the section header "VIII. VỐN
+    # CHỦ SỞ HỮU" onto the sub-line beneath it ("Vốn của TCTD"), which prints no figure of its
+    # own. Both rows then CONTAIN the account `von_chu_so_huu`, both take the flat 0.95, both
+    # reach an edge — so `_contains_at_an_edge` cannot separate them either — and the length
+    # tie-break prefers the SHORTER, which is the merged header: measured on TCB Q4-2025,
+    # `von_chu_so_huu_von` scores 14/18 = 0.778 against `tong_von_chu_so_huu`'s 14/19 = 0.737,
+    # and **78,626 mn of charter capital was written as equity against a true 179,501**. The
+    # discriminator is that the extra text is a TOTAL WORD rather than a sub-line's name.
+    # ⚠️ It can only ever RAISE a score, and only for a row that is the account prefixed by
+    # exactly a total word — never a substring, so it cannot reach a merged row.
+    TOTAL_PREFIXES = ("tong", "tongcong")
+    # Above the 0.95 containment floor and below an exact match, so an account that IS this row
+    # still wins it: measured over all 12 charts, exactly ONE pair (X, tongX) are both accounts
+    # of one chart (`b_no_phai_tra_va_von_chu_so_huu` / `tong_no_phai_tra_va_von_chu_so_huu`),
+    # and there the longer one matches at 1.0 and keeps the row.
+    TOTAL_LINE_SCORE = 0.97
     # Containment ("one name sits inside the other") runs in BOTH directions, and MIN_CONTAINS
     # guards only the schema account — which is the wrong string to check for `key in account`.
     # There the contained side is the parsed row, and OCR produces two very different kinds of
@@ -2235,6 +2253,13 @@ class FinancialsBuilder:
                 and (not edge_containment
                      or self._contains_at_an_edge(account, key))):
             r = max(r, 0.95)
+        # ⚠️ THE TOTAL LINE — see TOTAL_PREFIXES. Compared on the SEPARATOR-FREE forms because
+        # a filing writes "TỔNG CỘNG" and "TỔNG" for one thing and `ABBREV` folds them only on
+        # that form; an EQUALITY, never a containment, so a merged row cannot reach it.
+        bare_account, bare_key = account.replace("_", ""), key.replace("_", "")
+        if len(bare_account) >= self.MIN_CONTAINS and any(
+                bare_key == prefix + bare_account for prefix in self.TOTAL_PREFIXES):
+            r = max(r, self.TOTAL_LINE_SCORE)
         if relax and account.startswith(self.CASH_TAIL) and key.startswith(self.CASH_TAIL):
             r = max(r, 0.95)
         return r
