@@ -362,6 +362,43 @@ class PdfParser:
     # figure -- a page number, a date -- from reaching that test at all.
     MIN_TAIL_WORDS = 2
 
+    # ⚠️ **THE FILING ITSELF PUTS THE NOTES HEADER ON A STATEMENT'S CONTINUATION PAGE, AND
+    # `_fill_continuations` READS A NOTES PAGE AS "THE STATEMENTS ARE OVER".** TCB's Q2-2019,
+    # Q3-2019 and Q1-2021 consolidated filings print "THUYẾT MINH BÁO CÁO TÀI CHÍNH HỢP NHẤT"
+    # at the top of the cash flow's SECOND page — the page carrying sections II, III, IV and
+    # the opening, FX and CLOSING balances — and Q1-2021 stamps the notes FORM CODE on it too
+    # ("Mẫu B050/TCTD - HN", B05 = notes). Rendered and read off the page image: it is the
+    # document's own header, not OCR damage, and its period line is a broken Word mail-merge
+    # field ("cho giai đoạn từ ngày REF Yea01 …"). So no engine, DPI or crop setting reaches
+    # it, and all three quarters were `missing` for `no closing cash balance` on every layer.
+    #
+    # ⚠️ **AND `TAIL` ALONE CANNOT ADMIT IT, WHICH IS THE SECOND HALF OF THE DEFECT.** That
+    # needle is a contiguous phrase, and on these pages the closing line's label WRAPS AROUND
+    # its own figures — "TIỀN VÀ CÁC KHOẢN TƯƠNG ĐƯƠNG" / "VII 33 47.141.880 50.050.197" /
+    # "TIỀN TẠI THỜI ĐIỂM CUỐI KỲ" — so the flattened page reads
+    # "…tienvacackhoantuongduongvii3317141488050050197tientaithoidiemcuoiky…" and
+    # "tienvacackhoantuongduongtien" is broken by the numerals between the halves.
+    #
+    # So the evidence is taken in TWO parts, each of which survives the wrap:
+    #   * the statement's own SECTION heading, which only that statement prints. A cash flow
+    #     is the only place "LƯU CHUYỂN TIỀN THUẦN" appears — the title in `HEADING` is "lưu
+    #     chuyển tiền TỆ", a different phrase, so this is not a second copy of it.
+    #   * the CLOSING BALANCE's own date clause, "tại thời điểm cuối kỳ/năm/quý", which a note
+    #     merely TITLED "Tiền và các khoản tương đương tiền" does not carry.
+    #
+    # ⚠️ **MEASURED OVER EVERY PAGE OF ALL THREE FILINGS BEFORE IT SHIPPED (2026-09-04):**
+    # 197 pages, and exactly TWO per filing carry either marker — the cash flow's own two
+    # pages. Zero notes pages, zero signature pages, zero of the 30-odd note tables that
+    # follow. Reached only through `notes_tail`, so no statement that parses today is
+    # re-judged, and the run ENDS at the page it admits.
+    # ⚠️ RENAMED FROM `TAIL_SECTION` ON 2026-09-04, hours after it was added, because it stopped
+    # being about tails: `notes_head` uses the same needle to OPEN a run. A constant whose name
+    # says where it is used rather than what it is drifts the first time it is used elsewhere.
+    SECTION_HEADING = {
+        CASH_FLOW: "luuchuyentienthuan",
+    }
+    TAIL_CLOSING = ("taithoidiemcuoiky", "taithoidiemcuoinam", "taithoidiemcuoiquy")
+
     # How far below the last line that fed it a pending wrapped label survives a line that
     # contributed nothing. Rows on these statements are set 13-32pt apart and a wrapped half
     # sits 6-13pt from its own text, so 24pt admits one intervening noise line and no more.
@@ -435,6 +472,10 @@ class PdfParser:
         self.notes_boundary = False
         # set per PARSE LAYER; see TAIL / _is_tail_page
         self.tail_continuation = False
+        # set per PARSE LAYER; see SECTION_HEADING / _is_notes_tail_page
+        self.notes_tail = False
+        # set per PARSE LAYER; see SECTION_HEADING / _notes_head_report
+        self.notes_head = False
         # set per PARSE LAYER; see table_rows' carry
         self.label_wrap = False
         # set per PARSE LAYER; see table_rows' second bucketing pass
@@ -547,6 +588,24 @@ class PdfParser:
         counts as a continuation by EVIDENCE rather than by lowering a threshold.
         """
         self.tail_continuation = bool(on)
+
+    def set_notes_tail(self, on: bool) -> None:
+        """Admit a page whose HEADER says notes but whose CONTENT continues the statement.
+
+        `_fill_continuations` reads a NOTES page as "the statements are over" and ends the run
+        — which is right, and wrong for a filing that prints its own notes header on a
+        statement's continuation page. See `SECTION_HEADING` for the three TCB quarters this was
+        measured on and for the two-part evidence a page must carry to be admitted.
+        """
+        self.notes_tail = bool(on)
+
+    def set_notes_head(self, on: bool) -> None:
+        """Let a NOTES-headed page START a statement, not merely continue one.
+
+        `set_notes_tail` extends a run that is already open; this OPENS one, which is the wider
+        claim and is why it is a separate flag on later layers. See `_notes_head_report`.
+        """
+        self.notes_head = bool(on)
 
     def set_label_wrap(self, on: bool) -> None:
         """Reassemble a label that WRAPPED AROUND its own value line.
@@ -1509,12 +1568,35 @@ class PdfParser:
         narrative page between two statements is not swept in.
         """
         run: Optional[str] = None
+        # Which statements the page classifier found ANYWHERE in this document — so a page can
+        # never be claimed for a report that already has real pages of its own. See
+        # `_notes_head_report`; computed once, and added to as heads are opened.
+        seen = {p["kind"] for p in pages.values() if p["kind"] in REPORTS}
         for i in sorted(pages):
             kind = pages[i]["kind"]
             if kind in REPORTS:
                 run = kind
                 continue
             if kind == NOTES:
+                # ⚠️ …unless the page's CONTENT says otherwise. A filing may print its own
+                # notes header on a statement's page, and the header is then the only thing
+                # that is wrong about it — see `SECTION_HEADING`.
+                # ⚠️ **THE TAIL RULE IS TRIED FIRST, AND THE ORDER IS THE NARROWER CLAIM
+                # FIRST.** Extending a run that is already open says only that this page
+                # belongs to the statement above it; opening a new one says what statement a
+                # page IS, which is a bigger claim and gets the later layers.
+                if run and self._is_notes_tail_page(pages[i], run):
+                    pages[i]["kind"] = run
+                    pages[i]["from_form"] = False
+                    run = None                  # a tail page is by definition the last one
+                    continue
+                head = self._notes_head_report(pages[i], seen, run)
+                if head is not None:
+                    pages[i]["kind"] = head
+                    pages[i]["from_form"] = False
+                    seen.add(head)
+                    run = head                  # and its own continuation pages may follow
+                    continue
                 run = None                      # the statements are over
                 continue
             if run and self._is_table(pages[i]):
@@ -1532,6 +1614,87 @@ class PdfParser:
 
     def _is_table(self, page: dict) -> bool:
         return len(self._numbers(page["words"])) >= self.MIN_TABLE_WORDS
+
+    def _notes_head_report(self, page: dict, seen: set,
+                           run: Optional[str]) -> Optional[str]:
+        """Which statement this NOTES-headed page STARTS, or None.
+
+        ⚠️ **`notes_tail` ASSUMED THE STATEMENT'S FIRST PAGE WAS CLASSIFIED CORRECTLY, AND ON
+        TCB's Q1-2017 AND Q3-2017 IT IS NOT.** Those filings print "THUYẾT MINH BÁO CÁO TÀI
+        CHÍNH HỢP NHẤT" and the notes FORM CODE ("Mẫu B050/TCTD - HN") on the cash flow's
+        **first** page as well as its second, so no cash-flow run is ever opened and the tail
+        rule has nothing to extend. Every layer reported `no such statement on any page of this
+        filing` — ⚠️ **and `settled_absences` treats that reason as PERMANENT**, so both
+        quarters were recorded as filings that contain no cash flow. They contain one: page 8
+        of Q1-2017 prints "LƯU CHUYỂN TIỀN THUẦN TỪ HOẠT ĐỘNG KINH DOANH" over 67 figures.
+
+        The evidence is the statement's own SECTION heading (`SECTION_HEADING`) in the page's
+        HEADER BLOCK, and three guards around it:
+
+          * ⚠️ **THE RUN MUST BE OPEN** — `run is not None` means the PREVIOUS page belonged to
+            a statement, which is `_fill_continuations`' own premise that a statement's pages
+            are contiguous. It keeps this to the statements block and out of the notes, where
+            the same words in a narrative paragraph would otherwise be evidence.
+          * ⚠️ **THE REPORT MUST NOT ALREADY HAVE PAGES**, anywhere in the document (`seen` is
+            taken from the FINAL classification, so this protects forwards as well as back). A
+            filing whose cash flow is correctly titled somewhere cannot have a note claimed for
+            it here.
+          * **it must be a TABLE** (`MIN_TABLE_WORDS`), the same floor a continuation page
+            clears.
+
+        ⚠️ **MEASURED OVER EVERY PAGE OF THREE TCB FILINGS BEFORE IT SHIPPED — 191 pages, and
+        exactly SIX carry the needle in their header block: the six cash-flow pages.** Zero
+        notes pages, zero narrative pages, zero of the ~150 note tables that follow.
+
+        ⚠️ It says nothing about whether the statement RECONCILES; `reconcile` and `sane` judge
+        that exactly as before, and this only decides which pages they are handed.
+        """
+        if not self.notes_head or run is None:
+            return None
+        if not self._is_table(page):
+            return None
+        lines = [l for l in page["text"].splitlines() if l.strip()][:self.HEADER_LINES]
+        ns = self.norm("\n".join(lines)).replace(" ", "")
+        for report, needle in self.SECTION_HEADING.items():
+            # ⚠️ `report == run` was here too and was REMOVED on the mutation check that was
+            # supposed to defend it: deleting the clause broke no test, because `run` is only
+            # ever a report the classifier already found (or one this opened and added), so
+            # `report in seen` implies it. A clause no test can fail is a clause that will be
+            # wrong one day with nothing saying so.
+            if report in seen:
+                continue
+            if needle in ns:
+                return report
+        return None
+
+    def _is_notes_tail_page(self, page: dict, run: str) -> bool:
+        """Is this NOTES-headed page the running statement's own continuation?
+
+        A NOTES page ends the run in `_fill_continuations`, and that is right for every filing
+        but one shape: the document itself prints the notes header — sometimes the notes FORM
+        CODE too — on a statement's second page. The header is then the only thing wrong with
+        the page, so the evidence has to come from what is PRINTED ON IT.
+
+        Two markers, both required, and neither defeated by the label wrap that makes `TAIL`
+        miss here (see `SECTION_HEADING` for the measurement and for why each was chosen):
+
+          * the statement's own SECTION heading — a phrase only that statement prints;
+          * the CLOSING BALANCE's date clause, which a note merely NAMING the same account
+            does not carry.
+
+        ⚠️ The run ENDS at the page this admits, like `_is_tail_page`: a page reached through
+        its neighbour's identity must not pass that licence on to the next one.
+        """
+        if not self.notes_tail:
+            return False
+        section = self.SECTION_HEADING.get(run)
+        if not section:
+            return False
+        if len(self._numbers(page["words"])) < self.MIN_TAIL_WORDS:
+            return False
+        # The WHOLE page, not the header block — this evidence is printed in the table.
+        ns = self.norm(page["text"]).replace(" ", "")
+        return section in ns and any(c in ns for c in self.TAIL_CLOSING)
 
     def _is_tail_page(self, page: dict, run: str) -> bool:
         """Is this the sparse LAST page of the statement running through it?

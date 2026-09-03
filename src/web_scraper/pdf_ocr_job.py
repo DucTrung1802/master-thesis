@@ -440,6 +440,13 @@ class DocumentTask:
     # Q1..Q(q-1) of the same year and a one-document run does not have them. Recorded so
     # `compare()` refuses to read a cumulative P&L against a de-cumulated row on disk.
     cumulative: bool
+    # ⚠️ THE CafeF INDEX ROW `documents()` CHOSE, kept so `builder.alternates` can be asked for
+    # the OTHER filings of the same period and the same entity. It needs `period`, `year`,
+    # `quarter`, `consolidated` and the index-relative `path` — none of which can be
+    # reconstructed from the fields above, because `path` here is an absolute filesystem path
+    # and that is the field `alternates` excludes the chosen document by. Empty means "no
+    # alternate retry", which is what a caller that built a task by hand gets.
+    index_row: dict = field(default_factory=dict)
 
     @property
     def key(self) -> str:
@@ -599,6 +606,7 @@ def plan(builder: FinancialsBuilder, exchange: str, symbol: str,
             path=path, file=d["file"], consolidated=d.get("consolidated", "True"),
             assurance=d.get("assurance", ""),
             cumulative=(d.get("half_year") == "True" or d.get("annual") == "True"),
+            index_row=dict(d),
         ))
     return tasks
 
@@ -1049,6 +1057,84 @@ def _rows_digest(statement) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
 
 
+def _alternate_retry(builder: FinancialsBuilder, task: DocumentTask,
+                     accepted: dict, band: dict, open_ref: Optional[int],
+                     logger: CollectingLogger) -> Dict[str, dict]:
+    """Retry the ABSENT statements on the other filings of the same period and entity.
+
+    -> `{report: the index row it came from}` for whatever this recovered, empty otherwise.
+
+    ⚠️ **A QUARTER CAN HAVE MORE THAN ONE FILING AND THIS MODULE READ ONLY ONE.** `documents()`
+    returns the single best document per period, ranked entity-then-assurance, so a statement
+    every layer refused was recorded `missing` while another CONSOLIDATED filing of the same
+    quarter sat unread on disk. `build()` has had this retry since 2026-08-25; this module was
+    documented as not having it *"because it needs state a one-document run does not have"* —
+    and that reasoning is `_decumulate`'s, not this one's. **The retry needs the PDF index and
+    the same band and `open_ref` this function is already holding.**
+
+    ⚠️ **MEASURED ON TCB's Q2-2019, WHICH IS WHY IT EXISTS.** Its cash flow was refused by all
+    67 layers because the closing balance in the AUDITED consolidated filing is printed under
+    the company's round stamp — 47.141.880 read as 171414880 / 17141880 / 19111880 / 17141.880
+    at 200 / 300+500 / 400+pad6 / 600 dpi, never right, because the ink is over the digits. The
+    REVIEWED consolidated filing of the same quarter is a different scan and reads
+    `Tiền và các khoản tương đương tiền cuối kỳ 47.141.880 50.050.197` cleanly. ⚠️ The right
+    answer had been sitting one document away for as long as the quarter had read `missing`,
+    and *"no OCR configuration can read this figure"* — which is true — had been taken for
+    *"this quarter cannot be parsed"*, which is a claim about a different thing.
+
+    Three guards, and all three are `build()`'s rather than a second set:
+
+      * **the ENTITY is FIXED, not preferred** — `alternates` returns only filings whose
+        `consolidated` equals the chosen one's, so a fallback can never quietly change which
+        company a row describes. `allow_parent` stays the only route to a standalone filing.
+      * **the INCOME STATEMENT is refused when the cumulative shape differs.** `half_year` is a
+        property of the DOCUMENT and `_decumulate` subtracts Q1..Q(q-1) from a year-to-date
+        P&L, so taking a quarterly alternate's P&L under a half-year chosen document's flag —
+        or the reverse — would subtract quarters from a figure that never contained them. The
+        balance sheet is a point in time and the cash flow is cumulative either way.
+      * **reconcile and `sane` judge it exactly as before.** Nothing is accepted here that
+        would not have been accepted from the chosen document, and the band is the same one.
+
+    ⚠️ **THE ORIGIN IS RETURNED PER STATEMENT, AND THAT IS THE HALF THAT MUST NOT BE SKIPPED.**
+    A row that names the filing `documents()` chose while holding figures read from another one
+    asserts a document it did not come from — §6-2-terdecies is what that costs. The caller
+    writes it into `accepted[report]` and `pdf_ocr_merge` reads it from there.
+    """
+    origin: Dict[str, dict] = {}
+    if not task.index_row:
+        return origin
+    for alt in builder.alternates(task.exchange, task.symbol, task.index_row):
+        if len(accepted) == len(REPORTS):
+            break
+        alt_path = os.path.join(fin.PDFS_DIR, alt["path"].replace("/", os.sep))
+        if not os.path.exists(alt_path):
+            continue
+        missing = [r for r in REPORTS if r not in accepted]
+        logger.line(f"{task.period}: {len(missing)} statement(s) absent — retrying on the "
+                        f"{alt['assurance']} filing of the same period ({alt['file']})")
+        try:
+            more, _facts = builder._parse_cascaded(
+                alt_path, builder._period_end(task.period), task.template, band, open_ref)
+        except Exception as exc:                # noqa: BLE001 — one bad alternate is not a run
+            logger.log_warning(f"    {task.period}: the alternate raised — "
+                               f"{type(exc).__name__}: {exc}")
+            continue
+        alt_cumulative = (alt.get("half_year") == "True" or alt.get("annual") == "True")
+        for report, got in more.items():
+            if report in accepted:
+                continue
+            if report == fin.INCOME_STATEMENT and alt_cumulative != task.cumulative:
+                logger.log_warning(
+                    f"    {task.period}: {report} from the alternate REFUSED — cumulative "
+                    f"shape differs from the chosen filing")
+                continue
+            accepted[report] = got
+            origin[report] = alt
+            logger.line(f"    {task.period}: {report} recovered from "
+                            f"{alt['assurance']} {alt['file']}")
+    return origin
+
+
 def run_document(builder: FinancialsBuilder, task: DocumentTask,
                  history: Dict[str, Dict[str, List[int]]],
                  open_ref: Optional[int] = None,
@@ -1077,14 +1163,23 @@ def run_document(builder: FinancialsBuilder, task: DocumentTask,
     # ⚠️ Read off the builder rather than scraped out of the log: a WARNING is prose, and the
     # decision downstream ("was this parse decided by a broken tool?") must not depend on
     # matching a sentence.
+    # ⚠️ TAKEN BEFORE THE ALTERNATE RETRY, and that ordering is deliberate: these describe the
+    # CHOSEN document, which is the one the reader is being told about. A retry that recovers a
+    # statement does not make the chosen filing's refusals untrue, and `absent_reasons` below
+    # keeps only the reports that are still absent afterwards.
     result.engine_errors = list(getattr(builder, "layer_errors", []))
     result.absent_rows = dict(getattr(builder, "absent_rows", {}) or {})
+    refusals = dict(getattr(builder, "refusals", {}) or {})
+
+    # ⚠️ A quarter every layer refused may have a SECOND filing nobody read. Costs nothing on
+    # the success path — it runs only where something is still absent. See `_alternate_retry`.
+    origin = _alternate_retry(builder, task, accepted, band, open_ref, logger)
     # ⚠️ Collapsed exactly as `_parse_cascaded` prints it — DISTINCT reasons only, each
     # attributed to the FIRST layer that gave it. 50 layers usually refuse the same two or
     # three ways, and an artefact carrying all 50 buries the one that matters. Only the
     # statements that ended up ABSENT are recorded: a reason a later layer overturned is a
     # step in the cascade, not a verdict on the filing.
-    for _report, _tried in getattr(builder, "refusals", {}).items():
+    for _report, _tried in refusals.items():
         if _report in accepted:
             continue
         _first: Dict[str, str] = {}
@@ -1105,9 +1200,20 @@ def run_document(builder: FinancialsBuilder, task: DocumentTask,
             result.absent.append(report)
             continue
         row, statement, layer = got
+        src = origin.get(report)
         result.accepted[report] = {
             "layer": layer,
             "items": len(row),
+            # ⚠️ **WHICH FILING THIS STATEMENT CAME FROM, WHEN IT IS NOT THE ONE THE DOCUMENT
+            # BLOCK NAMES.** Absent for every statement of the chosen document, which is almost
+            # all of them; present only where `_alternate_retry` recovered one. A row that
+            # names the filing `documents()` chose while holding figures read from another
+            # asserts a document it did not come from — §6-2-terdecies is what that costs, and
+            # `pdf_ocr_merge` reads these three in preference to the document-level ones.
+            # ⚠️ The ENTITY is identical by construction (`alternates` fixes it) and is written
+            # anyway, so the merge has ONE rule rather than a rule and an exception.
+            **({"document": src["file"], "assurance": src.get("assurance", ""),
+                "consolidated": src.get("consolidated", "")} if src else {}),
             # ⚠️ **EVERY ROW THE PARSER READ, NOT ONLY THE ONES THAT MAPPED.** `values` below
             # holds the mapped cells — 98 for VCB Q1-2026 — and two runs agreeing on those says
             # nothing about the lines that mapped to no column, which is most of a statement.

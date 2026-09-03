@@ -476,7 +476,7 @@ keeping a finished one is how a session spends hours re-parsing a ticker with no
 win. `RUN__pdf_ocr_control_ctg.ipynb` went on 2026-09-03, at `complete = True` with **0
 outstanding cells** on all three statements. ⚠️ **`complete` ALONE IS NOT THE TEST** — it measures
 continuity from the START of the filing chain, so ACB, BID and BSR read `True` today with 5, 7
-and 2 cells still open. **Read `outstanding` beside it**, and delete only on both.
+and 2 cells still open. **Read `outstanding` beside it**, and delete only on both. ⚠️ `RUN__pdf_ocr_control_tcb.ipynb` is KEPT for now although TCB is 171/171 from Q2-2012 — Q4-2008 is still open and the ticker's own note records two conclusions that were withdrawn (§8a), which is the thing a future session most needs and which no table carries.
 
 ```powershell
 jupyter lab src\kaggle_gpu\RUN__pdf_ocr_summary.ipynb    # read-only: no OCR, no network, no write
@@ -605,6 +605,53 @@ fixes; re-measure rather than quoting it.
 checkout cannot prove which quarters were filed. Those tickers read `complete = False` with a
 warning rather than a guess (CLAUDE.md §5 rule 2).
 
+### ⚠️ 8a. TWO THINGS THIS TABLE CANNOT TELL YOU, AND BOTH COST A WRONG CONCLUSION ON TCB
+
+Measured 2026-09-04, finishing TCB. **The ticker went from 168 to 171 of 171 cells from Q2-2012**,
+and three of the five recoveries came only after a conclusion recorded in `CLAUDE.md`,
+`ISSUES.md` and a control notebook was withdrawn. Both mistakes have the same shape, and this
+table's own columns are where a reader will meet them.
+
+**1 · `open — a re-run could still win it` is not `winnable`, and `SETTLED` is not proof.**
+`settled_absences` marks a cell permanent on ONE reason, `no such statement on any page of this
+filing`, on the ground that it is a verdict on the DOCUMENT. ⚠️ **It is a verdict on the PAGE
+CLASSIFIER** (`SET-2`). TCB's Q1-2017 and Q3-2017 print the notes title **and the notes form
+code** (`Mẫu B050/TCTD - HN`) on the cash flow's own FIRST page, so no cash-flow page is found,
+all 67 layers report that reason, and both quarters were recorded as filings containing no cash
+flow. **Page 8 of Q1-2017 prints "LƯU CHUYỂN TIỀN THUẦN TỪ HOẠT ĐỘNG KINH DOANH" over 67
+figures.** Both now read `pdf`, identity residual **0**.
+
+⚠️ **A SETTLED CELL IS DROPPED BY §3 BEFORE ANY OCR**, so re-trying one means naming its quarter
+in `QUARTERS` explicitly — and a settled record written before 2026-09-04 still says PERMANENT
+about a filing whose statement was merely mis-titled.
+
+**2 · `documents()` returns ONE filing per period, and a quarter can have several.** TCB's
+Q2-2019 closing cash balance is printed **under the company's round stamp** in the AUDITED
+consolidated filing: 47.141.880 reads as 171414880 / 17141880 / 19111880 / 17141.880 at 200 /
+300+500 / 400+pad6 / 600 dpi, never the printed figure, because the ink is over the digits. All
+of that is true, and it is a fact about ONE DOCUMENT — CafeF holds **three** consolidated
+Q2-2019 filings, and the REVIEWED one reads the whole tail cleanly at layer 1. `build()` had had
+an alternate-filing retry since 2026-08-25 and `pdf_ocr_job` was documented as deliberately
+lacking it; that reasoning was `_decumulate`'s, not its own (`ALT-1`).
+
+⚠️ **§7 OF THE CONTROL NOTEBOOK NOW NAMES THE FILING EACH STATEMENT CAME FROM**, because the row
+on disk names the alternate and nothing else a reader sees would say so. The ENTITY is fixed by
+`alternates`, so a fallback can never change which company a row describes; the ASSURANCE may
+drop, and that is the trade.
+
+**⚠️ SO THE PRACTICAL RULE IS: BEFORE CALLING A QUARTER UNPARSEABLE, READ ITS PDF INDEX AND LOOK
+AT THE PAGE.** Both cost minutes; both were skipped twice; both would have answered it. Rendering
+one 612×792 strip is what settled that TCB's mis-titled headers are the DOCUMENT's own and not
+OCR damage — which is the difference between a page-classification fix and a week of layer
+hunting.
+
+⚠️ **AND ONE SCREEN MUST NOT BE RUN ON THIS TICKER.** `P43`'s cumulative-cash invariant — a
+cumulative cash flow prints ONE opening balance per year — does **not** hold for TCB's 2016-2017
+filings: Q1-2017 opens at 12,816,151 and Q3-2017 at 14,193,097, and the same disagreement is
+already on disk for 2016 in rows written long before. Both 2017 readings were verified against
+the rendered page and each one's prior-year column reproduces the corresponding quarter on disk
+to the đồng. Which period those openings anchor to is **not established**.
+
 ---
 
 ## 9. Where the rest is written down
@@ -613,6 +660,6 @@ warning rather than a guess (CLAUDE.md §5 rule 2).
 |---|---|
 | the parse itself — the cascade, the gates, the 47 layers | [`src/web_scraper/CONTEXT.md`](../../web_scraper/CONTEXT.md) §3a, §3b |
 | `kgpu` in general — payload modes, the measured traps | [`README.md`](../README.md) |
-| what the OCR has produced, ticker by ticker | `CLAUDE.md` §6-2-octies … §6-2-untricies |
-| open defects — read `CRP-1` before quoting any non-bank figure | [`docs/ISSUES.md`](../../../docs/ISSUES.md) |
+| what the OCR has produced, ticker by ticker | `CLAUDE.md` §6-2-octies … §6-2-unsexagies |
+| open defects — read `CRP-1` before quoting any non-bank figure, and `SET-2`/`ALT-1` before calling a quarter unparseable | [`docs/ISSUES.md`](../../../docs/ISSUES.md) |
 | what to run next | [`docs/TODO.md`](../../../docs/TODO.md) — `P38`, `P6`, `P5` |

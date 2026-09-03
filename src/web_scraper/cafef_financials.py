@@ -96,6 +96,36 @@ class ParseLayer:
         balance". The threshold is NOT lowered — it is what keeps a narrative page out, and a
         tail page is mostly signature; instead the page is admitted on POSITIVE evidence, by
         carrying the statement's own closing line (`PdfParser.TAIL`), and the run ends there.
+      * `notes_tail` — admit a page whose HEADER says notes and whose CONTENT continues the
+        statement. `_fill_continuations` reads a NOTES page as "the statements are over", which
+        is right until the filing prints its own notes header on a statement's second page:
+        TCB's Q2-2019, Q3-2019 and Q1-2021 consolidated cash flows each run onto a page titled
+        "THUYẾT MINH BÁO CÁO TÀI CHÍNH HỢP NHẤT", and Q1-2021 stamps "Mẫu B050/TCTD - HN" (B05
+        = notes) on it as well. That page carries sections II-VII — the opening, FX and CLOSING
+        balances — so losing it fails the statement outright, and all three quarters were
+        `missing` for "no closing cash balance" on every layer of the cascade.
+
+        ⚠️ **`TAIL` CANNOT ADMIT IT EITHER, AND THAT IS A SECOND DEFECT, NOT A THRESHOLD.**
+        The needle is a contiguous phrase and the closing line's label WRAPS AROUND its own
+        figures on these pages, so the flattened text reads "…tuongduong VII 33 47141880
+        50050197 tientaithoidiemcuoiky…" and the phrase is broken by the numerals. The evidence
+        is therefore taken in two parts that each survive the wrap — the statement's own
+        SECTION heading and the closing balance's date clause; see `PdfParser.TAIL_SECTION`.
+
+        ⚠️ **RIDES WITH `label_wrap`, AND CANNOT SHIP WITHOUT IT.** The same wrap that breaks
+        the needle also keys the row: `table_rows` builds a label from the lines ABOVE the
+        figures, so the opening and the closing balance would BOTH key on
+        "tien_va_cac_khoan_tuong_duong" and the clause that tells them apart — "tại thời điểm
+        đầu/cuối kỳ" — sits on the line BELOW. That is `SLD-1`'s shape: two cash balances on
+        the wrong accounts, with `reconcile` and `sane` both passing.
+      * `notes_head` — let such a page START a statement rather than merely continue one.
+        `notes_tail` assumes the statement's FIRST page was classified correctly, and on TCB's
+        Q1-2017 and Q3-2017 it is not: those filings print the notes title AND the notes form
+        code ("Mẫu B050/TCTD - HN") on the cash flow's first page too, so no run is ever opened
+        and the tail rule has nothing to extend. Every layer reported `no such statement on any
+        page of this filing` — ⚠️ and `settled_absences` treats that reason as PERMANENT, so
+        both quarters had been recorded as filings containing no cash flow. They contain one.
+        See `PdfParser._notes_head_report` for the three guards and the 191-page measurement.
       * `label_wrap` — reassemble a label that WRAPPED AROUND its own value line. `table_rows`
         builds a label from the lines ABOVE the figures, which is wrong when the figures sit
         BETWEEN its two halves, and BID's Q1-2012 cash flow does that twice. Two repairs, both
@@ -186,6 +216,8 @@ class ParseLayer:
     notes_boundary: bool = False
     relax_merged_seam: bool = False
     tail_continuation: bool = False
+    notes_tail: bool = False
+    notes_head: bool = False
     label_wrap: bool = False
     unit_from_document: bool = False
     annual_tail: bool = False
@@ -203,8 +235,9 @@ class ParseLayer:
 
         ⚠️ **ONE DEFINITION, BECAUSE FOUR TEST FILES WERE EACH KEEPING THEIR OWN COPY.**
         Every widening block in the cascade — `cash_extra_terms`, `condensed_income`,
-        `join_lost_separator`, `merged_tail`/`column_header_blind`, and now `reseat_words` /
-        `equity_wording` — is guarded by the same property: *no layer reading the box as
+        `join_lost_separator`, `merged_tail`/`column_header_blind`, `reseat_words` /
+        `equity_wording`, and now `notes_tail` / `notes_head` — is guarded by the same
+        property: *no layer reading the box as
         printed may run after it*. Each guard re-listed the widening flags, so adding the
         fifth block meant editing four lists, and forgetting one silently turns the new
         layers into "strict" ones and moves `max(strict)` past the block it is meant to
@@ -220,7 +253,15 @@ class ParseLayer:
                     or self.relax_merged_seam or self.annual_tail or self.cash_extra_terms
                     or self.condensed_income or self.join_lost_separator
                     or self.merged_tail or self.column_header_blind
-                    or self.reseat_words or self.equity_wording)
+                    or self.reseat_words or self.equity_wording
+                    # ⚠️ ADDED 2026-09-04, AND THEY WERE MISSING FOR AS LONG AS THEY EXISTED.
+                    # Both admit a page the CLASSIFIER rejected, which is `column_header_blind`'s
+                    # class exactly — it is listed here and they were not. Nothing was wrong
+                    # today only because every `+notestail`/`+noteshead` layer also carries
+                    # `relax_totals`; a future one without it would have been counted STRICT and
+                    # would have moved `max(strict)` past the very blocks these guards bound.
+                    # This is the docstring above describing the omission that then happened.
+                    or self.notes_tail or self.notes_head)
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
 # Filings before Q1-2008 are blocked at the INPUT, so no pre-2008 document is ever opened and
@@ -395,6 +436,11 @@ def parse_key(layer: ParseLayer) -> tuple:
             layer.join_lost_separator,
             layer.title_over_form, layer.loose_form_code, layer.realign_rows,
             layer.notes_boundary, layer.tail_continuation, layer.label_wrap,
+            # `notes_tail` moves which page belongs to which statement, exactly as
+            # `tail_continuation` beside it does, so two layers differing only in it must not
+            # share a parse. ⚠️ Deliberately NOT in `ocr_key`: it re-labels pages `scan` has
+            # already read and cannot change a recognised character.
+            layer.notes_tail, layer.notes_head,
             layer.unit_from_document,
             # `column_header_blind` moves which page is a NOTE, so it changes the PARSE;
             # `merged_tail` is a mapping rule and is deliberately absent, like
@@ -1217,6 +1263,94 @@ class FinancialsBuilder:
                    reseat_words=True, label_wrap=True, tail_continuation=True),
         ParseLayer("onnx@300+reseat", "onnx", 300,
                    reseat_words=True, label_wrap=True, tail_continuation=True),
+        # ── THE FILING PUT ITS NOTES HEADER ON A STATEMENT'S SECOND PAGE (`notes_tail`) ──
+        # `_fill_continuations` reads a NOTES page as "the statements are over" and ends the
+        # run there — correct for every filing but the one that mis-titles its own pages. TCB's
+        # Q2-2019, Q3-2019 and Q1-2021 consolidated cash flows each run onto a page headed
+        # "THUYẾT MINH BÁO CÁO TÀI CHÍNH HỢP NHẤT", and Q1-2021 stamps the notes FORM CODE on
+        # it too ("Mẫu B050/TCTD - HN"). That page carries sections II-VII, i.e. the opening,
+        # the FX line and the CLOSING balance, so all three quarters were refused for "no
+        # closing cash balance" on all 65 layers and had been `missing` since the ticker was
+        # bootstrapped. ⚠️ Rendered and read off the page image before anything was written:
+        # the header is the DOCUMENT's, not OCR damage — its period line is an unresolved Word
+        # field ("cho giai đoạn từ ngày REF Yea01 …") — so no engine, DPI or crop can reach it.
+        #
+        # ⚠️ **`label_wrap` RIDES WITH IT AND THE PAIR CANNOT BE SPLIT.** The closing line's
+        # label wraps around its own figures on these pages, so without the repair the opening
+        # and closing balances both key on "tien_va_cac_khoan_tuong_duong" and the clause that
+        # separates them sits on the line below — two cash balances on the wrong accounts, with
+        # `reconcile` and `sane` both passing. `PGB-1` and §6-2-unvicies each measured that
+        # rule from the other side: **when two new layers differ by a label repair, the repair
+        # goes first** — here they cannot even be separated.
+        #
+        # ⚠️ **LAST, AND THE POSITION IS WHAT BOUNDS THEM.** Measured 2026-09-04 over all
+        # **1,182 `pdf` rows on disk**: the latest cascade position any of them was won at is
+        # **65** of 65 — `onnx@300+reseat`, the CTG row the block above shipped for — so a
+        # layer at 66 or beyond is unreachable for every row this repo has already written.
+        # That is the same argument `join_lost_separator`, `merged_tail` and `equity_wording`
+        # each shipped on. What can reach here is a statement all 65 readings above refused.
+        # ⚠️ **EVERY ONE OF THEM IS RELAXED, AND THAT IS THE MEASUREMENT, NOT A PREFERENCE.**
+        # `verify_cash` rides with `relax_totals`, so a STRICT layer does not run
+        # `_cash_flow_identity` — and TCB's Q2-2019 is the case that decides it. Its closing
+        # balance is printed UNDER THE COMPANY'S ROUND STAMP: the filing prints 47.141.880 and
+        # the recogniser returns `171414880` at 200 dpi, `17141880` at 300 and 500, `19111880`
+        # at 400+pad6 and `17141.880` at 600 — never the right figure, at any resolution or
+        # crop, because the ink is over the digits. A strict `+notestail` layer ACCEPTS that
+        # (both totals are plausible and nothing else looks at them) and would have written
+        # 171,414,880; the relaxed one refuses it with "cash flow does not close: 3.7199e+13 +
+        # 9.94297e+12 + -7e+07 != 1.71415e+14". §6-2-tervicies stated the rule for `annual_tail`
+        # — *only the `+relax` variant ships* — and this is the same rule: **a layer that widens
+        # what may be FOUND may not also be the layer that skips the arithmetic.**
+        #
+        # ⚠️ `reseat_words` RIDES WITH THEM, and both recovered quarters need it: the closing
+        # line's two period columns sit on baselines 0.5-1.5pt apart, so `_line_key` puts them
+        # on separate rows and `label_wrap`'s `take_below` then attaches the account's own name
+        # to the SECOND one. Q3-2019 mapped the PRIOR YEAR's 42,604,730 as its closing balance
+        # that way — a wrong figure, refused only because the identity then missed.
+        #
+        # ⚠️ `cash_extra_terms` is a SECOND pair rather than a fifth flag on the first, and the
+        # narrower layers run first: TCB words its FX line "ẢNH HƯỞNG TỪ THAY ĐỔI TỶ GIÁ TRONG
+        # KỲ" against the chart's "Điều chỉnh ảnh hưởng của thay đổi tỷ giá" — **0.675 against
+        # a `SCHEMA_MATCH` of 0.80** — so on Q1-2021 the line does not map and the identity is
+        # unanswerable. The span between the two balances holds it (35,595,899 - 7,096,974 +
+        # 1,803 = 28,500,728, exact), and the term is COUNTED and never written, so the FX
+        # column stays empty rather than holding a figure nothing attributed. A quarter that
+        # closes on its own NAMED lines is the stronger reading and is reached first.
+        ParseLayer("onnx@200+notestail", "onnx", 200,
+                   notes_tail=True, label_wrap=True, reseat_words=True, relax_totals=True),
+        ParseLayer("onnx@300+notestail", "onnx", 300,
+                   notes_tail=True, label_wrap=True, reseat_words=True, relax_totals=True),
+        ParseLayer("onnx@200+notestail+extra", "onnx", 200,
+                   notes_tail=True, label_wrap=True, reseat_words=True, relax_totals=True,
+                   cash_extra_terms=True),
+        ParseLayer("onnx@300+notestail+extra", "onnx", 300,
+                   notes_tail=True, label_wrap=True, reseat_words=True, relax_totals=True,
+                   cash_extra_terms=True),
+        # ⚠️ …AND THE SAME DEFECT ON THE STATEMENT'S **FIRST** PAGE (`notes_head`), which the
+        # block above cannot reach: it extends a run, and here no run is ever opened. TCB's
+        # Q1-2017 and Q3-2017 print the notes title AND the notes form code on the cash flow's
+        # own first page, so all 67 layers reported `no such statement on any page of this
+        # filing` — and `settled_absences` treats that reason as PERMANENT, so both quarters
+        # were recorded as filings that contain no cash flow. Page 8 of Q1-2017 prints "LƯU
+        # CHUYỂN TIỀN THUẦN TỪ HOẠT ĐỘNG KINH DOANH" over 67 figures.
+        #
+        # ⚠️ **LATER THAN `+notestail`, AND THE ORDER IS THE NARROWER CLAIM FIRST.** Extending
+        # an open run says this page belongs to the statement above it; opening one says what a
+        # page IS. `notes_tail` rides along because the same filings need both — the cash flow's
+        # SECOND page is mis-titled too, and without the tail rule the run it just opened is
+        # closed again by the very next page.
+        ParseLayer("onnx@200+noteshead", "onnx", 200,
+                   notes_head=True, notes_tail=True, label_wrap=True, reseat_words=True,
+                   relax_totals=True),
+        ParseLayer("onnx@300+noteshead", "onnx", 300,
+                   notes_head=True, notes_tail=True, label_wrap=True, reseat_words=True,
+                   relax_totals=True),
+        ParseLayer("onnx@200+noteshead+extra", "onnx", 200,
+                   notes_head=True, notes_tail=True, label_wrap=True, reseat_words=True,
+                   relax_totals=True, cash_extra_terms=True),
+        ParseLayer("onnx@300+noteshead+extra", "onnx", 300,
+                   notes_head=True, notes_tail=True, label_wrap=True, reseat_words=True,
+                   relax_totals=True, cash_extra_terms=True),
     ]
 
     def __init__(self, logger=None):
@@ -1254,6 +1388,36 @@ class FinancialsBuilder:
         parser._logger = self._logger
         parser.on_page = self.on_page
         return parser
+
+    @staticmethod
+    def apply_layer(parser: PdfParser, layer: ParseLayer) -> None:
+        """Point a parser at one `ParseLayer`'s settings — every field `parse_key` keys on.
+
+        ⚠️ **ONE COPY, BECAUSE A SECOND ONE DISAGREES WITH THE FIRST THE DAY A FLAG IS ADDED.**
+        This was fifteen `parser.set_*` lines inside `_parse_cascaded`, and every probe that
+        drives one layer by hand had re-typed them — so the probe that diagnosed `notes_tail`
+        was silently running WITHOUT the flag it existed to test, and reported the defect
+        unchanged. `NST-1` records the same shape one module over: `ANCHORS` was a hand-written
+        literal duplicating the role tuples and had fallen two roles behind them.
+
+        ⚠️ It does NOT set `on_page` or `_logger` — those belong to the parser for the life of
+        the document, not to a layer, and `_parser_for` re-points them per call.
+        """
+        parser.set_dpi(layer.dpi)
+        parser.set_crop_pad(layer.crop_pad)
+        parser.set_join_split(layer.join_digits)
+        parser.set_join_lost_separator(layer.join_lost_separator)
+        parser.set_title_over_form(layer.title_over_form)
+        parser.set_loose_form_code(layer.loose_form_code)
+        parser.set_realign_rows(layer.realign_rows)
+        parser.set_notes_boundary(layer.notes_boundary)
+        parser.set_tail_continuation(layer.tail_continuation)
+        parser.set_notes_tail(layer.notes_tail)
+        parser.set_notes_head(layer.notes_head)
+        parser.set_label_wrap(layer.label_wrap)
+        parser.set_unit_from_document(layer.unit_from_document)
+        parser.set_column_header_blind(layer.column_header_blind)
+        parser.set_reseat_words(layer.reseat_words)
 
     def _parse_cascaded(self, path: str, period_end,
                         template: str, history: Dict[str, List[int]],
@@ -1326,19 +1490,7 @@ class FinancialsBuilder:
                 self.on_layer(layer_index, len(self.LAYERS), layer,
                               key in parsed or ocr_key(layer) in ocr_done)
             if key not in parsed:
-                parser.set_dpi(layer.dpi)
-                parser.set_crop_pad(layer.crop_pad)
-                parser.set_join_split(layer.join_digits)
-                parser.set_join_lost_separator(layer.join_lost_separator)
-                parser.set_title_over_form(layer.title_over_form)
-                parser.set_loose_form_code(layer.loose_form_code)
-                parser.set_realign_rows(layer.realign_rows)
-                parser.set_notes_boundary(layer.notes_boundary)
-                parser.set_tail_continuation(layer.tail_continuation)
-                parser.set_label_wrap(layer.label_wrap)
-                parser.set_unit_from_document(layer.unit_from_document)
-                parser.set_column_header_blind(layer.column_header_blind)
-                parser.set_reseat_words(layer.reseat_words)
+                self.apply_layer(parser, layer)
                 try:
                     # ⚠️ **THE CAPITAL-NOTE SCAN IS REQUESTED ONLY WHILE THE FACTS ARE STILL
                     # OPEN, AND THAT IS THE SAME CONDITION THE BLOCK BELOW READS THEM UNDER.**
@@ -3311,11 +3463,56 @@ class FinancialsBuilder:
         if len(dated) < 2:
             dated = self._cash_balance_rows(st)
         if len(dated) < 2:
+            dated = self._cash_balance_rows_unnumbered(st)
+        if len(dated) < 2:
             return None
         first_i = dated[0][0]
         close_i = next((i for i, r in reversed(dated)
                         if i != first_i and st._first_value(r.values) is not None), None)
         return None if close_i is None or close_i <= first_i else (first_i, close_i)
+
+    # A bare section numeral, as `slug` leaves it in a key: a roman numeral, a one- or
+    # two-digit code, or a single letter, standing alone between two underscores. The same
+    # vocabulary `PdfParser.NUMBER_RE` uses, because it is the same thing — the filing's own
+    # numbering — seen after slugging instead of before.
+    NUMBERING_SEG_RE = re.compile(r"_(?:[ivxlc]+|\d{1,2}|[a-z])(?=_)", re.I)
+
+    def _cash_balance_rows_unnumbered(self, st: Statement) -> List[Tuple[int, object]]:
+        """The two balance rows when the SECTION NUMERAL is sitting inside the account's name.
+
+        ⚠️ **A LABEL THAT WRAPS AROUND ITS OWN FIGURES PUTS THE FILING'S NUMBERING IN THE MIDDLE
+        OF THE KEY, AND BOTH SCANS ABOVE ARE CONTIGUOUS-SUBSTRING TESTS.** `table_rows` builds a
+        wrapped row as `carry + <the value line's own words> + <the half below it>`, and the
+        numeral is printed on one of those two lines — so TCB's Q1-2021 cash flow comes back
+        with `tien_va_cac_khoan_tuong_duong_V_tien_tai_thoi_diem_dau_ky`, in which neither
+        `CASH_TAIL` nor `CASH_PHRASE` appears. Fuzzy matching survives it (it costs about 0.09
+        of the score, so `map_to_schema` mapped BOTH balances correctly); these do not, so
+        `_cash_balance_span` returned None, `_extra_cash_terms` had no span to sum, and the
+        quarter was refused for `fx not mapped` with every figure on the page read correctly.
+
+        ⚠️ **THE FIX IS HERE AND NOT IN `table_rows`, AND THAT WAS MEASURED.** Relocating the
+        numeral to the front of the label — where `slug` already drops it and `Row.number`
+        already keeps it — is the tidier repair and it is a DEFAULT-PATH change to every
+        `label_wrap` layer. Replayed over the 16 disk rows won at one (2026-09-04, each
+        re-parsed at its own recorded layer against HEAD): 14 reproduced and **2 did not** —
+        CTG's Q1-2014 cash flow LOST `hdtc_iv_luu_chuyen_tien_thuan_trong_ky` outright, and
+        TCB's Q3-2012 income statement gained an unverified column. A change that recovers one
+        quarter and breaks a mapped figure in another is a net loss, so it was removed and the
+        repair moved to the ONE caller that needs it.
+
+        ⚠️ **REACHED ONLY FROM `_extra_cash_terms`, i.e. only on a `cash_extra_terms` layer,
+        and only when both scans above have already failed.** Whatever it pairs is tested by
+        `_cash_flow_identity` to the ĐỒNG immediately afterwards — no `_equal` tolerance — so a
+        wrong pairing is refused rather than written, which is the same safety
+        `_cash_balance_rows` above already relies on.
+        """
+        rows = []
+        for i, r in enumerate(st.rows):
+            bare = self.NUMBERING_SEG_RE.sub("", r.key).replace("_", "")
+            if (self.CASH_PHRASE in bare and "gomco" not in bare
+                    and st._first_value(r.values) is not None):
+                rows.append((i, r))
+        return rows if len(rows) >= 2 else []
 
     def _extra_cash_terms(self, st: Statement) -> int:
         """What the filing printed BETWEEN its two cash balances, in the CURRENT period.

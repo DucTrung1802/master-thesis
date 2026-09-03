@@ -613,10 +613,16 @@ def merge_run(folder: os.PathLike | str,
                 items[name] += [c for c in values if c not in items[name]]
                 # ⚠️ The provenance `_write` reads. `source` is `pdf` and nothing else: rule 24
                 # forbids any other origin, and this module has no other origin to offer.
+                # ⚠️ **THE STATEMENT'S OWN PROVENANCE WHERE IT HAS ONE, THE DOCUMENT'S
+                # OTHERWISE.** `pdf_ocr_job._alternate_retry` may recover a statement from a
+                # DIFFERENT filing of the same period and entity, and it records that filing on
+                # the accepted block. Reading `doc` unconditionally would write a row naming a
+                # document it did not come from, which is §6-2-terdecies' defect exactly. A run
+                # folder written before that field simply has none, and falls through here.
                 meta[name][period] = {
                     "ocr_config": got.get("layer", ""),
                     "source": "pdf",
-                    "consolidated": doc.get("consolidated", ""),
+                    "consolidated": got.get("consolidated") or doc.get("consolidated", ""),
                     "cash_flow_method": got.get("cash_flow_method", "") or "",
                     "unit": got.get("unit", ""),
                     "n_columns": got.get("n_columns", ""),
@@ -631,8 +637,8 @@ def merge_run(folder: os.PathLike | str,
                     # whose priors were never filed. Absent, the run's own value stands.
                     "months": (chosen.months if chosen.months is not None
                                else got.get("months")),
-                    "document": doc.get("document", ""),
-                    "assurance": doc.get("assurance", "") or "",
+                    "document": got.get("document") or doc.get("document", ""),
+                    "assurance": got.get("assurance") or doc.get("assurance", "") or "",
                 }
 
         # ⚠️ `attempted` is EXACTLY the periods being written. `_write` builds its quarter grid

@@ -2676,6 +2676,218 @@ with the measurement rather than relaxed to make a test pass.
   refuses to reproduce it and the span cannot be recorded. ⚠️ CTG Q1-2009's income statement is
   in the same state (out by 1,240 mn). Both are suspect rows the gate is pointing at.
 
+### ⚠️ 3j. A PAGE WHOSE HEADER SAYS NOTES AND WHOSE CONTENT CONTINUES THE STATEMENT — TCB, 2026-09-04
+
+`_fill_continuations` reads a NOTES page as *"the statements are over"* and ends the run there.
+That is right for every filing but one shape, and TCB has three of them: **Q2-2019, Q3-2019 and
+Q1-2021 each run their consolidated cash flow onto a second page headed "THUYẾT MINH BÁO CÁO TÀI
+CHÍNH HỢP NHẤT"**, and Q1-2021 stamps the notes FORM CODE on it as well (`Mẫu B050/TCTD - HN`,
+B05 = notes). That page carries sections II-VII, so the statement loses its opening balance, its
+FX line and its CLOSING balance at once, and all three quarters were `missing` for `no closing
+cash balance` on every layer of the cascade. CLAUDE.md §6-2-unsexagies is the write-up; this is
+what a future reader of THIS package needs.
+
+| flag / constant | what it repairs | where |
+|---|---|---|
+| `notes_tail` (`NHD-1`) | a NOTES-headed page that is the running statement's own tail | `PdfParser.SECTION_HEADING`, `_is_notes_tail_page` |
+| `_cash_balance_rows_unnumbered` | the section numeral sitting INSIDE the account's name | `FinancialsBuilder._cash_balance_span`, inside `cash_extra_terms` |
+| `apply_layer` | one copy of the 14 `parser.set_*` calls, so a probe cannot run without a flag | `FinancialsBuilder.apply_layer` |
+
+#### ⚠️ RENDER THE PAGE BEFORE BLAMING THE OCR — it is the only reason this is a classification fix
+
+The header is printed that way IN THE DOCUMENT. Its period line is an unresolved Word field
+(*"cho giai đoạn từ ngày REF Yea01 …"*) and its form-code fragment reads *"năm 2019a/TCTD - HN"*,
+so `_page_kind` is right about what the page SAYS and the filing is wrong about what the page IS.
+No engine, DPI or crop could ever have reached it, and 15 minutes of rendering one 612×792 strip
+is what separated that from a week of layer-hunting.
+
+#### The evidence a page must carry, and why it is TWO markers
+
+⚠️ **`TAIL` cannot admit these pages, and that is a second defect rather than a threshold.** The
+needle is a contiguous phrase and the closing line's label wraps AROUND its own figures:
+
+```
+TIỀN VÀ CÁC KHOẢN TƯƠNG ĐƯƠNG          <- the label's first half
+VII 33   47.141.880   50.050.197       <- the figures, between the halves
+TIỀN TẠI THỜI ĐIỂM CUỐI KỲ             <- the half that names the account
+```
+
+so the flattened page reads `…tuongduongvii3317141488050050197tientaithoidiemcuoiky…`. Both
+markers therefore have to survive the wrap:
+
+* **`SECTION_HEADING`** — the statement's own SECTION heading, `luuchuyentienthuan`. Only a cash
+  flow prints it; ⚠️ it is **not** a second copy of `HEADING[CASH_FLOW]`, which is "lưu chuyển
+  tiền **TỆ**", a different phrase.
+* **`TAIL_CLOSING`** — the closing balance's date clause, `taithoidiemcuoi{ky,nam,quy}`, which a
+  note merely NAMING the same account does not carry.
+
+⚠️ **MEASURED OVER EVERY PAGE OF ALL THREE FILINGS BEFORE IT SHIPPED — 197 pages, and exactly
+TWO per filing carry either marker: the cash flow's own two.** Zero notes pages, zero signature
+pages, and zero of the ~30 note tables that follow — **including note 33, which IS "Tiền và các
+khoản tương đương tiền", the account the closing line names and the note it references.** A test
+pins that page as a refusal.
+
+#### ⚠️ EVERY `+notestail` LAYER IS RELAXED, AND THE MEASUREMENT IS THE QUARTER IT REFUSES
+
+`verify_cash` rides with `relax_totals`, so a STRICT layer never runs `_cash_flow_identity`.
+TCB's Q2-2019 closing balance is printed **under the company's round stamp** and no configuration
+reads it: `171414880` at 200 dpi, `17141880` at 300 and 500, `19111880` at 400+pad6, `17141.880`
+at 600, against a printed **47.141.880**. A strict `+notestail` layer ACCEPTS that — both totals
+are plausible and nothing else looks at them — and would have written 171,414,880. §6-2-tervicies
+stated the rule for `annual_tail`; here it is measured on the quarter that would have been wrong.
+
+⚠️ `label_wrap` and `reseat_words` ride with them and neither can be dropped. The closing line's
+two period columns sit on baselines 0.5-1.5pt apart, so `_line_key` puts them on separate rows
+and `take_below` attaches the account's own name to the SECOND — Q3-2019 mapped the PRIOR YEAR's
+42,604,730 as its closing balance that way.
+
+#### ⚠️ THE TIDIER REPAIR WAS MEASURED AND REMOVED — and this is the reusable half
+
+The section numeral the wrap leaves in the MIDDLE of a key defeats every contiguous-substring
+test: `_is_cash_tail` and `CASH_PHRASE` find neither balance in
+`tien_va_cac_khoan_tuong_duong_V_tien_tai_thoi_diem_dau_ky`, so `_cash_balance_span` returns None
+and `cash_extra_terms` has no span to sum — while `map_to_schema` maps both correctly, because
+fuzzy matching only loses ~0.09 to it.
+
+Relocating that numeral to the FRONT of the label in `table_rows` is the better-looking fix —
+`slug` already drops a leading numeral, `Row.number` already keeps it, and it is one place
+instead of a second scan. ⚠️ **It is a DEFAULT-PATH change to every `label_wrap` layer**, so it
+was measured first: each of the **16 disk rows won at one**, re-parsed at its own recorded layer,
+against HEAD.
+
+| | HEAD | with the relocation |
+|---|---|---|
+| reproduced | **13** | **11** |
+| differ | 3, all pre-existing | 5 |
+
+The two extra are **CTG's Q1-2014 cash flow, which LOST `hdtc_iv_luu_chuyen_tien_thuan_trong_ky`
+outright**, and TCB's Q3-2012 income statement, which gained an unverified column. **A change
+that recovers one quarter and breaks a mapped figure in another is a net loss.** So the repair
+moved into `_cash_balance_rows_unnumbered`, reachable only from `_extra_cash_terms` — a
+`cash_extra_terms` layer, after both stricter scans have failed, with the identity testing what
+it pairs to the ĐỒNG immediately afterwards. **`table_rows` is byte-identical to HEAD.** A test
+records the disproven reasoning so it is not re-made.
+
+#### ⚠️ A PROBE THAT RE-TYPES THE LAYER'S SETTINGS IS PROBING A LAYER THAT DOES NOT EXIST
+
+`_parse_cascaded` carried a hand-written list of thirteen `parser.set_*` calls, and every probe
+that drives one layer by hand had copied it. **The probe written to diagnose `notes_tail` was
+therefore running WITHOUT the flag it existed to test, and reported the defect unchanged** — the
+same shape `NST-1` records for `ANCHORS`, a hand-written literal that had fallen two roles behind
+the tuples it duplicated. `FinancialsBuilder.apply_layer(parser, layer)` is the one copy now, and
+it is a `staticmethod` so a probe can call it without a cascade.
+
+#### ⚠️ AND THREE EXISTING TESTS PINNED THE SHAPE OF THE `cash_extra_terms` BLOCK
+
+`test_the_span_layers_run_late_and_relaxed` asserted ONE contiguous block; the flag now has two
+runs, because a second, unrelated quarter needs it at the end of the cascade. Restated as *each
+RUN is contiguous and no run starts before the strict layers end*, which is what was ever being
+guarded. `test_every_span_layer_still_carries_the_wide_crop` and
+`test_the_label_repair_runs_before_the_bare_layer` are scoped to the pad-6 run for the same
+reason — ⚠️ and the first keeps its teeth: a default-crop span layer must now carry `notes_tail`,
+i.e. **must belong to a run that has a quarter it demonstrably recovers**, which is exactly the
+bar `P39` set when three such layers were added on an argument and removed on a measurement.
+
+#### The regression, and what it establishes
+
+| | |
+|---|---|
+| the run | 4 documents, one process each, onnx-only cascade, **29.1 min**, 0 engine errors |
+| ⚠️ **every row it touched that disk already held** | **9 of 9 REPRODUCED**, each at its own layer |
+| the two recoveries | Q3-2019 `open + net + fx = close` residual **0**; Q1-2021 closes on the span, residual **0** |
+| corroborated OUTSIDE the filing | each opening balance equals the prior Q4's CLOSING **and** the same year's Q1 OPENING already on disk — three documents agree on each |
+| the `cash_extra_terms` block | 5 disk rows: **4 reproduce**; the 5th differs identically on HEAD |
+| tests | **648** across `src/web_scraper`, `src/utils`, `src/kaggle_gpu` — 41 new, none needing a PDF, a network or an engine |
+
+#### ⚠️ THE CASCADE MEASURES A DOCUMENT, AND A QUARTER CAN HAVE SEVERAL — `ALT-1`
+
+⚠️ **THIS SECTION WAS FIRST WRITTEN WITH TCB's Q2-2019 AS THE EXAMPLE OF A QUARTER NOTHING CAN
+WIN, AND THAT WAS WRONG.** The measurement behind it was right — its closing cash balance is
+printed under the company's round stamp in the AUDITED consolidated filing, and 47.141.880 comes
+back as 171414880 / 17141880 / 19111880 / 17141.880 at 200 / 300+500 / 400+pad6 / 600 dpi, never
+the printed figure, because the ink is over the digits. **That is a fact about ONE DOCUMENT.**
+CafeF holds THREE consolidated Q2-2019 filings and `documents()` returns one; the REVIEWED filing
+is a different scan and reads the whole tail cleanly at `onnx@200`, layer 1:
+
+```
+Lưu chuyển tiền thuần trong kỳ                 9.942.971   27.369.348
+Điều chỉnh ảnh hưởng của thay đổi tỷ giá             (70)       (350)
+Tiền và các khoản tương đương tiền đầu kỳ     37.198.979   22.681.199
+Tiền và các khoản tương đương tiền cuối kỳ    47.141.880   50.050.197
+```
+
+Both period columns close exactly, and 47,141,880 sits between Q1-2019's closing (43,521,850) and
+Q3-2019's (46,894,017) already on disk.
+
+⚠️ **`build()` HAS HAD THE RETRY SINCE 2026-08-25 AND THIS MODULE WAS DOCUMENTED AS DELIBERATELY
+LACKING IT** — *"no alternate-filing retry and no de-cumulation. Both are `build()`'s, and both
+need state a one-document run does not have."* That reasoning is `_decumulate`'s: the retry needs
+the PDF index and the same band and `open_ref` `run_document` is already holding. Three guards,
+and all three are `build()`'s rather than a second set — the **ENTITY is fixed** (`allow_parent`
+stays the only route to a standalone filing), the **INCOME STATEMENT is refused when the
+cumulative shape differs**, and `reconcile` + `sane` judge what it finds.
+
+⚠️ **THE ORIGIN IS RECORDED PER STATEMENT AND THAT IS THE HALF THAT MUST NOT BE SKIPPED.** The
+row on disk names `…_da_soat_xet.pdf` with `assurance=reviewed`, not the audited filing the
+document block names; `pdf_ocr_merge` reads `got["document"]` / `["assurance"]` /
+`["consolidated"]` in preference to the document-level fields, falling through for older run
+folders. A row that names the filing `documents()` chose while holding figures read from another
+asserts a document it did not come from — §6-2-terdecies.
+
+⚠️ **The opening balance is BLANK on that row**, and deliberately: it maps at `onnx@200+relax`
+(25 items) and not at `onnx@200` (24), the cascade stops at the first layer that reconciles, and
+a figure no accepted layer produced does not go on the row (§5 rule 2). The closing balance is
+the anchor and it is right. ⚠️ `verify_cash` did not run — it rides with `relax_totals` and this
+was a strict accept — so the identity above is a check on the artefact, not a verdict a gate
+reached, as for every strictly-accepted statement here.
+
+#### ⚠️ AND A `SETTLED` CELL IS NOT PROOF EITHER — `SET-2`, and the classifier is the verdict
+
+⚠️ **THE ONE REFUSAL THIS REPO TREATS AS PERMANENT CAN BE PRODUCED BY A PAGE-CLASSIFICATION
+FAILURE.** `settled_absences` settles a cell on `no such statement on any page of this filing`
+alone, on the ground that it is a verdict on the DOCUMENT — and it is a verdict on the
+CLASSIFIER, which is the same sentence. TCB's Q1-2017 and Q3-2017 print the notes title **and
+the notes form code** (`Mẫu B050/TCTD - HN`) on the cash flow's **FIRST** page as well as its
+second, so no cash-flow page is ever found, all 67 layers report that reason, and both quarters
+were recorded as filings containing no cash flow. **Page 8 of Q1-2017 prints "LƯU CHUYỂN TIỀN
+THUẦN TỪ HOẠT ĐỘNG KINH DOANH" over 67 figures.**
+
+⚠️ **`notes_tail` CANNOT REACH THEM** — it EXTENDS a run and here none is opened, which is why
+the same filing family needed a second rule. `notes_head` opens one, on the statement's own
+SECTION heading in the page's HEADER BLOCK, with three guards: the run must already be open
+(a statement's pages are contiguous, which keeps this inside the statements block), the report
+must have no pages of its own ANYWHERE in the document (`seen` comes from the FINAL
+classification, so it protects forwards as well as back), and the page must be a TABLE.
+**Measured over every page of three TCB filings first: 191 pages, exactly SIX header-block hits,
+all six cash-flow pages.**
+
+⚠️ **AND EVERY GUARD WAS MUTATION-CHECKED — remove it, and the test written for it must fail.**
+Five did; **`report == run` did not**, because `run` is only ever a report the classifier already
+found, so `report in seen` implied it. It was DELETED rather than kept: a clause nothing can
+falsify will be wrong one day with nothing saying so. ⚠️ The same check caught four of the new
+negative tests passing for the WRONG reason — their fixture carried 8 figures against
+`MIN_TABLE_WORDS = 15`, so the table floor was refusing them rather than the guard each was
+named for. **Mutation-check a negative test; a fixture can satisfy it by accident.**
+
+⚠️ **WHAT IS NOT FIXED IS THE REGISTER.** A settled record written before this still says
+PERMANENT about a filing whose statement was merely mis-titled, and nothing re-opens it —
+`plan_batch` drops such a cell before any OCR, so it must be NAMED in `quarters` to be re-tried.
+
+#### ⚠️ What TCB still cannot produce, and one screen that must not be run on it
+
+From **Q2-2012** (it filed only annual reports before that) TCB is **171 of 171 cells** — every
+quarter, all three statements. What remains is Q4-2008 through Q1-2012, where the company filed
+no quarterly report at all.
+
+⚠️ **`P43`'s CUMULATIVE-CASH SCREEN MUST NOT BE RUN ACROSS TCB's 2016-2017 QUARTERS — it would
+flag four correct rows.** That invariant (a cumulative cash flow prints ONE opening balance per
+year) is what corroborated Q3-2019 and Q1-2021, and it does not hold here: Q1-2017 opens at
+12,816,151 and Q3-2017 at 14,193,097, and the same disagreement is already on disk for 2016
+(Q1 19,607,170 against Q3 12,757,170) in rows written long before. **Both 2017 readings were
+verified against the rendered page and each one's prior-year column reproduces the corresponding
+quarter on disk to the đồng.** ⚠️ Which period those openings anchor to is NOT established, and
+no account of it is offered here.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):
