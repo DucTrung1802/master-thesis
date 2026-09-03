@@ -280,7 +280,7 @@ LOCAL run and a KAGGLE run read alike:
 
 ```
  33.7% - doc 2/3 HOSE_TCB Q3-2013 - layer 12/47 onnx@300 - page 40/96  ~76 s left   <- the OCR
- 42.5% - step 4/6 HOSE_TCB 2013-Q3 - wait kernel - [ 1.5 min] RUNNING  25% of last  <- the control
+ 42.5% - step 5/15 HOSE_TCB 3q - wait kernel - [ 1.5 min] RUNNING  25% of last      <- the control
 ```
 
 `xx.x% - task - sub-task - detail`. ⚠️ **The percentage is a POSITION IN THE PLAN, not a
@@ -299,6 +299,37 @@ here invents a curve to make the bar move.
 ⚠️ **A READER THAT MATCHED THE START OF A LOG LINE IS NOW BROKEN.** `run.log` lines begin
 with the percentage — `progress.detail_of(line)` returns the segment that used to BE the
 line, and the control notebook's own "what was refused" cell was the first thing this broke.
+
+#### ⚠️ AND SINCE 2026-09-04 THE WHOLE NOTEBOOK IS ONE PLAN — the % is of the SESSION
+
+`RUN__pdf_ocr_control.ipynb` §2 builds ONE `progress.Stages` and every cell after it reports
+through that, so a line from §3 and a line from §9 are positions in the same plan:
+
+```
+  0.9% - step 2/10 HOSE_CTG 2014-Q4 - what is left   - 70 quarter(s) filed, 70 complete
+ 92.2% - step 5/10 HOSE_CTG 2014-Q4 - OCR the filings - 1/1  HOSE_CTG Q4-2014
+ 98.3% - step 9/10 HOSE_CTG 2014-Q4 - did it land    - balance_sheet  70 quarters  pdf=70
+```
+
+**15 steps on KAGGLE, 10 on LOCAL, and the OCR is ~86 % of either** — the difference is that
+the six round-trip steps (`kgpu.runner.RUN_STAGES`) are stages of THIS plan on KAGGLE, so
+`runner.run` is handed the notebook's own reporter and one number stays on the line. Before
+this, §5 and §6 each ran a plan of their own and the other nine cells printed bare prose, so a
+reader had three denominators and no way to tell a session 3 % in from one 96 % in.
+
+⚠️ **RUN IT TOP TO BOTTOM, AND RE-RUN §2 AFTER EDITING §1** — the plan's SHAPE depends on
+`ENVIRONMENT`. The number is monotone by construction, so a cell re-run out of order re-prints
+its step at the percentage already reached rather than winding the bar back.
+
+⚠️ **THE STAGE WEIGHTS ARE NOMINAL AND THE NOTEBOOK SAYS SO.** They put the OCR where it
+belongs and they measure no run. ⚠️ **A skipped step CLAIMS its weight** rather than
+redistributing it — at `EXECUTE = False` the bar jumps to 92 %, which is honest: the plan is
+the plan, and nothing is left to do.
+
+⚠️ **A DOCUMENT'S OWN PER-PAGE LINES ARE NOT IN THE CELL.** `ISOLATE_DOCUMENTS` runs one
+subprocess per filing and a subprocess INHERITS stdout, so those lines go to the kernel log.
+The cell carries the batch's position, one line per document; the pages are in that document's
+`run.log`, in the same shape.
 
 ### When a statement is `absent`, read the FIRST refusal
 

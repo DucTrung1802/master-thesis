@@ -194,15 +194,31 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
               allow_parent: bool = True, overwrite: bool = True,
               compare: bool = True, notes: str = "",
               vram_floor_mb: int = VRAM_FLOOR_MB, retries: int = RETRIES,
-              log: Optional[Callable[[str], None]] = None) -> List[Path]:
+              log: Optional[Callable[[str], None]] = None, progress=None) -> List[Path]:
     """Parse every document of every plan, ONE PER PROCESS. Returns the run folders, in order.
 
     ⚠️ **NOTHING IS MERGED HERE.** `merge_batch` is a separate, deliberate act, because the
     merge is where a wrong figure would reach disk — and this repo has measured four builds in
     which an automatic per-quarter write silently downgraded a quarter it had been given only
     for history.
+
+    `progress` is an optional `utils.progress.Stages`, positioned on the stage this batch IS.
+    Given one, every line here comes out as `xx.x% - <task> - <sub> - <detail>` and the overall
+    fraction moves one document at a time through that stage — which is the only reason a
+    caller's bar does not stand still through the longest thing it does. ⚠️ `progress=None`
+    (the CLI default) prints exactly what it printed before: a formatting change that reaches a
+    command nobody asked to change is a change nobody consented to.
+
+    ⚠️ **DOCUMENTS ARE COUNTED AS EQUAL AND THEY ARE NOT** — one accepted at layer 1 is ~1 min
+    and one that defeats the cascade was 33 (§6-2-noviesdecies). The number is a position in
+    the plan, the same lower bound every other one in this repo is.
+
+    ⚠️ **A CHILD'S OWN PROGRESS LINES DO NOT COME THROUGH HERE.** Each document is a
+    subprocess that INHERITS stdout, so its `xx.x%` lines go to the terminal's file descriptor
+    and never through `say` — in a notebook they land in the kernel log, not the cell. What
+    this reports is the batch's own position, and the child reports its own in its `run.log`.
     """
-    say = log or print
+    say = log or (progress.note if progress is not None else print)
     out_root = Path(out_root or job.DEFAULT_OUT_ROOT)
     total = sum(len(p.quarters) for p in plans)
     folders: List[Path] = []
@@ -211,6 +227,11 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
     for plan in plans:
         for quarter in plan.quarters:
             done += 1
+            # ⚠️ The FLOOR of this document, not its ceiling: it has not been read yet, and a
+            # bar that credits work before it happens is the one thing a progress readout must
+            # not do. `end()` is the caller's, once the batch returns.
+            if progress is not None:
+                progress.inside((done - 1) / max(1, total))
             wait_for_vram(vram_floor_mb, log=say)
             cmd = [sys.executable, "-m", "web_scraper.pdf_ocr_job",
                    "--exchange", plan.exchange, "--symbol", plan.symbol,
@@ -255,6 +276,8 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
             if folder is None:
                 continue
             folders.append(folder)
+            if progress is not None:
+                progress.inside(done / max(1, total))
             if _engine_errors(folder):
                 raised.append(f"{plan.key} {quarter}")
                 say(f"   ⚠️ STILL raising after {retries} retr(ies) — whatever won this "

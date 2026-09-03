@@ -184,3 +184,55 @@ def test_the_floor_is_a_free_memory_test_not_a_budget(monkeypatch, floor):
     fails it — which is the case that actually happened (`GPU-1`: 4096 MiB total, ~900 free)."""
     monkeypatch.setattr(batch, "free_vram_mb", lambda: 1000)
     assert batch.wait_for_vram(floor_mb=floor, timeout=0) == 1000
+
+
+# ── the progress hook ─────────────────────────────────────────────────────────
+def test_the_bar_moves_one_document_at_a_time_through_the_stage(tmp_path, monkeypatch):
+    """⚠️ WITHOUT THIS THE BAR STANDS STILL THROUGH THE LONGEST THING THE CALLER DOES.
+    `run_batch` is one stage of the control notebook's plan and it is ~86 % of it; a stage
+    that reports only at its end is indistinguishable from a hung one for hours.
+
+    ⚠️ The FLOOR of a document is claimed before it is read and its ceiling only after — a bar
+    that credits work before it happens is the one thing a progress readout must not do.
+    """
+    from utils import progress
+
+    lines = []
+    reporter = progress.Stages([("before", "before", 50.0), ("parse", "OCR", 50.0)],
+                               label="HOSE_CTG 2q", emit=lines.append)
+    reporter.begin("parse")
+
+    monkeypatch.setattr(batch, "wait_for_vram", lambda *_a, **_kw: None)
+    monkeypatch.setattr(subprocess, "call", lambda *_a, **_kw: 0)
+    seen = []
+    monkeypatch.setattr(batch, "_newest_folder",
+                        lambda *_a, **_kw: seen.append(reporter.fraction) or tmp_path)
+    monkeypatch.setattr(batch, "_engine_errors", lambda _f: 0)
+
+    plan = batch.TickerPlan(exchange="HOSE", symbol="CTG", template="bank",
+                            template_how="override", quarters=["2014-Q3", "2014-Q4"],
+                            operands=[], settled={}, filed=2, complete=False)
+    batch.run_batch([plan], out_root=tmp_path, progress=reporter)
+
+    # the FLOOR of each document as it started: 0/2 and 1/2 of the second half of the plan
+    assert seen == [pytest.approx(0.5), pytest.approx(0.75)]
+    assert reporter.fraction == pytest.approx(1.0)
+    # ⚠️ and the driver's own lines came out in the ONE shape, not through a bare print
+    assert lines and all(l.count("%") >= 1 for l in lines)
+    assert any("HOSE_CTG 2q" in l and "2014-Q3" in l for l in lines)
+
+
+def test_progress_is_optional_so_the_cli_prints_what_it_always_printed(tmp_path,
+                                                                      monkeypatch, capsys):
+    """⚠️ A formatting change that reaches a command nobody asked to change is a change
+    nobody consented to — the same contract `kgpu.runner._stage` keeps for `reporter=None`."""
+    monkeypatch.setattr(batch, "wait_for_vram", lambda *_a, **_kw: None)
+    monkeypatch.setattr(subprocess, "call", lambda *_a, **_kw: 0)
+    monkeypatch.setattr(batch, "_newest_folder", lambda *_a, **_kw: tmp_path)
+    monkeypatch.setattr(batch, "_engine_errors", lambda _f: 0)
+    plan = batch.TickerPlan(exchange="HOSE", symbol="CTG", template="bank",
+                            template_how="override", quarters=["2014-Q4"],
+                            operands=[], settled={}, filed=1, complete=False)
+    batch.run_batch([plan], out_root=tmp_path)
+    out = capsys.readouterr().out
+    assert out.lstrip().startswith("──") and "%" not in out.splitlines()[0]

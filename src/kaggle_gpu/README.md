@@ -158,7 +158,13 @@ what `RUN__pdf_ocr_control.ipynb` passes — re-emits every line of the round tr
 ```
 
 the same shape `web_scraper.pdf_ocr_job` prints on the machine that does the OCR
-(`33.7% - doc 2/3 … - layer 12/47 … - page 40/96`). The stage weights in `RUN_STAGES`
+(`33.7% - doc 2/3 … - layer 12/47 … - page 40/96`). ⚠️ **A caller whose plan is BIGGER than
+the round trip embeds `RUN_STAGES` in it rather than running a second plan** — `run()` looks
+its stages up BY KEY, so any `Stages` containing those six keys drives it, and the line then
+carries the caller's own overall %. Build that plan with `final=False`: `run()` ends by calling
+`done()`, which would otherwise advance the caller's plan to 100 % while the rest of it still
+had to happen. `RUN__pdf_ocr_control.ipynb` is the worked example. The stage weights in
+`RUN_STAGES`
 are ⚠️ **NOMINAL** — they say which step is the long one and measure nothing.
 
 ⚠️ **THE NUMBER STANDS STILL THROUGH `wait kernel` UNLESS THIS JOB HAS COMPLETED ONCE.**

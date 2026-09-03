@@ -13,6 +13,27 @@ are still there, and they are still the honest ones; they moved into the segment
 each names its own denominator (`doc 2/3`, `layer 12/47`, `page 40/96`), and the number
 at the front is the answer.
 
+## ⚠️ EVERY PROGRESS LINE IN THIS REPO IS THIS SHAPE — leading with the OVERALL %
+
+A standing convention since 2026-09-04, and it is one rule: **anything that reports progress
+prints `xx.x% - task - sub-task - detail`, formatted HERE, and the number at the front is the
+fraction of the WHOLE thing the reader started.** Not of the current file, not of the current
+step — a per-step percentage is what the three nested readouts already were.
+
+Two mechanisms exist so that a caller never has to break the rule to compose a plan out of
+parts that each already report:
+
+* **`capture(nested=True)`** for output that already leads with a percentage of its own
+  denominator — the inner number is dropped and its segments are kept, so ONE line carries
+  ONE number (`split_line`).
+* **`Stages(..., final=False)`** for a plan whose stages are driven partly by a routine that
+  owns only a segment of them, so that routine's `done()` cannot advance the bar to 100 %
+  while the session runs on.
+
+⚠️ **A SECOND FORMATTER IS THE FAILURE THIS PREVENTS.** The rule is worth nothing if a caller
+builds the line itself: two writers drift, and then a reader parsing the log gets one shape
+from one stage and another from the next.
+
 ## ⚠️ THE OVERALL % IS A POSITION IN A PLAN. IT IS NOT A FRACTION OF THE TIME LEFT
 
 Nothing in this repo can promise otherwise and the difference is measured, not
@@ -49,6 +70,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import re
 import sys
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Sequence, Tuple, Union
@@ -92,6 +114,37 @@ def detail_of(line: str) -> str:
     """The DETAIL segment of a formatted line — what a reader that used to match on the
     start of the line must now match on. Returns the whole line if it is not one of ours."""
     return line.split(SEPARATOR)[-1].strip() if SEPARATOR in line else line.strip()
+
+
+#: What a percentage this module wrote looks like, and the ONLY way a line is recognised as
+#: ours. ⚠️ Anchored and one-decimal, so a caller's own text beginning "50% - done" is NOT
+#: mistaken for a formatted line and stripped of a segment it never had.
+PERCENT_RE = re.compile(r"^\s*\d{1,3}\.\d%$")
+
+
+def split_line(text: str) -> Optional[Tuple[str, str]]:
+    """`(sub, detail)` of a line THIS MODULE formatted, or `None` for anything else.
+
+    ⚠️ **THIS IS HOW ONE LINE KEEPS ONE NUMBER.** An entry point that already prints this
+    shape — `pdf_ocr_job.Progress`, a nested `Stages` — has its own overall %, and its own
+    denominator; driven from inside a LARGER plan, printing it verbatim puts two percentages
+    on one line, which is the exact nesting confusion this module was written to remove. So
+    `capture(nested=True)` splits the inner line here, drops the inner percentage and keeps
+    the segments that still mean something.
+
+    ⚠️ **THE INNER TASK IS DROPPED WITH THE PERCENTAGE, AND THAT IS THE TRADE.** It named the
+    inner denominator (`doc 2/3`), which is a fact about a plan the reader is no longer being
+    shown; the outer task names the one they are. Where that matters — a multi-document run —
+    the outer label is what must carry the identity.
+
+    ⚠️ Like `detail_of`, it splits on `SEPARATOR` and takes the LAST segment as the detail, so
+    a detail that itself contains `" - "` loses its head. Same property, same reason: the
+    writer joined with this string and nothing escapes it.
+    """
+    parts = str(text).split(SEPARATOR)
+    if len(parts) < 2 or not PERCENT_RE.match(parts[0]):
+        return None
+    return (parts[-2].strip() if len(parts) >= 3 else "", parts[-1].strip())
 
 
 class Overall:
@@ -158,7 +211,7 @@ class Stages(Overall):
     """
 
     def __init__(self, stages: Sequence[StageLike], *, label: str = "",
-                 emit: Optional[Callable[[str], None]] = None):
+                 emit: Optional[Callable[[str], None]] = None, final: bool = True):
         super().__init__(emit=emit)
         self.stages: List[Stage] = [s if isinstance(s, Stage) else Stage(*s) for s in stages]
         if not self.stages:
@@ -169,6 +222,14 @@ class Stages(Overall):
         if any(s.weight <= 0 for s in self.stages):
             raise ValueError("a stage weighing 0 can never be reported as started")
         self.label = label
+        # ⚠️ **`final=False` IS FOR A PLAN THAT OUTLIVES THE CODE DRIVING PART OF IT**, and it
+        # exists because `done()` means two different things to the two callers. A plan whose
+        # stages are driven partly by a routine that owns only a SEGMENT of them — the PDF-OCR
+        # control notebook embeds `kgpu.runner.RUN_STAGES` as six of its fifteen, and
+        # `runner.run` ends by calling `done()` — would otherwise be advanced to 100 % by that
+        # routine finishing, and every line after it would read `100.0%` while the session ran
+        # on. See `done()`.
+        self.final = bool(final)
         self._index = -1
 
     # ---- geometry ---------------------------------------------------------
@@ -246,16 +307,41 @@ class Stages(Overall):
         self.say(self.sub, detail)
 
     def done(self, detail: str = "") -> None:
+        """The plan is finished. ⚠️ **UNLESS `final=False`, when it means "the stages I was
+        driving are finished" and degrades to `end()`** — the fraction reaches the ceiling of
+        the CURRENT stage and no further, so the caller that owns the rest of the plan keeps
+        its remaining share. A `done()` on the last stage is `end()` anyway, so a plan driven
+        end to end reads the same either way."""
+        if not self.final:
+            self.end(detail)
+            return
         self._index = len(self.stages) - 1
         self.advance(1.0)
         self.say(self.sub, detail)
 
     # ---- somebody else's print() ------------------------------------------
     @contextlib.contextmanager
-    def capture(self, sub: Optional[str] = None):
-        """Re-emit everything written to stdout as the DETAIL of the current position."""
+    def capture(self, sub: Optional[str] = None, *, nested: bool = False):
+        """Re-emit everything written to stdout as the DETAIL of the current position.
+
+        ⚠️ **`nested=True` WHEN THE CAPTURED CODE ALREADY PRINTS THIS SHAPE.** `job.run` and
+        any inner `Stages` lead with an overall % of their OWN denominator; re-emitted whole,
+        the outer line carries two percentages and the reader is back to holding a nesting in
+        their head. With `nested`, such a line is split by `split_line`, its percentage and its
+        task are dropped, and its sub-task and detail become this position's — so one line has
+        one number. Text that is NOT one of ours passes through unchanged, which is why the
+        flag is safe on a stage whose output is mixed.
+        """
+
+        def relay(text: str) -> None:
+            inner = split_line(text) if nested else None
+            if inner is None:
+                self.note(text, sub)
+            else:
+                self.note(inner[1], inner[0] or (self.sub if sub is None else sub))
+
         real = sys.stdout
-        sink = _LineSink(lambda text: self.note(text, sub))
+        sink = _LineSink(relay)
         self._out = real
         try:
             with contextlib.redirect_stdout(sink):

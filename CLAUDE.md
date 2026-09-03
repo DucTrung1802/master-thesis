@@ -8136,6 +8136,71 @@ priors to subtract — a full `build()` can still split them.
    script again — after TCB (2026-08-29) and CTG (2026-08-30). They cost seconds, need no OCR,
    and have now stood between wrong figures and a CSV three times. **Ship them as code.**
 
+### ✅ 6-2-tresexagies. THE CONTROL NOTEBOOK IS ONE PLAN AND ONE PERCENTAGE — and composing it broke the shape twice
+
+Shipped 2026-09-04 on request, and it is §6-2-undequadragies' rule applied to the thing that
+DRIVES the OCR rather than to the OCR itself. That change gave the run one line leading with an
+overall %; what it did not do is reach the ten cells around it.
+
+| `RUN__pdf_ocr_control.ipynb` | before | after |
+|---|---|---|
+| code cells reporting progress at all | **2 of 11** — §5 and §6 | **11 of 11** |
+| plans | **two**, each with its own denominator (§5 counted 2 steps, §6 counted 6) | **ONE** — 15 steps on KAGGLE, 10 on LOCAL |
+| everything else | bare `print()` | `xx.x% - step i/N HOSE_CTG 70q - <section> - <detail>` |
+
+⚠️ **THE OLD SHAPE COULD NOT ANSWER THE QUESTION A PROGRESS READOUT EXISTS FOR, ONE LEVEL UP.**
+A reader got `50.0%` from the rehearse cell, `42.5%` from the run cell and prose from the nine
+around them — three denominators again, exactly what §6-2-undequadragies removed from inside a
+single run. **Driven end to end at `EXECUTE=False` the notebook now runs 0.0 % → 100.0 %,
+monotone, one number per line.**
+
+#### ⚠️ COMPOSING A PLAN OUT OF PARTS THAT EACH ALREADY REPORT IS WHERE THE SHAPE BREAKS
+
+Both mechanisms below exist because a caller would otherwise have to break the rule to obey it,
+and both are in `utils/progress.py` rather than in the notebook — a second formatter is the
+failure the one-module rule prevents.
+
+1. ⚠️ **`Stages(..., final=False)` — a sub-run finishing is not the session finishing.** The six
+   Kaggle steps are EMBEDDED as six of the notebook's fifteen (`runner.run` looks its stages up
+   BY KEY, so handing it the notebook's own plan costs nothing and keeps one number on the
+   line) — and `runner.run` ends by calling `done()`, which advances a plan to **1.0**.
+   **Measured: without the flag the notebook reads `100.0%` from the run cell onward while nine
+   sections still have to happen.** With it, `done()` degrades to `end()` and the round trip
+   claims its six stages and no more.
+2. ⚠️ **`capture(nested=True)` — one line, ONE number.** `job.run` already prints this shape,
+   with its OWN denominator (`doc 2/3`), so re-emitting it verbatim puts two percentages on one
+   line and the second appears to walk backwards. `split_line` drops the inner percentage and
+   its task and keeps `layer 12/47 …` / `page 40/96 …`. ⚠️ Text that is not one of ours passes
+   through untouched — `PERCENT_RE` is anchored and one-decimal, so a caller's own
+   `"50% - done"` is not stripped of a segment it never had — which is what makes the flag safe
+   on a stage whose output is mixed.
+
+⚠️ **AND `pdf_ocr_batch.run_batch` NEEDED A `progress` HOOK OR THE BAR STANDS STILL THROUGH
+86 % OF THE PLAN.** The OCR stage is weighted 100 against the other nine sections' 16, so a
+stage that reports only at its end is indistinguishable from a hung one for hours. It now moves
+one document at a time — the FLOOR before a document is read and the ceiling only after, because
+a bar that credits work before it happens is the one thing a progress readout must not do.
+⚠️ **A CHILD'S OWN LINES DO NOT COME THROUGH IT**: each document is a subprocess that INHERITS
+stdout, so its per-page lines go to the terminal's file descriptor — the kernel log, not the
+cell — and live in that document's own `run.log`, in the same shape. ✅ `progress=None` prints
+what it always printed, the contract `kgpu.runner._stage` already keeps.
+
+⚠️ **THE LABEL WAS SHORTENED, AND THAT IS A CONSEQUENCE OF THE RULE RATHER THAN A TIDY-UP.** It
+is repeated on every row of every table the notebook prints, so `HOSE_CTG 2013-Q1 2013-Q2 …`
+pushed a 70-row verdict table off the screen to say what §4 had already printed. Two quarters or
+fewer are named; more are a count (`HOSE_CTG 70q`).
+
+| verified | |
+|---|---|
+| the notebook, driven cell by cell on LOCAL at `EXECUTE=False` | 0.0 → 100.0 %, monotone, **every line one number**; `raw_data/` untouched (`git status`) |
+| tests | **656** across `src/utils`, `src/web_scraper`, `src/kaggle_gpu` and **999 across `src/`** — **8 new**, none needing a PDF, a network or an engine |
+| ✅ what did NOT change | no gate, no layer, no cascade order, no merge refusal. `python -m kgpu run` and the CLI `pdf_ocr_batch` print exactly what they printed before |
+
+⚠️ **WHAT THIS DOES NOT DO.** It reads no filing and writes no figure. The percentage is still a
+POSITION IN THE PLAN — the stage weights are NOMINAL and say so, and a filing accepted at layer 1
+is ~1 min against 33 for one that defeats the cascade (§6-2-noviesdecies) — so it is a LOWER
+bound, and low is the honest direction: a run finishes early rather than stalling at 99 %.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -8362,6 +8427,21 @@ workflow, log truncation) live in the auto-loaded memory index and are not dupli
   running it is the discipline. `RUNBOOK.md` §8c is the procedure.
 - **`⚠️` marks a claim that cost something to learn.** Do not strip them; add them when you
   measure a new one.
+- ⚠️ **ANYTHING THAT REPORTS PROGRESS PRINTS `xx.x% - task - sub-task - detail`, LEADING WITH
+  THE OVERALL %** — the fraction of the WHOLE thing the reader started, never of the current
+  file, step or cell. Standing since 2026-09-04, and formatted by **`src/utils/progress.py`
+  and by nothing else**: two writers of one shape drift, and then a reader parsing the log
+  gets one shape from one stage and another from the next. **A per-step percentage is what the
+  three nested readouts already were** (§6-2-undequadragies), and a bare `print()` beside them
+  is worse — the reader cannot tell a session 3 % in from one 96 % in. Composing a plan out of
+  parts that each already report has two supported shapes and neither needs a new formatter:
+  `Stages(..., final=False)` where a routine drives only a SEGMENT of the plan and its
+  `done()` must not complete it, and `capture(nested=True)` where the captured code already
+  leads with a percentage of its own denominator. ⚠️ **The number is a POSITION IN A PLAN and
+  never a fraction of the time left** — say so where it is printed, and keep the weights
+  NOMINAL and labelled (§5 rule 2 applies to a progress bar too). ⚠️ **A reader that matched
+  the START of a log line is broken by this**: `progress.detail_of(line)` is the segment that
+  used to BE the line.
 - ⚠️ **NO STRIKETHROUGH, ANYWHERE — 108 markers were removed on 2026-08-23.** A closed
   item is marked with words (`✅ FIXED <date>`, `DONE`, `SUPERSEDED`, `RETIRED`) and its
   text stays in ordinary type. Struck-out text renders as damaged and reads as *"ignore

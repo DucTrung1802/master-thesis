@@ -191,3 +191,67 @@ def test_the_shim_is_not_a_tty_because_kgpu_wait_rewrites_in_place_on_one():
     with stages.capture():
         assert sys.stdout.isatty() is False
         assert sys.stdout.encoding == "utf-8"       # a client that reads it must get one
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# One line, ONE number — composing a plan out of parts that each already report
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def test_split_line_recognises_our_own_shape_and_nothing_else():
+    ours = progress.format_line(0.337, "doc 2/3 HOSE_TCB Q3-2013",
+                                "layer 12/47 onnx@300", "page 40/96")
+    assert progress.split_line(ours) == ("layer 12/47 onnx@300", "page 40/96")
+    # ⚠️ A caller's own text that merely LOOKS like it must pass through untouched, or a
+    # capture would strip a segment the line never had.
+    assert progress.split_line("50% - done") is None
+    assert progress.split_line("no separator at all") is None
+    assert progress.split_line("") is None
+
+
+def test_a_line_with_only_a_detail_still_splits_and_reports_no_sub():
+    assert progress.split_line(progress.format_line(0.5, "", "", "up")) == ("", "up")
+
+
+def test_nested_capture_keeps_one_number_on_the_line():
+    """The point of `nested`: `job.run` and any inner `Stages` lead with a percentage of
+    THEIR OWN denominator, and printed verbatim the outer line carries two."""
+    stages, lines = _reporter()
+    stages.begin("wait")
+    with stages.capture(nested=True):
+        print(progress.format_line(0.9, "doc 1/1 HOSE_VCB Q1-2026",
+                                   "layer 3/55 onnx@300", "page 8/53"))
+    assert len(lines[-1].split(progress.SEPARATOR)) == 4      # percent, task, sub, detail
+    assert lines[-1].count("%") == 1
+    assert "90.0%" not in lines[-1]                           # the inner number is dropped
+    assert lines[-1].endswith("layer 3/55 onnx@300 - page 8/53")
+    assert "HOSE_TCB 2013-Q3" in lines[-1]                    # the OUTER task, not the inner
+
+
+def test_nested_capture_leaves_ordinary_text_alone():
+    """Which is why the flag is safe on a stage whose output is mixed."""
+    stages, lines = _reporter()
+    stages.begin("wait")
+    with stages.capture(nested=True):
+        print("uploading 86 MB")
+    assert progress.detail_of(lines[-1]) == "uploading 86 MB"
+
+
+def test_a_nested_run_finishing_does_not_finish_a_plan_that_outlives_it():
+    """`final=False`: `kgpu.runner.run` ends by calling `done()`, and the PDF-OCR control
+    notebook embeds its six stages as six of fifteen. Without this the notebook would read
+    `100.0%` from the run cell onward while nine sections still had to happen."""
+    stages, _ = _reporter(final=False)
+    stages.begin("wait")
+    stages.done("COMPLETE and pulled")
+    assert stages.fraction == pytest.approx(0.9)              # the ceiling of `wait`, not 1.0
+    stages.begin("merge")
+    stages.end()
+    assert stages.fraction == pytest.approx(1.0)
+
+
+def test_final_is_the_default_so_an_ordinary_plan_is_unchanged():
+    stages, _ = _reporter()
+    stages.begin("export")
+    stages.done()
+    assert stages.fraction == pytest.approx(1.0)

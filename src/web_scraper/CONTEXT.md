@@ -2030,7 +2030,7 @@ which is deterministic and was reproduced four times.
 | | |
 |---|---|
 | **input** | ONE frozen `JobSpec`, built identically by the CLI, the notebook and `kgpu`. `prepare()` resolves root / models / TEMPLATE / documents and RAISES on any of them, before a page is rendered |
-| **log** | ⚠️ **ONE LINE, FOUR SEGMENTS, LEADING WITH THE OVERALL % (2026-08-30):** ` 33.7% - doc 2/3 HOSE_TCB Q3-2013 - layer 12/47 onnx@300 - page 40/96  ~76 s left`. Formatted by `utils.progress`, which the Kaggle CONTROL side uses for its own six steps, so the two cannot drift. The three denominators are still named, in the segments (`doc 2/3`, `layer 12/47`, `page 40/96` — only the last predicts time), and the overall % is `documents finished + this document's place in the cascade`: **a position in the plan, a LOWER BOUND on real progress, never a fraction of the time**. Rate-limited to a 10-point step or 15 s |
+| **log** | ⚠️ **ONE LINE, FOUR SEGMENTS, LEADING WITH THE OVERALL % (2026-08-30):** ` 33.7% - doc 2/3 HOSE_TCB Q3-2013 - layer 12/47 onnx@300 - page 40/96  ~76 s left`. Formatted by `utils.progress`, which the Kaggle CONTROL side uses for its own six steps, so the two cannot drift. The three denominators are still named, in the segments (`doc 2/3`, `layer 12/47`, `page 40/96` — only the last predicts time), and the overall % is `documents finished + this document's place in the cascade`: **a position in the plan, a LOWER BOUND on real progress, never a fraction of the time**. Rate-limited to a 10-point step or 15 s. ⚠️ **A caller driving this from a BIGGER plan captures it with `progress.capture(nested=True)`**, which drops the inner percentage and keeps the segments — two numbers on one line is the nesting this shape exists to remove |
 | **output** | `metadata.json` (`schema_version`, resolved spec, `template_how`, `environment.ocr`), `summary.csv`, `documents/<key>.json`, and `run.log` written line-buffered as it goes |
 
 ⚠️ **ANYTHING THAT PARSED `run.log` MUST BE RE-READ.** A filter anchored at the start of
@@ -2525,7 +2525,7 @@ is the mode it exists for.
 | | |
 |---|---|
 | `plan_batch(tickers)` | what each ticker still owes — `job.plan` + `parsed_reports` + `settled_absences` + `span_operands`, no second rule |
-| `run_batch(plans)` | one SUBPROCESS per document, a `wait_for_vram` floor before each, a retry when layers raise, and one run folder per document |
+| `run_batch(plans)` | one SUBPROCESS per document, a `wait_for_vram` floor before each, a retry when layers raise, and one run folder per document. ⚠️ **`progress=` (2026-09-04) moves a caller's overall % ONE DOCUMENT AT A TIME** — the batch is ~86 % of the control notebook's plan, and a stage that reports only at its end is indistinguishable from a hung one for hours. The FLOOR is claimed before a document is read and the ceiling only after; `progress=None` prints what the CLI always printed. ⚠️ **A child's own per-page lines do NOT come through it** — a subprocess inherits stdout, so they go to the terminal's file descriptor and live in that document's `run.log` |
 | `merge_batch(folders)` | the upsert, **one period per call, oldest first, UNFORCED** |
 
 #### ⚠️ WHY A SUBPROCESS, AND WHY IT IS NOT A DIFFERENT PROCEDURE
