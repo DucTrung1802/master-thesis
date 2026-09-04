@@ -273,3 +273,6 @@ experiment/experiment_10/_cache/
 reports/pdf_ocr/
 # the advisory OCR device lock (`pdf_ocr_job.gpu_lock`) — a live pid, never a result
 reports/pdf_ocr/.pdf_ocr.lock
+
+# scratch for an OCR session — measurements and probe scripts, not a deliverable
+.probe/

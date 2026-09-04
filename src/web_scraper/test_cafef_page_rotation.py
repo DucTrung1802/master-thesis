@@ -78,10 +78,17 @@ def _word(x0, y0, x1, y1, text="x"):
     return (x0, y0, x1, y1, text, 0, 0, 0)
 
 
-def _lines(n, wide=True):
-    """`n` word boxes, laid out as ordinary text lines or as turned ones."""
-    return [_word(10.0, 10.0 * i, 90.0, 10.0 * i + 8.0) if wide
-            else _word(10.0 * i, 10.0, 10.0 * i + 8.0, 90.0) for i in range(n)]
+def _lines(n, wide=True, text="mot dong chu"):
+    """`n` word boxes, laid out as ordinary text lines or as turned ones.
+
+    ⚠️ **THE TEXT IS NOT DECORATION SINCE `ROT-3` (2026-09-04).** `_page_rotation` has a second
+    entry signal — *the upright read is nearly empty* — measured in CHARACTERS, so a fixture
+    whose boxes carry one letter each is a fixture of a page that reads as unreadable. The
+    default here is twelve characters a box, which puts any page of a dozen boxes or more well
+    over `MIN_UPRIGHT_CHARS`; pass a shorter one to build the `ROT-3` page deliberately.
+    """
+    return [_word(10.0, 10.0 * i, 90.0, 10.0 * i + 8.0, text) if wide
+            else _word(10.0 * i, 10.0, 10.0 * i + 8.0, 90.0, text) for i in range(n)]
 
 
 def _parser(engine="onnx", onnx=None):
@@ -108,7 +115,10 @@ def test_a_page_of_vertical_lines_is_turned_the_way_the_digits_read():
                       270: [_word(0, 0, 9, 9, "lIl")] * 30})
     page = _Page(rotation=0)
     assert _parser(onnx=engine)._page_rotation(page, _lines(60, wide=False)) == 90
-    assert [r for r, _ in engine.calls] == [90, 270]        # both directions, once each
+    # ⚠️ THE BASE IS READ TOO, AND IT WAS NOT BEFORE `ROT-3`. The old loop seeded `best_key`
+    # with None, so the first candidate won whether or not turning helped — see
+    # `test_a_rotation_that_reads_worse_than_upright_is_refused` for what that cost.
+    assert [r for r, _ in engine.calls] == [0, 90, 270]      # the base, then both directions
     assert page.rotation == 0                               # and the page is put back
 
 
@@ -159,6 +169,84 @@ def test_only_the_onnx_path_is_probed():
     engine = _Engine({90: [_word(0, 0, 9, 9, "1.234")] * 30})
     assert _parser(engine="tesseract", onnx=engine)._page_rotation(
         _Page(), _lines(60, wide=False)) == 0
+    assert engine.calls == []
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 1b. `ROT-3` — the page the first signal cannot see, and the seed that makes it safe
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# FPT's Q1-2012, Q3-2011 and Q3-2013 CONSOLIDATED income statements are turned scans in a
+# `/Rotate 0` portrait page, and the tall-box signal above cannot reach them: a page turned
+# that badly gives the detector nothing to segment, so it returns **25-29 near-square blobs
+# reading 31-56 characters** — 48-68 % tall against a 70 % bar, median w/h 0.82-1.00. The same
+# pages at +90 give 178-185 boxes, 121-127 numbers and 2,500-2,800 characters. All three
+# quarters reported `no such statement on any page of this filing` on every layer, and each
+# also blocked a cumulative Q4.
+#
+# ⚠️ Widening the entry exposed a latent defect in the probe: it seeded `best_key = None`, so
+# the FIRST candidate always won and the page was turned whether or not turning helped. Over
+# 460 pages of 11 filings, 38 read under `MIN_UPRIGHT_CHARS` and 27 really are turned; among
+# the other 11 is a cover page reading 211 characters upright whose +90 read is ONE — and the
+# numbers-first key preferred the ONE, because a cover page has no digits for the base to win
+# on. A rotation must now read MORE CHARACTERS than the base before it is ranked at all.
+
+
+def _blobs(n, text="I"):
+    """`n` near-square boxes carrying almost nothing — what a badly turned scan returns."""
+    return [_word(10.0 * i, 10.0 * i, 10.0 * i + 8.0, 10.0 * i + 9.0, text) for i in range(n)]
+
+
+def test_a_page_that_reads_as_nothing_upright_is_probed():
+    """⚠️ THE SIGNAL THE TALL-BOX TEST CANNOT GIVE. These boxes are near-square — the share
+    taller than wide is 100 % here only because the fixture must be one thing or the other, so
+    the test that matters is the one below it, where the shape is explicitly mixed."""
+    engine = _Engine({90: [_word(0, 0, 9, 9, "12,879,817,911,898")] * 40, 270: []})
+    assert _parser(onnx=engine)._page_rotation(_Page(), _blobs(28)) == 90
+
+
+def test_and_the_tall_box_signal_alone_would_not_have_found_it():
+    """The measured shape: HALF the boxes tall, i.e. under `VERTICAL_LINES_SHARE`, and 28
+    characters of text. The first signal abstains and the second one carries it."""
+    words = _lines(14, wide=True, text="I") + _lines(14, wide=False, text="I")
+    tall = sum(1 for w in words if (w[3] - w[1]) > (w[2] - w[0]))
+    assert tall / len(words) < PdfParser.VERTICAL_LINES_SHARE      # the first signal is silent
+    assert sum(len(w[4]) for w in words) < PdfParser.MIN_UPRIGHT_CHARS
+    engine = _Engine({90: [_word(0, 0, 9, 9, "12,879,817,911,898")] * 40, 270: []})
+    assert _parser(onnx=engine)._page_rotation(_Page(), words) == 90
+
+
+def test_a_rotation_that_reads_worse_than_upright_is_refused():
+    """⚠️ THE COVER PAGE, AND THE REASON THE PROBE IS SEEDED WITH THE BASE. Measured on TCB
+    Q1-2014 page 4 and FPT Q3-2011 page 1: the upright read is 211 and 128 characters of prose
+    with NO parseable numbers, and +90 reads one or two digits and nothing else. Numbers-first
+    on an unseeded probe preferred the digits."""
+    engine = _Engine({0: [_word(0, 0, 9, 9, "Bao cao tai chinh hop nhat quy I")] * 8,
+                      90: [_word(0, 0, 9, 9, "12")],
+                      270: [_word(0, 0, 9, 9, "7")]})
+    assert _parser(onnx=engine)._page_rotation(_Page(), _blobs(28)) == 0
+
+
+def test_a_blank_page_stays_upright():
+    """Nothing either way — and `>` rather than `>=` is what keeps it where it is."""
+    engine = _Engine({0: [], 90: [], 270: []})
+    assert _parser(onnx=engine)._page_rotation(_Page(), _blobs(28)) == 0
+
+
+def test_numbers_still_choose_BETWEEN_two_rotations_that_both_read_well():
+    """The character count is a GATE, not the ranking: 90 and 270 both lay the lines flat, and
+    only the digit count separates them (121 against 19 on FPT's Q1-2012 page 4)."""
+    engine = _Engine({0: [],
+                      90: [_word(0, 0, 9, 9, "12,879,817,911,898")] * 30,      # 121-ish numbers
+                      270: [_word(0, 0, 9, 9, "lIlIlIlIlIlIlIlIlI")] * 34})    # more chars, no digits
+    assert _parser(onnx=engine)._page_rotation(_Page(), _blobs(28)) == 90
+
+
+def test_a_page_with_plenty_of_text_and_wide_boxes_is_never_probed():
+    """⚠️ THE COST BOUND: the new signal is a FLOOR on characters, so an ordinary page — which
+    is 91.7 % of the corpus measured — pays nothing at all."""
+    engine = _Engine({})
+    assert _parser(onnx=engine)._page_rotation(_Page(), _lines(60, wide=True)) == 0
     assert engine.calls == []
 
 

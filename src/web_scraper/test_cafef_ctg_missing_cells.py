@@ -143,15 +143,33 @@ def test_a_real_notes_page_is_still_a_note_under_the_flag():
 
 
 def test_the_flag_never_touches_a_statement_title():
-    # The three statement titles keep the FULL header, so a title printed on the same OCR
-    # line as the column heading cannot be lost by removing that row.
-    #
-    # ⚠️ AND THE OTHER HALF IS THE DEFECT ITSELF, RECORDED: the notes test runs BEFORE the
-    # three titles are compared, so today that page is a NOTE — the column heading eats a
-    # statement whose own title is printed beside it. Measured here rather than assumed.
+    """The three statement titles keep the FULL header, so a title printed on the same OCR
+    line as the column heading cannot be lost by removing that row.
+
+    ⚠️ **THE SECOND ASSERTION USED TO READ `== "notes"`, PINNING THE DEFECT AS BEHAVIOUR** —
+    with a comment saying so in as many words ("AND THE OTHER HALF IS THE DEFECT ITSELF,
+    RECORDED"). `NOT-2` (2026-09-04) is that defect fixed: the notes verdict was taken BEFORE
+    the three titles were compared, so a page whose own title is printed VERBATIM read as a
+    note on a 0.8125 fuzzy match. An exact title now wins, so the flag is no longer what
+    separates these two answers. **A test that pins a defect is how the defect survives a
+    rewrite** (§6-2-quinvicies), and this is the second instance in this file's own subject.
+    """
     text = "BANG CAN DOI KE TOAN Chi tieu Thuyet minh So cuoi quy\n1 2 3 4"
     assert _kind(text, blind=True)[0] == "balance_sheet"
-    assert _kind(text, blind=False)[0] == "notes"
+    assert _kind(text, blind=False)[0] == "balance_sheet"
+
+
+def test_column_header_blind_is_still_load_bearing_for_a_continuation_page():
+    """⚠️ `NOT-2` DOES NOT SUBSUME `NOT-1`, AND THAT IS WHY BOTH ARE KEPT.
+
+    A CONTINUATION page has no title of its own — that is the whole reason the column-heading
+    row is its entire header — so there is no verbatim title for the new rule to prefer, and
+    `column_header_blind` remains the only thing that reaches it. The two answer two different
+    pages of the same statement: `NOT-1` the continuation, `NOT-2` the FIRST page of a filing
+    that sets its column headings on separate lines (FPT 2008-2010).
+    """
+    assert _kind(CONTINUATION, blind=False)[0] == "notes"
+    assert _kind(CONTINUATION, blind=True)[0] is None
 
 
 # ── MTL-1 · the merged grand total ────────────────────────────────────────────

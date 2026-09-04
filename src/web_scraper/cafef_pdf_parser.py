@@ -248,9 +248,27 @@ class PdfParser:
     # the front NAMES every statement in its prose, so matching the whole page tags those pages
     # as statements and drags audit text into the table; a statement announces itself at the
     # top of the page, an auditor merely mentions it further down.
+    # ⚠️ **THE PRE-2015 VAS WORDING PUTS "SAN XUAT" INSIDE THE INCOME STATEMENT'S TITLE, AND
+    # THE NEEDLE IS A CONTIGUOUS SUBSTRING** (`VAS-3`, 2026-09-04). Decision 15/2006 heads the
+    # form "BÁO CÁO KẾT QUẢ HOẠT ĐỘNG **SẢN XUẤT** KINH DOANH"; Circular 200/2014 dropped the
+    # two words, and `ketquahoatdongkinhdoanh` is that later spelling. Measured on FPT's
+    # Q3-2008 consolidated filing, page 5: `ketquahoatdongkinhdoanh` scores **0.696** and
+    # `baocaoketquakinhdoanh` **0.762**, both under `TITLE_MATCH` — so the page classified as
+    # NOTHING, `_fill_continuations` handed it to the balance sheet running above it, and the
+    # income statement was reported `only 1 rows parsed` from an unrelated page. The full
+    # wording scores **1.000**.
+    #
+    # ⚠️ **A LONGER NEEDLE CANNOT STEAL A PAGE, AND THAT WAS MEASURED RATHER THAN ARGUED.**
+    # `_page_kind` takes the BEST-scoring title, so adding one can only raise the income
+    # statement's score on a page — and a longer needle scores LOWER on unrelated text, not
+    # higher. Across the **7,404 text-layer pages of the eight parsed tickers**, exactly
+    # **11 pages** change verdict and **every one is `None` -> income_statement**: FPT
+    # Q1-2007, Q3-2008, Q2-2009, Q3-2009, Q4-2009, Q1-2010, Q2-2010, Q2-2011, Q2-2007 and ACB
+    # Q1-2007, Q2-2007. Not one page moves between statements and not one is lost.
     HEADING = {
         BALANCE_SHEET: ["bangcandoiketoan", "baocaotinhhinhtaichinh"],
-        INCOME_STATEMENT: ["ketquahoatdongkinhdoanh", "baocaoketquakinhdoanh"],
+        INCOME_STATEMENT: ["ketquahoatdongkinhdoanh", "ketquahoatdongsanxuatkinhdoanh",
+                           "baocaoketquakinhdoanh"],
         CASH_FLOW: ["luuchuyentiente"],
     }
     NOTES_NS = "thuyetminhbaocao"
@@ -282,6 +300,40 @@ class PdfParser:
     # itself as a review or an audit opinion is never a statement.
     AUDIT_NS = ("baocaosoatxet", "soatxetthongtintaichinh", "baocaokiemtoandoclap",
                 "baocaocuakiemtoanvien", "ykienkiemtoan")
+
+    # ⚠️ **THE FILING APPENDS A VARIANCE EXPLANATION AFTER THE INCOME STATEMENT, IT IS A
+    # TABLE, AND IT IS PRINTED IN A DIFFERENT UNIT — `GTR-1`, 2026-09-04.** Circular 155/2015 makes an issuer explain
+    # any profit swing over 10 %, and FPT prints that explanation on the page immediately
+    # AFTER its income statement: a five-column grid (this quarter, last year's quarter,
+    # the two year-to-date columns, the change) under the heading "GIẢI TRÌNH:", in
+    # **"ĐVT: Triệu đồng"** where the statement itself is in đồng.
+    #
+    # It carries a real table, so `_fill_continuations` absorbs it as the statement's second
+    # page — and its rows are the statement's OWN account names. Measured on HOSE_FPT
+    # 2026-09-04, **twelve quarters, every Q1 and Q3 from 2020-Q3 to 2026-Q1**: the row
+    # "Tổng lợi nhuận kế toán trước thuế" appears TWICE in the parsed statement, once from the
+    # statement (whose own columns the six-column grid then mis-clusters into `None`) and once
+    # from the explanation, in millions. `Statement.find` skips a row with no value and
+    # returns the SECOND, so `sane` bands the quarter on 8,111,171 against a typical 6.58e11
+    # and refuses it:
+    #
+    #     sane: magnitude 8.11e+06 vs typical 6.58e+11 (units? cumulative column? OCR misread?)
+    #
+    # ⚠️ Each of those twelve blocks a CUMULATIVE Q2/Q4 that then has no prior to subtract, so
+    # the twelve are worth roughly twenty-four cells.
+    #
+    # This is `AUDIT_NS`' rule at the other end of the filing — *a page that announces itself
+    # as something other than a statement is never a statement* — and it has to be a DEFAULT
+    # path change for `AUDIT_NS`' reason too: the income statement is accepted at layer 1 on
+    # every one of these filings, so no later layer is ever reached (§6-2-untricies: when the
+    # gates cannot see the defect, the repair cannot be an escalation).
+    #
+    # ⚠️ **IT CAN ONLY EVER REFUSE A PAGE THE CLASSIFIER COULD NOT IDENTIFY.** The test is
+    # applied in `_fill_continuations`, on the branch that absorbs an UNIDENTIFIED page into
+    # the run above it — a page carrying its own form code or its own statement title is
+    # `kind in REPORTS` and never reaches it. So the worst it can do is end a run one page
+    # early, and only on a page whose header says "giải trình".
+    SUPPLEMENT_NS = ("giaitrinh",)
 
     HEADER_LINES = 12       # the page header: company, form code, statement title, period
     TITLE_MATCH = 0.80      # how close an OCR'd title must be to count as that statement
@@ -318,6 +370,13 @@ class PdfParser:
     # answer is cached for the life of the document — so it is paid once per rotated page, not
     # once per OCR pass.
     ROT_PROBE_DPI = 100
+    # ⚠️ **A PAGE THIS FAR SHORT OF TEXT IS NOT A PAGE WITHOUT CONTENT, IT IS A PAGE READ THE
+    # WRONG WAY UP** — `ROT-3`. FPT's Q1-2012 / Q3-2011 / Q3-2013 consolidated income statements
+    # read 31, 56 and 32 characters upright and 2,525-2,797 at +90. Measured over 460 pages of
+    # 11 filings, **38 (8.3 %)** fall under this floor and **27** of those really are turned;
+    # the other 11 stay upright because a rotation must first read MORE than the base does. It
+    # bounds the CANDIDATE set and decides nothing — every candidate is settled by reading it.
+    MIN_UPRIGHT_CHARS = 200
 
     # ⚠️ A STATEMENT'S FINAL PAGE IS LEGITIMATELY SPARSE, AND `MIN_TABLE_WORDS` REFUSES IT.
     # The last page holds the closing rows and then the signature block, so it carries a
@@ -858,7 +917,32 @@ class PdfParser:
                 l for l in [x for x in text.splitlines() if x.strip()][:self.HEADER_LINES]
                 if not all(n in self.norm(l).replace(" ", "")
                            for n in self.COLUMN_HEADER_NS))).replace(" ", "")
-        if self._titled(notes_ns, [self.NOTES_NS]):
+        # ⚠️ **AN EXACT STATEMENT TITLE BEATS AN INEXACT NOTES VERDICT — `NOT-2`, 2026-09-04,
+        # AND IT IS `NOT-1`'s DEFECT WITH `column_header_blind` UNABLE TO REACH IT.** That fix
+        # re-takes the notes verdict without the table's column-heading ROW, which works when
+        # the row is one line. FPT's 2008-2010 filings emit each narrow heading CELL as its own
+        # line — `STT` / `TÀI SẢN` / `Mã ` / `số ` / `Thuyết ` / `minh` / `Số cuối quý` — so no
+        # single line carries both of `COLUMN_HEADER_NS`, and the form says `TÀI SẢN` where the
+        # test looks for `chỉ tiêu`. Measured on FPT Q3-2008 page 2, the balance sheet's own
+        # FIRST page: notes **0.8125** (the same fragment `NOT-1` records) against
+        # `bangcandoiketoan` **1.000**, and the page read as a note. The cost is the page that
+        # carries the `Mã số` column heading, so `_code_column` could not fire and the item
+        # codes were read as figures — `TỔNG CỘNG TÀI SẢN` = **270** (`MSO-1`'s symptom, caused
+        # by a classification failure two pages upstream).
+        #
+        # So the rule is the one `title_over_form` already makes against a wrong FORM CODE:
+        # **the title is the semantic truth, and a VERBATIM one wins.** Both halves are needed —
+        # the statement title must be an exact containment (1.0) and the notes match must be
+        # INEXACT (< 1.0), so a page that genuinely announces itself as notes keeps that verdict
+        # however many statement names it also prints.
+        #
+        # ⚠️ **MEASURED, NOT ARGUED**: across the 7,404 text-layer pages of the eight parsed
+        # tickers, **10 pages** change and **every one is `notes` -> balance_sheet** — FPT
+        # Q3-2008, Q2-2009, Q3-2009, Q4-2009, Q1-2010, Q2-2010, all of them pages 2-3, i.e. the
+        # balance sheet's own opening pages. Not one page moves between statements.
+        notes_exact = self._title_score(notes_ns, [self.NOTES_NS])
+        title_exact = max(self._title_score(ns, n) for n in self.HEADING.values())
+        if notes_exact >= self.TITLE_MATCH and not (title_exact == 1.0 and notes_exact < 1.0):
             return NOTES, False
         # The BEST-matching title wins, not the first to clear the threshold. A form code with an
         # OCR-mangled digit falls through to here — ACB's cash-flow page prints "Mẫu BO4/TCTD-HN"
@@ -1316,7 +1400,30 @@ class PdfParser:
         need_ocr = self.ocr_ready and (
             len(native.strip()) < self.MIN_PAGE_TEXT or self._native_garbled(native))
         if not need_ocr:
-            return native, page.get_text("words"), False
+            # ⚠️ **A `/Rotate 90` PAGE HANDS ITS NATIVE WORDS BACK IN THE *UNROTATED* SPACE
+            # WHILE `page.rect` IS THE ROTATED ONE — `ROT-2`, 2026-09-04.** Measured on FPT's
+            # Q3-2008 consolidated filing, page 5 (the income statement, a LANDSCAPE table):
+            # `page.rect` is 792x612 and `/Rotate` is 90, and `get_text("words")` returns boxes
+            # in the 612x792 mediabox — "CÔNG"/"TY"/"CP" stacked vertically at x=48.4 with
+            # DECREASING y, and y running to 756 on a page `scan` records as 612 tall.
+            #
+            # `scan` reads `page.rect.width` for the column measurement and `table_rows` groups
+            # by y, so the two disagree about which axis is which: `value_columns` returned four
+            # "columns" inside a 55pt band and the statement came out **6 rows**, refused
+            # `only 6 rows parsed` on every layer of the cascade. That is `ROT-1`'s defect in
+            # the one path `ROT-1` cannot reach — it re-RENDERS a turned scan, and re-rendering
+            # a text layer returns the same unrotated boxes.
+            #
+            # ⚠️ **AND IT IS THE MAPPING `_ocr_page`'s OWN DOCSTRING ALREADY PROMISES** ("words
+            # in VISUAL pdf-point space"), which the Tesseract path has always applied and this
+            # one never did. `_to_visual` returns the list UNCHANGED when `page.rotation` is 0,
+            # so the change is inert on every upright page by construction.
+            #
+            # ⚠️ **MEASURED BEFORE IT SHIPPED**: across the 73,780 pages of the eight parsed
+            # tickers, **2,116** are read through this path at all and **122** of those carry a
+            # non-zero `/Rotate` — 0.17 % of the corpus, and every one of them is being measured
+            # in the wrong space today. Nothing else can move.
+            return native, self._to_visual(page, page.get_text("words")), False
 
         if self.engine == "onnx":
             text, words = self._onnx.read_page(page)
@@ -1374,42 +1481,89 @@ class PdfParser:
         """The absolute `/Rotate` this page should be READ at — `page.rotation` unless its scan
         is turned, in which case 90° or 270° on top of it.
 
-        Two questions, and only the second costs anything. **Are the lines vertical?** is
-        answered from `words`, which the caller has already paid for: a text line is far wider
-        than it is tall, and a turned one is far taller than it is wide (see
-        `VERTICAL_LINES_SHARE` for the measurement). **Which way up?** cannot be answered from
-        geometry — 90 and 270 both lay the lines flat — so the page is read at the probe DPI
-        each way and the direction that yields more parseable NUMBERS wins. That is the right
-        discriminator here and not a general one: these are financial statements, and a column
-        of digits read upside down stops being digits.
+        Two questions, and only the second costs anything. **Is the page turned?** is answered
+        from `words`, which the caller has already paid for, by either of the two signals below.
+        **Which way up?** cannot be answered from geometry — 90 and 270 both lay the lines flat
+        — so the page is read at the probe DPI each way and the direction that yields more
+        parseable NUMBERS wins. That is the right discriminator here and not a general one:
+        these are financial statements, and a column of digits read upside down stops being
+        digits.
+
+        ⚠️ **THE TWO ENTRY SIGNALS ARE DIFFERENT PAGES, AND THE SECOND IS `ROT-3` (2026-09-04).**
+
+          * **the lines are VERTICAL** — the original `ROT-1` signal, measured on BID's Q3-2011
+            income statement, where the detector still finds text lines and 92-100 % of the
+            boxes come back taller than wide;
+          * ⚠️ **the upright read is NEARLY EMPTY** — a page turned badly enough that the
+            detector cannot segment it at all. FPT's Q1-2012, Q3-2011 and Q3-2013 CONSOLIDATED
+            income statements come back as **25-29 near-square blobs reading 31-56 characters**
+            ("I | I | 1 | I | l | I | 5 | E 8 a"), so the tall-box share is **48-68 % against a
+            70 % bar** and the median w/h is 0.82-1.00 — the first signal cannot see them. The
+            same pages at +90 give 178-185 boxes, **121-127 numbers and 2,500-2,800
+            characters**. All three quarters reported `no such statement on any page of this
+            filing` on every layer of the cascade, and each also blocked a cumulative Q4.
+
+        ⚠️ **AND THE PROBE IS SEEDED WITH THE BASE ROTATION, WHICH IT WAS NOT BEFORE.** The old
+        loop started at `best_key = None`, so the FIRST candidate always won and the page was
+        turned whether or not turning helped — harmless while the entry signal was "the lines
+        are definitely vertical", and wrong the moment the entry widened. Measured over 460
+        pages of 11 filings: **38 read under `MIN_UPRIGHT_CHARS` (8.3 %)** and **27 read better
+        turned**; among the other 11 is a cover page whose upright read is 211 characters and
+        whose +90 read is ONE — and the numbers-first key preferred the ONE, because a cover
+        page carries no digits at all for the base to win on.
+
+        ⚠️ **SO A ROTATION MUST FIRST READ MORE CHARACTERS THAN THE BASE, AND ONLY THEN IS IT
+        RANKED ON NUMBERS.** That one condition separates the 27 from the 11 exactly, in both
+        directions and with orders of magnitude to spare: a true positive goes 17-56 characters
+        to 1,100-3,200 and every false positive goes DOWN. Numbers stay the tie-break among
+        rotations that clear it, which is what keeps 90 apart from 270 (121 against 19 on the
+        same page).
         """
         base = page.rotation
-        # Only the onnx path: Tesseract's boxes come back through `_to_visual`, the native-text
-        # path has no boxes of its own, and neither has ever met this defect.
+        # Only the onnx path: Tesseract's boxes come back through `_to_visual` and — since
+        # `ROT-2` (2026-09-04) — so do the native text layer's, so on both of those a turned
+        # page is already square with `page.rect` and there is nothing here to detect. This
+        # probe exists for the case neither can see: a scan whose IMAGE is turned inside a page
+        # the PDF calls upright.
         if self.engine != "onnx" or self._onnx is None or len(words) < self.MIN_ROT_WORDS:
             return base
         tall = sum(1 for w in words if (w[3] - w[1]) > (w[2] - w[0]))
-        if tall / len(words) < self.VERTICAL_LINES_SHARE:
+        upright_chars = sum(len(w[4]) for w in words)
+        vertical = tall / len(words) >= self.VERTICAL_LINES_SHARE
+        unreadable = upright_chars < self.MIN_UPRIGHT_CHARS
+        if not (vertical or unreadable):
             return base
+
+        def probe(extra: int):
+            """`(numbers, characters)` for this page turned `extra` degrees, at the probe DPI."""
+            page.set_rotation((base + extra) % 360)
+            _, boxes = self._onnx.read_page(page)
+            return (sum(1 for w in boxes if self.parse_num(w[4]) is not None),
+                    sum(len(w[4]) for w in boxes))
 
         dpi = self.dpi
         best, best_key = base, None
         try:
             self.set_dpi(self.ROT_PROBE_DPI)
+            # ⚠️ THE BASE IS READ TOO, AT THE SAME DPI. A rotation is only ever better than
+            # SOMETHING, and comparing a 100-dpi probe against the caller's 200-400 dpi read
+            # would not be comparing anything.
+            floor = probe(0)
             for extra in (90, 270):
-                page.set_rotation((base + extra) % 360)
-                _, probe = self._onnx.read_page(page)
-                # Numbers first, then sheer recognised length as the tie-break, so a page with
-                # no figures either way still resolves the same way every time it is asked.
-                key = (sum(1 for w in probe if self.parse_num(w[4]) is not None),
-                       sum(len(w[4]) for w in probe))
+                key = probe(extra)
+                # ⚠️ MORE CHARACTERS THAN UPRIGHT IS THE GATE; numbers only RANK what clears it.
+                if key[1] <= floor[1]:
+                    continue
                 if best_key is None or key > best_key:
                     best, best_key = (base + extra) % 360, key
         finally:
             self.set_dpi(dpi)
             page.set_rotation(base)
-        self._log(f"page {page.number + 1}: text lines are vertical "
-                  f"({tall}/{len(words)} boxes) — reading it at /Rotate {best}")
+        if best != base:
+            self._log(f"page {page.number + 1}: "
+                      + (f"text lines are vertical ({tall}/{len(words)} boxes)" if vertical
+                         else f"upright read is nearly empty ({upright_chars} chars)")
+                      + f" — reading it at /Rotate {best}")
         return best
 
     def scan(self, doc) -> Dict[int, dict]:
@@ -1620,6 +1774,11 @@ class PdfParser:
                     continue
                 run = None                      # the statements are over
                 continue
+            if run and self._is_supplement(pages[i]):
+                # ⚠️ A variance explanation is not a continuation, and it IS a table — so
+                # without this it is absorbed on the branch below. See `SUPPLEMENT_NS`.
+                run = None                      # the statement ended on the page before
+                continue
             if run and self._is_table(pages[i]):
                 pages[i]["kind"] = run
                 pages[i]["from_form"] = False
@@ -1716,6 +1875,18 @@ class PdfParser:
         # The WHOLE page, not the header block — this evidence is printed in the table.
         ns = self.norm(page["text"]).replace(" ", "")
         return section in ns and any(c in ns for c in self.TAIL_CLOSING)
+
+    def _is_supplement(self, page: dict) -> bool:
+        """Does this page announce itself as an EXPLANATION rather than a statement?
+
+        See `SUPPLEMENT_NS`. Read from the HEADER BLOCK, like `AUDIT_NS` and the three
+        statement titles, so a note or a statement line that merely uses the word in prose
+        further down the page cannot trigger it.
+        """
+        header = "\n".join(
+            [l for l in page["text"].splitlines() if l.strip()][:self.HEADER_LINES])
+        ns = self.norm(header).replace(" ", "")
+        return any(n in ns for n in self.SUPPLEMENT_NS)
 
     def _is_tail_page(self, page: dict, run: str) -> bool:
         """Is this the sparse LAST page of the statement running through it?

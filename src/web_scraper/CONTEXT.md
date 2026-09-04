@@ -3020,6 +3020,110 @@ end against the rows on disk — one per parsed template family, and two of them
 changed paths directly: **TCB Q1-2014, whose income statement wins at `onnx@200+unit+tail`**
 (the `unit_from_document` path) and **VIC Q3-2014 on `corp`** (`MSO-1` territory).
 
+### ⚠️ 3l. FIVE MORE, AND EVERY ONE IS A PAGE THE PARSER LOST OR TOOK — FPT, 2026-09-04
+
+The day after §3k, on the same ticker, asking a different question: parse **every** quarter from
+`first_report` (2008-Q3) on, in all three statements. FPT went **154 → 188 `pdf` cells of 213**;
+the income statement went **31 → 61 of 71**. Five defects, all in the DEFAULT path, and — as with
+§3k's four — **not one is the OCR reading a character wrong**. What threw the figures away was a
+page the classifier mis-filed, a page it absorbed that was never part of the statement, or a
+coordinate space it measured in.
+
+| | what it was | measured reach |
+|---|---|---|
+| **`GTR-1`** | the **GIẢI TRÌNH** page absorbed as page 2 of the income statement | only pages the classifier could not identify |
+| **`VAS-3`** | the pre-2015 income-statement title scores **0.696** against a 0.80 bar | **11 of 7,404** text-layer pages |
+| **`NOT-2`** | a VERBATIM statement title losing to an INEXACT notes verdict | **10 of 7,404** |
+| **`ROT-2`** | a `/Rotate 90` page returns its NATIVE words in the UNROTATED space | **122 of 73,780** pages |
+| **`ROT-3`** | a page turned so badly the detector finds no lines to measure | **38 of 460** probed, **27** turned |
+
+⚠️ **`GTR-1` DID THE MOST DAMAGE AND NOTHING COULD SEE IT.** Circular 155/2015 makes an issuer
+explain any profit swing over 10 %, and FPT prints that explanation on the page IMMEDIATELY AFTER
+its consolidated income statement — a five-column grid under `GIẢI TRÌNH:`, in **`ĐVT: Triệu
+đồng`** where the statement is in đồng. It carries a real table, so `_fill_continuations` absorbed
+it, **and its rows are the statement's OWN account names**: `Tổng lợi nhuận kế toán trước thuế`
+then appears TWICE, once from the statement (whose own columns the six-column grid mis-clusters
+into `None`) and once from the explanation, in millions. `Statement.find` skips a row with no
+value and returns the SECOND, so `sane` banded Q3-2024 on **8,111,171** against a typical 6.58e11.
+**Twelve quarters — every Q1 and Q3 from 2020-Q3 to 2026-Q1 — and each blocked a cumulative Q2/Q4
+that then had no prior to subtract.** ✅ Fixed as `AUDIT_NS`' rule at the other end of the filing:
+*a page that announces itself as something other than a statement is never a statement.*
+
+⚠️ **`NOT-2` COST A SECOND DEFECT TWO PAGES DOWNSTREAM.** `_page_kind` took the NOTES verdict
+BEFORE comparing the three titles, so FPT's Q3-2008 balance-sheet FIRST page read `notes` on
+**0.8125** — the same fragment `NOT-1` records — against its own `BẢNG CÂN ĐỐI KẾ TOÁN` at
+**1.000**. ⚠️ `column_header_blind` (`NOT-1`) cannot reach it: that fix removes the table's
+column-heading ROW, and these filings emit each narrow heading CELL as its own line (`STT` /
+`TÀI SẢN` / `Mã ` / `số ` / `Thuyết ` / `minh`), so no single line carries both of
+`COLUMN_HEADER_NS` and the form says `TÀI SẢN` where that test looks for `chỉ tiêu`. **The page it
+lost is the one carrying the `Mã số` column heading**, so `_code_column` had nothing to read and
+`TỔNG CỘNG TÀI SẢN` came out **270** — `MSO-1`'s symptom produced by a classification failure. ✅
+The rule is the one `title_over_form` already makes against a wrong FORM CODE — *the title is the
+semantic truth, and a VERBATIM one wins* — with BOTH halves required, so a page that genuinely
+announces itself as notes keeps that verdict however many statement names it prints.
+
+⚠️ **`ROT-2` AND `ROT-3` ARE `ROT-1` IN THE TWO PLACES `ROT-1` CANNOT REACH.** `ROT-2`:
+`page.rect` accounts for `/Rotate` and `page.get_text("words")` does not, so a LANDSCAPE income
+statement in a `/Rotate 90` page is measured in one space and read in another — `value_columns`
+returned four "columns" inside a 55pt band and the statement came out **6 rows** where it is 21.
+`ROT-1` re-RENDERS a turned scan, and re-rendering a text layer returns the same boxes. ✅ Fixed
+with `_to_visual`, the mapping the Tesseract path has always applied and `_ocr_page`'s docstring
+already promises, so there is no second rotation rule in the file. `ROT-3`: a page turned so badly
+the recogniser cannot segment it returns **25-29 near-square blobs reading 31-56 characters** —
+48-68 % tall against a 70 % bar — while the same page at +90 reads **121-127 numbers and
+2,500-2,800 characters**. ✅ A second entry signal, *the upright read is nearly empty*.
+
+⚠️ **AND WIDENING THAT ENTRY EXPOSED A LATENT DEFECT IN THE PROBE ITSELF.** It seeded
+`best_key = None`, so the FIRST candidate always won and the page was turned **whether or not
+turning helped** — harmless while the entry signal was *the lines are definitely vertical*, and
+wrong the moment it widened. Measured over **460 pages of 11 filings: 38 read under the floor
+(8.3 %) and 27 really are turned**; among the other 11 is a cover page reading **211 characters
+upright against ONE at +90**, and the numbers-first key preferred the ONE because a cover page
+carries no digits for the base to win on. ✅ **A rotation must now read MORE CHARACTERS than the
+base before it is ranked on numbers** — one condition, separating the 27 from the 11 exactly with
+orders of magnitude to spare. The three guards are MUTATION-CHECKED: deleting the entry signal,
+the character gate or the base seed fails 1, 2 and 3 tests.
+
+⚠️ **`SET-2` BIT, AND THE RUN HAD TO BE WIDENED BY HAND.** Both title fixes change `_page_kind`,
+and `settled_absences` treats `no such statement on any page of this filing` as PERMANENT because
+it reads as a verdict on the DOCUMENT. It is a verdict on the classifier, and `plan_batch` DROPS a
+settled cell before any OCR — so the eight settled quarters were added explicitly, and **six of
+their sixteen cells were winnable** (2009-Q3, 2009-Q4, 2010-Q1 came back complete in 0.1 min
+each; 2011-Q3, 2012-Q1 and 2013-Q3 only after `ROT-3`, in a second run). 2009-Q1 and 2010-Q3 were
+re-confirmed settled by both.
+
+**Three merge passes, 34 rows**: 26 unforced, 3 with `force_empty_band` scoped to five 2008-2009
+folders whose arithmetic was checked by hand, 5 after `ROT-3`. ⚠️ **The dry run predicted 16 for
+the first pass and it wrote 26** — every cumulative Q2/Q4 from 2020 became writable the moment its
+own Q1/Q3 was written in the same pass, which a dry run cannot show. ✅ Diffed EVERY COLUMN against
+a pre-session snapshot: **34 periods newly `pdf`, 0 existing `pdf` rows changed, 0 columns lost, 0
+periods lost.**
+
+✅ **AND THE RECOVERED BLOCK IS CORROBORATED OUTSIDE THE PARSER.** The four quarters of a year must
+sum to the audited annual, and FPT's do against the company's published pre-tax profit: **2011
+2,502 · 2020 5,263 · 2021 6,337 · 2022 7,662 · 2023 9,203 · 2024 11,070 (published 11,071) tỷ.**
+
+⚠️ **TWO ROWS ON DISK ARE WRONG AND BOTH READINGS WERE REFUSED.** Q1-2025 and Q3-2025's income
+statements are `pdf` with `unit = 1000000` applied to figures **already in đồng** (`UNP-1`'s
+residue — post-tax profit 2,595,557,480,309,000,000 for a company holding 68 tn), and the new run
+reads that figure correctly **while being wrong elsewhere in the same statement**: Q3-2025's net
+revenue reads 20,985,896,381, three orders short. **Two wrong readings is not a repair**, so
+`force_differs` was not used. ⚠️ Q3-2025 propagates into Q4-2025 through the de-cumulation, which
+reads **−2,663 tỷ** — and the pre-session snapshot holds the identical four 2025 figures, so this
+predates the work rather than following from it. TODO `P62`.
+
+⚠️ **ONE PROBE OF MINE READ THE WRONG DOCUMENT, WHICH IS `ALT-1` WITH THE ENTITIES SWAPPED.** A
+quarter can have a CONSOLIDATED and a PARENT-COMPANY filing under the same `Q1-2012_` prefix, and
+a `glob` returns whichever sorts first — the parent one. Probed that way Q1-2012's income statement
+classifies cleanly on page 5; the CONSOLIDATED filing, which is what the run opens, finds no
+income-statement page at all. **A probe must take its document from `documents()`, for the same
+reason a run does.** Caught by comparing the probe against the run's own artefact, which names the
+file it opened.
+
+**720 tests pass**, 29 of them new (`test_cafef_supplement_page.py`, `test_cafef_statement_titles.py`,
+`test_cafef_native_rotation.py`, and six added to `test_cafef_page_rotation.py`), none needing a
+PDF, a network or an OCR engine. CLAUDE.md §6-2-quinquasexagies.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):
