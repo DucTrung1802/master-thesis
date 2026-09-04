@@ -122,7 +122,12 @@ def test_the_joinlost_layers_run_after_every_strict_layer():
     layers = FinancialsBuilder.LAYERS
     flagged = [i for i, l in enumerate(layers) if l.join_lost_separator]
     assert flagged, "no +joinlost layer in the cascade"
-    assert flagged == list(range(flagged[0], flagged[-1] + 1)), "the block must be contiguous"
+    # ⚠️ **AND CONTIGUITY WENT THE SAME WAY ON 2026-09-04 — THE FOURTH RESTATEMENT.** The
+    # `+deskew` block also carries `join_lost_separator`, and it has to: a crooked scan loses a
+    # thousands separator and drifts its baselines at once, so with the skew corrected and the
+    # separator left alone FPT's Q3-2019 is still refused as fragmented on all three
+    # statements. That makes the flag's layers TWO blocks, which is not a defect — it is what
+    # a flag being reusable looks like. The guard was never "one block"; it is the line below.
     # ⚠️ `ParseLayer.is_strict`, not a fifth private copy of the flag list — see its
     # docstring. Four files kept their own and each had to be edited whenever a widening
     # block was added; the one that was forgotten would have counted the NEW layers as

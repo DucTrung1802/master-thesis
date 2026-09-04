@@ -19,6 +19,10 @@
 > Nothing is written to `kaggle_config.json`: [`pdf_ocr.py`](pdf_ocr.py) computes the job from
 > your parameters and hands it to the **same** `config._validate` a file-borne job goes
 > through, so every guard still fires.
+>
+> ⚠️ **ASKING FOR A TICKER BY NAME —** *"OCR ticker FPT LOCAL"*, *"OCR ticker TCB KAGGLE"* — is a
+> request for a **prepared clone that waits**, not for a run:
+> [§1a](#1a-asking-for-a-ticker-by-name--the-standing-request).
 
 ⚠️ **THE WORKER WRITES NO STATEMENT CSV, AND IT COULD NOT IF IT WANTED TO.** A Kaggle kernel
 writes `/kaggle/working` and exits; your `raw_data/` is on this machine. Its output is a run
@@ -63,7 +67,10 @@ resolves** — the plan in §4 reads what §3 produced.
 ENVIRONMENT = "LOCAL"        # "LOCAL" = parse here | "KAGGLE" = ship it to a T4
 EXCHANGE    = "HOSE"         # HOSE | HNX | UPCOM
 SYMBOL      = "VIC"
-QUARTERS = ["2014-Q3"]       # [] or None = every quarter; "OUTSTANDING" = the gaps. YYYY-QQ.
+QUARTERS = ["2014-Q3"]       # A LIST. [] = every quarter this ticker files. YYYY-QQ.
+ONLY_MISSING = False         # True narrows an EMPTY list to the gaps. ⚠️ The "OUTSTANDING"
+                             #   sentinel this line used to carry was retired 2026-09-03 —
+                             #   two types in one parameter cost three measured readings.
 OVERWRITE = False            # False = fill the GAPS; True = re-parse and replace
 MERGE_INTO_CSV = True        # upsert into raw_data/.../statements/
 FORCE_EMPTY_BAND = True      # write even when `sane` had no band — the only way a
@@ -101,6 +108,61 @@ saying only *"DIFFERS in 2 columns"*. The notebook's **11 · Repair one row** ta
 filter, so nothing outside the list can move.
 
 Prefer a terminal? The same thing, four verbs — see [§7](#7-the-cli-instead-of-the-notebook).
+
+---
+
+## 1a. Asking for a ticker by name — the standing request
+
+⚠️ **"OCR ticker `<SYM>` LOCAL" and "OCR ticker `<SYM>` KAGGLE" ARE A REQUEST FOR A PREPARED
+NOTEBOOK, NEVER FOR A RUNNING ONE.** The clone is
+built, its parameters are resolved against what is on disk today, the plan is printed, and then it
+**stops and waits for you to say run**. Nothing is parsed, nothing is uploaded, no CSV is opened.
+
+⚠️ **THE WAIT IS THE POINT, AND IT IS THE ONE THING THAT MUST NOT BE OPTIMISED AWAY.** A whole-ticker
+parse is 60-70 filings and hours of GPU — HOSE_FPT was **185 min over 71 filings** on a T4
+(CLAUDE.md §6-2-duosexagies) — and the two parameters that decide whether the result may be WRITTEN
+(`FORCE_EMPTY_BAND`, `OVERWRITE`) are judgement calls about *that ticker's* history, not defaults.
+Both are printed by §2 and §3 before anything is spent, which is only useful if somebody reads them.
+
+### What gets built
+
+| | |
+|---|---|
+| **the file** | `src/kaggle_gpu/RUN__pdf_ocr_control_<sym>.ipynb` — the generic notebook, cloned, suffix lower-case (`RUN__pdf_ocr_control_fpt.ipynb`) |
+| **what changes in it** | **cell 2 (§1 · Parameters) and nothing else.** Every other cell stays byte-identical to the generic notebook, and that is CHECKED rather than assumed — compare the two sources cell by cell, never a remembered hash: §9's md5 was quoted as `a00f9c83156b` on 2026-09-04 and is `eef90abff419` today, because §9 itself changed. A clone that drifts in a cell nobody edited is exactly what these files exist to avoid |
+| **the outputs** | stripped. A clone carrying the parent's outputs reports another ticker's verdicts as its own |
+| **what runs** | ⚠️ **nothing.** Not a cell, not `plan`, not `export` |
+
+### The parameters, and how each is decided from disk
+
+Resolved with **`pdf_ocr_batch.plan_batch`** and **`job.seed_history`** — the same calls §3 makes,
+read-only, no OCR, no network beyond the template fingerprint. What they answer, in order:
+
+| parameter | how it is chosen |
+|---|---|
+| `ENVIRONMENT` | the word you said — `LOCAL` or `KAGGLE`, nothing infers it |
+| `EXCHANGE` / `SYMBOL` | the ticker, and the board it is listed on. ⚠️ Both must be registered — `CAFEF_FINANCIALS_TICKERS` **and** `config.json` — or a Dagster path is silently unaddressable (CLAUDE.md §6-2-untricies) |
+| `QUARTERS` / `ONLY_MISSING` | `[]` + `ONLY_MISSING = True` when the ticker already has statement CSVs — parse the GAP, not the ticker. `[]` + `False` only when it has none |
+| `TEMPLATE` | left `None` so it RESOLVES and records which route answered — but the resolved value is stated in the header, because `bank` and `corp` are different failure modes (`CRP-1`) |
+| `OVERWRITE` / `SPAN_OPERANDS` | `False`/`False` when `plan_batch` reports **no span operands**, which is the safer pair: a quarter already `pdf` in all three is dropped before any OCR and a DIFFERS is refused. `True`/`True` only when there ARE operands — §2 refuses `SPAN_OPERANDS` without `OVERWRITE` |
+| `FORCE_EMPTY_BAND` | ⚠️ **the judgement call, and it is quantified rather than guessed.** `seed_history` is asked, per open quarter and per report, whether `sane` would have a band at all; the header carries the count of cells that would be REFUSED with the guard on. Default **`False`** — the guard stays — because lifting it is `BND-1` and the arithmetic screens then have to replace it by hand |
+| `MERGE_INTO_CSV` | **off**, always. §9 does the upsert: one period at a time, oldest first, `force_differs=False` |
+| `ONNX_ONLY` | **`True`** for any ticker whose rows were bootstrapped on a T4 — the 53-layer cascade is the one that wrote them, and the full 55 is a different procedure (`TSS-1`) |
+| everything else | the generic notebook's value, untouched |
+
+### The header the clone carries
+
+A per-ticker clone exists to hold **what is true of that ticker and of no other**, so cell 2 opens
+with a measured note: filed quarters, open cells, which statement they are in, the settled ones, and
+any conclusion a past run withdrew. ⚠️ **That last part is the reason a clone is worth having at
+all** — a table can carry a count, and only prose carries *"this was measured, and the conclusion
+drawn from it was wrong"* (§8a; CLAUDE.md §6-2-septquadragies).
+
+### Then you say run
+
+Open it, run top to bottom, and read §2 and §3 before the OCR cell. The clone is **deleted when the
+ticker is finished** — [§8](#8-what-is-still-missing--across-every-ticker-at-once) has the test, and
+it is `complete = True` **and** `outstanding = 0`, never `complete` alone.
 
 ---
 
@@ -438,6 +500,38 @@ the same reason on both. What differed is the **population the gate compares aga
 it IN THE RUN, over more quarters and over pre-de-cumulation figures. **A statement a worker
 accepts is not a statement a full run would accept**, and the merge cannot tell the difference
 — only you can, by reading the figures against the filing.
+
+### ⚠️ SCREEN BEFORE YOU MERGE A BOOTSTRAP RUN — `statement_screens.py` (2026-09-04)
+
+`FORCE_EMPTY_BAND` lifts a real guard (`BND-1`), and **the arithmetic screens are what replaces
+it**. They are CODE now (`P47`(b)) rather than a script rewritten per ticker — free, no OCR, no
+network:
+
+```python
+from web_scraper import statement_screens as screens
+flagged = screens.screen_run(folders)      # {(period, report): [why]}
+screens.report(flagged)
+```
+
+`screen_document` checks the identities a filing asserts about ITSELF — `assets == resources`,
+`A + B = TỔNG CỘNG TÀI SẢN` and `C + D = TỔNG CỘNG NGUỒN VỐN` on a `corp` chart, and the cash
+identity — and `screen_run` adds total-assets continuity, **which needs the whole batch because
+a figure wrong by 10^6 reconciles perfectly against itself**. Hold the flagged pairs out of the
+merge through `merge_run`'s own `periods`/`reports` filter, never by editing the artefact.
+
+⚠️ **THE `unit` SCREEN IS DELIBERATELY NOT PART OF IT.** Taking the MINORITY `unit` of a
+report as the suspect convicted 8 TCB statements correctly and then flagged **32 CTG ones that
+were all right**. `accepted.values` are ALREADY scaled, so the declared unit is a fact about the
+FILING and never evidence about the figure — what convicts is the MAGNITUDE.
+
+⚠️ **AND CONTINUITY IS A PER-QUARTER RATE, because a batch parses the OUTSTANDING quarters
+and "consecutive" is therefore not consecutive on the calendar.** FPT's run held Q2-2009 and
+then Q2-2010 and the honest 1.79x between them was flagged, while every neighbour of the pair
+confirmed both figures.
+
+⚠️ **They are not `sane` and do not replace it.** `sane` compares against the magnitudes a run
+has already ACCEPTED; these are identities. A statement can pass every one and still be the
+wrong column of the right page — `PYR-1` is exactly that. Use them to decide what NOT to merge.
 
 ### Still the safer route, when a quarter matters
 

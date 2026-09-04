@@ -2888,6 +2888,138 @@ verified against the rendered page and each one's prior-year column reproduces t
 quarter on disk to the đồng.** ⚠️ Which period those openings anchor to is NOT established, and
 no account of it is offered here.
 
+### ⚠️ 3k. A SCAN THAT IS 0.8 DEGREES CROOKED — FPT, 2026-09-04
+
+Four defects, all found in ONE filing, and **not one of them is the OCR reading a character
+wrong**. FPT was bootstrapped on a T4 on 2026-09-04 (128 of 213 statements accepted, 93
+written) and a local whole-ticker re-run then recovered **5 more cells of 106 outstanding** —
+which is what sent this diagnosis to the page GEOMETRY rather than to the cascade.
+
+| | what it was | what it cost |
+|---|---|---|
+| **`SKW-2`** | the page is scanned ~0.8 degrees crooked | every row carries its NEIGHBOUR's figures |
+| **`UNP-1`** | one statement, two printed units | the whole statement multiplied by 10^6 |
+| **`MSO-3`** | the `Mã số` heading set on two lines | `TỔNG CỘNG TÀI SẢN` read as **270** |
+| **`JVW-1`** | an OPTIONAL identity term that does not map | the statement refused by exactly the JV figure |
+
+#### `SKW-2` · the drift grows with x, so one constant cannot fix it
+
+Measured on FPT Q3-2024 page 8, line 1 of the income statement:
+
+```
+y0=172.08  x=84    "1 Doanh thu bán hàng và cung cấp dịch vụ"
+y0=177.60  x=418   15.972.397.069.700
+y0=179.04  x=524   13.761.831.884.948
+y0=180.24  x=628   45.311.586.755.696
+y0=181.20  x=734   37.929.368.276.576
+```
+
+**9.1 pt of drift across 650 pt of width, against a `Y_TOL` of 4.0.** The label and the two
+right-hand columns never group, so line 1 kept what it could reach and its remaining figures
+went to the label BELOW it, and so on down the page — every figure read correctly and seated
+wrongly, which is `SLD-1`'s consequence from a different cause.
+
+⚠️ **`realign_rows` CANNOT REACH IT, AND MEASURED AN OFFSET OF 0 — CORRECTLY.** That flag
+shifts every figure by ONE CONSTANT; here the shift is proportional to x, so it fixes at most
+one column. There is no single offset to find and the flag said so.
+
+`deskew_rows` measures the slope from the page and subtracts `slope * (x_centre - x0)` before
+bucketing. Three decisions inside it, each measured:
+
+* **A SEARCH, NOT A FIT.** A least-squares line through the boxes follows the page's centre of
+  mass — long labels on the left, short figures on the right — and not its baselines. What
+  identifies a skew is that correcting for it makes the boxes CLUSTER, so the score IS the
+  clustering (the sum of squared line sizes) and the slope is whatever maximises it. A page
+  with no skew scores best at exactly 0.0 and is left alone.
+* **BOX CENTRES, NOT `y0`.** A label box is taller than a figure box, so their TOPS differ by
+  ~5 pt on the same printed line while their centres do not — and labels sit at low x, figures
+  at high x, so scoring on `y0` reads that constant height difference as slope: **0.0151
+  against a true 0.0125** here, an over-estimate in the one direction that matters, because it
+  is the right-hand columns that fall out of tolerance first.
+* **THE CENTRE OF THE MAXIMAL BAND, NOT ITS FIRST POINT.** `Y_TOL` is a tolerance, so the
+  maximum is a PLATEAU: on the synthetic three-row fixture the score is flat from 0.009 to
+  past 0.020 for a true 0.013. Taking the first point leaves every figure on the edge of the
+  tolerance. ⚠️ **This is `_value_row_offset`'s own lesson (`SLD-1`, 2026-08-26), re-learned
+  the same way — the real page tolerated the first-point answer and the synthetic fixture is
+  what caught it.**
+
+⚠️ **AND `_reseat` SILENTLY UNDID THE WHOLE THING ON THE FIRST WIRING.** It re-derived
+`w[1] + offset` inline, so the second bucketing pass re-seated every word on its UNCORRECTED
+position; the rows came back split much as before and the layer looked like a failed idea
+rather than a missing line. `realign_rows` had been safe only because the two copies happened
+to spell it identically. **`_row_y` is now the ONE place that decides a word's row**, and both
+passes call it.
+
+#### `UNP-1` · "printed in đồng" and "did not say" were one answer
+
+`declared_unit` scanned every page of a statement for a `Triệu` declaration and returned on the
+first hit. It had **no needle for an explicit `đồng` at all**, so a page SAYING VND and a page
+saying nothing were indistinguishable, and a later page could overrule an earlier one that had
+stated the unit outright.
+
+FPT Q3-2024's income statement runs pages 8-9. **Page 8 IS the statement and prints `Đơn vị:
+VND`; page 9 is the appended "giải trình kết quả kinh doanh" table and prints `ĐVT: Triệu
+đồng`.** Both are read correctly. The whole statement was multiplied by 10^6 — a Q3 revenue of
+15,972,397,069,700 written as 1.597e19 — and `OP_IDENTITY` refused it. **The balance sheet of
+the same filing, whose pages carry only page 8's declaration, took unit=1 and parsed.**
+
+The rule is now **the first page that states anything wins**, which preserves the case the old
+one was written for (*a continuation page may not repeat it* — a silent first page and a later
+one that declares) and changes the verdict only where an earlier page had already spoken.
+⚠️ The `đồng` needles are anchored to `đơn vị`/`ĐVT` glued to the unit token, never a bare
+`dong`, which every millions declaration also contains.
+
+#### `MSO-3` · a 16pt-wide column heading is set on two lines
+
+`MSO-1`/`MSO-2` a third time, and neither reaches it: `MSO-2` joins a heading the RECOGNISER
+merged horizontally ("Mã số minh"), and this one is not merged at all — it is set on two
+baselines by the FILING. On FPT Q3-2019, `Mã` at y0=159.60 x=298.6-313.2 and `số` at y0=169.44
+x=300.7-312.0, each normalising to `ma` / `so` and scoring **0.667** against `maso`. So the
+item-code column was not dropped and `TỔNG CỘNG TÀI SẢN` read **270**, `TỔNG CỘNG NGUỒN VỐN`
+**440**, `Vốn chủ sở hữu` **410**.
+
+`_header_candidates` now also offers each box JOINED with the one directly below it.
+⚠️ **Conditions 2 and 3 are untouched and remain the real protection** — the candidate must
+still sit over a detected column and that column must still be the LEFTMOST, so an invented
+`maso` over nothing, or over a figure column, drops nothing.
+⚠️ **Only a SHORT box may begin a join**, bounded by the needle's own length: the upper half
+of a split heading is a fragment by construction, and a box already as long as the whole needle
+cannot need a join, since the single-box branch scores its leading text too. That bound is also
+what keeps this affordable — unpruned the join is quadratic in every box on the page and cost
+**185 ms on a 1,200-box page**, paid once per statement per parse, in the DEFAULT path, for
+every filing in the corpus. Bounded, it is **11 ms**.
+
+#### `JVW-1` · the term `OP_IDENTITY` omits is the one that refuses the statement
+
+The corp chart carries the circular's wording, "- Phần lãi/lỗ trong công ty liên doanh, liên
+kết"; FPT prints "8. Lợi nhuận từ công ty liên doanh liên kết". **0.765**, under
+`SCHEMA_MATCH`. `OP_IDENTITY` ADDS this term where it is mapped and omits it where it is not,
+so the identity then misses by exactly the JV figure: **components 2.80565e12 against a printed
+2.94823e12, a gap of 142,580,948,775** — with every other figure of the statement correct.
+
+Added to `ACCOUNT_WORDING`, whose flag name (`equity_wording`) is historical.
+⚠️ **And measuring it corrected that table's own safety claim.** Its comment reads *"the only
+column in any of the twelve charts whose account text IS `von chu so huu`"*; measured, that key
+names an account on FIVE charts and TWICE on three of them — the corp/securities/insurance
+balance sheets each carry a section and a subtotal that reduce to the same text once the prefix
+and numbering are stripped. True on the BANK balance sheet where it was measured, not in
+general. **What makes the rewrite safe is that an alias is not itself an account of any chart**,
+which is what the test asserts now.
+
+#### Where the block sits, and what the regression measured
+
+Four layers at the **END** of the cascade — 78 layers, 37 parse keys, and **still 7 OCR keys**,
+so the block buys no extra OCR pass — after every strict layer, so no row already on disk can
+move. ⚠️ **`join_lost_separator` rides with them and is not optional**: a crooked scan loses a
+thousands separator and drifts its baselines at once, and with the skew corrected and the
+separator left alone FPT's Q3-2019 and Q1-2016 are still refused as fragmented on all three
+statements.
+
+⚠️ **`UNP-1` and `MSO-3` ARE DEFAULT-PATH CHANGES**, so five filings were re-parsed end to
+end against the rows on disk — one per parsed template family, and two of them exercise the
+changed paths directly: **TCB Q1-2014, whose income statement wins at `onnx@200+unit+tail`**
+(the `unit_from_document` path) and **VIC Q3-2014 on `corp`** (`MSO-1` territory).
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

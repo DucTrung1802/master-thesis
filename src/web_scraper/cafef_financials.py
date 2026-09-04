@@ -226,6 +226,7 @@ class ParseLayer:
     column_header_blind: bool = False
     merged_tail: bool = False
     reseat_words: bool = False
+    deskew_rows: bool = False
     equity_wording: bool = False
     crop_pad: Optional[float] = None
 
@@ -253,7 +254,7 @@ class ParseLayer:
                     or self.relax_merged_seam or self.annual_tail or self.cash_extra_terms
                     or self.condensed_income or self.join_lost_separator
                     or self.merged_tail or self.column_header_blind
-                    or self.reseat_words or self.equity_wording
+                    or self.reseat_words or self.deskew_rows or self.equity_wording
                     # ⚠️ ADDED 2026-09-04, AND THEY WERE MISSING FOR AS LONG AS THEY EXISTED.
                     # Both admit a page the CLASSIFIER rejected, which is `column_header_blind`'s
                     # class exactly — it is listed here and they were not. Nothing was wrong
@@ -455,7 +456,13 @@ def parse_key(layer: ParseLayer) -> tuple:
             # cascade that had never actually tried the one written for it.
             # ⚠️ It is deliberately NOT in `ocr_key`: it runs on the words `scan` has already
             # returned and cannot change a recognised character.
-            layer.reseat_words)
+            layer.reseat_words,
+            # ⚠️ **`deskew_rows` REBUILDS THE ROWS TOO, FOR THE SAME REASON.** It changes which
+            # printed line each word belongs to, so a layer carrying it must never be served a
+            # cached parse taken without it — the defect `reseat_words` cost a run to find.
+            # ⚠️ And deliberately NOT in `ocr_key`: it moves boxes the recogniser has already
+            # returned and cannot change a recognised character.
+            layer.deskew_rows)
 
 
 def ocr_key(layer: ParseLayer) -> tuple:
@@ -1351,6 +1358,54 @@ class FinancialsBuilder:
         ParseLayer("onnx@300+noteshead+extra", "onnx", 300,
                    notes_head=True, notes_tail=True, label_wrap=True, reseat_words=True,
                    relax_totals=True, cash_extra_terms=True),
+
+        # ── A SKEWED SCAN — `SKW-2`, 2026-09-04 ────────────────────────────────
+        # ⚠️ **LAST, AND THE POSITION IS THE WHOLE SAFETY ARGUMENT.** Correcting a page's skew
+        # changes which printed line every word on it belongs to, so it must only ever judge a
+        # statement that every strict read and every widening rule already refused. Measured:
+        # across the `pdf` rows on disk the latest cascade position any of them was won at is
+        # far above these, so no row already written can move.
+        #
+        # ⚠️ **IT IS NOT `realign_rows` AND THAT FLAG CANNOT SUBSTITUTE.** `realign` shifts
+        # every figure by one CONSTANT; a skew grows with x, so it fixes at most one column of
+        # it. On FPT Q3-2024 page 8 the drift is 9.1 pt across 650 pt of width — against a
+        # `Y_TOL` of 4.0 — and the statement came back with every row carrying its neighbour's
+        # figures, read correctly and seated wrongly. `realign` measured an offset of 0 there,
+        # correctly: there is no single offset to find.
+        #
+        # ⚠️ **`reseat_words` RIDES WITH IT AND NEITHER IS SUFFICIENT ALONE.** De-skewing puts
+        # a line's boxes within tolerance of each other; re-seating is what then assigns them
+        # to the bucket they belong in rather than to whichever one was opened first. Measured
+        # on that page: skew alone still splits the widest rows, `reseat` alone reads four
+        # columns per row and every one of them off by a line.
+        #
+        # ⚠️ **`equity_wording` RIDES WITH THEM, AND ITS NAME IS HISTORICAL.** The flag gates
+        # `ACCOUNT_WORDING`, which is now two entries and not one: the pre-2015 bank equity
+        # line and the corp income statement's joint-venture line (`JVW-1`). A de-skewed FPT
+        # income statement reads every figure correctly and is still refused without it,
+        # because `OP_IDENTITY` omits the JV term it could not map and then misses by exactly
+        # that figure.
+        # ⚠️ **`join_lost_separator` RIDES WITH THEM AND IS NOT OPTIONAL — measured.** A skewed
+        # page and a lost thousands separator are independent defects that arrive together,
+        # because both are what a crooked scan does to a figure: with the skew corrected and
+        # the separator left alone, FPT's Q3-2019 and Q1-2016 are still refused for
+        # `N figure(s) split across two boxes` on all three statements. With both, both
+        # filings' income statements and cash flows reconcile.
+        ParseLayer("onnx@200+deskew", "onnx", 200,
+                   deskew_rows=True, reseat_words=True, label_wrap=True,
+                   equity_wording=True, join_lost_separator=True),
+        ParseLayer("onnx@300+deskew", "onnx", 300,
+                   deskew_rows=True, reseat_words=True, label_wrap=True,
+                   equity_wording=True, join_lost_separator=True),
+        ParseLayer("onnx@400+deskew", "onnx", 400,
+                   deskew_rows=True, reseat_words=True, label_wrap=True,
+                   equity_wording=True, join_lost_separator=True),
+        ParseLayer("onnx@200+deskew+relax", "onnx", 200,
+                   deskew_rows=True, reseat_words=True, label_wrap=True,
+                   equity_wording=True, join_lost_separator=True, relax_totals=True),
+        ParseLayer("onnx@300+deskew+relax", "onnx", 300,
+                   deskew_rows=True, reseat_words=True, label_wrap=True,
+                   equity_wording=True, join_lost_separator=True, relax_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -1418,6 +1473,7 @@ class FinancialsBuilder:
         parser.set_unit_from_document(layer.unit_from_document)
         parser.set_column_header_blind(layer.column_header_blind)
         parser.set_reseat_words(layer.reseat_words)
+        parser.set_deskew_rows(layer.deskew_rows)
 
     def _parse_cascaded(self, path: str, period_end,
                         template: str, history: Dict[str, List[int]],
@@ -2278,8 +2334,39 @@ class FinancialsBuilder:
     # `NST-1` exactly. An equality test cannot: `viii_von_chu_so_huu` is the only column in
     # any of the twelve charts whose account text IS "von chu so huu" and nothing else, on the
     # bank balance sheet — asserted by `test_cafef_equity_wording.py`.
+    #
+    # ⚠️ **THE SECOND ENTRY IS THE SAME SHAPE ON THE CORP INCOME STATEMENT (`JVW-1`,
+    # 2026-09-04).** The chart carries the circular's wording, "- Phần lãi/lỗ trong công ty
+    # liên doanh, liên kết"; FPT prints "8. Lợi nhuận từ công ty liên doanh liên kết". They
+    # score **0.765**, under `SCHEMA_MATCH`, so the line does not map — and `OP_IDENTITY` ADDS
+    # this term where it is mapped and omits it where it is not, so the identity then misses
+    # by exactly the joint-venture figure and the whole statement is refused. Measured on FPT
+    # Q3-2024: components 2.80565e12 against a printed 2.94823e12, a gap of 142,580,948,775 —
+    # the JV line to the đồng.
+    #
+    # ⚠️ **SAME SAFETY STANDARD, MEASURED THE SAME WAY.** Across the 842 accounts of the twelve
+    # charts, `phanlailotrongcongtyliendoanhlienket` is the account of EXACTLY ONE column and
+    # is contained in no other, so the equality test can reach nothing else; and an alias is
+    # only ever offered to its own account, so a name that scores 0.800 against some other
+    # chart's account (`i_2_3_dau_tu_vao_cong_ty_lien_doanh_lien_ket`, on the securities
+    # BALANCE SHEET) cannot be raised by it. The result is a `max`, so a filing whose JV line
+    # already maps is untouched.
+    # ⚠️ **THE SECTION SUBTOTALS OF THE VAS `corp` BALANCE SHEET, `(part, part, total)`.**
+    # The form's own arithmetic and the only identity that chart has which is not true by
+    # construction. Named as CANONICAL COLUMNS, so `reconcile` reads them out of `mapped` and
+    # a chart without them abstains — which is every bank filing, so this needs no template
+    # argument. `statement_screens.SECTION_SUMS` is the same table for the read-only screen.
+    # ⚠️ The TOTAL is not named here: `reconcile` already resolves it as `assets` /
+    # `resources`, through `get`, which falls back to the text search. Naming a canonical
+    # column instead is what let FPT Q3-2022 through — see the loop.
+    SECTION_SUMS = (
+        ("a_tai_san_ngan_han", "b_tai_san_dai_han", "tong_cong_tai_san"),
+        ("c_no_phai_tra", "d_von_chu_so_huu", "tong_cong_nguon_von"),
+    )
+
     ACCOUNT_WORDING = {
         "vonchusohuu": ("vonvacacquy",),
+        "phanlailotrongcongtyliendoanhlienket": ("loinhuantucongtyliendoanhlienket",),
     }
 
     def _prefix_trims(self, key: str):
@@ -3362,6 +3449,45 @@ class FinancialsBuilder:
                     return "no total to balance against"
                 if abs(assets - (liab + eq)) > assets * 0.02:
                     return "assets != liabilities + equity"
+            # ⚠️ **THE SECTION SUMS — `SEC-1`, 2026-09-04, AND THIS IS `P49`'s ARGUMENT FOR
+            # THE BALANCE SHEET.** The two tests above are all a balance sheet had, and on the
+            # `corp` chart BOTH are trivially true: `C_LIABILITIES` does not map there
+            # (`CRP-1`), so the second never runs, and the first compares two grand totals
+            # that any page reading both gets right together. So a corporate balance sheet
+            # whose LINE ITEMS are wrong is accepted at layer 1 and every later layer is
+            # unreachable — `PGB-1`'s half-right layer, with the gate unable to see the defect.
+            #
+            # ⚠️ **MEASURED ON FPT Q3-2022, WHICH IS ALSO WHY IT IS WORTH GATING RATHER THAN
+            # SCREENING.** `onnx@300` accepts it with `b_tai_san_dai_han` = 198,477,998,944 for
+            # a company holding 55 tn, and **`onnx@200+deskew` reads 19,857,626,692,533, which
+            # closes A + B = T exactly** — the cascade already contains the answer and stops
+            # two layers short of it.
+            #
+            # ⚠️ **FALSE-REFUSAL RISK MEASURED ON THE POPULATION THE GATE SEES**, i.e. every
+            # ACCEPTED `corp` balance sheet in every run folder on disk: **209 answer, 14 fail,
+            # 7 abstain**. The 14 are 9 distinct quarters (FPT Q3-2022 and 8 VIC), and the
+            # smallest gap among them is **1.47e12** — far past any filing's own rounding.
+            # ⚠️ **THE TOTAL COMES FROM `get`, NOT FROM `mapped`, AND THE FIRST VERSION OF
+            # THIS GATE READ `mapped` AND WAS WALKED STRAIGHT THROUGH.** Every other anchor in
+            # `reconcile` falls back to `Statement.find` when the ordered walk missed the row;
+            # a gate that does not abstains exactly where the mapping is WORST. Measured the
+            # hour it shipped: FPT Q3-2022 escalated off `onnx@300` as intended and was then
+            # accepted at `onnx@300+relax`, a reading with **70 items and no grand total mapped
+            # at all** — `tong_cong_tai_san` None, so the new check abstained, while `assets`
+            # and `resources` came from the text search and agreed with each other. The gate
+            # refused the better reading and passed the worse one.
+            for lo, hi, total in ((self.SECTION_SUMS[0][0], self.SECTION_SUMS[0][1], assets),
+                                  (self.SECTION_SUMS[1][0], self.SECTION_SUMS[1][1],
+                                   resources)):
+                x, y = mapped.get(lo), mapped.get(hi)
+                # ⚠️ ABSTAIN on an unmapped PART, exactly as `OP_IDENTITY` does: a chart
+                # without these columns (every bank filing) must not be refused for lacking
+                # them, and neither must a corp statement that mapped only part of the form.
+                if x is None or y is None or total is None:
+                    continue
+                if not self._equal(x + y, total):
+                    return (f"section sum does not close: {lo} + {hi} = {x + y:,} "
+                            f"against a printed {total:,}")
 
         if st.report == INCOME_STATEMENT:
             if get(self.C_PBT, *self.PBT) is None:

@@ -189,11 +189,15 @@ def test_the_notes_tail_layers_run_after_every_layer_that_wins_a_row_today():
 
     Asserted as an ORDER, never as an index: a test that pins a POSITION fails the first time
     something legitimate is appended, which this repo has now had to restate three times."""
-    names = [l.name for l in FinancialsBuilder.LAYERS]
-    first = min(names.index(l.name) for l in FinancialsBuilder.LAYERS if l.notes_tail)
-    others = [names.index(l.name) for l in FinancialsBuilder.LAYERS if not l.notes_tail]
-
-    assert first > max(others)
+    layers = FinancialsBuilder.LAYERS
+    first = min(i for i, l in enumerate(layers) if l.notes_tail)
+    strict = [i for i, l in enumerate(layers) if l.is_strict]
+    # ⚠️ RESTATED 2026-09-04 — the FOURTH position assertion in this suite to be outgrown.
+    # It read `first > max(others)`, i.e. the block is literally the tail of the cascade, and
+    # the `+deskew` block broke it by being appended after it while changing nothing about
+    # when a mis-titled continuation page may be admitted. What bounds these layers is that no
+    # layer reading the page AS PRINTED runs after them — `ParseLayer.is_strict`.
+    assert first > max(strict),         "a +notestail layer must never run before a layer that reads the page as printed"
 
 
 # ── `notes_head` — the same defect on the statement's FIRST page ───────────────

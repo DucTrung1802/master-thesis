@@ -480,6 +480,7 @@ class PdfParser:
         self.label_wrap = False
         # set per PARSE LAYER; see table_rows' second bucketing pass
         self.reseat_words = False
+        self.deskew_rows = False
         # set per PARSE LAYER; see document_unit
         self.unit_from_document = False
         # set per PARSE LAYER; see COLUMN_HEADER_NS / _page_kind
@@ -629,6 +630,26 @@ class PdfParser:
         A second pass over the FINAL key set removes that dependence. See `table_rows`.
         """
         self.reseat_words = bool(on)
+
+    def set_deskew_rows(self, on: bool) -> None:
+        """Correct a whole page's SCAN SKEW before the words are grouped into lines.
+
+        ⚠️ **A SKEWED PAGE IS NOT `SLD-1` AND `realign_rows` CANNOT REACH IT.** That flag
+        shifts every figure by ONE CONSTANT; a skew is a drift that GROWS with x, so the
+        further right a figure sits the further it has slid, and no single offset fixes more
+        than one column of it.
+
+        ⚠️ **MEASURED ON FPT Q3-2024, PAGE 8 (`SKW-2`).** Line 1 of the income statement runs
+        `y0 = 172.08` at the label (x=84) to `y0 = 181.20` at the last figure (x=734) — **9.1
+        pt of drift across 650 pt of width, about 0.8 degrees**. `Y_TOL` is 4.0, so the label
+        and the two right-hand columns never group: line 1 kept the columns it could reach and
+        its remaining figures were handed to the label BELOW it, and so on down the page. The
+        result is a statement whose every row carries its neighbour's figures — read
+        correctly, seated wrongly — which is `SLD-1`'s consequence from a different cause.
+
+        The slope is measured from the page itself and never assumed: see `_page_skew`.
+        """
+        self.deskew_rows = bool(on)
 
     def set_column_header_blind(self, on: bool) -> None:
         """Stop the statement TABLE's own column heading from classifying a page as NOTES.
@@ -1862,6 +1883,34 @@ class PdfParser:
     CODE_HEADER_NS = "maso"
     CODE_HEADER_MATCH = 0.80
 
+    # ── PER-LAYER FLAGS, DECLARED ON THE CLASS ────────────────────────────
+    # ⚠️ **SO THAT A PARSER BUILT WITHOUT `__init__` STILL CARRIES THEM, AND ADDING A FLAG
+    # STOPS BREAKING EVERY TEST THAT DOES.** Several test modules build their subject with
+    # `PdfParser.__new__(PdfParser)` — deliberately, to drive `table_rows` on hand-made word
+    # boxes with no document, no engine and no OCR — and each of them then had to assign every
+    # per-layer flag `table_rows` reads. Adding `deskew_rows` on 2026-09-04 broke 36 tests in
+    # four files at once, and not one of the failures was about de-skewing: they were
+    # `AttributeError` on a flag the test had never heard of.
+    #
+    # ⚠️ **IT CHANGES NO BEHAVIOUR.** `__init__` assigns every one of these, so a normally
+    # built parser shadows all of them with an instance attribute of the same value; these are
+    # the fallback for an instance that skipped `__init__`, and the default is OFF in every
+    # case, which is what `apply_layer` sets anyway on the first layer of any cascade.
+    join_split_digits = False
+    join_lost_separator = False
+    title_over_form = False
+    loose_form_code = False
+    realign_rows = False
+    notes_boundary = False
+    tail_continuation = False
+    notes_tail = False
+    notes_head = False
+    label_wrap = False
+    reseat_words = False
+    deskew_rows = False
+    unit_from_document = False
+    column_header_blind = False
+
     def _code_column(self, cols: List[float],
                      words_by_page: Dict[int, list]) -> Optional[float]:
         """The right edge of the "Mã số" item-code column among `cols`, or None.
@@ -1890,10 +1939,7 @@ class PdfParser:
         leftmost = min(cols)
         want = self.CODE_HEADER_NS
         for words in words_by_page.values():
-            for w in words:
-                ns = self.norm(w[4]).replace(" ", "")
-                if not ns:
-                    continue
+            for ns, wx0, wx1 in self._header_candidates(words, len(want)):
                 # ⚠️ **THE WHOLE BOX, OR THE TEXT IT BEGINS WITH — because the recogniser
                 # merges neighbouring HEADER words as readily as it merges anything else.**
                 # BSR's FY-2019 balance sheet sets "Mã số" and "Thuyết minh" on the same
@@ -1912,9 +1958,60 @@ class PdfParser:
                        SequenceMatcher(None, want, ns[:len(want)]).ratio()) \
                         < self.CODE_HEADER_MATCH:
                     continue
-                if w[0] - self.EDGE_TOL <= leftmost <= w[2] + self.EDGE_TOL:
+                if wx0 - self.EDGE_TOL <= leftmost <= wx1 + self.EDGE_TOL:
                     return leftmost
         return None
+
+    def _header_candidates(self, words: list, fragment: int = 4):
+        """`(text, x0, x1)` per header box — and per box STACKED on the one below it.
+
+        ⚠️ **A NARROW COLUMN HEADING IS SET ON TWO LINES, AND `_code_column` COULD NOT
+        READ ONE (`MSO-3`, 2026-09-04).** The `Mã số` column is ~16pt wide, so a landscape
+        VAS form prints its heading as "Mã" over "số". Measured on FPT's Q3-2019
+        consolidated balance sheet: `Mã` at y0=159.60 x=298.6-313.2 and `số` at y0=169.44
+        x=300.7-312.0 — two boxes, one directly under the other. Each normalises to `ma` / `so`,
+        which score **0.667** against `maso`, under the bar — so the item-code column survived
+        and `TỔNG CỘNG TÀI SẢN` was read as **270**.
+
+        ⚠️ **THAT IS `MSO-1`/`MSO-2` A THIRD TIME AND NEITHER FIX REACHES IT.** `MSO-2`
+        joins a heading the recogniser merged HORIZONTALLY ("Mã số minh"); this one is not
+        merged at all, it is set on two baselines by the FILING.
+
+        ⚠️ **THE JOIN IS THE ONLY THING WIDENED — CONDITIONS 2 AND 3 ARE UNTOUCHED AND
+        REMAIN THE REAL PROTECTION.** A candidate still has to sit over a detected column and
+        that column still has to be the LEFTMOST, so an invented `maso` over nothing, or over a
+        figure column, drops nothing. The join itself is tight: the lower box must OVERLAP the
+        upper one horizontally and start within one box-height of its bottom — a stacked
+        heading, not two rows of a table, which are 13-18pt apart and horizontally offset.
+        """
+        seen = []
+        heads = []
+        for w in words:
+            ns = self.norm(w[4]).replace(" ", "")
+            if not ns:
+                continue
+            yield ns, w[0], w[2]
+            seen.append((ns, w))
+            # ⚠️ **ONLY A SHORT BOX MAY BEGIN A JOIN, AND THE BOUND IS THE NEEDLE'S OWN
+            # LENGTH.** The upper half of a heading split across two lines is a FRAGMENT by
+            # construction ("ma"); a box already at least as long as the whole needle cannot
+            # need a join to reach it, since the single-box branch above scores its leading
+            # text too. The LOWER half is unbounded — "Mã" over "số minh" is a real layout
+            # and its tail is not short.
+            # ⚠️ It is also what keeps this affordable. Unpruned the join is quadratic in
+            # every box on the page and cost **185 ms on a 1,200-box page** — paid once per
+            # statement per parse, in the DEFAULT path, for every filing in the corpus. Bounded
+            # to short heads it is **10.7 ms** there and 2.8 ms on a 170-box page.
+            if len(ns) < fragment:
+                heads.append((ns, w))
+        for ns_a, w in heads:
+            budget = w[3] - w[1]              # this box's own height, as the vertical reach
+            for ns_b, v in seen:
+                if v is w or not (w[3] - self.EDGE_TOL <= v[1] <= w[3] + budget):
+                    continue
+                if min(w[2], v[2]) <= max(w[0], v[0]):        # must overlap in x
+                    continue
+                yield ns_a + ns_b, min(w[0], v[0]), max(w[2], v[2])
 
     # How far a numeric box may be searched for its label, and how much better the shifted
     # pairing must be before it is believed. Both measured 2026-08-25 on four bank filings:
@@ -1975,6 +2072,73 @@ class PdfParser:
             return best
         return 0.0
 
+    # ── SCAN SKEW ─────────────────────────────────────────────────────────
+    # A search, not a fit. A least-squares line through the boxes would measure the PAGE's
+    # centre of mass, not its baselines — a statement whose labels are long and whose figures
+    # are short puts far more ink on the left, and the fitted slope follows that instead of
+    # the text. What identifies a skew is that correcting for it makes the boxes CLUSTER into
+    # lines, so the score below is the clustering itself and the slope is whatever maximises
+    # it. That also means a page with no skew scores best at exactly 0.0 and is left alone.
+    DESKEW_MAX = 0.030      # ±1.7°, past anything a flatbed or a phone camera produces here
+    DESKEW_STEP = 0.0010    # ~0.06°, and then refined ten times finer around the winner
+    DESKEW_GAIN = 1.05      # must beat the UNCORRECTED page by 5 %, or it is noise
+
+    def _page_skew(self, words: list) -> float:
+        """This page's baseline slope (dy per dx), or 0.0 when it is not skewed.
+
+        ⚠️ **THE BOX CENTRE, NEVER `y0` — and the difference is most of the answer.** A label
+        box is taller than a figure box (diacritics above, descenders below), so their TOPS
+        differ by ~5 pt on the same printed line while their centres do not. Labels sit at low
+        x and figures at high x, so scoring on `y0` reads that constant height difference as
+        slope: on FPT Q3-2024 page 8 it gives 0.0151 against the true 0.0125, a 20 % error in
+        the one direction that matters, because it is the right-hand columns that fall out of
+        tolerance first.
+        """
+        pts = [((w[0] + w[2]) / 2.0, (w[1] + w[3]) / 2.0)
+               for w in words if str(w[4]).strip()]
+        if len(pts) < self.MIN_TABLE_WORDS:
+            return 0.0
+        x0 = min(x for x, _ in pts)
+
+        def score(s: float) -> int:
+            # Greedy clustering on the corrected y, tolerance `Y_TOL`, scored by the sum of
+            # squared line sizes — so ten boxes on one line beat five lines of two.
+            ys = sorted(y - s * (x - x0) for x, y in pts)
+            total, start, n = 0, ys[0], 1
+            for v in ys[1:]:
+                if v - start <= self.Y_TOL:
+                    n += 1
+                else:
+                    total += n * n
+                    start, n = v, 1
+            return total + n * n
+
+        # ⚠️ **THE CENTRE OF THE MAXIMAL BAND, NOT ITS FIRST POINT.** `Y_TOL` is a
+        # TOLERANCE, so once a slope brings a row's boxes inside it every nearby slope scores
+        # the same and the maximum is a PLATEAU, not a peak — on the synthetic three-row page
+        # in `test_cafef_deskew.py` the score is flat at 75 from 0.009 to past 0.020 for a
+        # true 0.013. Taking the first point of that band leaves every figure on the very edge
+        # of the tolerance, where one more crooked row falls out again. This is the identical
+        # lesson `_value_row_offset` records for `realign_rows` (SLD-1, 2026-08-26), and it
+        # survived that fix's real-data check the same way: the real page's plateau is narrow
+        # enough that the two answers differ by little, and the synthetic one is what caught it.
+        def peak(candidates):
+            scored = [(score(s), s) for s in candidates]
+            top = max(v for v, _ in scored)
+            band = [s for v, s in scored if v == top]
+            return top, (min(band) + max(band)) / 2.0
+
+        base = score(0.0)
+        steps = int(round(self.DESKEW_MAX / self.DESKEW_STEP))
+        best, best_s = peak([i * self.DESKEW_STEP for i in range(-steps, steps + 1)])
+        if best_s:
+            fine = self.DESKEW_STEP / 10.0
+            best, best_s = peak([best_s + i * fine for i in range(-9, 10)])
+        # ⚠️ A MARGIN, BECAUSE THE SEARCH ALWAYS FINDS SOMETHING. `score` is maximised over 61
+        # candidates, so on a clean page the winner is a fraction of a percent above 0.0 —
+        # noise, and applying it would move words across a 4 pt tolerance for nothing.
+        return best_s if best >= base * self.DESKEW_GAIN else 0.0
+
     @staticmethod
     def _line_key(lines: Dict[float, list], y: float, y_tol: float) -> float:
         """The existing printed line this word belongs to, or `y` to open a new one.
@@ -2004,8 +2168,23 @@ class PdfParser:
         near = [k for k in lines if abs(k - y) <= y_tol]
         return min(near, key=lambda k: abs(k - y)) if near else y
 
+    def _row_y(self, w, offset: float, lo: float, skew: float, x0: float) -> float:
+        """The y `table_rows` groups this word by — the ONE place that decides it.
+
+        ⚠️ **BOTH BUCKETING PASSES MUST MEASURE A WORD THE SAME WAY, AND `_reseat` DID NOT.**
+        It re-derived `w[1] + offset` inline, so when `deskew_rows` was first wired into
+        `table_rows` the second pass silently re-seated every word on its UNCORRECTED y and
+        undid the correction — the rows came back split much as before, and the layer looked
+        like a failed idea rather than a missing line. `realign_rows` had been safe only
+        because both copies happened to spell it identically.
+        """
+        y = w[1] + (offset if (offset and w[2] >= lo
+                               and self.NUM_RE.match(w[4]) is not None
+                               and self.parse_num(w[4]) is not None) else 0.0)
+        return y - skew * ((w[0] + w[2]) / 2.0 - x0) if skew else y
+
     def _reseat(self, lines: Dict[float, list], offset: float,
-                lo: float) -> Dict[float, list]:
+                lo: float, skew: float = 0.0, x0: float = 0.0) -> Dict[float, list]:
         """A SECOND bucketing pass: every word goes to the nearest FINAL bucket key.
 
         ⚠️ **`_line_key` PREFERS THE NEAREST BUCKET, BUT ONLY AMONG THE ONES ALREADY OPEN.**
@@ -2043,9 +2222,9 @@ class PdfParser:
         this rule from the other side: *when two new layers differ by a LABEL REPAIR, the
         repair goes first.*
 
-        `offset` and `lo` are `table_rows`' own, so a word's y is measured exactly as the
-        first pass measured it -- a `realign_rows` shift must not be applied twice, and must
-        not be dropped either.
+        `offset`, `lo`, `skew` and `x0` are `table_rows`' own and reach `_row_y`, so a word's y
+        is measured by the SAME code the first pass measured it with -- a `realign_rows` shift
+        must not be applied twice, and must not be dropped either, and neither must a skew.
         """
         keys = sorted(lines)
         if len(keys) < 2:
@@ -2053,9 +2232,7 @@ class PdfParser:
         out: Dict[float, list] = {k: [] for k in keys}
         for k in keys:
             for w in lines[k]:
-                y = w[1] + (offset if (offset and w[2] >= lo
-                                       and self.NUM_RE.match(w[4]) is not None
-                                       and self.parse_num(w[4]) is not None) else 0.0)
+                y = self._row_y(w, offset, lo, skew, x0)
                 # Ties keep the bucket the word is already in: this pass exists to remove an
                 # ordering dependence, so it must not introduce one of its own.
                 best = min(keys, key=lambda kk: (abs(kk - y), abs(kk - k)))
@@ -2081,6 +2258,13 @@ class PdfParser:
         out: List[Row] = []
         for page in sorted(words_by_page):
             lines: Dict[float, list] = {}
+            # ⚠️ **PER PAGE, NOT PER STATEMENT.** A filing is scanned a page at a time, so each
+            # page carries its own skew — and the same statement can run across a clean page
+            # and a crooked one. `offset` above is per statement because `SLD-1` is a property
+            # of the RECOGNISER's box placement; this is a property of the paper.
+            skew = self._page_skew(words_by_page[page]) if self.deskew_rows else 0.0
+            x0 = (min((w[0] + w[2]) / 2.0 for w in words_by_page[page])
+                  if skew and words_by_page[page] else 0.0)
             # ⚠️ **CONSUMED IN THE RECOGNISER'S OWN ORDER, AND SORTING BY y FIRST WAS TRIED
             # AND REJECTED — 2026-09-01.** Bucketing in y order is the more principled shape
             # (a bucket then always grows downward from its topmost word, so the grouping is
@@ -2093,14 +2277,15 @@ class PdfParser:
             # The tolerance is 4.0pt against wrapped halves 4-8pt apart on this page, so the
             # clustering has no margin and a chain rule spends it. Left as it was.
             for w in words_by_page[page]:
-                y = w[1] + (offset if (offset and w[2] >= lo
-                                       and self.NUM_RE.match(w[4]) is not None
-                                       and self.parse_num(w[4]) is not None) else 0.0)
+                # ⚠️ The skew correction is RELATIVE, so it may be applied to `y0` even though
+                # the slope was measured on box centres: every box on one printed line moves
+                # by the same amount and the line's own spread is what closes.
+                y = self._row_y(w, offset, lo, skew, x0)
                 k = self._line_key(lines, y, self.Y_TOL)
                 lines.setdefault(k, []).append(w)
 
             if self.reseat_words:
-                lines = self._reseat(lines, offset, lo)
+                lines = self._reseat(lines, offset, lo, skew, x0)
 
             parsed: List[tuple] = []
             for y in sorted(lines):
@@ -2280,6 +2465,31 @@ class PdfParser:
     def _declares_millions(text: str) -> bool:
         return any(n in text for n in ("trieuvnd", "trieudong", "trieaunoang"))
 
+    # ⚠️ **AND THE OTHER HALF OF THAT SENTENCE — AN EXPLICIT `đồng` — WAS NOT DETECTABLE AT
+    # ALL UNTIL 2026-09-04 (`UNP-1`).** `declared_unit` could only ever answer "millions" or
+    # "silence", so a page SAYING đồng and a page saying nothing were one answer, and a later
+    # page could therefore overrule an earlier one that had stated the unit outright.
+    #
+    # ⚠️ **MEASURED ON FPT Q3-2024, AND IT IS NOT AN OCR FAILURE.** Its consolidated income
+    # statement runs pages 8-9: page 8 is the statement and prints `Đơn vị: VND`, page 9 is
+    # the appended "giải trình kết quả kinh doanh" table and prints `ĐVT: Triệu đồng`. Both
+    # are read correctly. `declared_unit` scanned for millions across every page of the
+    # statement, found page 9, and multiplied the whole statement by 10^6 — so a Q3 revenue
+    # of 15,972,397,069,700 was written as 1.597e19 and `OP_IDENTITY` refused the statement.
+    # The balance sheet of the SAME filing, whose pages carry only page 8's declaration, took
+    # unit=1 and parsed. **One statement, two printed units, and the scan took the wrong one.**
+    #
+    # ⚠️ **THE NEEDLES ARE ANCHORED TO THE DECLARATION, NEVER TO A BARE `dong`.** `norm` strips
+    # punctuation, so "Đơn vị: VND" -> `donvivnd` and "ĐVT: Triệu đồng" -> `dvttrieudong`;
+    # matching a bare `dong` would fire on every millions declaration there is. Each needle
+    # here is `đơn vị`/`ĐVT` glued to the unit token, which the millions forms cannot produce:
+    # "Đơn vị tính: Triệu đồng" normalises to `donvitinhtrieudong`, which contains neither
+    # `donvitinhdong` nor `donvidong`. Asserted by test rather than argued.
+    @staticmethod
+    def _declares_dong(text: str) -> bool:
+        return any(n in text for n in ("donvivnd", "donvitinhvnd", "dvtvnd",
+                                       "donvidong", "donvitinhdong", "dvtdong"))
+
     def declared_unit(self, pages: Dict[int, dict], on: List[int]) -> Optional[int]:
         """The unit these pages STATE, or `None` when they state nothing.
 
@@ -2290,10 +2500,25 @@ class PdfParser:
         Q1-2026 cash flow only `sane` did (`magnitude 5.45e+08 vs typical 1.19e+14`). Neither
         of that statement's two pages prints "Triệu VNĐ" while the balance sheet in the SAME
         filing does, so the figures are millions and were read as đồng.
+
+        ⚠️ **THE FIRST PAGE THAT SAYS ANYTHING WINS, AND THAT IS THE WHOLE RULE.** The unit is
+        printed with the statement's own column header, i.e. on the page where the statement
+        STARTS; a declaration further down belongs to whatever table that page carries. Until
+        2026-09-04 this scanned every page for `millions` alone and returned on the first hit,
+        so an appended note table in millions silently overruled a statement page that had
+        said VND (`UNP-1`, above). Reading in page order preserves the case the old rule was
+        written for — *"a continuation page may not repeat it"*, i.e. a silent first page and
+        a later one that declares — and only changes the verdict where an EARLIER page had
+        already stated the unit.
         """
         for i in on:
-            if self._declares_millions(self.norm(pages[i]["text"]).replace(" ", "")):
+            text = self.norm(pages[i]["text"]).replace(" ", "")
+            # ⚠️ Millions first WITHIN a page, so a page that somehow carries both keeps the
+            # answer it had before this change. Across pages the order is the page order.
+            if self._declares_millions(text):
                 return 1_000_000
+            if self._declares_dong(text):
+                return 1
         return None
 
     def document_unit(self, pages: Dict[int, dict]) -> Optional[int]:
@@ -2302,8 +2527,13 @@ class PdfParser:
         ⚠️ Only consulted for a statement that declares nothing itself (`unit_from_document`),
         and only when the filing is not self-contradictory — if one statement said millions and
         another said đồng outright there would be no document-level answer, and guessing one is
-        how a correct statement gets multiplied by a million. As it stands a statement can only
-        declare millions or stay silent, so this returns 1e6 or `None`.
+        how a correct statement gets multiplied by a million.
+
+        ⚠️ **THAT CASE IS REACHABLE SINCE 2026-09-04 AND WAS NOT BEFORE.** This docstring used
+        to end *"a statement can only declare millions or stay silent, so this returns 1e6 or
+        `None`"*; `declared_unit` can now answer 1 as well (`UNP-1`), so a filing whose
+        statements disagree returns `None` — the abstention the sentence above always
+        promised, now with something able to trigger it. It returns 1e6, 1 or `None`.
         """
         units = {self.declared_unit(pages, [i])
                  for i, pg in pages.items() if pg["kind"] in REPORTS}

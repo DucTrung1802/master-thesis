@@ -599,8 +599,17 @@ at a staged payload and cut it down first, treating the result as a smoke test a
 
 ### OCR-ing a FILING — the `pdf-ocr` job (documents mode)
 
-⚠️ **It writes a run folder and never a statement CSV** — merging a recovered quarter back stays a
-deliberate act with a pre-run backup (§3e-quater).
+⚠️ **PREFER THE CONTROL NOTEBOOK OVER THESE COMMANDS** —
+`src/kaggle_gpu/RUN__pdf_ocr_control.ipynb`, one parameter cell, and `ENVIRONMENT` decides which
+machine parses. **"OCR ticker `<SYM>` LOCAL|KAGGLE" is the standing request for a prepared
+per-ticker clone that WAITS**: `kgpu/PDF_OCR.md` §1a has what is cloned, how each parameter is
+decided from disk, and when the clone is deleted.
+
+⚠️ **THE "writes a run folder and never a statement CSV" BELOW IS TRUE OF THIS MODULE AND NO LONGER
+TRUE OF THE PATH YOU WILL USE.** Since 2026-08-29 a LOCAL run upserts each quarter as it finishes
+and a Kaggle PULL upserts the folder; `--merge` is what turns it on here, and the four refusals
+plus a pre-write backup are what make it safe (`PDF_OCR.md` §6). Merging a quarter that DIFFERS
+from a good `pdf` row is still a deliberate, scoped act (§3e-quater).
 
 ```powershell
 # locally first — this is the baseline the Kaggle run is scored against
