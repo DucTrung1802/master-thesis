@@ -673,22 +673,36 @@ def test_the_pass_denominator_comes_from_the_page_cache_key_not_the_parse_cache_
         assert fin.ocr_key(by_name["onnx@200"]) == fin.ocr_key(by_name["onnx@200+loose"])
 
 
-def test_ocr_key_names_the_three_things_that_change_a_recognised_character():
+def test_ocr_key_names_the_things_that_change_a_recognised_character():
     """⚠️ STRUCTURAL, because the failure it guards is silent. A `ParseLayer` field that
     really does change the OCR — a new engine option, a render flag — added to `ParseLayer`
     and NOT to `ocr_key` would hand the new configuration the OLD configuration's cached
-    pages, and the layer would 'run' without reading a pixel. The three named here are the
-    only ones `PdfParser._read_page` consults."""
-    assert fin.ocr_key(FinancialsBuilder.LAYERS[0]) == (
-        FinancialsBuilder.LAYERS[0].engine,
-        FinancialsBuilder.LAYERS[0].dpi,
-        FinancialsBuilder.LAYERS[0].crop_pad)
+    pages, and the layer would 'run' without reading a pixel. The ones named here are the
+    only ones `PdfParser._read_page` consults.
+
+    ⚠️ **RESTATED 2026-09-04 WHEN `red_channel` BECAME THE FOURTH, and the restatement is
+    the point rather than an inconvenience.** This assertion is the only thing that would
+    have caught a render flag added to `ParseLayer` and forgotten here, so a version of it
+    that could not be broken by a new one would be testing nothing. It names the tuple by
+    FIELD, not by length, for the same reason.
+    """
+    first = FinancialsBuilder.LAYERS[0]
+    assert fin.ocr_key(first) == (first.engine, first.dpi, first.crop_pad, first.red_channel)
     # crop_pad is part of it: ACB Q3-2023 reads 93.261.018 as 261.018 at the default crop
     # and correctly at 6, so the two must never share a cached page.
     by_name = {layer.name: layer for layer in FinancialsBuilder.LAYERS}
     if "onnx@200+components" in by_name and "onnx@200+pad6+components" in by_name:
         assert (fin.ocr_key(by_name["onnx@200+components"])
                 != fin.ocr_key(by_name["onnx@200+pad6+components"]))
+    # ⚠️ and so is `red_channel`, for the same reason one level up: it replaces the rendered
+    # page with its red channel, so `onnx@200` and `onnx@200+red` are two different readings
+    # of the same pixels and must not share a cached page. FPT Q1-2016's stamped
+    # `TỔNG CỘNG NGUỒN VỐN` is the measured case.
+    if "onnx@200" in by_name and "onnx@200+red" in by_name:
+        assert (fin.ocr_key(by_name["onnx@200"])
+                != fin.ocr_key(by_name["onnx@200+red"]))
+        assert (fin.parse_key(by_name["onnx@200"])
+                != fin.parse_key(by_name["onnx@200+red"]))
 
 
 def test_a_blank_line_is_dropped_rather_than_printed_as_a_bare_percentage(tmp_path):

@@ -375,6 +375,22 @@ class OnnxOcr:
         # Per-instance so a PARSE LAYER can widen it (see FinancialsBuilder.LAYERS); the module
         # constant remains the default every ordinary parse uses.
         self.crop_pad = crop_pad
+        # ⚠️ **READ THE RED CHANNEL AS GREYSCALE — the COMPANY STAMP over a printed figure.**
+        # A Vietnamese filing is signed with a round red seal, and on some scans it is stamped
+        # straight across the grand-total line. Red ink is (R high, G low, B low) and black
+        # print is (low, low, low), so the RED channel alone renders the seal as near-white and
+        # leaves the digits untouched — while the composite the recogniser normally sees has
+        # the two on top of each other.
+        #
+        # ⚠️ **BLANKING THE SATURATED PIXELS INSTEAD DOES NOT WORK, AND IT WAS MEASURED FIRST.**
+        # Where the seal crosses a digit the pixel is saturated AND part of the digit, so
+        # setting saturated pixels to white deletes the strokes it overlapped: FPT Q1-2016's
+        # `24.695.453.363.505` came back as `24.6??.453.363.5?5`. Taking one channel keeps
+        # every black stroke and drops only the ink that is not black.
+        #
+        # Per-instance and OFF by default, set per PARSE LAYER exactly like `crop_pad`, and it
+        # is part of BOTH `parse_key` and `ocr_key` because it changes the pixels.
+        self.red_channel = False
         self._det = None
         self._rec = None
 
@@ -413,6 +429,11 @@ class OnnxOcr:
         pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale))
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
             pix.height, pix.width, pix.n)[:, :, :3].copy()
+        if self.red_channel:
+            # See `__init__`. Replicated to three channels because the detector and the
+            # recogniser both expect a 3-channel image; a greyscale page is unchanged by this,
+            # since R == G == B there and the copy is the identity.
+            img = np.repeat(img[:, :, :1], 3, axis=2)
 
         boxes = self.detector(img[:, :, ::-1])            # detector expects BGR
         h_img, w_img = img.shape[:2]

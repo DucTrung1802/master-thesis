@@ -43,9 +43,21 @@ MAX_STEP = 1.7
 # The VAS form's own arithmetic, and the only identity a corp balance sheet has that is not
 # true by construction. `bank` carries none of these columns, so the check simply does not fire
 # there and this needs no template argument.
+# `label -> (parts, optional, total)`. ⚠️ **THE OPTIONAL TERMS ARE THE SAME ONES `reconcile`
+# TRIES BOTH WAYS (`CDF-3`), AND LEAVING THEM OUT MAKES THE SCREEN FLAG EVERY SOUND PRE-2015
+# CORPORATE BALANCE SHEET.** Under Decision 15/2006 the NGUỒN VỐN side has FOUR top-level lines
+# — `Nguồn kinh phí và quỹ khác` and `Lợi ích của cổ đông thiểu số` sit OUTSIDE `D. VỐN CHỦ SỞ
+# HỮU`, where Circular 200 folds them in — so `C + D` falls short by exactly their sum.
+# Measured on FPT Q1-2009: gap 624,624,135,544 against 9,622,225,302 + 615,001,910,241.
+# ⚠️ Tried BOTH ways for the same reason `reconcile` does: on a modern form they are already
+# inside `D` and adding them would double-count. A screen that cries wolf on a whole era of
+# filings is a screen nobody reads.
 SECTION_SUMS = {
-    "assets A+B": ("a_tai_san_ngan_han", "b_tai_san_dai_han", "tong_cong_tai_san"),
-    "sources C+D": ("c_no_phai_tra", "d_von_chu_so_huu", "tong_cong_nguon_von"),
+    "assets A+B": (("a_tai_san_ngan_han", "b_tai_san_dai_han"), (), "tong_cong_tai_san"),
+    "sources C+D": (("c_no_phai_tra", "d_von_chu_so_huu"),
+                    ("ii_nguon_kinh_phi_va_quy_khac_430",
+                     "i_11_loi_ich_co_dong_khong_kiem_soat"),
+                    "tong_cong_nguon_von"),
 }
 
 
@@ -97,11 +109,17 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
             # 55,127,101,516,155** - `b_tai_san_dai_han` reading 198,477,998,944 for a company
             # holding 55 tn - and the screen as first written could not see it. Both sides are
             # checked, because the sources side fails the same way.
-            for label, (lo, hi, total) in SECTION_SUMS.items():
-                x, y, whole = values.get(lo), values.get(hi), values.get(total)
-                if x is not None and y is not None and whole is not None                         and not _close(x + y, whole):
-                    why.append("{} {:,} + {:,} = {:,} != {:,} (gap {:,})"
-                               .format(label, x, y, x + y, whole, x + y - whole))
+            for label, (parts, optional, total) in SECTION_SUMS.items():
+                got = [values.get(c) for c in parts]
+                whole = values.get(total)
+                if any(v is None for v in got) or whole is None:
+                    continue
+                extra = sum(v for v in (values.get(c) for c in optional) if v is not None)
+                if _close(sum(got), whole) or (extra and _close(sum(got) + extra, whole)):
+                    continue
+                why.append("{} {:,} + {:,} = {:,} != {:,} (gap {:,})"
+                           .format(label, got[0], got[1], sum(got), whole,
+                                   sum(got) - whole))
         elif report == "cash_flow":
             close = _first(values, builder.C_CASH_CLOSE)
             opening = _first(values, builder.C_CASH_OPEN)

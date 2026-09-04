@@ -201,6 +201,18 @@ class ParseLayer:
         cannot read what it was never shown: ACB's Q3-2023 reads 93.261.018 as 261.018 at every
         DPI and correctly at 6. Raising the DPI cannot help — the missing pixels are missing at
         any resolution — which is why this is its own knob rather than another DPI step.
+      * `red_channel` — render the page's RED CHANNEL as greyscale (onnx only), which removes
+        the round red COMPANY SEAL a filing is signed with and leaves every black stroke. On
+        some scans that seal lands across the grand-total line, and the composite image the
+        recogniser normally sees has the ink and the digits on top of each other: FPT Q1-2016's
+        `TỔNG CỘNG NGUỒN VỐN` reads 24.693.152.363.505 at 200 dpi, the same at 300,
+        2.469.355.661.505 at 400 and 24.605.453.361.505 at 500 — **four different wrong answers
+        against one printed 24.695.453.363.505**, which is the signature of ink over a figure
+        rather than of a resolution problem. Like `crop_pad` it changes what the recogniser is
+        SHOWN and not what the matcher will believe, so it is not a widening; it is late in the
+        cascade only because it costs an OCR pass.
+        ⚠️ **A NO-OP ON A GREYSCALE SCAN, BY CONSTRUCTION** — R == G == B there, so the channel
+        copy is the identity. See `PdfParser.set_red_channel`.
     """
     name: str
     engine: str
@@ -228,7 +240,10 @@ class ParseLayer:
     reseat_words: bool = False
     deskew_rows: bool = False
     equity_wording: bool = False
+    condensed_form: bool = False
+    income_by_columns: bool = False
     crop_pad: Optional[float] = None
+    red_channel: bool = False
 
     @property
     def is_strict(self) -> bool:
@@ -255,6 +270,10 @@ class ParseLayer:
                     or self.condensed_income or self.join_lost_separator
                     or self.merged_tail or self.column_header_blind
                     or self.reseat_words or self.deskew_rows or self.equity_wording
+                    # ⚠️ `condensed_form` names a page the classifier refused, which is
+                    # `notes_head`'s class exactly — a widening, and no layer reading the page
+                    # as printed may run after it.
+                    or self.condensed_form
                     # ⚠️ ADDED 2026-09-04, AND THEY WERE MISSING FOR AS LONG AS THEY EXISTED.
                     # Both admit a page the CLASSIFIER rejected, which is `column_header_blind`'s
                     # class exactly — it is listed here and they were not. Nothing was wrong
@@ -433,7 +452,10 @@ def parse_key(layer: ParseLayer) -> tuple:
     would be two copies of one contract, and the copy would be wrong the first time a
     `ParseLayer` field moved between "changes the parse" and "changes the mapping".
     """
-    return (layer.engine, layer.dpi, layer.crop_pad, layer.join_digits,
+    return (layer.engine, layer.dpi, layer.crop_pad,
+            # ⚠️ `red_channel` changes the PIXELS, so it belongs in both keys — see `ocr_key`.
+            layer.red_channel,
+            layer.join_digits,
             layer.join_lost_separator,
             layer.title_over_form, layer.loose_form_code, layer.realign_rows,
             layer.notes_boundary, layer.tail_continuation, layer.label_wrap,
@@ -462,7 +484,14 @@ def parse_key(layer: ParseLayer) -> tuple:
             # cached parse taken without it — the defect `reseat_words` cost a run to find.
             # ⚠️ And deliberately NOT in `ocr_key`: it moves boxes the recogniser has already
             # returned and cannot change a recognised character.
-            layer.deskew_rows)
+            layer.deskew_rows,
+            # ⚠️ `condensed_form` NAMES PAGES the classifier left unnamed, which is exactly what
+            # `notes_tail` / `notes_head` do — a PARSE key, and deliberately not an `ocr_key`:
+            # it re-labels pages `scan` has already read and cannot change a character.
+            layer.condensed_form,
+            # ⚠️ `income_by_columns` names a page the classifier left unnamed, exactly as
+            # `condensed_form` above it does — a PARSE key, and not an `ocr_key`.
+            layer.income_by_columns)
 
 
 def ocr_key(layer: ParseLayer) -> tuple:
@@ -481,8 +510,13 @@ def ocr_key(layer: ParseLayer) -> tuple:
     `ocr_key`**. That is why this is the denominator the progress readout uses — reporting
     "OCR pass 23/24" while seven of them read pixels and sixteen replayed a cached page
     would be a denominator that names the wrong work.
+
+    ⚠️ **`red_channel` IS THE FOURTH, AND IT IS THE ONLY ONE ADDED SINCE.** It replaces the
+    rendered page with its red channel, so it changes the pixels the detector and the
+    recogniser are shown — which is exactly what this key is for. Everything else added to
+    `ParseLayer` since has been a mapping or a row rule and is correctly absent from here.
     """
-    return (layer.engine, layer.dpi, layer.crop_pad)
+    return (layer.engine, layer.dpi, layer.crop_pad, layer.red_channel)
 
 
 # ⚠️ **THE ONE REFUSAL THAT IS NOT A FAILURE, AND IT IS A CONSTANT SO NOBODY RE-TYPES IT.**
@@ -1086,6 +1120,51 @@ class FinancialsBuilder:
         ParseLayer("onnx@300+unit+tail", "onnx", 300,
                    unit_from_document=True, tail_continuation=True, label_wrap=True),
         ParseLayer("onnx@300+unit", "onnx", 300, unit_from_document=True),
+        # ── THE COMPANY SEAL IS STAMPED ACROSS THE FIGURE (`red_channel`) ─────────────────
+        # A Vietnamese filing is signed with a round RED seal, and on some scans it lands on
+        # the grand-total line. The composite image the recogniser is normally shown has the
+        # ink and the digits on top of each other; the RED CHANNEL alone renders the seal as
+        # near-white and leaves every black stroke, because red ink is (R high, G low, B low)
+        # against black print's (low, low, low).
+        #
+        # ⚠️ **THE SIGNATURE OF INK OVER A FIGURE IS THAT EVERY DPI IS WRONG AND WRONG
+        # DIFFERENTLY.** FPT Q1-2016's `TỔNG CỘNG NGUỒN VỐN` is printed 24.695.453.363.505 and
+        # reads 24.693.152.363.505 at 200 dpi, the same at 300, **2.469.355.661.505** at 400
+        # and **24.605.453.361.505** at 500 — four answers, none of them the printed one, while
+        # `A + B` closes on the assets side to the đồng. A resolution problem converges as the
+        # resolution rises; this does not, because the pixels the recogniser needs are not
+        # missing, they are covered.
+        #
+        # ⚠️ **BLANKING THE SATURATED PIXELS WAS TRIED FIRST AND IS WORSE.** Where the seal
+        # crosses a digit the pixel is BOTH saturated and part of the stroke, so setting
+        # saturated pixels to white deletes what it overlapped: the same figure came back as
+        # `24.6??.453.363.5?5`, i.e. a fresh wrong answer rather than a refusal. Taking one
+        # channel keeps every black stroke and drops only ink that is not black.
+        #
+        # ⚠️ **STRICT, AND THAT IS NOT A CHOICE — it is `is_strict`'s own rule.** Like `dpi` and
+        # `crop_pad` this changes what the recogniser is SHOWN and not what the matcher will
+        # believe, so it may not run after a widening layer; it sits at the END of the strict
+        # zone because it costs an OCR pass and only a filing that has defeated every cheaper
+        # read should pay for it.
+        # ⚠️ **AND IT IS A NO-OP ON A GREYSCALE SCAN BY CONSTRUCTION** — R == G == B there, so
+        # the channel copy is the identity and a filing with no coloured ink cannot move.
+        ParseLayer("onnx@200+red", "onnx", 200, red_channel=True),
+        ParseLayer("onnx@300+red", "onnx", 300, red_channel=True),
+        # ⚠️ **AND THE PAGE HAS TO BE FOUND BEFORE THE SEAL CAN BE REMOVED FROM IT.** FPT's
+        # modern filings print the cash flow on pages whose FORM CODE disagrees with their
+        # title, so the statement is only classified under `title_over_form` — and then its
+        # CLOSING BALANCE, the last line before the signature block, is stamped. The seal is
+        # therefore invisible to the bare pair above, which never sees the page at all:
+        # measured 2026-09-04 on four quarters, `+title` alone reads the closing balance as
+        # **795** (Q3-2023, printed 7.153.625.069.795), **424.451.239** (Q1-2023, printed
+        # 3.289.424.451.229) and as an EMPTY CELL (Q1-2025), while `+title+red` reads
+        # 7.153.625.069.795 and 3.289.424.451.229 — each closing its own identity to the đồng
+        # against an opening and a movement no configuration ever disagreed about.
+        # ⚠️ These cost NO extra OCR pass: `ocr_key` is `(engine, dpi, crop_pad, red_channel)`
+        # and `title_over_form` is a CLASSIFICATION knob, so all four layers of this block are
+        # two trips through the recogniser.
+        ParseLayer("onnx@200+title+red", "onnx", 200, title_over_form=True, red_channel=True),
+        ParseLayer("onnx@300+title+red", "onnx", 300, title_over_form=True, red_channel=True),
         # ── SOMEBODY ELSE'S WORDS ARE STUCK TO THE FRONT OF THE LABEL (`annual_tail`) ──
         # `table_rows` keys a row on `carry + label`, so a previous item whose label wrapped
         # onto its own line — too far below its figures for the forward branch to reclaim —
@@ -1200,6 +1279,29 @@ class FinancialsBuilder:
                    join_lost_separator=True, relax_totals=True),
         ParseLayer("onnx@200+joinlost+relax+components", "onnx", 200,
                    join_lost_separator=True, relax_totals=True, relax_components=True),
+        # ⚠️ **THE SEAL AND THE LOST SEPARATOR ON ONE PAGE, AND NEITHER FLAG ALONE REACHES
+        # IT.** FPT's Q1-2016 balance sheet needs BOTH: the scan drops thousands separators
+        # (5 fragments at `onnx@200`, which `reconcile` refuses) AND the round company seal is
+        # stamped across `TỔNG CỘNG NGUỒN VỐN`. Strict `+red` still reads 5 fragments, and
+        # `+joinlost` alone reads the seal as 24.693.152.363.505 against a printed
+        # 24.695.453.363.505 — so the quarter is refused twice for two different reasons and
+        # the cascade never puts the two repairs together.
+        # ⚠️ These are WIDENING layers because `join_lost_separator` is one, which is why they
+        # live in this block and not beside the strict `+red` pair — `is_strict`'s rule again.
+        # ⚠️ **AND THE PAGE HAS TO BE FOUND BEFORE ITS SEPARATORS CAN BE JOINED, TOO.** FPT
+        # prints the notes RUNNING HEADER above the cash flow's own title, so the page is only
+        # classified under `title_over_form` — and the same scan drops thousands separators, so
+        # `+title` alone refuses it as fragmented and `+joinlost` alone never sees it. Measured
+        # on Q1-2012: `onnx@200+title` reads 4 fragments, `onnx@300+title` reads 7, and
+        # `onnx@200+title+joinlost` reconciles with 30 rows.
+        ParseLayer("onnx@200+title+joinlost", "onnx", 200,
+                   title_over_form=True, join_lost_separator=True),
+        ParseLayer("onnx@300+title+joinlost", "onnx", 300,
+                   title_over_form=True, join_lost_separator=True),
+        ParseLayer("onnx@200+joinlost+red", "onnx", 200,
+                   join_lost_separator=True, red_channel=True),
+        ParseLayer("onnx@300+joinlost+red", "onnx", 300,
+                   join_lost_separator=True, red_channel=True),
         # A CONTINUATION PAGE READ AS A NOTE (`column_header_blind`) and A GRAND TOTAL MERGED
         # ONTO THE LINE ABOVE IT (`merged_tail`) -- see `PdfParser.COLUMN_HEADER_NS` and
         # `_anchor_keys`. Both widen what may be found rather than what may be believed:
@@ -1406,6 +1508,55 @@ class FinancialsBuilder:
         ParseLayer("onnx@300+deskew+relax", "onnx", 300,
                    deskew_rows=True, reseat_words=True, label_wrap=True,
                    equity_wording=True, join_lost_separator=True, relax_totals=True),
+        # ── THE CONDENSED DISCLOSURE FORM, WHICH PRINTS NO STATEMENT TITLE (`condensed_form`)
+        # Mẫu CBTT-03 lets an issuer publish a two-page "BÁO CÁO TÀI CHÍNH" whose only heading
+        # is the FILING's — see `PdfParser._classify_condensed`. There is no title to score and
+        # no form code to read, so all three statements are reported `no such statement on any
+        # page of this filing`, the one refusal this repo treats as PERMANENT.
+        # ⚠️ **THE LAST LAYERS OF THE CASCADE, AND THEY WERE NOT ON THE FIRST TRY —
+        # measured the same day.** Placed mid-block they carry `equity_wording`,
+        # `join_lost_separator` and `unit_from_document` TOGETHER, a combination that had
+        # not existed, and they then INTERCEPTED ordinary filings from the `+equity` block
+        # twenty layers later: four FPT income statements (Q2-2015, Q1-2016, Q3-2022,
+        # Q1-2023) moved off `onnx@{200,300}+equity` onto `onnx@200+condensed` in one run.
+        # A block added for ONE form must not decide statements that form has nothing to do
+        # with, and last is the only position where it cannot.
+        # ⚠️ **REACHED ONLY WHEN THE DOCUMENT NAMED NO STATEMENT AT ALL** — a filing
+        # with any titled statement page cannot move, whether the flag is set or not, so the
+        # blast radius is the 2 documents on disk in that state.
+        # ⚠️ `condensed_income` rides with it because the same form's P&L can be four printed
+        # lines, and `equity_wording`/`join_lost_separator` because these are the oldest scans
+        # in the corpus.
+        # ⚠️ `unit_from_document` RIDES WITH `condensed_income`, AND THAT IS A RULE RATHER THAN
+        # A CHOICE (§6-2-sesquadragies): the condensed form prints its unit once, in the page-1
+        # header, while the P&L is on another page — so a bare `+condensed` layer would accept
+        # a statement that declares nothing at x1, a 10^6 error that `sane` cannot catch on the
+        # EMPTY band these earliest quarters have by construction. A layer that widens what is
+        # accepted may not also be the layer that reads the wrong unit.
+        # ── THE INCOME STATEMENT'S PAGE LOST BOTH ITS TITLE AND ITS FORM CODE
+        # (`income_by_columns`) — see `PdfParser._classify_income_by_columns`. An
+        # image-only scan can garble the title line and drop the code at once, and
+        # `_fill_continuations` then gives the page to the statement running ABOVE it: FPT's
+        # Q1-2012 income statement was reported absent while its rows were written INTO the
+        # balance sheet, which came out of pages [2, 3, 4]. Forced to `income_statement` the
+        # page reconciles with 22 rows and the balance sheet reconciles on [2, 3].
+        # ⚠️ **THE COLUMN MARKER IS NOT A STATEMENT ON ITS OWN — 26 text-layer pages print it
+        # and 10 of them are CASH FLOWS.** What makes this safe is that the page is
+        # UNCLASSIFIED and the document has found NO income-statement page anywhere, i.e. the
+        # alternative is losing the statement and mis-filing its page. Last in the cascade for
+        # the same reason `+condensed` is: a filing that already parses cannot reach it.
+        ParseLayer("onnx@200+bycol", "onnx", 200, income_by_columns=True,
+                   deskew_rows=True, join_lost_separator=True, reseat_words=True,
+                   label_wrap=True),
+        ParseLayer("onnx@300+bycol", "onnx", 300, income_by_columns=True,
+                   deskew_rows=True, join_lost_separator=True, reseat_words=True,
+                   label_wrap=True),
+        ParseLayer("onnx@200+condensed", "onnx", 200, condensed_form=True,
+                   condensed_income=True, unit_from_document=True,
+                   equity_wording=True, join_lost_separator=True),
+        ParseLayer("onnx@300+condensed", "onnx", 300, condensed_form=True,
+                   condensed_income=True, unit_from_document=True,
+                   equity_wording=True, join_lost_separator=True),
     ]
 
     def __init__(self, logger=None):
@@ -1460,6 +1611,9 @@ class FinancialsBuilder:
         """
         parser.set_dpi(layer.dpi)
         parser.set_crop_pad(layer.crop_pad)
+        parser.set_red_channel(layer.red_channel)
+        parser.set_condensed_form(layer.condensed_form)
+        parser.set_income_by_columns(layer.income_by_columns)
         parser.set_join_split(layer.join_digits)
         parser.set_join_lost_separator(layer.join_lost_separator)
         parser.set_title_over_form(layer.title_over_form)
@@ -2056,6 +2210,32 @@ class FinancialsBuilder:
     COL_PREFIXES = ("hdkd_indirect_", "hdkd_direct_", "hdkd_", "hddt_", "hdtc_")
     # An index: roman, digit or single letter, e.g. `vii_1_a_`.
     INDEX_RE = re.compile(r"^(?:[ivxlc]+_|\d+_|[a-z]_)+")
+    # ⚠️ **THE VAS CODE FORMULA AT THE OTHER END OF THE NAME — `CDF-1`, 2026-09-04.**
+    # `INDEX_RE` strips a LEADING index because it is bookkeeping and not part of the account's
+    # name; the same annotation is printed at the END of several accounts and was left on.
+    # `corp`'s closing cash line is `Tiền và tương đương tiền cuối kỳ (70 = 50+60+61)`, whose
+    # column carries `_70_50_60_61`, and a filing that prints the line as "Tiền và CÁC KHOẢN
+    # tương đương tiền cuối kỳ" then scores **0.765 against `SCHEMA_MATCH` of 0.80** — while
+    # the OPENING account, four characters shorter, scores 0.754 right behind it. FPT's
+    # Q2-2009 cash flow was refused `no closing cash balance` with its own identity closing to
+    # the đồng (1,242,502,927,497 - 303,538,812,440 = 938,964,115,057). Stripped, the closing
+    # account scores 0.867 and the opening 0.746 — the right row wins by a wider margin than
+    # before, which is the direction that matters.
+    #
+    # ⚠️ **`VAS-1` ALREADY STRIPS THIS FORMULA FROM THE ROW, and this is the same annotation
+    # on the ACCOUNT side.** `_split_merged` reads "(50 = 30 + 40)" printed inside a label as an
+    # item-code formula rather than a merged seam; treating it as part of the name here and as
+    # noise there is the same string being given two meanings.
+    #
+    # ⚠️ **REFUSED WHERE IT WOULD COLLIDE, AND THAT GUARD IS THE MEASUREMENT.** Across all 12
+    # charts 13 accounts carry a trailing group and **exactly 3 of them are DISAMBIGUATORS
+    # rather than codes** — `securities`' cash flow prints `Tiền` twice and numbers the second
+    # `tien_2`, so stripping it would give one chart two accounts with one name and the walk
+    # could no longer tell them apart. Those three are exactly the three whose stripped form is
+    # already another account of the same chart, so the collision test separates the two
+    # populations without naming either. The other 10 are `(430)`, `(60)`, `(70 = 50+60+61)`
+    # and their kind.
+    TRAILING_CODE_RE = re.compile(r"(?:_\d+[a-z]?)+$")
 
     def schema_of(self, template: str, report: str) -> List[Tuple[str, str]]:
         """[(canonical column, its account name)] in statement order, from schema/.
@@ -2094,8 +2274,24 @@ class FinancialsBuilder:
                         break
                 account = self.INDEX_RE.sub("", rest)
                 items.append((col, account or rest))
+        items = self._drop_trailing_codes(items)
         self._schema_cache[key] = items
         return items
+
+    def _drop_trailing_codes(self, items: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+        """Strip the VAS code formula from the END of an account name — see `TRAILING_CODE_RE`.
+
+        ⚠️ A strip that would leave two accounts of ONE chart with the SAME name is refused,
+        which is what separates `(70 = 50+60+61)` from `securities`' `tien_2`: the second is a
+        disambiguator and the whole point of it is the digit.
+        """
+        names = {a for _c, a in items}
+        out = []
+        for col, account in items:
+            stripped = self.TRAILING_CODE_RE.sub("", account)
+            out.append((col, account if (stripped == account or not stripped
+                                         or stripped in names) else stripped))
+        return out
 
     def sign_identities(
         self, template: str
@@ -2359,15 +2555,67 @@ class FinancialsBuilder:
     # ⚠️ The TOTAL is not named here: `reconcile` already resolves it as `assets` /
     # `resources`, through `get`, which falls back to the text search. Naming a canonical
     # column instead is what let FPT Q3-2022 through — see the loop.
+    # `(parts, optional, total)` — the parts must all map for the test to run, and the
+    # OPTIONAL terms are tried BOTH WAYS: the sum closes with them or without them.
+    #
+    # ⚠️ **THE NGUỒN VỐN SIDE HAS FOUR TOP-LEVEL LINES UNDER DECISION 15/2006 AND TWO UNDER
+    # CIRCULAR 200** (`CDF-3`, 2026-09-04). The pair below is the Circular-200 shape, where
+    # `Nguồn kinh phí và quỹ khác` and `Lợi ích của cổ đông thiểu số` are folded INSIDE
+    # `D. VỐN CHỦ SỞ HỮU`. A pre-2015 form prints them as separate top-level lines, so
+    # `C + D` falls SHORT of the grand total by exactly their sum and `SEC-1`'s gate refuses a
+    # sound statement. Measured on FPT's Q1-2009: assets == resources to the đồng, and
+    # 2,750,692,107,706 + 2,590,778,655,417 = 5,341,470,763,123 against a printed
+    # 5,966,094,898,667 — short by 9,622,225,302 + 615,001,910,241, which is those two lines.
+    #
+    # ⚠️ **TRIED BOTH WAYS RATHER THAN ADDED, BECAUSE ON A MODERN FORM THEY ARE ALREADY INSIDE
+    # `D` AND ADDING THEM WOULD DOUBLE-COUNT.** That is `OP_IDENTITY`'s own shape — "or with
+    # the deductions taken as expenses" — and the same argument holds: a wrong reading is very
+    # unlikely to close either way, so accepting either convention costs the gate almost
+    # nothing and refusing one of them costs a whole statement.
     SECTION_SUMS = (
-        ("a_tai_san_ngan_han", "b_tai_san_dai_han", "tong_cong_tai_san"),
-        ("c_no_phai_tra", "d_von_chu_so_huu", "tong_cong_nguon_von"),
+        (("a_tai_san_ngan_han", "b_tai_san_dai_han"), (), "tong_cong_tai_san"),
+        (("c_no_phai_tra", "d_von_chu_so_huu"),
+         ("ii_nguon_kinh_phi_va_quy_khac_430", "i_11_loi_ich_co_dong_khong_kiem_soat"),
+         "tong_cong_nguon_von"),
     )
-
-    ACCOUNT_WORDING = {
-        "vonchusohuu": ("vonvacacquy",),
-        "phanlailotrongcongtyliendoanhlienket": ("loinhuantucongtyliendoanhlienket",),
+    # ⚠️ **THE OPTIONAL TERMS ARE RESOLVED THROUGH `get`, i.e. WITH THE TEXT FALLBACK every
+    # other anchor in `reconcile` has** — and that is not a convenience, it is the only way
+    # they can be found at all on the form that needs them. Decision 15/2006 calls the minority
+    # interest "lợi ích của cổ đông THIỂU SỐ" where Circular 200 renames it "lợi ích cổ đông
+    # KHÔNG KIỂM SOÁT", so the pre-2015 row maps to no column of the corp BALANCE-SHEET chart.
+    # ⚠️ **AND `ACCOUNT_WORDING` CANNOT CARRY THAT RENAME, WHICH IS MEASURED RATHER THAN
+    # ASSUMED**: `loi_ich_cua_co_dong_thieu_so` IS ITSELF AN ACCOUNT on the bank balance sheet,
+    # the bank income statement and the corp income statement, so offering it as an alias would
+    # put two real accounts in competition for one row — the `NST-1` hazard, and the thing
+    # `test_every_account_wording_key_names_exactly_one_column` exists to refuse.
+    SECTION_EXTRA_TEXT = {
+        "ii_nguon_kinh_phi_va_quy_khac_430": ("nguon kinh phi va quy khac",),
+        "i_11_loi_ich_co_dong_khong_kiem_soat": ("loi ich cua co dong thieu so",
+                                                 "loi ich co dong khong kiem soat"),
     }
+
+    # ⚠️ **KEYED BY (report, account text), BECAUSE THE COMPETITION `NST-1` WARNS ABOUT IS
+    # WITHIN ONE CHART AND NOT ACROSS TWELVE** (2026-09-04). `map_to_schema` scores a row
+    # against the accounts of ONE (template, report) chart, so an alias can only put two real
+    # accounts in competition when both are accounts of THAT chart. The corp income statement's
+    # PBT is the case that forced the scoping: a condensed form prints "Lợi nhuận trước thuế"
+    # where the chart says "Tổng lợi nhuận KẾ TOÁN trước thuế" (0.77 against a bar of 0.80), and
+    # the shorter wording IS an account — of the corp CASH FLOW (`hdkd_indirect_1_...`), where
+    # it can never meet the income statement's accounts.
+    # ⚠️ `None` means EVERY report, which is what the two original entries were and are.
+    ACCOUNT_WORDING = {
+        (None, "vonchusohuu"): ("vonvacacquy",),
+        (None, "phanlailotrongcongtyliendoanhlienket"):
+            ("loinhuantucongtyliendoanhlienket",),
+        # Decision 15/2006 wording, printed by the CONDENSED disclosure form (`CDF-2`).
+        (INCOME_STATEMENT, "tongloinhuanketoantruocthue"): ("loinhuantruocthue",),
+    }
+
+    def account_aliases(self, report: str, account: str):
+        """The other spellings this account answers to on THIS report — see `ACCOUNT_WORDING`."""
+        bare = account.replace("_", "")
+        return (self.ACCOUNT_WORDING.get((None, bare), ())
+                + self.ACCOUNT_WORDING.get((report, bare), ()))
 
     def _prefix_trims(self, key: str):
         """The key, then the key with 1..`MAX_TAIL_TRIM` leading words dropped.
@@ -2402,7 +2650,8 @@ class FinancialsBuilder:
                      annual_tail: bool = False,
                      edge_containment: bool = False,
                      cut_fragment: bool = False,
-                     equity_wording: bool = False) -> float:
+                     equity_wording: bool = False,
+                     report: Optional[str] = None) -> float:
         """How alike a schema account and a parsed row label are, both separator-stripped.
 
         One measure shared by the ordered walk and `_anchor`, so a line is scored the same way
@@ -2432,10 +2681,11 @@ class FinancialsBuilder:
             # hand the grand total a second short account to lose to (`NST-1`).
             # ⚠️ The alias is scored as an ALTERNATIVE and the result is a `max`, so this can
             # only ever raise a score. A statement whose equity line already maps is untouched.
-            alts = self.ACCOUNT_WORDING.get(account.replace("_", ""))
+            alts = self.account_aliases(report, account)
             if alts:
                 return max(self._label_score(a, key, relax, annual_tail,
-                                             edge_containment, cut_fragment)
+                                             edge_containment, cut_fragment,
+                                             report=report)
                            for a in (account,) + tuple(alts))
 
         if annual_tail:
@@ -2585,7 +2835,7 @@ class FinancialsBuilder:
         out: Dict[str, int] = {}
         src: Dict[str, int] = {}                # column -> the parsed row that filled it
         for j, ri in self._align([k for _, _, k in rows], accounts, relax_totals,
-                                 annual_tail, equity_wording).items():
+                                 annual_tail, equity_wording, st.report).items():
             self._claim(out, src, schema[j][0], rows[ri][0], rows[ri][1])
 
         self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail,
@@ -2841,7 +3091,8 @@ class FinancialsBuilder:
 
     def _align(self, keys: List[str], accounts: List[str],
                relax: bool, annual_tail: bool = False,
-               equity_wording: bool = False) -> Dict[int, int]:
+               equity_wording: bool = False,
+               report: Optional[str] = None) -> Dict[int, int]:
         """Best monotonic alignment of parsed rows onto schema lines -> {schema index: row index}.
 
         The ordered walk this replaces was greedy: each row took the best account still open
@@ -2876,7 +3127,7 @@ class FinancialsBuilder:
                 if cand > best:
                     best, b = cand, 1
                 s = self._label_score(accounts[j - 1], key, relax, annual_tail,
-                                      equity_wording=equity_wording)
+                                      equity_wording=equity_wording, report=report)
                 if s >= self.SCHEMA_MATCH:
                     cand = fp[j - 1] + s
                     if cand > best:
@@ -3233,10 +3484,12 @@ class FinancialsBuilder:
                 keys, tails = self._anchor_keys(row, relax_merged_seam, merged_tail)
                 r = max(self._label_score(a, cand, relax, annual_tail,
                                           edge_containment=True,
-                                          equity_wording=equity_wording) for cand in keys)
+                                          equity_wording=equity_wording,
+                                          report=st.report) for cand in keys)
                 r_cut = max([self._label_score(a, cand, relax, annual_tail,
                                                edge_containment=True, cut_fragment=True,
-                                               equity_wording=equity_wording)
+                                               equity_wording=equity_wording,
+                                               report=st.report)
                              for cand in tails], default=0.0)
                 from_cut = r_cut > r
                 r = max(r, r_cut)
@@ -3476,16 +3729,21 @@ class FinancialsBuilder:
             # at all** — `tong_cong_tai_san` None, so the new check abstained, while `assets`
             # and `resources` came from the text search and agreed with each other. The gate
             # refused the better reading and passed the worse one.
-            for lo, hi, total in ((self.SECTION_SUMS[0][0], self.SECTION_SUMS[0][1], assets),
-                                  (self.SECTION_SUMS[1][0], self.SECTION_SUMS[1][1],
-                                   resources)):
-                x, y = mapped.get(lo), mapped.get(hi)
+            for (parts, optional, _col), total in zip(self.SECTION_SUMS,
+                                                      (assets, resources)):
+                got = [mapped.get(c) for c in parts]
                 # ⚠️ ABSTAIN on an unmapped PART, exactly as `OP_IDENTITY` does: a chart
                 # without these columns (every bank filing) must not be refused for lacking
                 # them, and neither must a corp statement that mapped only part of the form.
-                if x is None or y is None or total is None:
+                if any(v is None for v in got) or total is None:
                     continue
-                if not self._equal(x + y, total):
+                lo, hi = parts[0], parts[1]
+                x, y = got[0], got[1]
+                # ⚠️ THE OPTIONAL TERMS ARE TRIED BOTH WAYS — see `SECTION_SUMS`.
+                extra = sum(v for v in (get((c,), *self.SECTION_EXTRA_TEXT.get(c, ()))
+                                        for c in optional) if v is not None)
+                if not (self._equal(x + y, total)
+                        or (extra and self._equal(x + y + extra, total))):
                     return (f"section sum does not close: {lo} + {hi} = {x + y:,} "
                             f"against a printed {total:,}")
 

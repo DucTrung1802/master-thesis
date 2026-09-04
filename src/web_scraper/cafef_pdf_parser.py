@@ -477,8 +477,33 @@ class PdfParser:
     # matching `)` is there to prove a bracket was printed. A token that merely STARTS with a
     # quote is not a number, then or now. `parse_num` does the same substitution.
     QUOTE_FOR_BRACKET = "\"'`´|"
+    # ⚠️ **A THOUSANDS SEPARATOR THE RECOGNISER READ AS A COLON — `CLN-1`, 2026-09-05.** The
+    # separator is a full stop, and a stray mark above it makes a colon: FPT's Q3-2025 balance
+    # sheet returns `82.738.304.930:449` for its printed TỔNG CỘNG TÀI SẢN. `parse_num` refuses
+    # the token outright, so the row keeps its PRIOR-YEAR cell and loses the current one, and
+    # the quarter was refused `no total assets` at every layer of the cascade — with the figure
+    # on the page, read correctly but for one character, and equal to `A + B` and to
+    # `TỔNG CỘNG NGUỒN VỐN` to the đồng.
+    #
+    # ⚠️ **ONLY BETWEEN TWO DIGITS, which is where a separator is and where nothing else is.**
+    # A colon otherwise appears in a time or a label ("Đơn vị:"), and neither has a digit on
+    # both sides of it in a numeric token. ⚠️ And it is LENGTH-PRESERVING for
+    # `_split_number_runs`' sake, exactly as `SLASH_GAP_RE` is: that splitter apportions a box
+    # by CHARACTER OFFSET, so a rewrite that shortened the text would move every right edge it
+    # computes — and the right edge is what the column clustering reads.
+    # ⚠️ A THOUSANDS-SEPARATOR POSITION, not merely "between digits": the colon must be
+    # followed by exactly THREE digits, which is what a separator is followed by and what
+    # a CLOCK never is. Without that, `10:30` parses as 10 (the tail reads as a decimal)
+    # and a time in the value zone would join the column clustering.
+    COLON_SEPARATOR_RE = re.compile(r"(?<=\d):(?=\d{3}(?!\d))")
     NUM_RE = re.compile(r"^\(?-?[\d][\d.,]*\)?$"
                         r"|^[" + QUOTE_FOR_BRACKET + r"]+\(?[\d][\d.,]*\)$"
+                        # A colon in a THOUSANDS-SEPARATOR position — see
+                        # `COLON_SEPARATOR_RE`. Its own alternative rather than a widening of
+                        # the two above, so a CLOCK (`10:30`) is refused HERE too and never
+                        # joins the column clustering — `parse_num` refusing it later would
+                        # leave a box counted and a value missing.
+                        r"|^\(?-?[\d][\d.,]*:[\d]{3}[\d.,]*\)?$"
                         r"|^[-–—]$")
     # The filing's own row numbering, in the left margin.
     NUMBER_RE = re.compile(r"^[IVXLC]+$|^\d{1,2}$|^[a-z]$|^[A-Z]$", re.I)
@@ -544,6 +569,10 @@ class PdfParser:
         self.unit_from_document = False
         # set per PARSE LAYER; see COLUMN_HEADER_NS / _page_kind
         self.column_header_blind = False
+        # set per PARSE LAYER; see CONDENSED_BS / _classify_condensed
+        self.condensed_form = False
+        # set per PARSE LAYER; see _classify_income_by_columns
+        self.income_by_columns = False
         # ⚠️ **PROGRESS HOOK, AND THE ONLY DENOMINATOR IN THIS FILE THAT PREDICTS TIME.**
         # `on_page(index, total)` is called once per page of `scan`, before it is read. Pages
         # of one document cost roughly the same (0.87 s/page at onnx@200, measured for `P41`),
@@ -580,9 +609,20 @@ class PdfParser:
         self.ocr_ready = self._init_ocr()
 
     def _ocr_config(self) -> tuple:
-        """The three things that decide what the OCR returns. See `_ocr_cache`."""
-        pad = self._onnx.crop_pad if (self.engine == "onnx" and self._onnx is not None) else None
-        return (self.engine, self.dpi, pad)
+        """What decides what the OCR returns. See `_ocr_cache`.
+
+        ⚠️ `red_channel` joined `(engine, dpi, crop_pad)` on 2026-09-04 and had to: it changes
+        the PIXELS the detector and the recogniser are shown, so a layer carrying it must never
+        be served a page another layer read in colour. Everything else a `ParseLayer` sets runs
+        after the page has been read and cannot change a recognised character.
+        """
+        onnx = self._onnx if self.engine == "onnx" else None
+        pad = onnx.crop_pad if onnx is not None else None
+        # `getattr`, because the engine object is stubbed in the tests that drive this seam
+        # without onnxruntime — and because a flag absent from a stub must read as OFF rather
+        # than raise, which is what `set_red_channel` leaves an un-flagged parser at anyway.
+        red = bool(getattr(onnx, "red_channel", False)) if onnx is not None else False
+        return (self.engine, self.dpi, pad, red)
 
     def _use_document(self, pdf_path: str) -> None:
         """Point the page cache at one filing, discarding the previous one's pages."""
@@ -745,6 +785,49 @@ class PdfParser:
             pad = CROP_PAD_PT
         self._onnx.crop_pad = pad
 
+    def set_condensed_form(self, on: bool) -> None:
+        """Name the pages of a CONDENSED disclosure form, which prints no statement title.
+
+        See `_classify_condensed`. Reached only when the document classified NO statement at
+        all, so an ordinary filing is untouched whether the flag is set or not.
+        """
+        self.condensed_form = bool(on)
+
+    def set_income_by_columns(self, on: bool) -> None:
+        """Name an unclassified table page the income statement by its COLUMN HEADINGS.
+
+        See `_classify_income_by_columns`. Reached only when the document has found no
+        income-statement page at all, so a filing that already parses is untouched.
+        """
+        self.income_by_columns = bool(on)
+
+    def set_red_channel(self, on: bool) -> None:
+        """Render the page's RED CHANNEL as greyscale before detecting and recognising.
+
+        A Vietnamese filing is signed with a round red seal, and on some scans it lands across
+        the grand-total line. Red ink is (R high, G low, B low) against black print's (low, low,
+        low), so one channel renders the seal as near-white and leaves every black stroke
+        intact. Measured on FPT Q1-2016, whose `TỔNG CỘNG NGUỒN VỐN` is stamped: the composite
+        reads 24.693.152.363.505 at 200 dpi, 24.693.152.363.505 at 300, 2.469.355.661.505 at
+        400 and 24.605.453.361.505 at 500 — four different wrong answers — against a printed
+        24.695.453.363.505 that the red channel returns.
+
+        ⚠️ **A NO-OP ON A GREYSCALE PAGE, BY CONSTRUCTION** — R == G == B there, so the channel
+        copy is the identity and a scan with no coloured ink cannot move. That is why the layers
+        carrying it are safe to place at all, and it is measured rather than argued: see the
+        cascade block in `FinancialsBuilder.LAYERS`.
+
+        ⚠️ **AND IT IS NOT THE OBVIOUS "BLANK THE SATURATED PIXELS".** That was tried first and
+        is worse: where the seal crosses a digit the pixel is BOTH saturated and part of the
+        stroke, so blanking deletes what it overlapped — the same figure came back as
+        `24.6??.453.363.5?5`. Dropping a channel keeps every stroke.
+
+        A no-op on the other engines, which rasterise their own pages.
+        """
+        if self._onnx is None:
+            return
+        self._onnx.red_channel = bool(on)
+
     def _log(self, msg: str) -> None:
         if self._logger:
             self._logger.log_info(msg)
@@ -838,6 +921,9 @@ class PdfParser:
             t = re.sub(r"^[" + cls.QUOTE_FOR_BRACKET + r"]+(?=\(?\d)", "(", t)
         neg = t.startswith("(") and t.endswith(")")
         t = t.strip("()")
+        # See `COLON_SEPARATOR_RE`: a full stop with a stray mark above it. Between two digits
+        # a colon can only be the separator, and the substitution is length-preserving.
+        t = cls.COLON_SEPARATOR_RE.sub(".", t)
         if not re.fullmatch(r"-?[\d.,]+", t):
             return None
         frac = 0.0
@@ -870,12 +956,42 @@ class PdfParser:
         # carries exactly ONE form code, its own; two or more distinct ones mean the page is
         # talking ABOUT the statements. (Found via experiment_8 on ACB's FY-2013 filing.)
         form_re = self.FORM_RE_LOOSE if self.loose_form_code else self.FORM_RE
-        codes = {re.sub(r"\s+", "", m.group(1)).upper()
-                 for m in form_re.finditer(text)}
+        found = [(re.sub(r"\s+", "", m.group(1)).upper(), m) for m in form_re.finditer(text)]
+        codes = {c for c, _ in found}
+        kind_of = {c: self.FORMS[m.group(2).upper()].get(c) for c, m in found}
+        # ⚠️ **COUNT THE STATEMENT CODES, NOT THE CODES — `RHF-1`, 2026-09-04.** The guard above
+        # this line is a TABLE-OF-CONTENTS test and it was counting every code on the page, so a
+        # STATEMENT page carrying the notes RUNNING HEADER was thrown away as a contents page.
+        # FPT prints "THUYẾT MINH BÁO CÁO TÀI CHÍNH HỢP NHẤT / MẪU SỐ B 09-DN/HN" at the top of
+        # its cash-flow page, above the cash flow's own title and `B 03-DN/HN`: two codes, so
+        # `_page_kind` returned None, `_fill_continuations` handed the page to the statement
+        # running above it, and Q3-2011's cash flow was reported absent on all 76 layers while
+        # every figure on the page was readable.
+        #
+        # ⚠️ A contents page is still guarded, because it lists SEVERAL STATEMENTS — that is
+        # what a contents page is. Measured over the 7,389 text-layer pages of the eight parsed
+        # tickers: **8 pages carry more than one distinct code**, 7 of them name two or three
+        # STATEMENTS (the contents pages this guard was written for, all still refused) and
+        # **exactly one names a single statement** — a `cong_ty_me` FY-2024 balance sheet
+        # carrying {B02, B05}, i.e. this same defect on another ticker.
+        #
+        # ⚠️ AND THE TITLE MUST AGREE, which is what keeps a stray code from claiming a page:
+        # the one statement code is trusted only when the header also carries that statement's
+        # own title VERBATIM. That is `title_over_form`'s standard (score 1.0), applied here to
+        # ADMIT a page rather than to re-label one.
+        stmt_codes = {c for c in codes if kind_of.get(c) in REPORTS}
         if len(codes) > 1:
-            return None, False
+            if len(stmt_codes) != 1:
+                return None, False
+            only = next(iter(stmt_codes))
+            header_ns = self.norm("\n".join(
+                [l for l in text.splitlines() if l.strip()][:self.HEADER_LINES]
+            )).replace(" ", "")
+            if self._title_score(header_ns, self.HEADING[kind_of[only]]) < 1.0:
+                return None, False
+            found = [(c, m) for c, m in found if c == only]
 
-        m = form_re.search(text)
+        m = found[0][1] if found else None
         if m:
             code = re.sub(r"\s+", "", m.group(1)).upper()
             kind = self.FORMS[m.group(2).upper()].get(code)
@@ -1144,7 +1260,7 @@ class PdfParser:
     # a LINE-level detector has boxed together. Letters anywhere disqualify it, so a label is
     # never touched, and it must carry at least one digit so a row of "-" placeholders is left
     # alone.
-    NUM_RUN_RE = re.compile(r"^[\s\d.,()\-–—]+$")
+    NUM_RUN_RE = re.compile(r"^[\s\d.,:()\-–—]+$")
 
     # ⚠️ **A SLASH THE RECOGNISER PUT IN THE COLUMN GAP MAKES THE WHOLE BOX PARSE AS NOTHING.**
     # `NUM_RUN_RE` does not admit "/", so a box holding both period figures with one between
@@ -1601,12 +1717,93 @@ class PdfParser:
             elif kind == NOTES and from_form and len(seen) == len(REPORTS):
                 break            # the statements are behind us; the rest is notes
 
+        if self.condensed_form and not seen:
+            self._classify_condensed(pages)
+        if self.income_by_columns and INCOME_STATEMENT not in seen:
+            self._classify_income_by_columns(pages)
         self._drop_islands(pages)
         if self.notes_boundary:
             self._drop_after_notes(pages)
         self._enforce_order(pages)
         self._fill_continuations(pages)
         return pages
+
+    # ⚠️ **THE CONDENSED DISCLOSURE FORM PRINTS NO STATEMENT TITLE AT ALL** (`CDF-2`,
+    # 2026-09-04). Mẫu CBTT-03 (Thông tư 38/2007) lets an issuer publish a two-page
+    # "BÁO CÁO TÀI CHÍNH" whose only heading is the FILING's — FPT's Q1-2009 and Q3-2010 print
+    # `BÁO CÁO TÀI CHÍNH HỢP NHẤT` over `STT | Nội dung | Số dư cuối kỳ | Số dư đầu năm` on
+    # page 1 and `STT | Chỉ tiêu | Kỳ báo cáo | Lũy kế` on page 2, and nothing else. There is no
+    # title to score and no form code to read, so `_page_kind` returns None for both pages and
+    # all three statements are reported `no such statement on any page of this filing` — the one
+    # refusal this repo treats as PERMANENT (`SET-2`).
+    #
+    # ⚠️ **THE PAGE IS IDENTIFIED BY THE LINES ONLY THAT STATEMENT PRINTS, exactly as
+    # `CONDENSED_PL` is** — never by the "Mẫu CBTT-03" marker, which is boilerplate quoting the
+    # circular and which VIC carries on the statement pages of eleven FULL 24-32 page filings.
+    # A balance sheet is the page naming total assets, liabilities AND owners' equity together;
+    # an income statement the page naming cost of sales and gross profit. Neither fingerprint
+    # can hit the other's page and neither appears on a notes page.
+    CONDENSED_BS = ("tongtaisan", "nophaitra", "vonchusohuu")
+    CONDENSED_IS = ("giavonhangban", "loinhuangop")
+
+    def _classify_income_by_columns(self, pages: Dict[int, dict]) -> None:
+        """Name an UNCLASSIFIED page the income statement when its header prints BOTH a
+        standalone-quarter column and a cumulative one — `IBC-1`, 2026-09-05.
+
+        ⚠️ **THE PAGE CAN LOSE BOTH ITS TITLE AND ITS FORM CODE AT ONCE, AND THEN IT IS TAKEN
+        BY THE STATEMENT ABOVE IT.** FPT's Q1-2012 income statement is page 4 of an image-only
+        scan whose title line came back as gibberish ("Cho ký hoạt động tù ngày do tháng trong
+        nhành thiếp…") and which carries no readable form code, so `_page_kind` returned None
+        and `_fill_continuations` handed the page to the BALANCE SHEET running above it. The
+        income statement was reported `no such statement on any page of this filing` — and the
+        balance sheet was written from pages [2, 3, 4], i.e. with a page of P&L rows inside it.
+        Forced to `income_statement`, page 4 reconciles with 22 rows and the balance sheet
+        reconciles on [2, 3] with the same grand totals.
+
+        ⚠️ **THE MARKER DOES NOT IDENTIFY A STATEMENT ON ITS OWN, AND THAT IS MEASURED.** Over
+        the 7,389 text-layer pages of the eight parsed tickers, 26 print both markers and they
+        are spread across every kind: 7 income statements, **10 CASH FLOWS**, 4 balance sheets,
+        2 notes and 3 unclassified. So "both columns ⇒ income statement" is false for 16 of 26,
+        and what makes this safe is the two guards rather than the marker:
+
+          * the page is UNCLASSIFIED — the 16 are not;
+          * the document has found NO income-statement page ANYWHERE, so the alternative is
+            losing the statement outright and mis-filing its page into a neighbour.
+
+        Under those, the 3 measured hits are FPT Q1-2009 p2, FPT Q3-2010 p2 (both condensed
+        forms, which `condensed_form` names anyway and names the same way) and VIC Q2-2008 p4,
+        whose balance sheet and cash flow are found and whose income statement is not.
+
+        ⚠️ The survey reads NATIVE text, so it covers no image-only page — FPT Q1-2012's own is
+        outside it. That is why this ships behind a flag on the LAST layers rather than in the
+        default path: a filing that already parses cannot reach it.
+        """
+        for pg in pages.values():
+            if pg["kind"] or len(self._numbers(pg["words"])) < self.MIN_TABLE_WORDS:
+                continue
+            if self._prints_quarter_column(pg["text"]):
+                pg["kind"] = INCOME_STATEMENT
+                return          # a filing has ONE income statement; the first hit is it
+
+    def _classify_condensed(self, pages: Dict[int, dict]) -> None:
+        """Name the pages of a CONDENSED disclosure form, which carries no statement title.
+
+        ⚠️ **REACHED ONLY WHEN THE DOCUMENT CLASSIFIED NO STATEMENT AT ALL**, which is the
+        guard that bounds this: a filing with any titled statement page is untouched, so the
+        whole corpus of ordinary filings cannot move. Measured over every document with a
+        recorded verdict on disk, **2 are in that state** and both are FPT condensed forms.
+
+        ⚠️ And the page must still be a TABLE (`MIN_TABLE_WORDS`), so a cover page that happens
+        to name the three totals in prose is refused the way it always was.
+        """
+        for pg in pages.values():
+            if pg["kind"] or len(self._numbers(pg["words"])) < self.MIN_TABLE_WORDS:
+                continue
+            ns = self.norm(pg["text"]).replace(" ", "")
+            if all(n in ns for n in self.CONDENSED_BS):
+                pg["kind"] = BALANCE_SHEET
+            elif all(n in ns for n in self.CONDENSED_IS):
+                pg["kind"] = INCOME_STATEMENT
 
     @staticmethod
     def _drop_islands(pages: Dict[int, dict]) -> None:
@@ -2018,10 +2215,36 @@ class PdfParser:
                               key=lambda w: w[0])
                 for a, b in zip(nums, nums[1:]):
                     if (b[0] - a[2] < self.SPLIT_MAX_GAP
+                            and self._joinable(a[4], b[4])
                             and self.SPLIT_JOIN_RE.match(
                                 a[4].strip("()") + "." + b[4].strip("()"))):
                         n += 1
         return n
+
+    @staticmethod
+    def _joinable(left: str, right: str) -> bool:
+        """Could these two boxes be the two halves of ONE printed figure? — brackets only.
+
+        ⚠️ **A BRACKET IS A FIGURE BOUNDARY, AND THE GATE WAS IGNORING BOTH OF THEM** (`SPB-1`,
+        2026-09-04). A negative figure is printed `(1.234.567)`; split across two boxes its
+        LEFT half keeps the `(` and its RIGHT half keeps the `)`. So a right box that OPENS
+        with `(` is starting its own figure and a left box that CLOSES with `)` has finished
+        one — neither can be a continuation, whatever the gap and however well the digits join.
+
+        Measured on FPT's FY-2008 income statement: `'85.604.572.576'` and
+        `'(132.899.704.388)'` are two ADJACENT PERIOD COLUMNS **4.32pt apart**, under
+        `SPLIT_MAX_GAP`, and their digits join into a well-formed grouped figure — so the gate
+        counted them and refused the statement as fragmented at **every one of the six
+        configurations tried**, including 300 and 400 dpi. It is a false positive that no
+        escalation can clear, which is the worst kind: the cascade has nowhere left to go.
+
+        ⚠️ **`_merge_split_figures` HAS ALWAYS BEEN PROTECTED FROM THE SAME PAIR** — its
+        `MERGE_TAIL_RE` requires the right box to begin with a full THREE-DIGIT group, which
+        `'(132…'` does not — so the REPAIR refused this pair while the GATE counted it. The two
+        must agree about what a continuation is, and this is the gate adopting the repair's
+        own evidence.
+        """
+        return not (right.lstrip().startswith("(") or left.rstrip().endswith(")"))
 
     # ⚠️ THE "Mã số" COLUMN IS WHERE THE MAGNITUDE RULE ABOVE RUNS OUT, AND IT IS THE STANDARD
     # CORPORATE FORM — not a quirk of one filing. VAS form B01-DN prints
@@ -2053,6 +2276,11 @@ class PdfParser:
     # the column's right edge at 279.7, inside it.
     CODE_HEADER_NS = "maso"
     CODE_HEADER_MATCH = 0.80
+    # ⚠️ **`MSO-4`: THE VOWEL, AND ONLY THE VOWEL.** See `_code_column` — one substitution
+    # in a four-character needle scores 0.750, so the tone-marked `ã` coming back as `o` or
+    # `i` cannot be admitted by any threshold that is not also admitting three-quarters of the
+    # alphabet. This names the shape instead: `m`, `s`, `o` in place, one character between.
+    CODE_HEADER_RE = re.compile(r"^m.so$")
 
     # ── PER-LAYER FLAGS, DECLARED ON THE CLASS ────────────────────────────
     # ⚠️ **SO THAT A PARSER BUILT WITHOUT `__init__` STILL CARRIES THEM, AND ADDING A FLAG
@@ -2067,6 +2295,8 @@ class PdfParser:
     # built parser shadows all of them with an instance attribute of the same value; these are
     # the fallback for an instance that skipped `__init__`, and the default is OFF in every
     # case, which is what `apply_layer` sets anyway on the first layer of any cascade.
+    condensed_form = False
+    income_by_columns = False
     join_split_digits = False
     join_lost_separator = False
     title_over_form = False
@@ -2125,9 +2355,23 @@ class PdfParser:
                 # code printed in the same band, scores 0.50 whole and **0.75** on its head,
                 # and is still refused. Conditions 2 and 3 are untouched and remain the real
                 # protection.
-                if max(SequenceMatcher(None, want, ns).ratio(),
-                       SequenceMatcher(None, want, ns[:len(want)]).ratio()) \
-                        < self.CODE_HEADER_MATCH:
+                # ⚠️ **THE TONE-MARKED VOWEL IS THE CHARACTER OCR DAMAGES, AND ON A FOUR-
+                # CHARACTER NEEDLE ONE SUBSTITUTION CAN NEVER CLEAR THE BAR** (`MSO-4`,
+                # 2026-09-04). `Mã số` normalises to `maso`; at 300 dpi FPT's Q1-2016 balance
+                # sheet returns `moso` on page 2 and `miso` on page 3 — the `ã` read as `o`
+                # and as `i`. Each scores **0.750** against a bar of 0.80, and no bar between
+                # them exists: one substitution in four characters IS 0.75, so a threshold
+                # that admits it admits every 4-character box sharing three characters.
+                # So the SHAPE is named instead of the score being lowered: SAME LENGTH, and
+                # the three CONSONANT positions in place. `mausob01dnhn` — the form code
+                # `MẪU SỐ B 01-DN/HN` printed in the same band, and the impostor conditions 2
+                # and 3 exist for — is 12 characters and cannot match, whole or on its head
+                # (`maus`). Conditions 2 and 3 are untouched and remain the real protection.
+                if not (max(SequenceMatcher(None, want, ns).ratio(),
+                            SequenceMatcher(None, want, ns[:len(want)]).ratio())
+                        >= self.CODE_HEADER_MATCH
+                        or self.CODE_HEADER_RE.fullmatch(ns)
+                        or self.CODE_HEADER_RE.fullmatch(ns[:len(want)])):
                     continue
                 if wx0 - self.EDGE_TOL <= leftmost <= wx1 + self.EDGE_TOL:
                     return leftmost

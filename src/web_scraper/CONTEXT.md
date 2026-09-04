@@ -3124,6 +3124,157 @@ file it opened.
 `test_cafef_native_rotation.py`, and six added to `test_cafef_page_rotation.py`), none needing a
 PDF, a network or an OCR engine. CLAUDE.md §6-2-quinquasexagies.
 
+### ⚠️ 3m. NINE MORE, AND ONE OF THEM WROTE A WRONG FIGURE — FPT, 2026-09-04/05
+
+The day after §3l, same ticker, same question: every quarter from `first_report` on, all three
+statements. FPT went **188 → 204 `pdf` cells of 213**, and the CSVs gained two quarters that had
+no row at all. Nine defects, and — for the third day running — **not one is the OCR reading a
+character wrong**. What is new is the last column: one of the fixes turned an UNREADABLE figure
+into a READABLE WRONG one, and nothing in the parser caught it.
+
+| | what it was | measured reach |
+|---|---|---|
+| **`SEAL-1`** | the round company SEAL stamped ACROSS a printed figure | a new OCR pass per dpi; identity on a greyscale scan |
+| **`RHF-1`** | the notes RUNNING HEADER carries a SECOND form code onto a statement page | **8 of 7,389** text-layer pages carry >1 code; 7 are contents pages |
+| **`SPB-1`** | a BRACKET is a figure boundary, and the split gate ignored both of them | can only LOWER a count, never raise one |
+| **`CDF-1`** | the VAS code formula at the END of an account name | **10 of 842** accounts stripped, **3 refused** as disambiguators |
+| **`CDF-2`** | the CONDENSED disclosure form prints NO statement title | **2 documents on disk** classify no statement at all |
+| **`CDF-3`** | FOUR top-level NGUỒN VỐN lines under Decision 15/2006, two under Circular 200 | the `SEC-1` gate, both ways |
+| **`MSO-4`** | `Mã số` → `moso` / `miso` — one substitution in a four-character needle | condition 1 only; 2 and 3 untouched |
+| **`IBC-1`** | the page lost BOTH its title and its form code | **26 of 7,389** print the marker, **10 are CASH FLOWS** |
+| **`CLN-1`** | a thousands separator read as a COLON | a separator position only, so a clock is still refused |
+
+#### ⚠️ `SEAL-1` — and its signature is what makes it diagnosable
+
+A Vietnamese filing is signed with a round RED seal, and on some scans it lands on the
+grand-total or the closing-balance line. The composite image the recogniser is normally shown has
+the ink and the digits on top of each other. **The signature is that raising the resolution does
+not CONVERGE** — FPT Q1-2016's `TỔNG CỘNG NGUỒN VỐN` is printed 24.695.453.363.505 and reads
+24.693.152.363.505 at 200 dpi, the same at 300, **2.469.355.661.505** at 400 and
+**24.605.453.361.505** at 500. A resolution problem converges as the resolution rises; this does
+not, because the pixels the recogniser needs are not missing, they are **covered**.
+
+✅ `red_channel` renders the page's RED channel as greyscale: red ink is (R high, G low, B low)
+against black print's (low, low, low), so the seal goes near-white and every black stroke
+survives. ⚠️ **A NO-OP ON A GREYSCALE SCAN BY CONSTRUCTION** — R == G == B there, so the channel
+copy is the identity and a filing with no coloured ink cannot move, which is what makes the
+layers safe to place at all.
+
+⚠️ **BLANKING THE SATURATED PIXELS WAS TRIED FIRST AND IS WORSE, and that measurement is pinned
+in the tests so it is not re-made.** Where the seal crosses a digit the pixel is BOTH saturated
+and part of the stroke, so setting saturated pixels to white deletes what it overlapped: the same
+figure came back as `24.6??.453.363.5?5` — a fresh wrong answer rather than a refusal. Taking one
+channel keeps every stroke and drops only ink that is not black.
+
+Recovered FPT's Q3-2022, Q1-2023, Q3-2023 and Q3-2025 cash flows, each closing its own identity
+to the đồng — Q3-2023 reads **7.153.625.069.795** where `+title` alone read **795**.
+
+⚠️ **IT IS NOT A CURE.** Where the seal's dense ring physically breaks the strokes no channel
+recovers them: FPT Q1-2025's closing balance reads `6.755.015,214:252` at 200, 250, 300, 400, 500
+and 600 dpi under the red channel against a printed 6.755.645.214.252.
+
+#### ⚠️ `SPB-1` — the one no escalation could clear
+
+FPT's FY-2008 income statement prints `85.604.572.576` and `(132.899.704.388)` **4.32pt apart**
+on the line "Phân bổ vào các quý" — two adjacent PERIOD COLUMNS, under `SPLIT_MAX_GAP`, whose
+digits join into a well-formed grouped figure because `split_figures` stripped `()` from BOTH
+boxes before joining. The statement was refused as fragmented at **six configurations including
+300 and 400 dpi**. ⚠️ **A false positive no escalation can clear is the worst kind: the cascade
+has nowhere left to go.**
+
+⚠️ **AND `_merge_split_figures` HAS ALWAYS BEEN PROTECTED FROM THE SAME PAIR** — its
+`MERGE_TAIL_RE` requires the right box to begin with a full three-digit group, which `'(132…'`
+does not. So the REPAIR refused this pair while the GATE counted it; the fix is the gate adopting
+the repair's own evidence. A genuine split of a NEGATIVE keeps `(` on the left half and `)` on
+the right, so the rule reads the INNER edges and cannot break it.
+
+#### ⚠️ `CDF-2` — and a block added for ONE form decided statements it has nothing to do with
+
+Mẫu CBTT-03 (Thông tư 38/2007) lets an issuer publish a two-page "BÁO CÁO TÀI CHÍNH" whose only
+heading is the FILING's. FPT's Q1-2009 and Q3-2010 print `BÁO CÁO TÀI CHÍNH HỢP NHẤT` over
+`STT / Nội dung / Số dư cuối kỳ / Số dư đầu năm` on page 1 and `STT / Chỉ tiêu / Kỳ báo cáo /
+Lũy kế` on page 2 — no title to score and no form code to read — so all three statements were
+reported `no such statement on any page of this filing`, **the one refusal this repo treats as
+PERMANENT (`SET-2`)**. Both quarters had no CSV row at all.
+
+`condensed_form` names such a page by the lines ONLY that statement prints, never by the "Mẫu
+CBTT-03" marker, which is boilerplate a FULL filing quotes too — the argument `CONDENSED_PL`
+already shipped on. ⚠️ **REACHED ONLY WHEN THE DOCUMENT CLASSIFIED NO STATEMENT AT ALL**, and
+that is measured: of every document with a recorded verdict on disk, **2 are in that state and
+both are these**. All four cells reconcile; the cash flows stay `missing` and correctly so.
+
+⚠️ **THE BLOCK HAD TO BE MOVED TO THE VERY END OF THE CASCADE THE SAME DAY.** Placed mid-block it
+carries `equity_wording` + `join_lost_separator` + `unit_from_document` TOGETHER — a combination
+that had not existed — and in one run it **INTERCEPTED four ordinary FPT income statements**
+(Q2-2015, Q1-2016, Q3-2022, Q1-2023) from the `+equity` block twenty layers later. Moved last,
+all four go back to `onnx@{200,300}+equity` and the condensed form still parses. **A block added
+for one filing shape must not decide statements that shape has nothing to do with, and last is
+the only position where it cannot.**
+
+#### ⚠️ AND `CLN-1` MADE A DAMAGED FIGURE PARSE — `CFV-1`
+
+The colon substitution is right and it recovered Q3-2025's balance sheet at **layer 2 of 90**:
+`82.738.304.930:449` is the printed `TỔNG CỘNG TÀI SẢN`, equal to `A + B` and to `TỔNG CỘNG NGUỒN
+VỐN` to the đồng, and `parse_num` had refused the whole token so the row kept its prior-year cell
+and lost the current one. It also made two seal-damaged CLOSING BALANCES parse:
+
+| | read | the identity requires |
+|---|---|---|
+| **2025-Q3 cash flow** | `09.853151273133` → 9,853,151,273,133 | **9,853,512,731,370** |
+| **2025-Q1 cash flow** | `6.755.015,214:252` → 6,755,015,214,252 | **6,755,645,214,252** |
+
+⚠️ **NEITHER WAS CAUGHT BY ANY GATE.** `_cash_flow_identity` rides with `relax_totals`, so a
+statement accepted at a STRICT layer is never checked against it — and both were. Only `sane`
+looked, and 9.85e12 sits squarely inside its band. **Q3-2025's was WRITTEN and reverted the same
+hour** from a pre-session copy; Q1-2025's was held back at the merge. ⚠️ **What caught them was
+an arithmetic screen run over the CSV afterwards**, and the asymmetry is the finding: on a
+BALANCE SHEET `reconcile` tests `assets == resources` on every layer, so a damaged recovered
+total is caught; on a CASH FLOW nothing is. ✅ **6 of the 7 cash flows written that day close
+their identity to EXACTLY 0**, so an always-on check is cheap — and it needs its own
+false-refusal measurement first, because a filing with an unmapped fourth term (a merger line,
+which is why `cash_extra_terms` exists) would start failing. `CFV-1`, TODO `P60`.
+
+#### The measurements that let it ship
+
+| | |
+|---|---|
+| archive replay, **3,420 mappings** over 285 statements, every mapping-flag combination | **248 change, across 26 statements — every one a statement that had been REFUSED and not one that had been accepted.** 144 verdicts go `no closing cash balance` → `None`; **0 columns lost** |
+| the five canonical filings, re-parsed END TO END | **14 REPRODUCED, 1 abstained by design, 1 DIFFERS proven PRE-EXISTING** by re-running it on stashed HEAD in a `git worktree` |
+| the merge, diffed column by column against a pre-session copy | **17 cells changed, EVERY ONE `missing` → `pdf`; 0 columns lost, 0 periods lost, not one existing `pdf` row altered** |
+| the cascade | **90 layers, 49 parse keys, 9 OCR passes** — up from 7, and the two new passes are `SEAL-1`'s red channel at 200 and 300 dpi. `+condensed`, `+bycol`, `+title+red` and `+joinlost+red` re-map pages the cache already holds |
+
+⚠️ **AND THE FIRST BLAST-RADIUS HARNESS READ `0 of 3,456 changed` WHILE MEASURING NOTHING** — it
+built a `Statement` without `n_columns`, `map_to_schema` raised, and a bare `except` turned both
+sides into `__error__`, so the two runs agreed perfectly on an error string. `DEP-1`/`CWD-1` for
+the ninth time: **a check that cannot run reports what a check that passed reports.** The honest
+baseline is 3,420 mappings and **0 errors**, and the harness re-raises now.
+
+#### ⚠️ The nine cells that remain — refusals with reasons, not coverage
+
+| | cells | |
+|---|---|---|
+| **PERMANENT** | 2 | 2009-Q1 and 2010-Q3 cash flows — the condensed form contains none (§5 rule 24) |
+| **the gate working** | 1 | 2012-Q1 cash flow: the reading puts the 1-Jan OPENING in the CLOSING slot, so `sane` sees it "exactly equal an already-accepted quarter" (Q4-2011's closing) |
+| **one quarter blocking two** | 3 | 2015-Q1's income statement, and with it Q2 and Q4. ⚠️ The page is a LANDSCAPE rotated scan with FOUR columns, and **for a Q1 columns 0 and 2 are the SAME quantity** — column 0 is misread in two cells and column 2 has both right, verified against the page (`9_chi_phi_ban_hang` 522.723.919.797 and `7_doanh_thu_hoat_dong_tai_chinh` 89.420.051.565, with which `11 = 5+7-8-9-10` closes to the đồng). No layer reads column 0 correctly at any DPI |
+| **the seal broke the digit** | 3 | 2016-Q1 balance sheet — parsed with 70 correct line items and ONE total reading **24.695.452.363.505** against a printed **24.695.453.363.505**, 4e-8 relative and therefore inside `_equal`'s tolerance, so **held back at the merge** — plus the two `CFV-1` cash flows |
+
+⚠️ **THE VERIFIED FIGURES ARE WRITTEN DOWN** where a reader meets them (the per-ticker notebook's
+own parameter cell), so a later fix can be checked in seconds rather than re-derived: FPT
+Q1-2016 assets **24.695.453.363.506** = A + B exactly, liabilities **14.052.382.733.257**,
+owners' equity **10.643.070.630.248**, grand total **24.695.453.363.505** = the two above.
+
+⚠️ **AND `SET-2` BIT TWICE.** `settled_absences` treats `no such statement on any page of this
+filing` as PERMANENT because it reads as a verdict on the DOCUMENT; it is a verdict on
+`_page_kind`, and `CDF-2`, `IBC-1` and `RHF-1` all change that function. Every settled FPT cell
+was re-tried and **six of the eight were winnable**. The two that remain are the condensed forms'
+cash flows, and they are settled for the right reason.
+
+**1,122 tests pass**, 38 of them new (`test_cafef_red_channel.py`,
+`test_cafef_running_header_code.py`, `test_cafef_split_brackets.py`,
+`test_cafef_condensed_disclosure.py`, `test_cafef_income_by_columns.py`, and four added to
+`test_cafef_code_column.py`), none needing a PDF, a network or an OCR engine.
+CLAUDE.md §6-2-sexsexagies.
+
 ## 4. Source specialization (why 3 price sources)
 
 Matches the bronze-source decision (memory `project-bronze-source-per-field`):

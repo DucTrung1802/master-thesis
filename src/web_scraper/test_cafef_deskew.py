@@ -276,8 +276,19 @@ def test_every_account_wording_key_names_exactly_one_column():
     # chart, two real accounts would compete for one row and the shorter would sometimes win
     # (`NST-1`). And a key naming no account anywhere is a dead entry - the alias could never
     # be offered - which is the other way this table rots.
-    for key, aliases in FinancialsBuilder.ACCOUNT_WORDING.items():
-        assert any(key in accounts for accounts in charts.values()),             "{} names no account in any chart - the alias can never be offered".format(key)
+    # ⚠️ **THE COMPETITION IS WITHIN ONE CHART, AND THE TABLE IS KEYED THAT WAY SINCE
+    # 2026-09-04.** An entry is `(report | None, account text) -> aliases`; `None` means every
+    # report, which is what both original entries were. So the alias check is taken over the
+    # charts the entry can actually REACH — a spelling that is an account of some OTHER report
+    # can never meet this one's accounts, because `map_to_schema` scores a row against ONE
+    # (template, report) chart at a time. Measured: the corp income statement's PBT needs
+    # "loi nhuan truoc thue" (the condensed disclosure form's wording, 0.77 against the chart's
+    # own "tong loi nhuan KE TOAN truoc thue"), and that spelling IS an account — of the corp
+    # and insurance CASH FLOWS, where it is unreachable from here.
+    for (report, key), aliases in FinancialsBuilder.ACCOUNT_WORDING.items():
+        reach = {c: a for c, a in charts.items() if report is None or c[1] == report}
+        assert reach, "{} names a report with no chart on disk".format(report)
+        assert any(key in accounts for accounts in reach.values()),             "{} names no account in any chart it can reach - the alias can never be "            "offered".format(key)
         for alias in aliases:
-            for chart, accounts in charts.items():
+            for chart, accounts in reach.items():
                 assert alias not in accounts, (alias, chart)

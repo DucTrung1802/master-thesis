@@ -121,7 +121,16 @@ def test_the_heading_names_the_code_column_and_it_is_dropped(parser):
     assert (rows["no_ngan_han"][0] + rows["no_dai_han"][0] == rows["no_phai_tra"][0])
 
 
-@pytest.mark.parametrize("heading", ["Mã số", "Mã sô", "Mãsố", "MÃ SỐ", "Ma so"])
+@pytest.mark.parametrize("heading", ["Mã số", "Mã sô", "Mãsố", "MÃ SỐ", "Ma so",
+                                    # ⚠️ `MSO-4`, 2026-09-04: at 300 dpi FPT's Q1-2016 balance
+                                    # sheet returns the tone-marked vowel as a DIFFERENT LETTER
+                                    # — `moso` on page 2, `miso` on page 3. One substitution in
+                                    # a four-character needle is 0.750 against a bar of 0.80,
+                                    # and there is no threshold between them: 0.75 IS one
+                                    # substitution, so admitting it by score would admit every
+                                    # four-character box sharing three characters. The shape is
+                                    # named instead — see `CODE_HEADER_RE`.
+                                    "Mô số", "Mi số"])
 def test_the_heading_is_matched_through_ocr_damage(parser, heading):
     """Tone marks are the first thing OCR drops, so the match is on the normalised box."""
     page = _page()
@@ -206,3 +215,47 @@ def test_a_box_that_only_resembles_the_heading_is_still_refused(parser, heading,
     assert SequenceMatcher(None, want, ns[:len(want)]).ratio() == pytest.approx(head, abs=0.001)
     assert max(whole, head) < PdfParser.CODE_HEADER_MATCH
     assert len(parser.value_columns(_page(header_text=heading), WIDTH)) == 3
+
+
+def test_a_substituted_vowel_is_admitted_by_SHAPE_and_not_by_a_LOWER_BAR(parser):
+    """⚠️ `MSO-4` — WHY THIS IS A REGEX AND NOT A SMALLER NUMBER.
+
+    `SequenceMatcher` scores one substitution in a four-character needle at exactly 0.750, so
+    every box below scores the same and only some of them are the heading. A threshold that
+    admitted `moso` would admit `mxso`, `xaso` and `masx` alike; naming the shape — `m`, `s`,
+    `o` in place, SAME LENGTH, one character between — separates them, and it is the CONSONANT
+    skeleton because the character OCR damages is the tone-marked vowel.
+    """
+    from difflib import SequenceMatcher
+
+    want = PdfParser.CODE_HEADER_NS
+    for ns in ("moso", "miso", "muso"):
+        assert SequenceMatcher(None, want, ns).ratio() == pytest.approx(0.750, abs=0.001)
+        assert PdfParser.CODE_HEADER_RE.fullmatch(ns), ns
+    for ns in ("xaso", "masx", "mas", "masoo"):
+        assert not PdfParser.CODE_HEADER_RE.fullmatch(ns), ns
+
+
+def test_the_form_code_printed_in_the_same_band_is_STILL_refused(parser):
+    """⚠️ THE IMPOSTOR THE WIDENING MUST NOT REACH, and it is why the rule is SAME LENGTH.
+    `MẪU SỐ B 01-DN/HN` is printed in the header band of every VAS form; it normalises to
+    `mausob01dnhn`, whose score is **0.750** — the same score `moso` gets. Twelve characters
+    cannot match a four-character shape, whole or on its head (`maus`), so the shape rule
+    separates the two where a threshold could not."""
+    ns = PdfParser.norm("MẪU SỐ B 01-DN/HN").replace(" ", "")
+    assert not PdfParser.CODE_HEADER_RE.fullmatch(ns)
+    assert not PdfParser.CODE_HEADER_RE.fullmatch(ns[:len(PdfParser.CODE_HEADER_NS)])
+    # and end to end: the column is NOT dropped, so all three columns survive
+    assert len(parser.value_columns(_page(header_text="MẪU SỐ B 01-DN/HN"), WIDTH)) == 3
+
+
+def test_conditions_2_and_3_still_gate_a_shape_match(parser):
+    """⚠️ THE SHAPE RULE WIDENS CONDITION 1 AND NOTHING ELSE. A heading that reads `Mô số` over
+    NOTHING still drops nothing, and one that reaches past the leftmost column still cannot
+    take it — which is where the real protection has always been."""
+    # a heading whose span sits nowhere near a detected column
+    assert len(parser.value_columns(_page(header_span=(60.0, 90.0),
+                                          header_text="Mô số"), WIDTH)) == 3
+    # …and one over the SECOND column rather than the first
+    assert len(parser.value_columns(_page(header_span=(X_NOW - 12, X_NOW + 12),
+                                          header_text="Mô số"), WIDTH)) == 3
