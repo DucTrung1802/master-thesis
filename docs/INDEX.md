@@ -3,7 +3,7 @@
 > **AUTO-LOADED.** `CLAUDE.md` imports this file with `@docs/INDEX.md`, so every session starts
 > holding this map. Nothing else here is loaded until you ask for it.
 >
-> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 106 `.md` files, **~639k tokens** — about 3× a full context
+> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 117 `.md` files, **~659k tokens** — about 3× a full context
 > window. The routing below is the whole point: **open ONE file, when you touch that thing.** Every
 > row carries its measured cost so you can budget before you read.
 >
@@ -34,7 +34,7 @@
 | file | ~tokens | what it answers |
 |---|---|---|
 | [../CLAUDE.md](../CLAUDE.md) | **44.2k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state. ⚠️ **Was 162.7k until 2026-09-06** — the filings/OCR chronicle moved to Tier 1 |
-| **docs/INDEX.md** *(this file)* | ~2k | *where is everything else, and what does it cost to open?* |
+| **docs/INDEX.md** *(this file)* | **3.7k** | *where is everything else, and what does it cost to open?* |
 | [../.claude/rules/common.md](../.claude/rules/common.md) | **0.9k** | *what rules hold in EVERY session, whatever the task?* Added 2026-09-06; auto-loaded via `@.claude/rules/common.md` in `CLAUDE.md`. **R1: everything written into a file is English** (the conversation stays Vietnamese; `*_VI.md` and Vietnamese DATA are the two named exceptions). ⚠️ **A new file in `.claude/rules/` is loaded only if `CLAUDE.md` imports it** — add the `@` line in the same commit |
 
 ## Tier 1 — the four registers + the result write-ups (`docs/`)
@@ -90,6 +90,22 @@ locality is what keeps them true. **~246k tokens total — never open more than 
 | [../src/train_test_creator/CONTEXT.md](../src/train_test_creator/CONTEXT.md) | 4.9k | building a dataset, or the purge/impute/scale/window steps |
 | [../src/result_evaluator/CONTEXT.md](../src/result_evaluator/CONTEXT.md) | 4.1k | scoring, the metric set, panel-vs-series grain. ⚠️ **STALE** — predates `index.py` and `NUL-3` |
 | [../src/sentiment/CONTEXT.md](../src/sentiment/CONTEXT.md) | 3.4k | anything news / text / PhoBERT |
+
+### Session tooling — `.claude/` (started 2026-09-06)
+
+⚠️ **How to WORK, as opposed to what the project knows.** `.claude/rules/common.md` is the only
+auto-loaded part (Tier 0); everything below is **lazily loaded — open the one file for the job in
+front of you.** ⚠️ **The runbook here is an INDEX into [RUNBOOK.md](RUNBOOK.md), not a replacement:
+when the two disagree about a command, `docs/RUNBOOK.md` wins**, because that is the file whose
+commands were actually run.
+
+| open this | ~tokens | when you are… |
+|---|---|---|
+| [../.claude/workflows/README.md](../.claude/workflows/README.md) | **0.9k** | starting any recurring JOB — it routes the eight step-by-step guides below |
+| `.claude/workflows/*.md` | **13.6k** total | *start a session* (1.2k) · *run the chain* (1.6k) · *run a selection* (1.8k) · *refresh the data* (1.6k) · *OCR a ticker* (1.8k) · *quote a number* (1.8k) · *record a finding* (1.5k) · *finish and commit* (1.4k). ⚠️ **Each is the ORDER; the commands are cited by runbook row ID** so a flag changes in one place |
+| [../.claude/runbook/RUNBOOK.md](../.claude/runbook/RUNBOOK.md) | **4.0k** | you want the COMMAND — ~40 templates as one table (`O`/`C`/`W`/`D`/`E`/`F` row IDs), each with what it writes, its measured cost, and the step that must follow it |
+| [../.claude/current_state/README.md](../.claude/current_state/README.md) | **1.3k** | writing a measured SNAPSHOT (freshness, coverage, what exists). ⚠️ **Not a fifth register** — `CLAUDE.md` §6 holds what the state MEANS; this holds what a command PRINTED, with the command named |
+| `.claude/current_state/*.md` | — | the snapshots themselves. ⚠️ **Empty until someone measures something, and that is the correct state** |
 
 ### Module descriptions — `.claude/module_descriptions/` (started 2026-09-06)
 

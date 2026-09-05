@@ -8,7 +8,7 @@
 > nobody reads.**
 >
 > ⚠️ **This file is in the always-loaded budget**, alongside `CLAUDE.md` (44.2k) and
-> `docs/INDEX.md` (~3.2k). Keep it to rules — a rule that needs a page of evidence belongs in
+> `docs/INDEX.md` (3.7k). Keep it to rules — a rule that needs a page of evidence belongs in
 > `CLAUDE.md` or a package `CONTEXT.md`, with a one-line pointer from here.
 >
 > **Scope:** how to WORK in this repo, in any session, regardless of the task. What the project

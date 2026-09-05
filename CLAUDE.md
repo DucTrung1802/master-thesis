@@ -18,10 +18,10 @@
 >
 > ⚠️ **ALL PROSE DOCUMENTATION LIVES IN [`docs/`](docs/) SINCE 2026-08-22**, and the line
 > above this paragraph is why: `@docs/INDEX.md` imports the documentation map into every
-> session automatically. **[docs/INDEX.md](docs/INDEX.md) routes all 106 `.md` files with
+> session automatically. **[docs/INDEX.md](docs/INDEX.md) routes all 117 `.md` files with
 > a measured token cost each** — read it before opening anything, and add a row to it when
 > you write a new doc (`python docs/check_index.py` fails if you forget). ⚠️ **The corpus
-> is ~639k tokens (re-measured 2026-09-06), ~3× a context window, so it can never be bulk-loaded** — the index is
+> is ~659k tokens (re-measured 2026-09-06), ~3× a context window, so it can never be bulk-loaded** — the index is
 > deliberately routing and not content. `CLAUDE.md` itself stays at the repo root because
 > that is the only place Claude Code auto-loads it from.
 >
@@ -2478,7 +2478,7 @@ still resolves; only the PATH gained a `docs/` prefix.
 | `docs/thesis/THESIS_PROGRESS_2026*.md`, `docs/thesis/THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |
 | `docs/feature_groups.md` | canonical feature taxonomy | naming a feature group |
 | `vn30.csv` / `vn100.csv` | index membership — ⚠️ **current, not point-in-time**; ⚠️ **repo ROOT, they are data not docs** | never as a historical universe |
-| **[docs/INDEX.md](docs/INDEX.md)** | ⚠️ **the auto-loaded map** — all 106 `.md` files routed with a measured token cost each, in four tiers. `CLAUDE.md` pulls it in via `@docs/INDEX.md`; `python docs/check_index.py` fails if a doc is unrouted | before opening ANY file below, and whenever you add one |
+| **[docs/INDEX.md](docs/INDEX.md)** | ⚠️ **the auto-loaded map** — all 117 `.md` files routed with a measured token cost each, in four tiers. `CLAUDE.md` pulls it in via `@docs/INDEX.md`; `python docs/check_index.py` fails if a doc is unrouted | before opening ANY file below, and whenever you add one |
 
 ⚠️ **`TODO.md` absorbed `src/orchestration/todo.md` on 2026-08-17** (28 items, Vietnamese).
 If an older message or `CONTEXT.md` points at that path, it is a history reference —
