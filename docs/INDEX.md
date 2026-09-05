@@ -3,7 +3,7 @@
 > **AUTO-LOADED.** `CLAUDE.md` imports this file with `@docs/INDEX.md`, so every session starts
 > holding this map. Nothing else here is loaded until you ask for it.
 >
-> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 128 `.md` files, **~705k tokens** — about 3× a full context
+> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 106 `.md` files, **~639k tokens** — about 3× a full context
 > window. The routing below is the whole point: **open ONE file, when you touch that thing.** Every
 > row carries its measured cost so you can budget before you read.
 >
@@ -35,6 +35,7 @@
 |---|---|---|
 | [../CLAUDE.md](../CLAUDE.md) | **44.2k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state. ⚠️ **Was 162.7k until 2026-09-06** — the filings/OCR chronicle moved to Tier 1 |
 | **docs/INDEX.md** *(this file)* | ~2k | *where is everything else, and what does it cost to open?* |
+| [../.claude/rules/common.md](../.claude/rules/common.md) | **0.9k** | *what rules hold in EVERY session, whatever the task?* Added 2026-09-06; auto-loaded via `@.claude/rules/common.md` in `CLAUDE.md`. **R1: everything written into a file is English** (the conversation stays Vietnamese; `*_VI.md` and Vietnamese DATA are the two named exceptions). ⚠️ **A new file in `.claude/rules/` is loaded only if `CLAUDE.md` imports it** — add the `@` line in the same commit |
 
 ## Tier 1 — the four registers + the result write-ups (`docs/`)
 
@@ -73,7 +74,7 @@ research record (`CLAUDE.md` and the `CONTEXT.md` files are).
 ## Tier 2 — package evidence (`src/*/CONTEXT.md`) — **open ONE, only when you touch it**
 
 These stay beside their package on purpose: they are the evidence behind `CLAUDE.md`'s claims, and
-locality is what keeps them true. **~232k tokens total — never open more than one or two.**
+locality is what keeps them true. **~246k tokens total — never open more than one or two.**
 
 | open this | ~tokens | when you are… |
 |---|---|---|
@@ -90,6 +91,18 @@ locality is what keeps them true. **~232k tokens total — never open more than 
 | [../src/result_evaluator/CONTEXT.md](../src/result_evaluator/CONTEXT.md) | 4.1k | scoring, the metric set, panel-vs-series grain. ⚠️ **STALE** — predates `index.py` and `NUL-3` |
 | [../src/sentiment/CONTEXT.md](../src/sentiment/CONTEXT.md) | 3.4k | anything news / text / PhoBERT |
 
+### Module descriptions — `.claude/module_descriptions/` (started 2026-09-06)
+
+⚠️ **One file per `src/` module, named after the module.** These answer *"what is in this folder,
+what is actually USED, and what will bite me"* — a structural read of the code with measured
+reference counts, which is a different question from what a `CONTEXT.md` answers (*"what did we
+measure, and what did it prove"*). **Lazily loaded — open the one for the module you are touching.**
+
+| open this | ~tokens | when you are… |
+|---|---|---|
+| [../.claude/module_descriptions/dtos.md](../.claude/module_descriptions/dtos.md) | **3.3k** | touching any dataclass under `src/dtos/`. ⚠️ **The package is a mixed-age attic**: `tabular_database_driver_dtos` carries ~232 reference sites, `Task` 36, and `ModelConfigDto` / `ConfigDto` have **0** — "it is in `dtos/`" does not mean it is used |
+| `.claude/module_descriptions/*.md` | — | the rest, as they are written |
+
 ### Package sub-docs
 
 | open this | ~tokens | when you are… |
@@ -100,27 +113,13 @@ locality is what keeps them true. **~232k tokens total — never open more than 
 | [../src/orchestration/preprocessor/FUNDAMENTAL_INDICATORS.md](../src/orchestration/preprocessor/FUNDAMENTAL_INDICATORS.md) | 3.4k | the fundamental indicator definitions |
 | [../src/feature_selection/docs/NULL_DRAWS_VI.md](../src/feature_selection/docs/NULL_DRAWS_VI.md) · [NULL_DRAWS.md](../src/feature_selection/docs/NULL_DRAWS.md) | 3.2k · 3.1k | how many null draws, and why (VI · EN) |
 
-## Tier 3 — the research record (`experiment/`) — ~95k tokens
-
-| open this | ~tokens | when you are… |
-|---|---|---|
-| [../experiment/experiment_10/CONTEXT.md](../experiment/experiment_10/CONTEXT.md) | **44.0k** ⚠️ | writing the literature chapter. **Read the `"Combined reading"` section alone** unless you need a specific paper — 23 papers, and not one reports a naive baseline |
-| [../experiment/CONTEXT.md](../experiment/CONTEXT.md) | 9.2k | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
-| [../experiment/experiment_10/guidance.md](../experiment/experiment_10/guidance.md) | 7.8k | the paper-analysis method |
-| [../experiment/experiment_10/news_result_examples.md](../experiment/experiment_10/news_result_examples.md) | 6.0k | worked news examples |
-| [../experiment/experiment_10/conclusion.md](../experiment/experiment_10/conclusion.md) | 5.1k | the literature distillate |
-| `../experiment/experiment_{1,3,4,5,6,7,8,9}/README.md` | 0.6-3.6k each | one experiment's own write-up |
-| [../experiment/model_comparison.md](../experiment/model_comparison.md) | 0.6k | the model comparison note |
-
-## Tier 4 — generated, **not hand-written** — do not edit, rarely read
+## Tier 3 — generated, **not hand-written** — do not edit, rarely read
 
 | what | files | ~tokens | |
 |---|---|---|---|
 | `../reports/feature_selection*/**/README.md` | 71 | ~45k | one per archived selection run — **an artefact, written by `feature_selection.report`.** Read a single run's when auditing that run |
 | [../reports/feature_selection/unified_schema_vcb__pool_columns.md](../reports/feature_selection/unified_schema_vcb__pool_columns.md) | 1 | 7.5k | the VCB pool column dump |
 | [../README.md](../README.md) | 1 | 0.3k | the front door; routes to `CLAUDE.md` |
-| `../experiment/experiment_{8,9}/out*/*.md` | 7 | ~3k | OCR probe output |
-| `../experiment/experiment_9/vendor/**/*.md` | 3 | ~5k | **third-party**, not ours |
 
 ## The rules that keep this map honest
 

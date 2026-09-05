@@ -1,10 +1,11 @@
 # CLAUDE.md — master-thesis
 
 @docs/INDEX.md
+@.claude/rules/common.md
 
 > **ONE FILE, WHOLE PROJECT.** This is the map. The twelve `CONTEXT.md` files are the
-> evidence behind it (**~243k tokens** — re-measured 2026-09-04; the ~234k this line carried
-> since 2026-09-02 has drifted with them) — **open one only when you touch that package**, and §7 says
+> evidence behind it (**~246k tokens** — re-measured 2026-09-06; the ~243k this line carried
+> since 2026-09-04 has drifted with them) — **open one only when you touch that package**, and §7 says
 > which. Hub written 2026-08-10 against the state at commit `fcac8904`.
 >
 > ⚠️ **AND THIS FILE WAS 165.3k TOKENS UNTIL 2026-09-06, WHICH IS THE RULE BELOW BEING BROKEN BY
@@ -17,10 +18,10 @@
 >
 > ⚠️ **ALL PROSE DOCUMENTATION LIVES IN [`docs/`](docs/) SINCE 2026-08-22**, and the line
 > above this paragraph is why: `@docs/INDEX.md` imports the documentation map into every
-> session automatically. **[docs/INDEX.md](docs/INDEX.md) routes all 128 `.md` files with
+> session automatically. **[docs/INDEX.md](docs/INDEX.md) routes all 106 `.md` files with
 > a measured token cost each** — read it before opening anything, and add a row to it when
 > you write a new doc (`python docs/check_index.py` fails if you forget). ⚠️ **The corpus
-> is ~705k tokens (re-measured 2026-09-04), ~3× a context window, so it can never be bulk-loaded** — the index is
+> is ~639k tokens (re-measured 2026-09-06), ~3× a context window, so it can never be bulk-loaded** — the index is
 > deliberately routing and not content. `CLAUDE.md` itself stays at the repo root because
 > that is the only place Claude Code auto-loads it from.
 >
@@ -1079,6 +1080,25 @@ it: the old mechanism explains the shape of what replaced it.
 ⚠️ **`src/utils/constants.py` still defines `{SILVER,GOLD,ARIMA}_VISUALIZATION_LOG_FILE_BASE`.**
 Now dead — the notebooks that used them are gone. Harmless, unreferenced, left alone
 because this was a folder cleanup and not a code change.
+
+### ⚠️ 5b-bis. `experiment/` REMOVED 2026-09-06 — and the CITATIONS TO IT STAYED
+
+Commit `4cf907f0` ("CLEAN: clean up /experiment") deleted the whole folder: 10 experiment
+sub-folders, `experiment/CONTEXT.md` (9.2k) and `experiment/experiment_10/CONTEXT.md` (44.0k,
+the 23-paper literature record), ~95k tokens in all. ✅ **Tracked, so `git checkout 4cf907f0^ --
+experiment` restores every byte** — unlike `RPR-1`'s run folders, which were gitignored and are
+gone for good.
+
+The routing was removed the same day: `docs/INDEX.md`'s Tier 3 (7 rows) and its two Tier 4 rows,
+plus the two rows in §7 of this file. **`Tier 4` was renumbered to `Tier 3`**, and the corpus
+line fell from **128 files / ~705k tokens to 106 / ~639k**.
+
+⚠️ **THREE CITATIONS IN THIS FILE NOW POINT AT A DELETED FOLDER, AND THEY WERE LEFT ON PURPOSE:**
+§2a's literature row (*"23 papers … not one reports a naive baseline"*, `experiment_10`), §2c's
+costed walk-forward (*"`model` §11, `experiment` exp_3"*) and §5b's `ocr_env8/9` row. **Each is a
+measurement, and deleting the citation would delete the record of where it came from** — §8's rule
+is to record what was measured. Read them as `RPR-1`'s shape: **a claim whose evidence is one
+`git checkout` away**, not a live pointer.
 
 ---
 
@@ -2416,8 +2436,6 @@ what a session budgets against.
 | [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **7.4k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
 | [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | **3.4k** | anything news/text/PhoBERT |
 | [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | **8.0k** | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
-| [experiment/CONTEXT.md](experiment/CONTEXT.md) | **9.2k** | the 9 exploratory experiments — signal discovery, tradability, point-in-time data, VN OCR |
-| [experiment/experiment_10/CONTEXT.md](experiment/experiment_10/CONTEXT.md) | **44.0k** | writing the literature chapter. **§"Combined reading" (line 2877) is the distillate** — read that alone unless you need a specific paper |
 
 ⚠️ **[ISSUES.md](docs/ISSUES.md) (~42.2k) is the second file to open, not an afterthought.**
 **97** open issues — ⚠️ *(this line read "96" earlier on 2026-09-06, "70" until 2026-09-05, "69", "68" and "67" earlier on 2026-09-04, "66" and "63" earlier on 2026-09-03, "59", "55" and "51" earlier on 2026-09-02, "48" earlier on 2026-09-01, "42" and "40" earlier on 2026-08-30, "34" and "28" earlier on 2026-08-29, "22" until 2026-08-28 and "(~4k)"/"Sixteen" until
@@ -2460,7 +2478,7 @@ still resolves; only the PATH gained a `docs/` prefix.
 | `docs/thesis/THESIS_PROGRESS_2026*.md`, `docs/thesis/THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |
 | `docs/feature_groups.md` | canonical feature taxonomy | naming a feature group |
 | `vn30.csv` / `vn100.csv` | index membership — ⚠️ **current, not point-in-time**; ⚠️ **repo ROOT, they are data not docs** | never as a historical universe |
-| **[docs/INDEX.md](docs/INDEX.md)** | ⚠️ **the auto-loaded map** — all 128 `.md` files routed with a measured token cost each, in four tiers. `CLAUDE.md` pulls it in via `@docs/INDEX.md`; `python docs/check_index.py` fails if a doc is unrouted | before opening ANY file below, and whenever you add one |
+| **[docs/INDEX.md](docs/INDEX.md)** | ⚠️ **the auto-loaded map** — all 106 `.md` files routed with a measured token cost each, in four tiers. `CLAUDE.md` pulls it in via `@docs/INDEX.md`; `python docs/check_index.py` fails if a doc is unrouted | before opening ANY file below, and whenever you add one |
 
 ⚠️ **`TODO.md` absorbed `src/orchestration/todo.md` on 2026-08-17** (28 items, Vietnamese).
 If an older message or `CONTEXT.md` points at that path, it is a history reference —

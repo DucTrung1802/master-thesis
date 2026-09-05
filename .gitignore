@@ -276,3 +276,8 @@ reports/pdf_ocr/.pdf_ocr.lock
 
 # scratch for an OCR session — measurements and probe scripts, not a deliverable
 .probe/
+
+# Claude Code's per-machine permission allowlist — 115 rules carrying absolute Windows paths and
+# session scratchpad directories, useful to nobody else. The SHARED half of .claude/ IS tracked:
+# rules/ (auto-loaded into every session via CLAUDE.md) and module_descriptions/.
+.claude/settings.local.json
