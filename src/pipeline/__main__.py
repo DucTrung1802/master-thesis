@@ -33,7 +33,7 @@ def main(argv=None):
     def option(flag: str, default):
         return argv[argv.index(flag) + 1] if flag in argv else default
 
-    # ⚠️ **THE ONE ENTRY POINT THAT LACKED THIS, AND IT IS THE GATE** (`RUNBOOK.md` §8
+    # ⚠️ **THE ONE ENTRY POINT THAT LACKED THIS, AND IT IS THE GATE** (§8
     # rule 1). A Windows console is cp1252, and this module prints a table built from
     # every stage's `detail` — text those stages own, not text this one wrote. A single
     # non-cp1252 glyph in one detail therefore killed the WHOLE plan after the stages had

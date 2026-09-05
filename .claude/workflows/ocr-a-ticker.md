@@ -119,7 +119,7 @@ reported, and you have stopped.
 
 **For a finished run:** coverage recomputed (**F3**), the double-printed figures cross-checked,
 `source` audited (**D6**), the numbers written into
-[docs/OCR_PARSER_LOG.md](../../docs/OCR_PARSER_LOG.md) or the hub's §6-2 summary, and the clone
+the hub's §6-2 summary, and the clone
 deleted.
 
 ## Traps

@@ -877,7 +877,7 @@ justify a fifth wall. 162 is still 35 % wider than the previous best.
 ## 14. ✅ `WFO-1` CLOSED 2026-08-21 — one directory, one experiment, and a refusal
 
 `run.DEFAULT_OUT` is a single fixed path and all three artefacts are written by BASENAME,
-so `RUNBOOK.md` §3's documented command run at a second horizon overwrote the first
+so the documented command run at a second horizon overwrote the first
 horizon's whole OOS track — silently. It was caught on 2026-08-20 by reading `DEFAULT_OUT`
 before pressing enter, which is not a control.
 
@@ -887,7 +887,7 @@ Two candidates were on the table and only one survives contact with the repo as 
 
 | candidate | verdict |
 |---|---|
-| derive the leaf — `results/walkforward/<ticker>__<table>/` | ❌ **rejected.** Five tracks already exist under hand-chosen names (`walkforward`, `walkforward_h10`, `_h10_arch`, `_h10_wide`, `settings_h10/*`) that CLAUDE.md, RUNBOOK and this file cite BY PATH. Moving them trades a live citation for a guarantee the refusal gives anyway |
+| derive the leaf — `results/walkforward/<ticker>__<table>/` | ❌ **rejected.** Five tracks already exist under hand-chosen names (`walkforward`, `walkforward_h10`, `_h10_arch`, `_h10_wide`, `settings_h10/*`) that CLAUDE.md and this file cite BY PATH. Moving them trades a live citation for a guarantee the refusal gives anyway |
 | **refuse a mismatched directory** | ✅ **shipped.** `walkforward/manifest.py` |
 
 `manifest.claim(out_dir, ident)` runs **before a single fold is built**, so a refusal costs

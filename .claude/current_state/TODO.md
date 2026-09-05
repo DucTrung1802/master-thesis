@@ -1,6 +1,6 @@
 # TODO — the one backlog
 
-> **Registers:** [CLAUDE.md](../CLAUDE.md) *what is PROVED* · [RUNBOOK.md](RUNBOOK.md) *how to RUN* ·
+> **Registers:** [CLAUDE.md](../../CLAUDE.md) *what is PROVED* ·
 > [ISSUES.md](ISSUES.md) *what is BROKEN* · **TODO.md** *what is NEXT*. Movement is one-way: a TODO
 > item that turns out to be a defect graduates to ISSUES.md with a code; a done TODO item leaves its
 > measurement in CLAUDE.md or a `CONTEXT.md` and is **deleted, not ticked**.
@@ -40,7 +40,7 @@ structural code comes last because it only pays off for runs that are currently 
 > | you see | it is |
 > |---|---|
 > | **`P7`** — bare, no hyphen | a **LIVE** item |
-> | **`P1-9`**, `PRF-8`, `M-3`, `SSK-1` — **hyphenated** | a **RETIRED** code — see the crosswalks. Cited ~150× across CLAUDE.md, RUNBOOK.md, ISSUES.md, four `CONTEXT.md`s, source comments and immutable archived run READMEs, so they were **never rewritten**; the crosswalk is the bridge |
+> | **`P1-9`**, `PRF-8`, `M-3`, `SSK-1` — **hyphenated** | a **RETIRED** code — see the crosswalks. Cited ~150× across CLAUDE.md, ISSUES.md, four `CONTEXT.md`s, source comments and immutable archived run READMEs, so they were **never rewritten**; the crosswalk is the bridge |
 >
 > ⚠️ **A `P<n>` written BEFORE 2026-08-23 still resolves to a different item.** Take the DATE of what
 > you are reading, then the matching crosswalk below — the last two that will ever be needed.
@@ -157,7 +157,7 @@ screened basket, so the prediction below is still unscored.
 ## ⚠️ THE TRADABILITY GATE — measured 2026-08-22
 
 Evidence attached to existing items; nothing renumbered. Full measurement in `pipeline.md` §9-§10,
-operating rules RUNBOOK §8 rules 14-16.
+operating rules recorded with it.
 
 **Asked:** cap the book at 5 names. **Found:** `--top-k` already IS that cap, all ten stages were
 `up to date`, and the published h=10 track at k=5 gives CAGR@30 **+181.3 %** against k=20's +74.0 %,
@@ -337,7 +337,7 @@ run). ⚠️ **Then apply table 1** (`− 3`) to reach today's numbering.
 
 ### 3 · retired HYPHENATED codes → the 2026-08-21 one-list scheme
 
-⚠️ **Read this before following any reference in CLAUDE.md, RUNBOOK.md, ISSUES.md or a
+⚠️ **Read this before following any reference in CLAUDE.md, ISSUES.md or a
 `CONTEXT.md`** — those files were never rewritten, so they still say `PRF-4` where this file says a
 bare number. ⚠️ **These rows are frozen history**: they were renumbered once by a regex that could
 not tell a live pointer from a record of the past, and the table then described a renumbering that
@@ -777,7 +777,7 @@ ops:
 
 ⚠️ **BACK THE THREE CSVs UP FIRST** — an authoritative run writes NON-MERGING progress snapshots, so
 an interrupted one leaves a TRUNCATED file (measured: ACB's three statements stood at 9 rows against
-74 when a run was killed). ⚠️ **`--config <file>`, not `--config-json`** (RUNBOOK §3e-ter).
+74 when a run was killed). ⚠️ **`--config <file>`, not `--config-json`**.
 ⚠️ **Diff every result against the backup cell by cell** — `SAN-1` was found that way and no other.
 
 ---
@@ -1212,7 +1212,7 @@ genuinely wrong, it outranks everything and goes to the top row.**
 | **News sentiment scorer** (annotation, LLM labelling, PhoBERT fine-tune, LIME gate, full panel) | ⛔ **Decided against 2026-08-03, confirmed 2026-08-17.** 7 paired tests, every \|t\| < 1.3; adding news costs 2-8 pp CAGR for ΔMCC ±0.003. The one reason to continue — coverage — was tested on the top-30 most-covered tickers and did not survive. The event-count half is `pool__news_daily` and it measured `z = +0.53` |
 | **Silver / gold leaf assets** (bonds, forex, funds, indices, gics) | ✅ all exist |
 | **`switch_config.json` cleanup** | ✅ moot — the file is gone (§5a); a leftover copy now RAISES |
-| **`execution.finished_at = None`** in every `metadata.json` | ✅ **working as designed** ([runtime.py:329](../src/utils/runtime.py#L329)) — `summary()` is called mid-run because `write_report` writes the file, and waiting for `stop()` would record a runtime of zero. `None` "rather than a guess" is §5 rule 2 at the clock. I called it a bug on 2026-08-16 and was wrong |
+| **`execution.finished_at = None`** in every `metadata.json` | ✅ **working as designed** ([runtime.py:329](../../src/utils/runtime.py#L329)) — `summary()` is called mid-run because `write_report` writes the file, and waiting for `stop()` would record a runtime of zero. `None` "rather than a guess" is §5 rule 2 at the clock. I called it a bug on 2026-08-16 and was wrong |
 | **`P3` · the JSON fundamentals gate** | ⚠️ **CLOSED 2026-08-23 BY DECISION, NOT BY MEASUREMENT, and archived UNMEASURED.** It would have priced `api.simplize.vn` / `vnstock` as a 1-day gate on the whole OCR program. The source is now fixed by CLAUDE.md §5 rule 24. ⚠️ **Nothing may cite it as evidence that a JSON source does not work** (§5 rule 2) — the route is UNTRIED, not disproven |
 
 ---

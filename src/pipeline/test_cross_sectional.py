@@ -1,7 +1,7 @@
 # src\pipeline\test_cross_sectional.py
 """The cross-sectional chain through `pipeline` — stages 3-4 do not EXIST here.
 
-⚠️ `RUNBOOK.md` §8 rule 1 makes `python -m pipeline` the gate on quoting any number, and
+⚠️ The standing rule makes `python -m pipeline` the gate on quoting any number, and
 until 2026-08-21 §3a had to warn readers OFF that gate for the chain producing every
 headline in CLAUDE.md §6-0. Two things made that necessary and both are pinned below:
 `shortlist_pool` reported *"would run"* for a pool nothing can ever select over (`CSP-1`),

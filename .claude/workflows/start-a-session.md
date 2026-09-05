@@ -5,14 +5,14 @@
 >
 > ⚠️ **The expensive mistake this prevents is reading the corpus.** It is **106 `.md` files,
 > ~639k tokens, about 3× a context window** — bulk-loading it is not slow, it is impossible.
-> `CLAUDE.md` and `docs/INDEX.md` are already in context; **everything else is opened one file at
+> `CLAUDE.md` and `../current_state/INDEX.md` are already in context; **everything else is opened one file at
 > a time, when you touch that thing.**
 
 ---
 
 ## 1. Read what is already loaded — 0 s
 
-`CLAUDE.md` (44.2k), `docs/INDEX.md` and `.claude/rules/common.md` load themselves. Two sections
+`CLAUDE.md` (44.2k), `../current_state/INDEX.md` and `.claude/rules/common.md` load themselves. Two sections
 carry the answer to most questions:
 
 - **§2 — THE VERDICT.** Single-stock short-horizon prediction has failed **five** independent
@@ -41,13 +41,13 @@ anything reading one number.
 
 ## 3. Find out what is broken before you trust a number
 
-`docs/ISSUES.md` is **42.2k and you do not open it whole.** Seven codes change how a number may be
+`../current_state/ISSUES.md` is **42.2k and you do not open it whole.** Seven codes change how a number may be
 *read*, and `CLAUDE.md` §6's closing table lists them: `NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`, `CFB-1`,
 `TPL-1`/`CRP-1`, `FLT-1`/`SHP-1`. **Open the file only for the code that touches your job.**
 
 ## 4. Route to the ONE file you need
 
-`docs/INDEX.md` is the map and it carries a measured token cost per row. Budget against it.
+`../current_state/INDEX.md` is the map and it carries a measured token cost per row. Budget against it.
 
 | your job | open | cost |
 |---|---|---|
@@ -55,7 +55,6 @@ anything reading one number.
 | a scraper or the PDF/OCR parser | `src/web_scraper/CONTEXT.md` | 61.9k |
 | a selection, an IC, a null, a bar | `src/feature_selection/CONTEXT.md` | 45.0k |
 | whether a result survives more than one split | `src/walkforward/CONTEXT.md` | 16.0k |
-| a specific `§6-2-*` citation about the filing parser | `docs/OCR_PARSER_LOG.md` — ⚠️ **123.6k, open it for ONE section** | 123.6k |
 | what a module's code actually contains | `.claude/module_descriptions/<module>.md` | ~3k |
 
 ⚠️ **A `CONTEXT.md` answers *"what did we measure and what did it prove"*; a
@@ -66,7 +65,7 @@ different questions — pick the one you are asking.
 
 - **A number without a date cannot be told from a stale one.** Dates are on findings by convention
   here; if one is missing, treat the number as unverified.
-- ⚠️ **A `P<n>` in `docs/TODO.md` written before 2026-08-23 means a DIFFERENT item** — three
+- ⚠️ **A `P<n>` in `../current_state/TODO.md` written before 2026-08-23 means a DIFFERENT item** — three
   renumbers preceded the freeze. Take the date of what you are reading, then TODO's crosswalks.
 - ⚠️ **A HYPHENATED code (`P1-9`, `PRF-8`, `M-3`) is RETIRED.** A bare `P<n>` is live.
 

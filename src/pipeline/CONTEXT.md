@@ -7,7 +7,7 @@
 > The **ten** stages as one chain, and the one question none of them could answer:
 > **which stage is stale?** Built 2026-08-09; the two selection layers split apart
 > 2026-08-16; `backtest` and `walkforward` joined 2026-08-21, which is when this became
-> the gate `RUNBOOK.md` §8 rule 1 had always claimed it was.
+> the gate it had always been claimed to be.
 
 ```
 python -m pipeline                      # what exists, what is stale — writes nothing
@@ -66,7 +66,7 @@ a separate file (`backtest_null_<split>.csv`); without it the row reads
 
 ### 1d. ⚠️ THE CROSS-SECTIONAL CHAIN: stages 3-4 do not EXIST, and saying "would run" was worse than useless
 
-`RUNBOOK.md` §3a had to warn readers OFF `pipeline` for the chain that produces every
+the runbook had to warn readers OFF `pipeline` for the chain that produces every
 headline, in two separate blocks, for two reasons — both now fixed:
 
 | was | now |

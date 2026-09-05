@@ -2,17 +2,17 @@
 
 > **These rules are always in force.** They are auto-loaded into every session because
 > [CLAUDE.md](../../CLAUDE.md) imports this file with `@.claude/rules/common.md`, next to
-> `@docs/INDEX.md`. ⚠️ **A file dropped into `.claude/rules/` is NOT loaded by itself** — Claude
+> `@../current_state/INDEX.md`. ⚠️ **A file dropped into `.claude/rules/` is NOT loaded by itself** — Claude
 > Code auto-loads `CLAUDE.md` and whatever `CLAUDE.md` imports, and nothing else. **If you add
 > another rules file here, add its `@` import to `CLAUDE.md` in the same commit, or it is a file
 > nobody reads.**
 >
 > ⚠️ **This file is in the always-loaded budget**, alongside `CLAUDE.md` (44.2k) and
-> `docs/INDEX.md` (3.7k). Keep it to rules — a rule that needs a page of evidence belongs in
+> `../current_state/INDEX.md` (3.7k). Keep it to rules — a rule that needs a page of evidence belongs in
 > `CLAUDE.md` or a package `CONTEXT.md`, with a one-line pointer from here.
 >
 > **Scope:** how to WORK in this repo, in any session, regardless of the task. What the project
-> KNOWS lives in `CLAUDE.md`; what is BROKEN in `docs/ISSUES.md`; what is NEXT in `docs/TODO.md`.
+> KNOWS lives in `CLAUDE.md`; what is BROKEN in `../current_state/ISSUES.md`; what is NEXT in `../current_state/TODO.md`.
 > Do not restate any of those here.
 
 ---
@@ -34,7 +34,7 @@ Vietnamese so it is fast to read.** A rule that blurred the two would silently c
 **Two deliberate exceptions, and both are named rather than inferred:**
 
 1. **A `*_VI.md` file is a translation and is meant to be Vietnamese** — there are three today:
-   `docs/thesis/THESIS_PROGRESS_2026_VI.md`, `docs/thesis/THESIS_SUMMARY_2026_VI.md`,
+   `../docs/THESIS_PROGRESS_2026_VI.md`, `../docs/THESIS_SUMMARY_2026_VI.md`,
    `src/feature_selection/docs/NULL_DRAWS_VI.md`. Each is a Vietnamese counterpart of an English
    original that carries the same content; **the `_VI` suffix is the marker, and a Vietnamese file
    without it is a defect, not an exception.**
@@ -44,7 +44,7 @@ Vietnamese so it is fast to read.** A rule that blurred the two would silently c
    translate them, and never "normalise" the diacritics out of them.
 
 ⚠️ **This rule is forward-looking and there is a known bill.** Some existing files mix Vietnamese
-prose into English documents — `docs/TODO.md` absorbed 28 Vietnamese items from
+prose into English documents — `../current_state/TODO.md` absorbed 28 Vietnamese items from
 `src/orchestration/todo.md` on 2026-08-17, and scattered comments elsewhere are Vietnamese.
 **Do not open a translation project on the strength of this rule.** Convert a file to English when
 you are already editing it for another reason, and say so in the commit message; a mass

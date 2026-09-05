@@ -1,4 +1,4 @@
-"""Fail if any `.md` in the repo is not routed by `docs/INDEX.md`.
+"""Fail if any `.md` in the repo is not routed by `.claude/current_state/INDEX.md`.
 
 ⚠️ **The index is auto-loaded into every session, so a file missing from it is a file no
 session knows exists.** That is the same failure shape as CLAUDE.md §5 rule 12 — silence
@@ -12,7 +12,7 @@ Routing is matched two ways, because the index deliberately does not name all 12
 
 Run it before committing documentation::
 
-    python docs/check_index.py
+    python check_index.py
 
 Exits 1 and lists the unrouted files; prints the token budget either way.
 """
@@ -23,8 +23,8 @@ import re
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
-INDEX = REPO / "docs" / "INDEX.md"
+REPO = Path(__file__).resolve().parent.parent.parent
+INDEX = REPO / ".claude" / "current_state" / "INDEX.md"
 
 # Directories that hold no documentation of ours.
 SKIP_DIRS = {".git", "mt_env", ".pytest_cache", "node_modules", ".dagster"}
@@ -70,7 +70,7 @@ def index_patterns(text: str) -> tuple[set[str], list[re.Pattern[str]]]:
     literals: set[str] = set()
     globs: list[re.Pattern[str]] = []
     for r in raw:
-        # Index links are written relative to docs/; strip the climb back to the root.
+        # Index links are written relative to .claude/current_state/; strip the climb back to the root.
         norm = re.sub(r"^(\.\./)+", "", r.split("#")[0].strip())
         if not norm or norm.startswith(("http", "mailto")):
             continue
@@ -105,10 +105,10 @@ def main() -> int:
         unrouted.append(path)
 
     print(f"{len(files)} markdown files, ~{total / 4 / 1000:.0f}k tokens total")
-    print(f"index: docs/INDEX.md ({len(INDEX.read_text(encoding='utf-8')) / 4 / 1000:.1f}k tokens, auto-loaded)")
+    print(f"index: .claude/current_state/INDEX.md ({len(INDEX.read_text(encoding='utf-8')) / 4 / 1000:.1f}k tokens, auto-loaded)")
 
     if unrouted:
-        print(f"\n{len(unrouted)} UNROUTED — add each to a tier in docs/INDEX.md:", file=sys.stderr)
+        print(f"\n{len(unrouted)} UNROUTED — add each to a tier in .claude/current_state/INDEX.md:", file=sys.stderr)
         for path in unrouted:
             print(f"  {path.relative_to(REPO).as_posix()}", file=sys.stderr)
         return 1

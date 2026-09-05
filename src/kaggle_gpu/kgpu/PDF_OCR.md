@@ -538,7 +538,7 @@ wrong column of the right page — `PYR-1` is exactly that. Use them to decide w
 Materialise `raw/cafef_financials` through **Dagster** with the preceding quarters in `periods`
 so `sane` has the same history the probe had, then **diff every column** against a backup and
 restore any non-target quarter that moved. That is more work and it is what a full run's band
-buys you. CLAUDE.md §6-2-quinvicies; RUNBOOK.md.
+buys you. CLAUDE.md §6-2-quinvicies.
 
 ## 7. The CLI instead of the notebook
 
@@ -839,5 +839,5 @@ to the đồng. Which period those openings anchor to is **not established**.
 | the parse itself — the cascade, the gates, the 47 layers | [`src/web_scraper/CONTEXT.md`](../../web_scraper/CONTEXT.md) §3a, §3b |
 | `kgpu` in general — payload modes, the measured traps | [`README.md`](../README.md) |
 | what the OCR has produced, ticker by ticker | `CLAUDE.md` §6-2-octies … §6-2-unsexagies |
-| open defects — read `CRP-1` before quoting any non-bank figure, and `SET-2`/`ALT-1` before calling a quarter unparseable | [`docs/ISSUES.md`](../../../docs/ISSUES.md) |
-| what to run next | [`docs/TODO.md`](../../../docs/TODO.md) — `P38`, `P6`, `P5` |
+| open defects — read `CRP-1` before quoting any non-bank figure, and `SET-2`/`ALT-1` before calling a quarter unparseable | [`../../../.claude/current_state/ISSUES.md`](../../../.claude/current_state/ISSUES.md) |
+| what to run next | [`../../../.claude/current_state/TODO.md`](../../../.claude/current_state/TODO.md) — `P38`, `P6`, `P5` |

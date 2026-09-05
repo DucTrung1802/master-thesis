@@ -1,6 +1,6 @@
 # CLAUDE.md — master-thesis
 
-@docs/INDEX.md
+@.claude/current_state/INDEX.md
 @.claude/rules/common.md
 
 > **ONE FILE, WHOLE PROJECT.** This is the map. The twelve `CONTEXT.md` files are the
@@ -10,17 +10,16 @@
 >
 > ⚠️ **AND THIS FILE WAS 165.3k TOKENS UNTIL 2026-09-06, WHICH IS THE RULE BELOW BEING BROKEN BY
 > THE FILE THAT STATES IT.** §6-2-septies…undeseptuagies — the filings/OCR chronicle, **465,178
-> characters, 70 % of the hub** — was **relocated verbatim** to
-> [docs/OCR_PARSER_LOG.md](docs/OCR_PARSER_LOG.md); §6-2 now carries a state summary and a
-> pointer. **Nothing was condensed or dropped**, and all ~196 `§6-2-*` citations across the repo
-> still resolve, because they cite by section NAME rather than by anchor. **44.2k tokens now.**
+> characters, 70 % of the hub** — was DELETED; §6-2 now carries a state summary only.
+> ⚠️ **~196 `§6-2-*` citations across the repo now name sections that are no longer written
+> down** — `git show ea07d4aa` is where they were last recorded. **44.2k tokens now.**
 > ⚠️ *A hub that grows without bound stops being a map — measure this file when you add to it.*
 >
-> ⚠️ **ALL PROSE DOCUMENTATION LIVES IN [`docs/`](docs/) SINCE 2026-08-22**, and the line
-> above this paragraph is why: `@docs/INDEX.md` imports the documentation map into every
-> session automatically. **[docs/INDEX.md](docs/INDEX.md) routes all 117 `.md` files with
+> ⚠️ **ALL PROSE DOCUMENTATION LIVES IN [`.claude/`](.claude/) SINCE 2026-09-06** (in `docs/` from 2026-08-22 until then), and the line
+> above this paragraph is why: `@.claude/current_state/INDEX.md` imports the documentation map into every
+> session automatically. **[.claude/current_state/INDEX.md](.claude/current_state/INDEX.md) routes all 117 `.md` files with
 > a measured token cost each** — read it before opening anything, and add a row to it when
-> you write a new doc (`python docs/check_index.py` fails if you forget). ⚠️ **The corpus
+> you write a new doc (`python .claude/tools/check_index.py` fails if you forget). ⚠️ **The corpus
 > is ~659k tokens (re-measured 2026-09-06), ~3× a context window, so it can never be bulk-loaded** — the index is
 > deliberately routing and not content. `CLAUDE.md` itself stays at the repo root because
 > that is the only place Claude Code auto-loads it from.
@@ -34,9 +33,9 @@
 > | file | answers | when you touch it |
 > |---|---|---|
 > | **[CLAUDE.md](CLAUDE.md)** | *what is this, and what has it PROVED?* | auto-loaded every session; the map and the verdict. **Root, not `docs/`** |
-> | **[docs/RUNBOOK.md](docs/RUNBOOK.md)** | *how do I RUN it?* | commands, stage order, the flags that destroy things |
-> | **[docs/ISSUES.md](docs/ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
-> | **[docs/TODO.md](docs/TODO.md)** | *what is NEXT?* | one list, `P1` first. ⚠️ **A bare `P<n>` is LIVE; a HYPHENATED code (`P1-9`, `PRF-8`, `M-3`) is RETIRED** — renumbered 2026-08-21, crosswalk at the top of that file |
+> | **[.claude/runbook/RUNBOOK.md](.claude/runbook/RUNBOOK.md)** | *how do I RUN it?* | ~40 command templates, each with what it writes and its measured cost |
+> | **[.claude/current_state/ISSUES.md](.claude/current_state/ISSUES.md)** | *what is BROKEN?* | permanent codes; a code is never renumbered or reused |
+> | **[.claude/current_state/TODO.md](.claude/current_state/TODO.md)** | *what is NEXT?* | one list, `P1` first. ⚠️ **A bare `P<n>` is LIVE; a HYPHENATED code (`P1-9`, `PRF-8`, `M-3`) is RETIRED** — renumbered 2026-08-21, crosswalk at the top of that file |
 >
 > Movement between them is one-way and worth knowing: a TODO item that turns out to be a
 > defect **graduates to ISSUES.md with a code**; an ISSUES entry that gets fixed keeps its
@@ -906,7 +905,7 @@ a one-off backfill and even when the scraper class already has a batch method th
 do it. A run outside Dagster leaves no materialisation, no metadata and no partition
 status, so a later session cannot tell what was fetched or with what scope. If a run needs
 a knob the asset does not have, **the work is adding the knob to the asset** (a `Config`
-class), not writing a wrapper around it. `RUNBOOK.md` §3e.
+class), not writing a wrapper around it.
 
 ---
 
@@ -1089,7 +1088,7 @@ the 23-paper literature record), ~95k tokens in all. ✅ **Tracked, so `git chec
 experiment` restores every byte** — unlike `RPR-1`'s run folders, which were gitignored and are
 gone for good.
 
-The routing was removed the same day: `docs/INDEX.md`'s Tier 3 (7 rows) and its two Tier 4 rows,
+The routing was removed the same day: `.claude/current_state/INDEX.md`'s Tier 3 (7 rows) and its two Tier 4 rows,
 plus the two rows in §7 of this file. **`Tier 4` was renumbered to `Tier 3`**, and the corpus
 line fell from **128 files / ~705k tokens to 106 / ~639k**.
 
@@ -1229,7 +1228,7 @@ reaches +1.04, so this is underpowered, not settled. **The chain stays at h=20**
 because h=10 lost, but because it has not won the test that matters.
 `walkforward/CONTEXT.md` §10.
 
-**The chain that produced it**, and every stage is reproducible from `RUNBOOK.md` §3a:
+**The chain that produced it**, and every stage is reproducible:
 
 | stage | artefact | number |
 |---|---|---|
@@ -1357,7 +1356,7 @@ fold. `walkforward/CONTEXT.md` §9e.
 
 ⚠️ **`--out` IS LOAD-BEARING AND OMITTING IT DESTROYS `PRF-1`.** `walkforward`'s
 `DEFAULT_OUT` is `results/walkforward/`, which holds the h=20 track; every artefact is
-written by basename, so the RUNBOOK §3 command run at h=10 **silently overwrites it**. The
+written by basename, so the documented command run at h=10 **silently overwrites it**. The
 h=10 track lives in `results/walkforward_h10/`.
 
 ⚠️ **`PRB-1`, found and fixed in the same session**: two Kaggle PROBE runs had been merged
@@ -1999,8 +1998,7 @@ with no date to resume from, and a row is amended in place upstream, so "rows af
 not well defined. ⚠️ **`incremental` helps only where a CSV EXISTS**: 348 of 780 tickers
 have no prop-desk history at all and correctly take the full path every time.
 
-**Run:** 1h 05m, **0 errors**, all four tabs at 780/780. `RUNBOOK.md` has the command and
-the config; ⚠️ **`incremental: true` needs `skip_existing: false` beside it** or
+**Run:** 1h 05m, **0 errors**, all four tabs at 780/780. ⚠️ **`incremental: true` needs `skip_existing: false` beside it** or
 `skip_existing` returns first and the run refreshes nothing while going green.
 
 ⚠️ **THIS CLOSED THE SCRAPE AND NOT THE CARRY-UP** — see §6-2-ter, which ran the same
@@ -2198,23 +2196,9 @@ or a dependency on it, and the observer is written by someone who is not thinkin
 the writer. Ask of any new monitor: *what does this stop the repair path from doing?*
 `pipeline/CONTEXT.md` §1a-bis; `ISSUES.md` `DEP-1`.
 
-### ⚠️ 6-2. THE FILINGS/OCR CHRONICLE — **MOVED to [docs/OCR_PARSER_LOG.md](docs/OCR_PARSER_LOG.md) on 2026-09-06**
+### ⚠️ 6-2. THE FILINGS/OCR PARSER — the state summary
 
-⚠️ **§6-2-septies … §6-2-undeseptuagies LIVE IN THAT FILE NOW, VERBATIM AND UNEDITED** — 63
-sections, **465,178 characters ≈ 116k tokens**, which was **70 % of this hub** and was being
-auto-loaded into every session whatever the session was about. Nothing was summarised away in
-the move; the file is a relocation, not a condensation. ⚠️ **Every `§6-2-*` citation in the repo
-still resolves** — all ~196 of them (`ISSUES.md` 74, `TODO.md` 33, `PDF_OCR.md` 19,
-`web_scraper/CONTEXT.md` 23, `pipeline/CONTEXT.md` 1, here 46) cite **by section NAME, never by
-anchor**, and the names are unchanged. **§6-2-bis … §6-2-sexies stayed here** — they are the
-data-pipeline carry-up, not the parser.
-
-⚠️ **THE MOVE IS THIS FILE OBEYING ITS OWN OPENING RULE.** The header says the corpus "can never
-be bulk-loaded" and that the index is "deliberately routing and not content" — and the hub had
-grown to 165k tokens of content. **Open the log when you touch `src/web_scraper/`'s filing
-parser, and not before.**
-
-#### What the log establishes, and what a session must carry without opening it
+#### What the filings/OCR work established
 
 | | |
 |---|---|
@@ -2226,7 +2210,7 @@ parser, and not before.**
 | **the recurring shape** | ⚠️ **`SLD-1`'s family: a WRONG FIGURE that passes every gate.** Recorded six-plus times — a slid row, a lost bracket, a comparative column, a merged label, a seal over the digits. `reconcile` and `sane` are the only gates, and on a cash flow accepted at a STRICT layer the arithmetic identity never runs at all (`CFV-1`) |
 | **the method that keeps working** | ⚠️ **a VAS filing prints several of its figures twice, and checking one against the other is free** — the cash flow's closing balance is the balance sheet's cash line, a Q1 income statement's two columns are the same three months, a balance sheet's two grand totals are one number, and a cumulative cash flow prints one opening per year. Four of the 2026-09-05 defects were found that way, with no OCR and no network |
 
-#### Coverage, as the log last recorded it
+#### Coverage, as last measured
 
 Measured **2026-09-06** by `RUN__pdf_ocr_summary.ipynb` over `statements/**/*.csv` against
 `documents(allow_parent=True)` and `settled_absences` — no OCR, no network, seconds to recompute.
@@ -2264,7 +2248,7 @@ is a request for a PREPARED NOTEBOOK that then WAITS — never for a run. `kgpu/
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
-resulting program is in **[TODO.md](docs/TODO.md)** (⚠️ renumbered again 2026-08-23 when the first two items closed); three numbers belong
+resulting program is in **[TODO.md](.claude/current_state/TODO.md)** (⚠️ renumbered again 2026-08-23 when the first two items closed); three numbers belong
 here because they change how any current result is read.
 
 **1. ⚠️ `MAX(date)` SAYS 2026-08-19 AND FIVE TICKERS PRODUCE IT.** Names per session at
@@ -2379,7 +2363,7 @@ dataset both end 2026-06-25 rather than 2026-08-07.
 `final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
 `pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
 
-**Open issues live in [ISSUES.md](docs/ISSUES.md)** — **97 open**, 38 resolved, codes permanent.
+**Open issues live in [ISSUES.md](.claude/current_state/ISSUES.md)** — **97 open**, 38 resolved, codes permanent.
 ⚠️ *(This count is a SCAN of the tables, not a running decrement, and it has been wrong before —
 it read 96 earlier on 2026-09-06, 70 until 2026-09-05, 22 until 2026-08-28. A stale count is what
 a session budgets against.)* ⚠️ **Several FIXED rows deliberately sit inside the Open table rather
@@ -2400,10 +2384,8 @@ read from its text and never from damaged type.
 | **`FLT-1` / `SHP-1`** | bound what forex data can EXIST: 19 of 47 broker filters fail open, and a `value`-only filter silently discarded **71 % of the forex folder** on every run until 2026-08-14 — the same filter sits unchecked on `bonds`/`funds`/`economy`/`indices` |
 
 ⚠️ **The OCR/filings issue codes** (`SLD-1`, `PAR-1`, `QUO-1`, `MSO-*`, `SEAL-*`, `SET-*`, `BND-1`,
-`VCR-1`, `CWD-1`, `GPU-1`, `SGN-*`, `NST-*`, `LSP-1`, …) **are in `ISSUES.md` in full and their
-narratives in [docs/OCR_PARSER_LOG.md](docs/OCR_PARSER_LOG.md).** A 27k-character inline digest of
-them stood here until 2026-09-06 and is preserved as that file's appendix — ⚠️ **read the register,
-not the snapshot.**
+`VCR-1`, `CWD-1`, `GPU-1`, `SGN-*`, `NST-*`, `LSP-1`, …) **are in `ISSUES.md` in full.** A 27k-character inline digest of
+them stood here until 2026-09-06 — ⚠️ **read the register, not the snapshot.**
 
 Also worth knowing without opening the file: `EVD-1` the missing nulls are ~1,000 CPU-hours;
 `DRF-1` 18 channels put 100 % of test beyond 5 train-sigmas; `COV-1` 248 of 952 shortlisted rows
@@ -2412,8 +2394,8 @@ sit below 0.95 coverage; `RPR-1` datasets and run folders are git-ignored.
 
 ## 7. Where to read more — open ONE, only when you touch it
 
-⚠️ **[docs/INDEX.md](docs/INDEX.md) is the complete map and it is already in your context**
-(`@docs/INDEX.md`, top of this file). This table is the same routing for the packages,
+⚠️ **[.claude/current_state/INDEX.md](.claude/current_state/INDEX.md) is the complete map and it is already in your context**
+(`@.claude/current_state/INDEX.md`, top of this file). This table is the same routing for the packages,
 kept here because the *when you are…* column is the part worth reading twice.
 ⚠️ **The token costs below were re-measured 2026-08-22 and every one of the 16 had gone
 stale as the files grew** — `walkforward` was listed at 6k against a true 16.0k, and
@@ -2437,7 +2419,7 @@ what a session budgets against.
 | [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | **3.4k** | anything news/text/PhoBERT |
 | [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | **8.0k** | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
 
-⚠️ **[ISSUES.md](docs/ISSUES.md) (~42.2k) is the second file to open, not an afterthought.**
+⚠️ **[ISSUES.md](.claude/current_state/ISSUES.md) (~42.2k) is the second file to open, not an afterthought.**
 **97** open issues — ⚠️ *(this line read "96" earlier on 2026-09-06, "70" until 2026-09-05, "69", "68" and "67" earlier on 2026-09-04, "66" and "63" earlier on 2026-09-03, "59", "55" and "51" earlier on 2026-09-02, "48" earlier on 2026-09-01, "42" and "40" earlier on 2026-08-30, "34" and "28" earlier on 2026-08-29, "22" until 2026-08-28 and "(~4k)"/"Sixteen" until
 2026-08-25; a stale count is what a session budgets against)*. ⚠️ **CFB-1 IS THE ONE TO READ
 BEFORE QUOTING A BID FUNDAMENTAL** (opened 2026-08-28): a cash-flow anchor can hold the wrong
@@ -2460,25 +2442,28 @@ the extremes before selecting on any foreign or prop channel). **FLT-1**
 bounds what forex data can exist at all: 19 of 47 broker filters fail open, so 37
 brokers' books are unreachable.
 
-### The other files in `docs/`
+### The other files — `.claude/`
 
-⚠️ **These moved out of the repo root on 2026-08-22.** The filenames did not change, so a
-prose citation like *"`RUNBOOK.md` §8 rule 1"* — including the ~12 in Python docstrings —
-still resolves; only the PATH gained a `docs/` prefix.
+⚠️ **`docs/` NO LONGER EXISTS. It was merged into `.claude/` on 2026-09-06** and the folder
+removed: the four registers went to `.claude/current_state/`, the write-ups to `.claude/docs/`,
+and the two drift checks to `.claude/tools/`. **Two files were DELETED rather than moved** — the
+8-stage operating guide and the 63-section filings/OCR chronicle. ⚠️ **Everything either of them
+recorded is now recoverable only from git** (`git show ea07d4aa`), so a `§<n>` or `§6-2-*` citation
+anywhere in this repo names a section that is no longer written down. Read those as `RPR-1`'s
+shape: a claim whose evidence is one `git checkout` away.
 
 | file | what it is | read it when |
 |---|---|---|
-| **[RUNBOOK.md](docs/RUNBOOK.md)** | the operating guide — 8 stages with MEASURED runtimes, the two flags that destroy things, the target-switch leakage trap, and §10's list of what is deliberately not standardized | you are about to run something |
-| **[ISSUES.md](docs/ISSUES.md)** | 71 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
-| **[TODO.md](docs/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** Seven groups — ⭐ **the TOP ROW is `P43`, in the NEW group `0 · PARSER`** (added 2026-08-27: `P41`-`P45` plus `P39`, from a review of `cafef_pdf_parser.py` + `cafef_financials.py` against the three parsed tickers ON DISK. ✅ **`P39` DONE 2026-08-27** — its positional FX guess was guarded behind a FLAG, so the guard was live on 3 of 47 layers and had already written MERGER CASH into BID Q4-2015 and Q2-2017 with the identity confirming both; fixed, blast radius measured at 30-unchanged/2-dropped over 32 candidates, both cells repaired, and **two leftovers moved into `P43`** rather than to a new code (§6-2-quinvicies). ⚠️ **`P43` is now the top row and it is wrong numbers every gate passed** — its free cumulative-cash invariant flags **10 BID rows**, 7 of them the 1-Jan opening sitting in the CLOSING slot, plus 4 FX cells written at strict layers and the `alternates` restatement guard `FXM-1` still needs. ⚠️ **Two are the cost `P38`/`P6` are budgeted on** — `P41` is the unbounded, 22×-repeated, bank-only share-capital note scan, which is the `document size` term §6-2-noviesdecies could not find); **A data `P2`, B OCR `P38`/`P6`/`P5`/`P4`** (⚠️ `P3`, the JSON gate, is CLOSED BY DECISION and archived UNMEASURED), C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ✅ **`P1` DONE 2026-08-23** (§6-2-quinquies). ⚠️ **THE NUMBERS ARE FROZEN AS OF 2026-08-23 AND WILL NOT MOVE AGAIN** — a `P<n>` is a permanent NAME, exactly as an `ISSUES.md` code is, and **PRIORITY IS THE ROW ORDER**, so read the list top-down and cite the number. The list starts at `P2` and the numbers need not stay monotonic; that is the price of a code that means one thing forever. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P11`, `P4-2` is now `P21`, …). ⚠️ **A `P<n>` written BEFORE 2026-08-23 still resolves to a different item** — three renumbers in two days preceded the freeze — so take the DATE of what you are reading, then TODO.md's two crosswalks, which are the last two that will ever be needed | deciding what to do next |
-| **[pipeline.md](docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
-| **[PIPELINE_h10_CAGR74.md](docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
-| **[OCR_PARSER_LOG.md](docs/OCR_PARSER_LOG.md)** | ⚠️ **123.6k — the biggest file in the corpus.** §6-2-septies…undeseptuagies, moved here verbatim 2026-09-06: 63 sections of the filings/OCR parser's day-by-day record, and **every `§6-2-*` citation in the repo resolves here**. ⚠️ **Open it for ONE section, never whole** — §6-2 above carries what a session needs without it | you touch `src/web_scraper/`'s filing parser, or a citation names a `§6-2-*` section |
+| **[.claude/runbook/RUNBOOK.md](.claude/runbook/RUNBOOK.md)** | ~40 command templates as one table, each with what it writes, its measured cost, and the step that must follow it | you are about to run something |
+| **[ISSUES.md](.claude/current_state/ISSUES.md)** | 71 open / 38 resolved, permanent codes | before quoting any number — four of them change how a number may be READ |
+| **[TODO.md](.claude/current_state/TODO.md)** | the one backlog — ⚠️ **DATA FIRST.** Seven groups — ⭐ **the TOP ROW is `P43`, in the NEW group `0 · PARSER`** (added 2026-08-27: `P41`-`P45` plus `P39`, from a review of `cafef_pdf_parser.py` + `cafef_financials.py` against the three parsed tickers ON DISK. ✅ **`P39` DONE 2026-08-27** — its positional FX guess was guarded behind a FLAG, so the guard was live on 3 of 47 layers and had already written MERGER CASH into BID Q4-2015 and Q2-2017 with the identity confirming both; fixed, blast radius measured at 30-unchanged/2-dropped over 32 candidates, both cells repaired, and **two leftovers moved into `P43`** rather than to a new code (§6-2-quinvicies). ⚠️ **`P43` is now the top row and it is wrong numbers every gate passed** — its free cumulative-cash invariant flags **10 BID rows**, 7 of them the 1-Jan opening sitting in the CLOSING slot, plus 4 FX cells written at strict layers and the `alternates` restatement guard `FXM-1` still needs. ⚠️ **Two are the cost `P38`/`P6` are budgeted on** — `P41` is the unbounded, 22×-repeated, bank-only share-capital note scan, which is the `document size` term §6-2-noviesdecies could not find); **A data `P2`, B OCR `P38`/`P6`/`P5`/`P4`** (⚠️ `P3`, the JSON gate, is CLOSED BY DECISION and archived UNMEASURED), C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ✅ **`P1` DONE 2026-08-23** (§6-2-quinquies). ⚠️ **THE NUMBERS ARE FROZEN AS OF 2026-08-23 AND WILL NOT MOVE AGAIN** — a `P<n>` is a permanent NAME, exactly as an `ISSUES.md` code is, and **PRIORITY IS THE ROW ORDER**, so read the list top-down and cite the number. The list starts at `P2` and the numbers need not stay monotonic; that is the price of a code that means one thing forever. ⚠️ **A HYPHENATED code is retired** (`PRF-4` is now `P11`, `P4-2` is now `P21`, …). ⚠️ **A `P<n>` written BEFORE 2026-08-23 still resolves to a different item** — three renumbers in two days preceded the freeze — so take the DATE of what you are reading, then TODO.md's two crosswalks, which are the last two that will ever be needed | deciding what to do next |
+| **[pipeline.md](.claude/docs/pipeline.md)** | ⚠️ **what the chain OUTPUTS — `(date, ticker, weight)`** — 4,720 picks across 236 dated books, with the measured statistics: 65.1 % turnover, **UPCOM over-picked 2.20×**, one book is a coin flip (60.2 % of picks in the top half). ⚠️ **§6 is why there is no book for TODAY**: after 2026-06-11 only **7 of 150** names carry data | asking *"which ticker, on which date"* |
+| **[PIPELINE_h10_CAGR74.md](.claude/docs/PIPELINE_h10_CAGR74.md)** | ⚠️ **how ONE number gets made, end to end** — the h=10 cross-sectional chain that returns **CAGR +74.0 %/yr** (Sharpe@30 +2.531, z = +18.58). Raw scrape → pools → the 19 channels → the LSTM → the costed walk-forward, with every artefact id and every measured runtime. **§12 is the caveat section and is the reason the file exists** | explaining the result to anyone, or reproducing it |
 | `README.md` | the front door; routes here — ⚠️ **stays at the repo ROOT** | — |
-| `docs/thesis/THESIS_PROGRESS_2026*.md`, `docs/thesis/THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |
-| `docs/feature_groups.md` | canonical feature taxonomy | naming a feature group |
+| `.claude/docs/THESIS_PROGRESS_2026*.md`, `.claude/docs/THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |
+| `.claude/docs/feature_groups.md` | canonical feature taxonomy | naming a feature group |
 | `vn30.csv` / `vn100.csv` | index membership — ⚠️ **current, not point-in-time**; ⚠️ **repo ROOT, they are data not docs** | never as a historical universe |
-| **[docs/INDEX.md](docs/INDEX.md)** | ⚠️ **the auto-loaded map** — all 117 `.md` files routed with a measured token cost each, in four tiers. `CLAUDE.md` pulls it in via `@docs/INDEX.md`; `python docs/check_index.py` fails if a doc is unrouted | before opening ANY file below, and whenever you add one |
+| **[.claude/current_state/INDEX.md](.claude/current_state/INDEX.md)** | ⚠️ **the auto-loaded map** — all 117 `.md` files routed with a measured token cost each, in four tiers. `CLAUDE.md` pulls it in via `@.claude/current_state/INDEX.md`; `python .claude/tools/check_index.py` fails if a doc is unrouted | before opening ANY file below, and whenever you add one |
 
 ⚠️ **`TODO.md` absorbed `src/orchestration/todo.md` on 2026-08-17** (28 items, Vietnamese).
 If an older message or `CONTEXT.md` points at that path, it is a history reference —
@@ -2491,17 +2476,17 @@ workflow, log truncation) live in the auto-loaded memory index and are not dupli
 
 ## 8. Conventions that hold across the repo
 
-- ⚠️ **BEFORE YOU COMMIT, RECORD THE STATE.** Run **`python docs/state_check.py`** and
+- ⚠️ **BEFORE YOU COMMIT, RECORD THE STATE.** Run **`python .claude/tools/state_check.py`** and
   resolve what it reports. A commit that changes what this project KNOWS must also change
   where that knowledge is read: a new measurement lands in `CLAUDE.md` (§6 "State today",
   and its date is bumped) or in the package's own `CONTEXT.md`; a new defect gets a
-  permanent code in `docs/ISSUES.md`; a finished item leaves its number behind and is
-  deleted from `docs/TODO.md`; a new `.md` file gets a row in `docs/INDEX.md`. ⚠️ **The
+  permanent code in `.claude/current_state/ISSUES.md`; a finished item leaves its number behind and is
+  deleted from `.claude/current_state/TODO.md`; a new `.md` file gets a row in `.claude/current_state/INDEX.md`. ⚠️ **The
   script REPORTS and never rewrites** — the counts here are a SCAN, not a decrement
   (`ISSUES.md` keeps four fixed rows struck-through inside its Open table, so a row-counter
   returns 17 where the truth is 16), and a confidently wrong number is worse than none.
   ⚠️ **Nothing enforces this at commit time by choice** (2026-08-22): no git hook, so
-  running it is the discipline. `RUNBOOK.md` §8c is the procedure.
+  running it is the discipline.
 - **`⚠️` marks a claim that cost something to learn.** Do not strip them; add them when you
   measure a new one.
 - ⚠️ **"OCR ticker `<SYM>` LOCAL" / "OCR ticker `<SYM>` KAGGLE" IS A REQUEST FOR A PREPARED

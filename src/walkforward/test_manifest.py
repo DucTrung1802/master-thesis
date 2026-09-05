@@ -3,7 +3,7 @@
 `DEFAULT_OUT` before pressing enter.
 
 ⚠️ The first two tests reproduce the exact command pair that nearly destroyed `PRF-1`:
-`RUNBOOK.md` §3's documented h=20 line, then the same line at h=10 with `--out` omitted.
+the documented h=20 line, then the same line at h=10 with `--out` omitted.
 The third pins the half that misstates a number instead of destroying one.
 """
 

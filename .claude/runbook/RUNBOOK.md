@@ -4,11 +4,6 @@
 > its placeholders, what it writes, what it costs, and the steps that must happen **before** and
 > **after** it. Copy a row, fill the `<PLACEHOLDERS>`, run it.
 >
-> ⚠️ **IT IS NOT [docs/RUNBOOK.md](../../docs/RUNBOOK.md), AND THAT FILE WINS ON EVERY DISPUTE.**
-> `docs/RUNBOOK.md` (15.9k) is the operating guide — the measured runtimes, the traps, the
-> reasoning, the evidence. This file is the index into it. **When the two disagree about a
-> command, `docs/RUNBOOK.md` is right and this file is the bug**, because that is the one whose
-> commands were actually run.
 >
 > ⚠️ **A step is not optional because it is boring.** Nearly every row's "after" column exists
 > because skipping it once produced a green run that had done nothing — `CLAUDE.md` §5 rules 10,
@@ -33,14 +28,14 @@ cd src                                                # every `python -m` below 
 ⚠️ **`cd src` matters** — every stage is a package under `src\`; from the repo root
 `python -m pipeline` raises `ModuleNotFoundError`. ⚠️ **`dagster asset materialize` is the
 exception** — its `-f` path in this table is written from the REPO ROOT
-(`src/orchestration/definitions.py`), which is how `docs/RUNBOOK.md` §3d/§3e run it.
+(`src/orchestration/definitions.py`).
 
 ---
 
 ## 1. The table
 
 `ID` is a handle for citing a row in a conversation or a commit message. **Measured** is a real
-runtime taken from `docs/RUNBOOK.md`, never an estimate — an unmeasured cell reads `—`.
+runtime that was MEASURED, never an estimate — an unmeasured cell reads `—`.
 
 ### A · Orientation — writes NOTHING, run these first
 
@@ -50,8 +45,8 @@ runtime taken from `docs/RUNBOOK.md`, never an estimate — an unmeasured cell r
 | **O2** | know what is stale for ONE experiment | `python -m pipeline --ticker <TICKER> --table <TABLE> --config <CFG>.yaml` | 5.8 s | — → ⚠️ `--config` is NOT optional; without it the `model` row scores the DEFAULT chain's run |
 | **O3** | know whether the DATA is fresh | `python -m pipeline.freshness --layer <LAYER>` | ~1 s (silver) · ~33 s (all 39) | — → read the SHAPE: a cliff is a scrape scope, scatter is delistings |
 | **O4** | see which tickers are behind | `SELECT ticker, last_date, sessions_behind FROM health_schema.ticker_freshness('<LAYER>') WHERE NOT is_current ORDER BY sessions_behind DESC;` | 0.25 s | O3 → ⚠️ **pass the layer as the ARGUMENT**; a `WHERE layer = …` written after the call costs 32.9 s instead |
-| **O5** | check the docs before committing | `python docs/state_check.py` | ~2 s | — → resolve every row it reports; it REPORTS and never rewrites |
-| **O6** | check a new `.md` is routed | `python docs/check_index.py` | ~1 s | wrote a `.md` → add its row to `docs/INDEX.md` |
+| **O5** | check the docs before committing | `python ../tools/state_check.py` | ~2 s | — → resolve every row it reports; it REPORTS and never rewrites |
+| **O6** | check a new `.md` is routed | `python ../tools/check_index.py` | ~1 s | wrote a `.md` → add its row to `../current_state/INDEX.md` |
 | **O7** | re-read what a finished track scored | `python -m walkforward.evaluate --top-k 20 --draws 0 --universe all --out <DIR>` | ~2 min | — → ⚠️ **it REWRITES `per_fold.csv`**, and at a different `--top-k` it OVERWRITES the published table |
 
 ### B · The chain — stages 0-9, in order
@@ -164,10 +159,10 @@ raises on, and the surviving channel count is only known once the dataset is bui
 | you changed | it goes in |
 |---|---|
 | a new measurement, or one that moves a verdict | `CLAUDE.md` §6 (+ bump the date), or the package's `CONTEXT.md` |
-| a new defect | `docs/ISSUES.md`, with a **permanent** code |
-| a finished backlog item | its number moves to `CLAUDE.md` / `CONTEXT.md`; the item is **deleted from `docs/TODO.md`, not ticked** |
-| a new `.md` file | a row in `docs/INDEX.md` |
-| a new command or stage | **this file, and `docs/RUNBOOK.md`** |
+| a new defect | `../current_state/ISSUES.md`, with a **permanent** code |
+| a finished backlog item | its number moves to `CLAUDE.md` / `CONTEXT.md`; the item is **deleted from `../current_state/TODO.md`, not ticked** |
+| a new `.md` file | a row in `../current_state/INDEX.md` |
+| a new command or stage | **this file** |
 
 ---
 
@@ -177,6 +172,5 @@ raises on, and the surviving channel count is only known once the dataset is bui
    value is that its runtimes were measured. An unmeasured cost is `—`, never a number.
 2. **Fill the `before → after` column.** If it comes out empty, ask what a green run of this
    command would fail to change — that answer is the "after" step.
-3. **Mirror it in [docs/RUNBOOK.md](../../docs/RUNBOOK.md)** when it is a new stage or a new flag.
    That file is the authority; this one is the index into it.
 4. **Date anything you measured.** A number without a date cannot be told from a stale one.

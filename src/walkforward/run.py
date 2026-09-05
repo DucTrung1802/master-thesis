@@ -260,7 +260,7 @@ def train_fold(base_config: Dict, dataset_name: str, n_features: int, tag: str,
     config.pop("dataset_hash", None)
     # ⚠️ The model-stage null costs `draws` re-scorings per fold and buys nothing: the
     # verdict here is the BACKTEST against Buy&Hold, not `ic_clears` (NUL-3, and
-    # RUNBOOK §8 rule 4). Turned off so ten folds cost ten trainings.
+    # §8 rule 4). Turned off so ten folds cost ten trainings.
     config["null_draws"] = 0
     run_dir, _ = train(config)
     return run_dir

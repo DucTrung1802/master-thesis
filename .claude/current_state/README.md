@@ -5,7 +5,7 @@
 > parsed"* — facts that a command can re-derive in seconds and that go stale on their own.
 >
 > ⚠️ **THIS IS NOT A FIFTH REGISTER.** The four are `CLAUDE.md` (*what is PROVED*),
-> `docs/RUNBOOK.md` (*how to RUN*), `docs/ISSUES.md` (*what is BROKEN*), `docs/TODO.md` (*what is
+> `ISSUES.md` (*what is BROKEN*), `TODO.md` (*what is
 > NEXT*), and this folder must not compete with any of them. The distinction that keeps it honest:
 >
 > | | holds | goes stale by |
@@ -74,7 +74,7 @@ available**: of one measurement's 130 missing cells, **66 were quarters the comp
 2. **Paste the readout as a table**, with the provenance block above it.
 3. **Add the caveat that makes it readable** — the one thing a reader would otherwise
    over-conclude from it.
-4. **Add a row to [docs/INDEX.md](../../docs/INDEX.md)**; `python docs/check_index.py` fails
+4. **Add a row to [INDEX.md](INDEX.md)**; `python ../tools/check_index.py` fails
    without one (**O6**).
 5. **If it changed a verdict, it also belongs in `CLAUDE.md`** — see
    [../workflows/record-a-finding.md](../workflows/record-a-finding.md).

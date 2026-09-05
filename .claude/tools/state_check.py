@@ -11,13 +11,13 @@ So every check below either passes, or hands you a decision. Nothing is auto-edi
 
 Six checks, in the order they usually break::
 
-    python docs/state_check.py
+    python state_check.py
 
 1. `CLAUDE.md` §6 "State today" date vs. the newest `.md` change in the tree
 2. package `CONTEXT.md` files changed without `CLAUDE.md` being touched alongside
 3. issue counts: what `CLAUDE.md` claims vs. what `ISSUES.md`'s own headers say
-4. `docs/INDEX.md` completeness (delegates to `check_index.py`)
-5. `docs/INDEX.md` token costs vs. measured — the failure that had gone stale by 2.7×
+4. `.claude/current_state/INDEX.md` completeness (delegates to `check_index.py`)
+5. `.claude/current_state/INDEX.md` token costs vs. measured — the failure that had gone stale by 2.7×
 6. relative-link integrity across every `.md`
 
 Exit 0 when clean, 1 when something needs a human. ⚠️ **Nothing calls this automatically.**
@@ -34,8 +34,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "docs"))
+REPO = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from check_index import index_patterns, repo_markdown  # noqa: E402
 
@@ -108,14 +108,14 @@ def carries_measurements(path: str) -> bool:
     ⚠️ **The date check fired on every commit before this existed**, because *any* `.md`
     edit tripped it — including edits to the index and this very script's own docs. A check
     that always fires is a check nobody reads, so the trigger is narrowed to the files that
-    actually carry numbers. `README.md`, `docs/INDEX.md`, `docs/RUNBOOK.md` and the thesis
+    actually carry numbers. `README.md`, `.claude/current_state/INDEX.md` and the thesis
     write-ups are deliberately NOT here: changing them cannot make §6 stale.
     """
     return path.endswith("CONTEXT.md") or path in {
-        "docs/ISSUES.md",
-        "docs/TODO.md",
-        "docs/pipeline.md",
-        "docs/PIPELINE_h10_CAGR74.md",
+        ".claude/current_state/ISSUES.md",
+        ".claude/current_state/TODO.md",
+        "../docs/pipeline.md",
+        "../docs/PIPELINE_h10_CAGR74.md",
     }
 
 
@@ -157,7 +157,7 @@ def check_context_without_hub(rep: Report) -> None:
 
 def check_issue_counts(rep: Report) -> None:
     hub = (REPO / "CLAUDE.md").read_text(encoding="utf-8")
-    issues = (REPO / "docs" / "ISSUES.md").read_text(encoding="utf-8")
+    issues = (REPO / ".claude" / "current_state" / "ISSUES.md").read_text(encoding="utf-8")
 
     heads = dict(re.findall(r"^## (Open|Resolved) \((\d+)\)", issues, re.M))
     if len(heads) != 2:
@@ -181,7 +181,7 @@ def check_issue_counts(rep: Report) -> None:
 
 
 def check_index_complete(rep: Report) -> None:
-    index = REPO / "docs" / "INDEX.md"
+    index = REPO / ".claude" / "current_state" / "INDEX.md"
     literals, globs = index_patterns(index.read_text(encoding="utf-8"))
     unrouted = [
         p.relative_to(REPO).as_posix()
@@ -198,7 +198,7 @@ def check_index_complete(rep: Report) -> None:
 
 def check_index_costs(rep: Report) -> None:
     """⚠️ The check that exists because all 16 of CLAUDE.md §7's costs had gone stale."""
-    index = REPO / "docs" / "INDEX.md"
+    index = REPO / ".claude" / "current_state" / "INDEX.md"
     stale: list[str] = []
     for m in re.finditer(r"\[[^\]]+\]\(([^)]+\.md)\)\s*\|\s*\*{0,2}~?([\d.]+)k", index.read_text(encoding="utf-8")):
         target = (index.parent / m.group(1)).resolve()

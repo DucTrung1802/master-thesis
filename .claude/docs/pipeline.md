@@ -8,7 +8,6 @@
 > |---|---|
 > | [PIPELINE_h10_CAGR74.md](PIPELINE_h10_CAGR74.md) | *how is the **+74 %/yr** number made?* — provenance, nulls, caveats |
 > | **pipeline.md** *(this file)* | *what does the chain **OUTPUT**, in what shape, and can it name a ticker and a date?* |
-> | [RUNBOOK.md](RUNBOOK.md) | *how do I RUN it?* |
 >
 > ## ⚠️ THE ONE-LINE ANSWER
 >

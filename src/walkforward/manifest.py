@@ -3,7 +3,7 @@
 
 `run.DEFAULT_OUT` is a single fixed path and every artefact under it — `folds.csv`,
 `per_fold.csv`, `predictions_oos.csv` — is written by BASENAME, with no term for the
-table, the target or the horizon. So `RUNBOOK.md` §3's documented command, run at a
+table, the target or the horizon. So the documented command, run at a
 second horizon, overwrites the first horizon's entire OOS track: silently, with no
 fingerprint check and no message. That is `WFO-1`, and it was caught once by reading
 `DEFAULT_OUT` before pressing enter, which is not a control.

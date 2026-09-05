@@ -12,7 +12,7 @@
 ## 1. Record the state — **O5**
 
 ```powershell
-python docs/state_check.py      # about two seconds, exits 1 on drift
+python ../tools/state_check.py      # about two seconds, exits 1 on drift
 ```
 
 ⚠️ **It REPORTS and never rewrites.** Every finding is handed back as a decision, because these
@@ -26,17 +26,17 @@ inside its Open table on purpose, so a naive row-counter disagrees with the head
 | **issue counts** | the hub's *"N open, M resolved"* disagrees with `ISSUES.md`'s headings. **Re-SCAN; do not decrement** |
 | **`INDEX.md` completeness** | a `.md` exists that the index does not route. **A file missing from the index is a file no session knows exists** |
 | **`INDEX.md` token costs** | a claimed cost drifted >20 % from measured. ⚠️ This check exists because **all 16** of the hub's costs had gone stale at once |
-| **relative links** | a markdown link points at nothing. ⚠️ **Read the COUNT, not just the colour** — `docs/RUNBOOK.md` §8c records 11 as known-broken from the docs move; measured 2026-09-06 the check reports **304 checked, all resolve**, so that backlog is gone and a new failure is genuinely new |
+| **relative links** | a markdown link points at nothing. ⚠️ **Read the COUNT, not just the colour** — measured 2026-09-06 the check reports **304 checked, all resolve**, so that backlog is gone and a new failure is genuinely new |
 
 ## 2. Put each change where it is read
 
 | you changed | it goes in |
 |---|---|
 | a new measurement, or one that moves a verdict | `CLAUDE.md` §6 (+ bump the date), or the package's `CONTEXT.md` |
-| a new defect | `docs/ISSUES.md`, with a **permanent** code |
-| a finished backlog item | its number moves to `CLAUDE.md` / `CONTEXT.md`; the item is **deleted from `docs/TODO.md`, not ticked** |
-| a new `.md` file | a row in `docs/INDEX.md` |
-| a new command, flag or stage | `docs/RUNBOOK.md` **and** [../runbook/RUNBOOK.md](../runbook/RUNBOOK.md) |
+| a new defect | `../current_state/ISSUES.md`, with a **permanent** code |
+| a finished backlog item | its number moves to `CLAUDE.md` / `CONTEXT.md`; the item is **deleted from `../current_state/TODO.md`, not ticked** |
+| a new `.md` file | a row in `../current_state/INDEX.md` |
+| a new command, flag or stage | [../runbook/RUNBOOK.md](../runbook/RUNBOOK.md) |
 | a new rules file under `.claude/rules/` | ⚠️ **its `@` import in `CLAUDE.md`, in the SAME commit** — a rules file is not auto-loaded by itself, and without the import it is a file nobody reads |
 
 [record-a-finding.md](record-a-finding.md) is the detail for each row.

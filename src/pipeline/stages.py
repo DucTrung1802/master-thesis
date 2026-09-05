@@ -10,7 +10,7 @@ the tables between them and checks that each still matches the shortlists it cam
 ⚠️ **`backtest` and `walkforward` joined 2026-08-21, and until then the gate was blind to
 the two tools that produce every headline in CLAUDE.md §6-0.** `result_evaluator` answers
 *does it rank?*; only `backtest` answers *does it pay?*. One split cannot tell a decayed
-edge from a lucky window; only `walkforward` can. `RUNBOOK.md` §8 rule 1 makes this command
+edge from a lucky window; only `walkforward` can. The standing rule makes this command
 the gate on quoting any number, so a green plan that had never asked either question was a
 gate answering a smaller question than the one it was trusted for.
 
@@ -484,7 +484,7 @@ def _layer2_runs(root: Optional[str] = DEFAULT_ROOT,
     horizon — so `python -m pipeline --ticker all --table rank_20day__final__d20_h20`
     reported *"2 layer-2 run(s) over `pool__shortlist__rank_20day__d20_h20`"* and then
     named a `vcb` / `return_5day` / `d20_h5` run. **A stage that has never run for this
-    chain read green**, and `RUNBOOK.md` §8 rule 1 makes this command the gate on quoting
+    chain read green**, and the standing rule makes this command the gate on quoting
     any number. Measured 2026-08-18, fixed 2026-08-21.
     """
     from feature_selection.outstanding import OUTSTANDING_FILENAME
@@ -569,7 +569,7 @@ def _not_applicable(name: str, table: str) -> StageState:
     ⚠️ `ready=True` on purpose, and the distinction cost something. `--apply` skips a
     ready stage; a `ready=False` row here would make `pipeline --apply` build a
     `pool__shortlist__rank_20day__d20_h20` that **nothing can ever select over**, which
-    is precisely what `RUNBOOK.md` §3a had to warn readers off `pipeline` to prevent.
+    is precisely what the runbook had to warn readers off `pipeline` to prevent.
     The `detail` says "n/a" so nobody reads the green as "this ran".
     """
     return StageState(
@@ -606,7 +606,7 @@ def apply_shortlist_pool(
     # ⚠️ A SECOND GUARD, and it is not redundant with `status_shortlist_pool`'s. `--only
     # shortlist_pool` forces a stage regardless of its `ready`, so the status check alone
     # would still let `pipeline --only shortlist_pool` build the junk pool that
-    # `RUNBOOK.md` §3a warns about.
+    # the runbook warns about.
     if is_cross_sectional(ticker, table, root):
         raise ValueError(
             f"{table} is a CROSS-SECTIONAL chain — a selection over a shortlist pool "
@@ -1006,7 +1006,7 @@ def status_walkforward(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE,
     """Is this one lucky split, or does it survive ten expanding folds?
 
     ⚠️ **NOT A STAGE THE CHAIN PRODUCES, AND NEVER `--apply`-able.** A sweep is ~35 GPU
-    minutes and writes ten run folders; `RUNBOOK.md` §3's own rule that the expensive
+    minutes and writes ten run folders; the standing rule that the expensive
     artefact must be a deliberate act applies here exactly as it does to a selection.
     So this row REPORTS and never runs — `manual=True`, `apply=None`.
 
@@ -1126,7 +1126,7 @@ def stages(
             status_evaluation,
             apply_evaluation,
         ),
-        # ⚠️ **STAGES 9 AND W, ADDED 2026-08-21.** `RUNBOOK.md` §8 rule 1 makes this
+        # ⚠️ **STAGES 9 AND W, ADDED 2026-08-21.** the standing rule makes this
         # command the gate on quoting any number, and the two tools that produce every
         # headline in CLAUDE.md §6-0 were invisible to it — so the gate could read green
         # on a chain whose tradability and whose out-of-sample survival were both

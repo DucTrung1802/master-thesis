@@ -3,11 +3,9 @@
 > Written 2026-08-21. **Every number below was read from disk on that date**, not quoted from another
 > register — the pooled row was re-derived with `walkforward.evaluate --draws 0` (26.1 s, no GPU) and
 > the provenance came out of the artefacts' own `metadata.json`. Registers:
-> [CLAUDE.md](../CLAUDE.md) *what is PROVED* · [RUNBOOK.md](RUNBOOK.md) *how to RUN* ·
-> [ISSUES.md](ISSUES.md) *what is BROKEN* · [TODO.md](TODO.md) *what is NEXT*.
+> [CLAUDE.md](../../CLAUDE.md) *what is PROVED* ·
+> [ISSUES.md](../current_state/ISSUES.md) *what is BROKEN* · [TODO.md](../current_state/TODO.md) *what is NEXT*.
 >
-> ⚠️ **This file explains ONE result. It is not a second RUNBOOK** — where a command is given,
-> RUNBOOK is the authority and this file is quoting it.
 >
 > ## ⚠️ READ §12 BEFORE QUOTING THE 74 %
 >
@@ -36,7 +34,7 @@ POOLED — the whole walk-forward as ONE track
 | IC positive | **10 of 10 folds**; beats the universe **10 of 10** on Sharpe *and* CAGR |
 
 **Which model.** ⚠️ The 74 % is the **`lstm`** arm. A `gbt` arm on the identical folds
-scores a *higher Sharpe* (**+2.891**) and a *lower CAGR* (**+69.8 %**) — RUNBOOK §7c:
+scores a *higher Sharpe* (**+2.891**) and a *lower CAGR* (**+69.8 %**):
 *"the best model" is not well-formed without an estimand.* This document follows the CAGR,
 so it follows the LSTM.
 
@@ -87,7 +85,7 @@ chain exists and gives a *different* number (§11). The 74 % is the ten folds po
 browser-gated); **CafeF** the matched/negotiated turnover split, foreign and proprietary flow, news
 and filing PDFs; **Simplize** adjusted daily OHLC and foreign flow through a plain JSON endpoint;
 **MSCI GICS** the industry tree that `drv_cs_ret_vs_industry` needs. **Orchestration** is Dagster,
-83 assets — see [src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md). Nothing here is a
+83 assets — see [src/orchestration/CONTEXT.md](../../src/orchestration/CONTEXT.md). Nothing here is a
 manual step.
 
 ⚠️ **A green asset is not evidence of fresh data** (§5 rule 10): `landed()` asks *"is this folder
@@ -548,9 +546,9 @@ re-derivable from §13 in about 35 minutes.
 
 | open this | for |
 |---|---|
-| [src/walkforward/CONTEXT.md](../src/walkforward/CONTEXT.md) | §9 the h=10 track · §9b the leak check · §9e the look-ahead probe · §11 seven architectures · **§15 the seed floor** |
-| [src/backtest/CONTEXT.md](../src/backtest/CONTEXT.md) | §3 the cost identity · §5 the single-stock answer · §10 the indicator survey |
-| [src/feature_selection/CONTEXT.md](../src/feature_selection/CONTEXT.md) | the selector, the nulls, the ranker comparison |
-| [src/orchestration/CONTEXT.md](../src/orchestration/CONTEXT.md) | every asset, pool and source table above |
-| [ISSUES.md](ISSUES.md) | `NUL-1`, `FNM-1`, `COV-1`, `DRF-1`, `RPR-1`, `STA-1`, `CSP-1` — all cited above |
-| [TODO.md](TODO.md) | `P7` (live scoring), `P8` (the `FNM-1` fix), `P10` (portfolio construction), `P11` (execution realism); the fundamentals program is `P2`/`P37`/`P38`/`P6`/`P5`. ⚠️ Codes were FROZEN 2026-08-23 — a `P<n>` written before that date resolves through that file's crosswalks |
+| [src/walkforward/CONTEXT.md](../../src/walkforward/CONTEXT.md) | §9 the h=10 track · §9b the leak check · §9e the look-ahead probe · §11 seven architectures · **§15 the seed floor** |
+| [src/backtest/CONTEXT.md](../../src/backtest/CONTEXT.md) | §3 the cost identity · §5 the single-stock answer · §10 the indicator survey |
+| [src/feature_selection/CONTEXT.md](../../src/feature_selection/CONTEXT.md) | the selector, the nulls, the ranker comparison |
+| [src/orchestration/CONTEXT.md](../../src/orchestration/CONTEXT.md) | every asset, pool and source table above |
+| [ISSUES.md](../current_state/ISSUES.md) | `NUL-1`, `FNM-1`, `COV-1`, `DRF-1`, `RPR-1`, `STA-1`, `CSP-1` — all cited above |
+| [TODO.md](../current_state/TODO.md) | `P7` (live scoring), `P8` (the `FNM-1` fix), `P10` (portfolio construction), `P11` (execution realism); the fundamentals program is `P2`/`P37`/`P38`/`P6`/`P5`. ⚠️ Codes were FROZEN 2026-08-23 — a `P<n>` written before that date resolves through that file's crosswalks |

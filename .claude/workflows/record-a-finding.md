@@ -14,9 +14,9 @@
 | register | answers | your finding belongs here if… |
 |---|---|---|
 | **`CLAUDE.md`** | *what is this, and what has it PROVED?* | it changes what the project KNOWS, or moves a verdict |
-| **`docs/RUNBOOK.md`** + [../runbook/RUNBOOK.md](../runbook/RUNBOOK.md) | *how do I RUN it?* | it is a command, a flag, a stage, or a measured runtime |
-| **`docs/ISSUES.md`** | *what is BROKEN?* | it is a defect — and it gets a **permanent code** |
-| **`docs/TODO.md`** | *what is NEXT?* | it is work not yet done |
+| [../runbook/RUNBOOK.md](../runbook/RUNBOOK.md) | *how do I RUN it?* | it is a command, a flag, a stage, or a measured runtime |
+| **`../current_state/ISSUES.md`** | *what is BROKEN?* | it is a defect — and it gets a **permanent code** |
+| **`../current_state/TODO.md`** | *what is NEXT?* | it is work not yet done |
 
 **Movement between them is one-way and worth knowing:**
 
@@ -49,7 +49,7 @@ is left in."* That is the convention working.
 
 ## 3. If it is a DEFECT
 
-- [ ] give it a **permanent code** in `docs/ISSUES.md` — never reuse or renumber one.
+- [ ] give it a **permanent code** in `../current_state/ISSUES.md` — never reuse or renumber one.
 - [ ] say **how it manifests**, not just what is wrong. The most valuable entries here describe a
       failure that **passes every gate** (`SLD-1`, `CFB-1`, `CFV-1`).
 - [ ] say **what it does to a NUMBER**, if anything. Seven codes exist mainly because they change
@@ -65,13 +65,13 @@ is left in."* That is the convention working.
 ## 4. If it is a FINISHED ITEM
 
 - [ ] move its measurement into `CLAUDE.md` or the package's `CONTEXT.md`
-- [ ] **DELETE the item from `docs/TODO.md`** — do not tick it. Its number stays a permanent name
+- [ ] **DELETE the item from `../current_state/TODO.md`** — do not tick it. Its number stays a permanent name
       wherever it is cited.
 
 ## 5. If it is a NEW `.md` FILE
 
-- [ ] add a row to **`docs/INDEX.md`**, with a **measured** token cost (`chars/4000`)
-- [ ] **O6** — `python docs/check_index.py`. ⚠️ **A file missing from the index is a file no
+- [ ] add a row to **`../current_state/INDEX.md`**, with a **measured** token cost (`chars/4000`)
+- [ ] **O6** — `python ../tools/check_index.py`. ⚠️ **A file missing from the index is a file no
       session knows exists.**
 - [ ] ⚠️ **A stale cost is worse than none** — it is what a session budgets against, and it once
       made a file look 1.8× more expensive than it was, in the direction that makes a session
@@ -92,7 +92,7 @@ contract. ⚠️ **A snapshot is measured and dated, or it is not written.**
 
 - [ ] exactly one register owns the finding, and you can say why that one
 - [ ] it carries a date, and a `⚠️` if it was expensive to learn
-- [ ] **O5** (`python docs/state_check.py`) reports nothing you have not resolved
+- [ ] **O5** (`python ../tools/state_check.py`) reports nothing you have not resolved
 - [ ] nothing was deleted that carried a measurement
 
 ## Traps

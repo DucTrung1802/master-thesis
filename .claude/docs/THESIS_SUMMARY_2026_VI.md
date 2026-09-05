@@ -1,8 +1,8 @@
 # Luận văn Thạc sĩ — Tóm tắt tiến độ 2026
 
-> ⚠️ **Deliverable write-up, not an operating document.** For how to run the pipeline see
-> [RUNBOOK.md](../RUNBOOK.md); for what it has proved, [CLAUDE.md](../../CLAUDE.md); for what is
-> broken, [ISSUES.md](../ISSUES.md); for what is next, [TODO.md](../TODO.md).
+> ⚠️ **Deliverable write-up, not an operating document.** For what it has proved see
+> [CLAUDE.md](../../CLAUDE.md); for what is
+> broken, [ISSUES.md](../current_state/ISSUES.md); for what is next, [TODO.md](../current_state/TODO.md).
 
 **Giai đoạn:** 01/01/2026 → 27/07/2026 · **517 commit** · **54 pull request** (`#137`→`#190`)
 *(Bản chi tiết: [THESIS_PROGRESS_2026_VI.md](THESIS_PROGRESS_2026_VI.md))*

@@ -263,7 +263,7 @@ def _vn_stock_universe() -> list[tuple[str, str]]:
 # ADDRESSABLE unit, not a promise to run it — scope a run with `year_min`/`year_max`
 # (`CafefPdfConfig`), never by trimming this list. TODO `P2`.
 #
-# ⚠️ A BARE BACKFILL OF ALL 784 WITH NO YEAR WINDOW IS ~555 GiB. RUNBOOK.md §2a.
+# ⚠️ A BARE BACKFILL OF ALL 784 WITH NO YEAR WINDOW IS ~555 GiB.
 CAFEF_PDF_TICKERS: list[tuple[str, str]] = _vn_stock_universe()
 
 # Statement parse (FinancialsBuilder) — OCRs the archive above into the three statement
