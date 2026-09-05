@@ -8809,10 +8809,17 @@ corroborated OUTSIDE the cash-flow page: `40` financing **−894,393,456,418**, 
 **−725,230,437,373**, `60` opening **2,902,382,823,282**, `70` closing **2,177,152,385,909**.
 `60 + 50 = 70` to the đồng; the opening equals Q4-2011's closing on disk AND Q2-2012's own
 opening; and 2,177,152,385,909 is the same filing's BALANCE-SHEET cash line, also on disk.
-⚠️ `realign_rows` measures an offset of **0** and is right to — the misalignment is local to the
-tail, not a constant shift of the page. ⚠️ Under `CBS-1` the cascade now refuses it PRECISELY
-(`sane` at `onnx@200+title+joinlost`, then the identity at `onnx@300+cashbs`) where before it was
-accepted-then-refused with nothing saying which figure was wrong.
+⚠️ **AND IT MUST NOT BE REPAIRED BY SHIFTING THE TAIL, WHICH IS WHAT THE ROWS SAY WHEN YOU
+READ THEM RATHER THAN THE FOUR FIGURES.** The slide is not local to the tail: the whole FINANCING
+section is slid the same way — `luu_chuyen_tien_thuan_tu_hoat_dong_tai_chinh` holds
+**−236,989,568,000**, which is code 36's *"Cổ tức đã trả"*, and `co_tuc_loi_nhuan_da_tra_cho_chu_so_huu`
+holds code 34's −3,136,142,177,053. So a repair that moved only 40/50/60/70 would write **three
+right figures over ~20 wrong line items**, every one of them past both gates, which is `SLD-1`
+exactly. `missing` is the correct answer until the SEATING is fixed, and ⚠️ `realign_rows` cannot
+do it — it measures an offset of **0**, correctly, because the page is not shifted by a constant.
+⚠️ Under `CBS-1` the cascade now refuses it PRECISELY (`sane` at `onnx@200+title+joinlost`, then
+the identity at `onnx@300+cashbs`) where before it was accepted-then-refused with nothing saying
+which figure was wrong.
 
 ⚠️ **AND `GTL-1` COSTS ONE ROW'S REPRODUCIBILITY, WHICH IS THE HONEST HALF OF IT.** FPT's
 Q1-2015 balance sheet is `pdf` on disk and a re-parse now REFUSES it at every layer: assets read
