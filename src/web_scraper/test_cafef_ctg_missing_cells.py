@@ -288,16 +288,26 @@ def test_the_new_layers_are_last_and_reachable_by_nothing_on_disk():
 def test_the_new_flags_are_off_on_every_other_layer():
     """⚠️ `merged_tail` IS NO LONGER PRIVATE TO THE +merged BLOCK, and that is deliberate:
     `equity_wording` needs the merged-row suffix keys to find CTG Q3-2010's grand total, so
-    the two travel together. What still holds -- and is what this guards -- is that neither
-    flag is ever on outside the two widening blocks at the end of the cascade.
+    the two travel together. What still holds — and is what this guards — is that neither flag
+    is ever on outside a WIDENING block at the end of the cascade.
+
+    ⚠️ **RESTATED 2026-09-05, AND THE OLD SHAPE IS WHY.** It enumerated block NAMES
+    (`+merged`, `+equity`) and an `else` that refused everything else, so appending a
+    legitimate widening block broke it while changing nothing about the guard: `SEAL-2`'s
+    `+total` layers need the merged-row suffix keys for exactly `equity_wording`'s reason —
+    FPT Q1-2016's liabilities line arrives with the column headings glued onto it. That is the
+    third time in this repo a test pinning a POSITION or a NAME LIST has failed an append; the
+    invariant is what it says it is, so it is now asserted directly.
     """
-    for layer in FinancialsBuilder.LAYERS:
+    strict = max(i for i, l in enumerate(FinancialsBuilder.LAYERS, 1) if l.is_strict)
+    for i, layer in enumerate(FinancialsBuilder.LAYERS, 1):
         if "+merged" in layer.name:
             assert layer.column_header_blind and layer.merged_tail
         elif "+equity" in layer.name:
             assert layer.merged_tail and layer.column_header_blind and layer.equity_wording
-        else:
-            assert not layer.column_header_blind and not layer.merged_tail
+        elif layer.column_header_blind or layer.merged_tail:
+            assert not layer.is_strict and i > strict, (
+                f"{layer.name} carries a widening flag and must sit past every strict layer")
 
 
 def test_the_page_flag_is_in_the_parse_key_and_the_mapping_flag_is_not():

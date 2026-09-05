@@ -2,6 +2,7 @@
 
 # ===== Standard Library =====
 import csv
+import itertools
 import os
 import re
 from dataclasses import dataclass
@@ -242,6 +243,9 @@ class ParseLayer:
     equity_wording: bool = False
     condensed_form: bool = False
     income_by_columns: bool = False
+    cash_close_from_bs: bool = False
+    duplicate_period: bool = False
+    total_from_section: bool = False
     crop_pad: Optional[float] = None
     red_channel: bool = False
 
@@ -281,7 +285,22 @@ class ParseLayer:
                     # `relax_totals`; a future one without it would have been counted STRICT and
                     # would have moved `max(strict)` past the very blocks these guards bound.
                     # This is the docstring above describing the omission that then happened.
-                    or self.notes_tail or self.notes_head)
+                    or self.notes_tail or self.notes_head
+                    # ⚠️ `cash_close_from_bs` WRITES a closing balance the cash-flow page did
+                    # not yield, from the balance sheet of the same filing (`CBS-1`). That is a
+                    # widening in the strongest sense — it changes what the matcher will
+                    # believe — so no layer reading the page as printed may run after it.
+                    or self.cash_close_from_bs
+                    # ⚠️ `duplicate_period` changes which readings are
+                    # BELIEVED — it drops a cell two columns disagree on and
+                    # lets the identity choose between them — so it is a
+                    # widening in both directions and nothing reading the page
+                    # as printed may run after it.
+                    or self.duplicate_period
+                    # ⚠️ `total_from_section` REPLACES a figure the page
+                    # yielded with the sum the form says it is, so it is a
+                    # widening in the strongest sense — see `SEAL-2`.
+                    or self.total_from_section)
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
 # Filings before Q1-2008 are blocked at the INPUT, so no pre-2008 document is ever opened and
@@ -491,7 +510,13 @@ def parse_key(layer: ParseLayer) -> tuple:
             layer.condensed_form,
             # ⚠️ `income_by_columns` names a page the classifier left unnamed, exactly as
             # `condensed_form` above it does — a PARSE key, and not an `ocr_key`.
-            layer.income_by_columns)
+            layer.income_by_columns,
+            # ⚠️ `duplicate_period` changes the VALUES a row yields — a cell
+            # the two columns disagree on comes back None — so a layer
+            # carrying it must never be served a parse taken without it.
+            # Deliberately not an `ocr_key`: it compares figures `scan` has
+            # already read and cannot change a recognised character.
+            layer.duplicate_period)
 
 
 def ocr_key(layer: ParseLayer) -> tuple:
@@ -671,6 +696,70 @@ class FinancialsBuilder:
                     "tien_va_tuong_duong_tien_cuoi_ky",
                     "hdtc_vi_tien_va_cac_khoan_tuong_duong_tien_cuoi_ky",       # securities
                     "hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61")        # corp
+
+    # ⚠️ **THE BALANCE SHEET READS THE CLOSING CASH BALANCE A SECOND TIME — `CBS-1`,
+    # 2026-09-05, and it is what `CFV-1` asked for.** A cash flow accepted at a STRICT layer is
+    # checked by NOTHING: `_cash_flow_identity` rides with `relax_totals`, so `reconcile`
+    # demands only that a closing balance exists. FPT's Q3-2025 was written on 2026-09-05 with
+    # a closing balance the company SEAL had broken and reverted the same hour, and what caught
+    # it was an arithmetic screen run over the CSV afterwards.
+    #
+    # The gate this needed was already printed on another page of the same filing. VAS ties
+    # B03's code 70 to B01's code 110 — "Tiền và các khoản tương đương tiền" — so the same
+    # printed quantity is read TWICE by two independent OCR passes, and the balance sheet's
+    # reading is corroborated a third time by its own two components summing to it.
+    #
+    # `{template: (total column, (component, component))}`.
+    #
+    # ⚠️ **`bank` IS ABSENT BECAUSE IT IS MEASURED NOT TO HOLD, NOT BECAUSE NOBODY LOOKED.**
+    # A bank balance sheet's cash line is `I. Tiền mặt, vàng bạc, đá quý` — notes and coin —
+    # while its cash flow closes on a far wider aggregate. Across the five parsed bank tickers
+    # the two figures agree on **0 of 226** quarters, at ratios of 3.5x to 18x. On `corp` they
+    # agree on **84 of 91**, and the seven that do not are seven rows already wrong on disk
+    # (VIC Q1-2013 reads 1,175,172,391,881 for a printed 4,175,172,391,881 — one leading
+    # digit; VIC Q1-2025 reads 491,938,000,000 for 32,491,938,000,000).
+    #
+    # ⚠️ **`securities` AND `insurance` ARE ABSENT ON `OP_IDENTITY`'s OWN GROUNDS** — both
+    # charts do name the same quantity on both statements, and neither has ever met a filing,
+    # so an entry written from the chart alone would be a guess that refuses real statements.
+    BS_CASH_LINE: Dict[str, Tuple[str, Tuple[str, ...]]] = {
+        "corp": ("i_tien_va_cac_khoan_tuong_duong_tien",
+                 ("i_1_tien", "i_2_cac_khoan_tuong_duong_tien")),
+    }
+
+    def balance_sheet_cash(self, template: str, bs_row: Optional[Dict[str, int]]
+                           ) -> Tuple[Optional[int], bool]:
+        """(the balance sheet's cash line, is it corroborated by its own components?).
+
+        `CBS-1`. The first value is what the CASH-FLOW GATE compares against; the second says
+        whether it is strong enough to be WRITTEN into the cash flow as a recovered closing
+        balance.
+
+        ⚠️ **THE TWO ANSWERS ARE SEPARATE BECAUSE THE TWO USES FAIL IN OPPOSITE DIRECTIONS.**
+        A wrong reference used as a GATE refuses a sound cash flow, which costs coverage and
+        writes nothing — the safe direction, §5 rule 2. A wrong reference WRITTEN into the
+        closing-balance column is a wrong figure on disk, which is the thing this whole module
+        exists to prevent. So the gate takes the reference as it stands and the repair demands
+        that the filing's own two components sum to it to the đồng.
+
+        ⚠️ **AND THAT SECOND LOCK IS `SAN-1`'s LESSON, NOT A BELT-AND-BRACES.** A guard that
+        learns its baseline from its own input adopts the first corruption it sees: the balance
+        sheet is accepted FIRST (`REPORTS` order) and usually at layer 1, so without the
+        component test a balance sheet whose cash line was misread would quietly decide every
+        cash flow after it. Measured on the corp corpus: the components close on 119 of 140
+        `pdf` balance-sheet rows and are absent on 4, and 15 of the 17 that break are VIC rows
+        already known wrong.
+        """
+        spec = self.BS_CASH_LINE.get(template)
+        if spec is None or not bs_row:
+            return None, False
+        col, parts = spec
+        total = bs_row.get(col)
+        if total is None:
+            return None, False
+        got = [bs_row.get(c) for c in parts]
+        firm = all(v is not None for v in got) and sum(got) == total
+        return total, firm
 
     # ⚠️ **THE OPERATING-PROFIT IDENTITY — the income statement's ONLY arithmetic gate.**
     # The balance sheet is tested on `assets == liabilities + equity` and the cash flow on
@@ -1557,6 +1646,92 @@ class FinancialsBuilder:
         ParseLayer("onnx@300+condensed", "onnx", 300, condensed_form=True,
                    condensed_income=True, unit_from_document=True,
                    equity_wording=True, join_lost_separator=True),
+        # ── THE COMPANY SEAL BROKE THE CLOSING CASH BALANCE (`cash_close_from_bs`, `CBS-1`)
+        # The round red seal a filing is signed with lands on the last line of the cash flow,
+        # and where it does the digits under it are COVERED rather than missing — so every DPI
+        # returns a different wrong answer and `red_channel` gets close without converging.
+        # FPT's Q1-2025 reads `6.755.015,214:252` against a printed 6.755.645.214.252 at 200,
+        # 300, 400, 500 and 600 dpi, with the red channel and without, and its Q3-2025
+        # `09.853151273133` against 9.853.512.731.370.
+        #
+        # The same filing prints that figure a SECOND time, on its balance sheet: VAS ties
+        # B03's code 70 to B01's code 110. So this is not a derived number — it is the reading
+        # that survived, from a different page and a different OCR pass, and one the balance
+        # sheet's own two components confirm.
+        #
+        # ⚠️ **LAST IN THE CASCADE, AND THAT IS THE WHOLE SAFETY ARGUMENT.** Only a cash flow
+        # that has already defeated every reading of its own page can reach these, and
+        # `verify_cash` is forced on for the flag, so `opening + movement + fx` must reach the
+        # substituted figure EXACTLY before anything is accepted.
+        # ⚠️ `+red` rides with them because the seal is the reason the statement is here: the
+        # OTHER figures of the tail have to be read well enough for the identity to close, and
+        # dropping the channel is what makes that possible. `title_over_form` because on these
+        # scans the cash flow's page carries the notes running header (`RHF-1`).
+        # ── A Q1 PRINTS EVERY FIGURE TWICE (`duplicate_period`, `DPC-1`)
+        # "Quý I" and "Lũy kế từ đầu năm đến cuối quý" are the same three months, so a Q1
+        # income statement has four columns and two quantities. FPT's Q1-2015 is a LANDSCAPE
+        # rotated scan the recogniser damages badly and in a DIFFERENT set of cells in each
+        # column: at 200 dpi column 0 reads 16 of 23 known figures and column 2 reads 15, and
+        # neither is right on its own at 200, 300, 400, 500 or 600.
+        #
+        # Two independent readings agreeing exactly is the strongest signal that page offers —
+        # **85 of 86 agreeing pairs across five DPIs are the printed figure** — so under these
+        # layers `_first_value` believes only what both columns say and drops the rest, and
+        # `_resolve_duplicate_identity` then lets the operating-profit identity choose between
+        # the two readings of any term it contradicted, keeping an assignment only when exactly
+        # one closes to the đồng.
+        #
+        # ⚠️ **LAST IN THE CASCADE, LIKE EVERY OTHER WIDENING BLOCK.** Dropping a contradicted
+        # cell makes a statement STRICTLY thinner, so a filing that already parses must never
+        # reach these — and cannot: `is_strict` counts `duplicate_period`, and the whole block
+        # sits past position 49.
+        # ⚠️ `+deskew` and `join_lost_separator` ride with them because the page that needs
+        # this is a crooked rotated scan and those are what a crooked scan does to a figure —
+        # the same pairing the `+deskew` block itself was measured to need.
+        # ── THE SEAL BROKE A GRAND TOTAL (`total_from_section`, `SEAL-2`)
+        # `red_channel` removes the seal where the ink merely covers the paper; where it lands
+        # ON the digits it removes the digits with it, and the reading then does not converge —
+        # FPT's Q1-2016 `TỔNG CỘNG NGUỒN VỐN` returns **eighteen different wrong answers** over
+        # three DPIs x three crop paddings x the channel, against one printed
+        # 24.695.453.363.505. The form prints the arithmetic (`440 = 300 + 400`) and both parts
+        # read identically at every one of those eighteen, so the sum is the two readings that
+        # survived, put together the way the document says to.
+        # ⚠️ `merged_tail` and `+red` ride with them because that is what the quarter needs to
+        # get its PARTS: the liabilities line arrives with the column headings glued onto it.
+        # ⚠️ LAST, like every widening: only a statement `GTL-1` has already refused for a
+        # grand total that disagrees with its counterpart can reach these.
+        ParseLayer("onnx@200+total", "onnx", 200, total_from_section=True,
+                   merged_tail=True, red_channel=True, join_lost_separator=True),
+        ParseLayer("onnx@300+total", "onnx", 300, total_from_section=True,
+                   merged_tail=True, red_channel=True, join_lost_separator=True),
+        ParseLayer("onnx@200+total+relax", "onnx", 200, total_from_section=True,
+                   merged_tail=True, red_channel=True, join_lost_separator=True,
+                   relax_totals=True),
+        ParseLayer("onnx@300+total+relax", "onnx", 300, total_from_section=True,
+                   merged_tail=True, red_channel=True, join_lost_separator=True,
+                   relax_totals=True),
+        ParseLayer("onnx@200+dup", "onnx", 200, duplicate_period=True,
+                   deskew_rows=True, reseat_words=True, label_wrap=True,
+                   join_lost_separator=True),
+        ParseLayer("onnx@300+dup", "onnx", 300, duplicate_period=True,
+                   deskew_rows=True, reseat_words=True, label_wrap=True,
+                   join_lost_separator=True),
+        ParseLayer("onnx@200+dup+relax", "onnx", 200, duplicate_period=True,
+                   deskew_rows=True, reseat_words=True, label_wrap=True,
+                   join_lost_separator=True, relax_totals=True),
+        ParseLayer("onnx@300+dup+relax", "onnx", 300, duplicate_period=True,
+                   deskew_rows=True, reseat_words=True, label_wrap=True,
+                   join_lost_separator=True, relax_totals=True),
+        ParseLayer("onnx@200+cashbs", "onnx", 200, cash_close_from_bs=True,
+                   red_channel=True, title_over_form=True, join_lost_separator=True),
+        ParseLayer("onnx@300+cashbs", "onnx", 300, cash_close_from_bs=True,
+                   red_channel=True, title_over_form=True, join_lost_separator=True),
+        ParseLayer("onnx@200+cashbs+relax", "onnx", 200, cash_close_from_bs=True,
+                   red_channel=True, title_over_form=True, join_lost_separator=True,
+                   relax_totals=True),
+        ParseLayer("onnx@300+cashbs+relax", "onnx", 300, cash_close_from_bs=True,
+                   red_channel=True, title_over_form=True, join_lost_separator=True,
+                   relax_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -1614,6 +1789,7 @@ class FinancialsBuilder:
         parser.set_red_channel(layer.red_channel)
         parser.set_condensed_form(layer.condensed_form)
         parser.set_income_by_columns(layer.income_by_columns)
+        parser.set_duplicate_period(layer.duplicate_period)
         parser.set_join_split(layer.join_digits)
         parser.set_join_lost_separator(layer.join_lost_separator)
         parser.set_title_over_form(layer.title_over_form)
@@ -1747,6 +1923,22 @@ class FinancialsBuilder:
                                          annual_tail=layer.annual_tail,
                                          merged_tail=layer.merged_tail,
                                          equity_wording=layer.equity_wording)
+                # ⚠️ **THE BALANCE SHEET OF THIS FILING, IF IT HAS BEEN ACCEPTED — `CBS-1`.**
+                # `REPORTS` puts the balance sheet FIRST, so on any layer at which both are
+                # judged the balance sheet is decided before the cash flow reaches the gate;
+                # once accepted it stays accepted, so a cash flow escalating through forty
+                # layers keeps the same reference throughout. None when the balance sheet was
+                # never accepted, or on any chart but `corp` — and then the gate abstains.
+                if layer.duplicate_period and report == INCOME_STATEMENT:
+                    self._resolve_duplicate_identity(st, row, template)
+                if layer.total_from_section and report == BALANCE_SHEET:
+                    self._total_from_section(st, row)
+                bs_cash, bs_firm = (None, False)
+                if report == CASH_FLOW and BALANCE_SHEET in accepted:
+                    bs_cash, bs_firm = self.balance_sheet_cash(
+                        template, accepted[BALANCE_SHEET][0])
+                    if layer.cash_close_from_bs and bs_firm:
+                        self._cash_close_from_balance_sheet(row, bs_cash)
                 # ⚠️ THE SHORT-CIRCUIT IS LOAD-BEARING AND IS PRESERVED EXACTLY: `sane` runs
                 # only when `reconcile` passed, as it always has. What is new is that the
                 # refusal is KEPT rather than discarded — see the report below the loop.
@@ -1754,11 +1946,19 @@ class FinancialsBuilder:
                 # `relax_totals` does — see the unit block in LAYERS.
                 why = self.reconcile(st, row,
                                      verify_cash=(layer.relax_totals
-                                                  or layer.unit_from_document),
+                                                  or layer.unit_from_document
+                                                  # ⚠️ A recovered closing balance must be
+                                                  # PROVED, not merely un-contradicted: the
+                                                  # figure now comes from another page, so the
+                                                  # statement's own arithmetic is the only
+                                                  # thing tying it to this one. Same rule
+                                                  # `unit_from_document` follows.
+                                                  or layer.cash_close_from_bs),
                                      open_ref=open_ref,
                                      relax_components=layer.relax_components,
                                      cash_extra_terms=layer.cash_extra_terms,
-                                     condensed_income=layer.condensed_income)
+                                     condensed_income=layer.condensed_income,
+                                     bs_cash=bs_cash)
                 if why is not None:
                     why = f"reconcile: {why}"
                 else:
@@ -1768,6 +1968,31 @@ class FinancialsBuilder:
                     accepted[report] = (row, st, layer.name)
                 else:
                     refused.setdefault(report, []).append((layer.name, why))
+
+        # ⚠️ **AND THE CASH-FLOW CROSS-CHECK IS RE-RUN ONCE THE CASCADE IS OVER — `CBS-1`,
+        # and WITHOUT THIS 20 % OF IT IS INERT.** Inside the loop the reference exists only if
+        # the balance sheet was already accepted, and `REPORTS` order guarantees that only
+        # WITHIN one layer: a cash flow accepted at layer 1 is judged before a balance sheet
+        # accepted at layer 2. Measured over the accepted `corp` documents in
+        # `reports/pdf_ocr/`, that is **59 of 288** — and VIC's Q3-2014 is one of them, its
+        # closing balance 5,220,100,054,978 against a balance-sheet cash line of
+        # 5,209,108,954,978 that the same run read and that its own two components confirm.
+        #
+        # ⚠️ **IT CAN ONLY REFUSE, NEVER ESCALATE, AND THAT IS THE PRICE OF RUNNING IT LATE.**
+        # The cascade is over, so a statement dropped here has no later layer to try. That is
+        # the safe direction — §5 rule 2, a refusal costs coverage and writes nothing — and the
+        # `+cashbs` layers could not have been reached anyway by a statement that was accepted
+        # at layer 1.
+        if BALANCE_SHEET in accepted and CASH_FLOW in accepted:
+            bs_cash, _firm = self.balance_sheet_cash(template, accepted[BALANCE_SHEET][0])
+            row, st, layer_name = accepted[CASH_FLOW]
+            close = next((row[c] for c in self.C_CASH_CLOSE if row.get(c) is not None), None)
+            if bs_cash is not None and close is not None and not self._equal(close, bs_cash):
+                del accepted[CASH_FLOW]
+                refused.setdefault(CASH_FLOW, []).append(
+                    (layer_name,
+                     f"reconcile: closing cash balance {close:,} disagrees with the balance "
+                     f"sheet's cash line {bs_cash:,} of the same filing"))
 
         # ⚠️ WHY A STATEMENT IS ABSENT, NOT MERELY THAT IT IS. Until 2026-08-25 the only trace
         # a refused statement left was the word `absent` in the period line — which is exactly
@@ -2588,6 +2813,23 @@ class FinancialsBuilder:
     # the bank income statement and the corp income statement, so offering it as an alias would
     # put two real accounts in competition for one row — the `NST-1` hazard, and the thing
     # `test_every_account_wording_key_names_exactly_one_column` exists to refuse.
+    # ⚠️ `SEAL-2`. The text `_total_from_section` falls back to for a PART that did not map,
+    # and the entry that matters is `c_no_phai_tra` — `CRP-1`'s gap. Measured: over the 837
+    # accepted balance sheets in `reports/pdf_ocr/`, the NGUỒN VỐN sum answers **10 times**,
+    # because on the `corp` chart that column almost never maps: FPT's Q1-2016 prints
+    # "A - NỢ PHẢI TRẢ" with the column headings glued onto it, so the row arrives keyed
+    # `ma_thuyet_stt_nguon_von_so_minh_a_n_no_phai_tra` and the ordered walk cannot take it.
+    # `Statement.find` tests containment first, so the needle reaches it.
+    # ⚠️ **`d_von_chu_so_huu` IS DELIBERATELY ABSENT.** "von chu so huu" is contained in the
+    # grand total's own name, which is `NST-1`'s collision, and the column maps on its own
+    # wherever the form is ordinary. A fallback for a part that is not measured to need one is
+    # a hazard bought for nothing.
+    SECTION_PART_TEXT = {
+        "a_tai_san_ngan_han": ("tai san ngan han",),
+        "b_tai_san_dai_han": ("tai san dai han",),
+        "c_no_phai_tra": ("no phai tra",),
+    }
+
     SECTION_EXTRA_TEXT = {
         "ii_nguon_kinh_phi_va_quy_khac_430": ("nguon kinh phi va quy khac",),
         "i_11_loi_ich_co_dong_khong_kiem_soat": ("loi ich cua co dong thieu so",
@@ -3652,7 +3894,8 @@ class FinancialsBuilder:
                   open_ref: Optional[int] = None,
                   relax_components: bool = False,
                   cash_extra_terms: bool = False,
-                  condensed_income: bool = False) -> Optional[str]:
+                  condensed_income: bool = False,
+                  bs_cash: Optional[int] = None) -> Optional[str]:
         """None if the statement balances against its OWN printed subtotals, else why not.
 
         The subtotals are taken from the CANONICAL columns when the rows have been mapped —
@@ -3693,8 +3936,25 @@ class FinancialsBuilder:
             resources = get(self.C_RESOURCES, *self.TOTAL_RESOURCES)
             if assets is None:
                 return "no total assets"
-            if resources is not None and not self._equal(assets, resources):
-                return "assets != liabilities + equity"
+            # ⚠️ **FOUR UNITS OF WHATEVER THE STATEMENT IS PRINTED IN, NOT `_equal` — `GTL-1`,
+            # 2026-09-05, and it is `P49`'s argument for the balance sheet's primary identity.**
+            # `EQUAL_REL = 1e-5` on a 24.7 tn balance sheet is **±247 million**, and these two
+            # figures are one accounting number the filing prints twice: measured over the 837
+            # accepted balance sheets in `reports/pdf_ocr/` that carry both, **819 are EXACTLY
+            # equal** and not one of the rest is between 1 and 4 units. The 7 distinct
+            # statements past that gap are all misread digits — FPT Q1-2015 by 31 dong, BSR
+            # Q4-2018 by 6,000, BSR Q2-2018 by 450,000, FPT Q1-2016 by 1,000,001, CTG Q1-2024
+            # by 100 units of trieu dong.
+            # ⚠️ **THE UNIT IS THE POINT AND AN ABSOLUTE BAR WOULD BE WRONG.** A bank files in
+            # trieu dong, so its rounding unit is 1,000,000 dong: BID's Q3-2019 differs by
+            # exactly 1,000,000 and is the filing's own rounding, while CTG's Q1-2024 differs
+            # by 100 of those and is a digit. In dong either would look the same.
+            # ⚠️ And it is not EXACT: FPT's Q1-2016 prints 24.695.453.363.506 on the asset side
+            # and 24.695.453.363.505 on the resources side — verified against the page — so a
+            # filing may genuinely round the two apart by a unit.
+            if (resources is not None
+                    and abs(assets - resources) > self.TOTALS_TOL * st.unit):
+                return (f"assets {assets:,} != liabilities + equity {resources:,}")
             if resources is None:
                 liab = get(self.C_LIABILITIES, *self.TOTAL_LIABILITIES)
                 eq = get(self.C_EQUITY, *self.TOTAL_EQUITY)
@@ -3740,10 +4000,11 @@ class FinancialsBuilder:
                 lo, hi = parts[0], parts[1]
                 x, y = got[0], got[1]
                 # ⚠️ THE OPTIONAL TERMS ARE TRIED BOTH WAYS — see `SECTION_SUMS`.
-                extra = sum(v for v in (get((c,), *self.SECTION_EXTRA_TEXT.get(c, ()))
-                                        for c in optional) if v is not None)
-                if not (self._equal(x + y, total)
-                        or (extra and self._equal(x + y + extra, total))):
+                # ⚠️ EVERY SUBSET of the optional terms, not "all or none" — see
+                # `_section_candidates`, which is where the measurement that forced it lives.
+                cands = self._section_candidates(
+                    x + y, [get((c,), *self.SECTION_EXTRA_TEXT.get(c, ())) for c in optional])
+                if not any(self._equal(c, total) for c in cands):
                     return (f"section sum does not close: {lo} + {hi} = {x + y:,} "
                             f"against a printed {total:,}")
 
@@ -3784,6 +4045,22 @@ class FinancialsBuilder:
             bad = self._closing_breakdown(st, close, relax_components)
             if bad:
                 return bad
+            # ⚠️ **AND AGAINST THE BALANCE SHEET OF THE SAME FILING, ON EVERY LAYER — `CBS-1`,
+            # which is `CFV-1`'s answer.** Everything above proves the closing balance EXISTS
+            # and agrees with a breakdown printed beneath it when there is one; the identity
+            # that would prove the figure itself rides with `relax_totals` and so never runs on
+            # a strict layer. That is how FPT's Q3-2025 reached disk on 2026-09-05 with a
+            # closing balance the company seal had broken, and how VIC carries seven more.
+            #
+            # VAS ties B03's code 70 to B01's code 110, so the balance sheet — a different
+            # page, a different OCR pass, and itself checked against its own two components —
+            # has already read this figure. `bs_cash` is None on every chart but `corp`, where
+            # the two are measured to be the same quantity (`BS_CASH_LINE`), and None whenever
+            # the balance sheet of this filing was not accepted, so a statement that cannot
+            # answer this is judged exactly as before.
+            if bs_cash is not None and not self._equal(close, bs_cash):
+                return (f"closing cash balance {close:,} disagrees with the balance sheet's "
+                        f"cash line {bs_cash:,} of the same filing")
             # The IDENTITY, by contrast, stays on the relaxed layers only. It tests the whole
             # statement at once and so cannot say WHICH term is wrong — and on a strict layer the
             # wrong one is usually not the closing balance. ACB's FY-2013 reads its closing
@@ -3935,6 +4212,128 @@ class FinancialsBuilder:
                 total += v
         return total
 
+    @staticmethod
+    def _section_candidates(base: int, optional: List[Optional[int]]) -> set:
+        """`base` plus every SUBSET of the optional terms — one definition, two readers.
+
+        ⚠️ **"ALL OR NONE" IS NOT ENOUGH, AND IT WAS MEASURED ON FPT's Q1-2016.**
+        `SECTION_SUMS` names two optional terms and that filing puts them in DIFFERENT places:
+        the form prints `B - NGUỒN VỐN CHỦ SỞ HỮU (400) = I. Vốn chủ sở hữu (410) + II. Nguồn
+        kinh phí và quỹ khác (430)`, so `d_von_chu_so_huu` maps to 410 and `ii_nguon_kinh_phi`
+        has to be ADDED — while `i_11_loi_ich_co_dong_khong_kiem_soat` is already inside 410 and
+        adding it double-counts by 1.7 tn. Neither "both" nor "neither" closes, and the gate
+        refused a statement whose own arithmetic is exact: all-or-none gives 24,692,703,363,505
+        and 26,403,648,009,097, neither within `_equal` of the printed total, where
+        14,052,382,733,257 + 10,640,320,630,248 + 2,750,000,000 = **24,695,453,363,505**, the
+        figure printed under the seal.
+
+        ⚠️ Four candidates at most, because `SECTION_SUMS` names two — this is not a search.
+        `SECTION_SUMS`' own comment already argues that trying a convention BOTH ways costs the
+        gate almost nothing and refusing one costs a whole form; the subsets are that argument
+        carried to the case where the two terms disagree with each other.
+        """
+        out = {base}
+        vals = [v for v in optional if v is not None]
+        for i, v in enumerate(vals):
+            out.add(base + v)
+            for w in vals[i + 1:]:
+                out.add(base + v + w)
+        return out
+
+    def _total_from_section(self, st: Statement, row: Dict[str, int]) -> None:
+        """Repair a grand total the SEAL broke, from the section sum the form itself prints.
+
+        `SEAL-2`. FPT's Q1-2016 balance sheet is signed across `TỔNG CỘNG NGUỒN VỐN`, and the
+        ink is over the digits rather than instead of them — so the reading does not converge:
+        eighteen configurations of dpi, `crop_pad` and `red_channel` return **eighteen
+        different wrong answers** against one printed 24.695.453.363.505. `SEAL-1` measured that
+        signature and this is what is left when dropping the red channel is not enough.
+
+        The form prints the arithmetic: `440 = 300 + 400`, `270 = 100 + 200`. Both parts are
+        figures the OCR READ — here 14,052,382,733,257 and 10,640,320,630,248 + 2,750,000,000,
+        each returned identically at 200, 250, 300 and 400 dpi with and without the channel —
+        so the sum is not a derived number, it is the two readings that survived put together
+        the way the document says to.
+
+        Four locks, and the last is the one that matters:
+
+          1. the total must be PRESENT — a damaged reading, never an absence. A statement whose
+             grand total was not read at all has not been read;
+          2. every part must resolve, through `get`'s text fallback, exactly as `reconcile`'s
+             own anchors do. `c_no_phai_tra` does not map on the `corp` chart (`CRP-1`) and
+             this quarter's row is the column headers merged onto "A - NỢ PHẢI TRẢ";
+          3. the sum must be within `_equal` of the damaged reading — the same figure, damaged,
+             and not a different one;
+          4. **the OTHER grand total then has to agree with it to `TOTALS_TOL` units**, which is
+             what refused the reading in the first place (`GTL-1`). The repair is scored against
+             a figure read from a different page of the statement, so it cannot pass by being
+             fitted to the sum it came from.
+        """
+        # ⚠️ The caller gates this on `report == BALANCE_SHEET`; there is no second check here
+        # because `SECTION_SUMS`' columns exist on no other chart, so a stray call is a no-op
+        # rather than a wrong answer — and a duplicated condition is a second place to drift.
+        for parts, optional, col in self.SECTION_SUMS:
+            total = row.get(col)
+            if total is None:
+                continue
+            got = [row.get(c) if row.get(c) is not None
+                   else st.find(*self.SECTION_PART_TEXT.get(c, ())) for c in parts]
+            if any(v is None for v in got):
+                continue
+            # Every SUBSET of the optional terms — `_section_candidates`, which is where the
+            # measurement that forced it lives, and which `reconcile`'s own gate now shares.
+            cands = self._section_candidates(sum(got), [row.get(c) for c in optional])
+            hits = [c for c in cands if c != total and self._equal(total, c)]
+            # ⚠️ EXACTLY ONE, never the nearest: two candidates inside the tolerance means the
+            # subsets cannot be told apart and the reading stays as it was.
+            if len(hits) == 1:
+                row[col] = hits[0]
+                return
+
+    def _cash_close_from_balance_sheet(self, row: Dict[str, int],
+                                       bs_cash: Optional[int]) -> None:
+        """Write the balance sheet's reading of the closing cash balance into the cash flow.
+
+        `CBS-1`, and it is a SECOND READING of one printed figure — not a derivation. VAS ties
+        B03's code 70 to B01's code 110, the same filing prints the number on both pages, and
+        each page is a separate OCR pass. What this repairs is a reading the company SEAL broke:
+        FPT's Q1-2025 recogniser returns `6.755.015,214:252` at 200-600 dpi with and without
+        the red channel against a printed 6.755.645.214.252, and its Q3-2025 `09.853151273133`
+        against 9.853.512.731.370. The pixels are not missing, they are covered, so raising the
+        resolution returns a different wrong answer rather than converging (`SEAL-1`).
+
+        ⚠️ **THREE LOCKS, AND NONE OF THEM IS THIS FUNCTION.** It writes whatever it is given;
+        what makes that defensible is upstream and downstream of it.
+
+          1. `balance_sheet_cash` hands over a figure only when the balance sheet's OWN two
+             components sum to it to the đồng — a third independent reading.
+          2. The layers carrying the flag sit LAST in the cascade, so only a cash flow that
+             defeated every reading of its own page reaches this.
+          3. `reconcile` then runs `_cash_flow_identity` on it (`verify_cash` is forced on for
+             this flag), so `opening + movement + fx` must reach the substituted figure
+             EXACTLY. FPT Q1-2025: 9,315,440,438,884 - 2,631,247,078,985 + 71,451,854,353 =
+             6,755,645,214,252. Q3-2025: 9,315,440,438,884 + 548,813,818,401 - 10,741,525,915 =
+             9,853,512,731,370. In both the opening is corroborated OUTSIDE the filing as well,
+             by the Q4 already on disk.
+
+        ⚠️ **IT FILLS THE COLUMN THE CHART ALREADY HAS AND INVENTS NOTHING ELSE.** The other
+        cells of the row are untouched, and the LAYER NAME is written to `method`, so a reader
+        can see on disk that this quarter's closing balance came from a layer that is allowed
+        to do this. That is the distinction `cash_extra_terms` draws from the other side: a
+        term with no column is COUNTED and never written; a column the filing fills twice may
+        take the reading that survived.
+        """
+        if bs_cash is None:
+            return
+        col = next((c for c in self.C_CASH_CLOSE if c in row), None)
+        # ⚠️ Only ever a REPAIR of a column the statement produced. A cash flow that yielded no
+        # closing balance at all has not been read; giving it one from another page would turn
+        # `no closing cash balance` — a refusal that is usually right — into an acceptance
+        # nothing on the page supports.
+        if col is None or row.get(col) is None:
+            return
+        row[col] = bs_cash
+
     def _cash_flow_identity(self, mapped: Dict[str, int],
                             open_ref: Optional[int] = None,
                             st: Optional[Statement] = None) -> Optional[str]:
@@ -4030,6 +4429,100 @@ class FinancialsBuilder:
             return (f"cash flow does not close: opening {open_:.6g} + movement {net:.6g} "
                     f"+ fx {fx:.6g} != closing {close:.6g}")
         return None
+
+    # `DPC-1`. How many cells of the operating-profit identity may be decided by it at once.
+    # 2**6 = 64 candidate assignments is the ceiling; past that the search stops proving
+    # anything, because a unique exact solution over a wide enough space is arithmetic rather
+    # than evidence. FPT's Q1-2015 needs THREE.
+    DUP_MAX_UNKNOWNS = 6
+
+    def _resolve_duplicate_identity(self, st: Statement, mapped: Dict[str, int],
+                                    template: str) -> None:
+        """Let the operating-profit identity choose between two disagreeing readings — `DPC-1`.
+
+        A Q1 income statement prints every figure twice (`Statement.duplicate_column`), and
+        `_first_value` drops a cell the two columns contradict. Dropping is right where nothing
+        can arbitrate — but on a term of `OP_IDENTITY` something can: the statement's own
+        arithmetic. Both readings of every contradicted term are offered, and an assignment is
+        kept ONLY when exactly ONE of them closes the identity to the đồng.
+
+        FPT's Q1-2015 is the case, and the numbers are why this is evidence and not a fit.
+        Three terms disagree — financial income (89,420,081,565 / 89,420,051,565), selling
+        expense (522,721,917,777 / 522,723,919,797) and operating profit itself
+        (628,940,977,843 / 618,940,977,843) — so there are EIGHT candidate assignments, and
+        exactly one closes:
+
+            1,689,717,875,941 + 89,420,051,565 - 120,816,576,677
+                             - 522,723,919,797 - 506,656,453,189 = 628,940,977,843
+
+        to the last unit, on 13-digit figures. The other seven miss by 30,000 to 10 bn. Every
+        one of the three values it picks is the figure the filing prints, checked against the
+        page — and note that it is NOT "prefer the duplicate column": two of the three come
+        from column 2 and the third from column 0.
+
+        ⚠️ **EXACTLY ONE, NEVER THE BEST.** Two assignments closing means the identity cannot
+        tell them apart and the cells stay dropped, which is the same answer as none closing.
+        ⚠️ **AND NOTHING IS WRITTEN WHERE THE IDENTITY DOES NOT REACH.** A contradicted cell
+        that is not a term of `OP_IDENTITY` — revenue, COGS, the tax lines — stays absent,
+        because nothing on the page arbitrates it. §5 rule 2, and the reason this recovers six
+        cells of that statement rather than twenty.
+        """
+        if getattr(st, "duplicate_column", None) is None:
+            return
+        # The identity is keyed by its operating-profit column, and THAT column may itself be
+        # one of the contradicted cells — so a chart qualifies when its key is either mapped or
+        # recoverable, and only one chart of the four can match a given statement's accounts.
+        accounts = {c: a.replace("_", "") for c, a in self.schema_of(template, st.report)}
+        entry = next(((c, e) for c, e in self.OP_IDENTITY.items()
+                      if c in accounts
+                      and (mapped.get(c) is not None or self._dup_candidates(st, accounts[c]))),
+                     None)
+        if entry is None:
+            return
+        col, (plus, minus, optional) = entry
+        terms = (col,) + plus + minus
+        unknown = [c for c in terms if mapped.get(c) is None]
+        if not unknown or len(unknown) > self.DUP_MAX_UNKNOWNS:
+            return
+        # A term that is absent for an ORDINARY reason — the parse never produced it — leaves
+        # the identity unanswerable, exactly as it is today. Only a cell the duplicate column
+        # CONTRADICTED can be decided here, and every unknown has to be one of them.
+        cands = {c: self._dup_candidates(st, accounts.get(c, "")) for c in unknown}
+        if any(not v for v in cands.values()):
+            return
+        solutions = []
+        for combo in itertools.product(*(cands[c] for c in unknown)):
+            trial = dict(mapped)
+            trial.update(dict(zip(unknown, combo)))
+            if any(trial.get(c) is None for c in terms):
+                continue
+            if self._operating_profit_identity(trial) is None:
+                solutions.append(dict(zip(unknown, combo)))
+        if len(solutions) == 1:
+            mapped.update(solutions[0])
+
+    def _dup_candidates(self, st: Statement, account: str) -> Tuple[int, ...]:
+        """The two readings of the row that WOULD have answered this account, or () — `DPC-1`.
+
+        A cell `_first_value` dropped leaves no trace in `mapped`, so the two readings have to
+        be found again from the rows. Scored with `_label_score`, the same measure the ordered
+        walk uses and against the same `SCHEMA_MATCH` bar, over the handful of rows whose
+        duplicate columns disagree. The BEST-scoring such row wins, and () when none clears the
+        bar — which is what keeps this from offering a nearby line's figures.
+        """
+        if getattr(st, "duplicate_column", None) is None or not account:
+            return ()
+        best, hit = 0.0, None
+        for r in st.rows:
+            pair = st.duplicate_pair(r.values)
+            if pair is None:
+                continue
+            keys, _ = self._anchor_keys(r, False, False)
+            for key in keys:
+                score = self._label_score(account, key)
+                if score > best:
+                    best, hit = score, pair
+        return hit if hit is not None and best >= self.SCHEMA_MATCH else ()
 
     def _operating_profit_identity(self, mapped: Dict[str, int]) -> Optional[str]:
         """Operating profit must equal what the statement adds and deducts to reach it.
@@ -4159,6 +4652,12 @@ class FinancialsBuilder:
     # digit inserted into the total (Q2-2018 reads 10x). Those are 3-6 orders of magnitude
     # larger and are still caught.
     EQUAL_REL = 1e-5
+
+    # ⚠️ `GTL-1`. How far apart the two GRAND TOTALS of a balance sheet may be, in units of the
+    # statement — see the block in `reconcile`. Four, the same number `OP_IDENTITY_TOL` allows
+    # for a filing's own rounding, and for the same reason: this is one accounting number the
+    # document prints twice, not two independent measurements.
+    TOTALS_TOL = 4
 
     @classmethod
     def _equal(cls, a: int, b: int) -> bool:

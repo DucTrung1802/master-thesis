@@ -6,7 +6,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 # Tesseract ships no Vietnamese data and Program Files is not writable without admin, so the
 # language pack lives in a user-writable dir. PyMuPDF needs the binary on PATH and the
@@ -83,6 +83,41 @@ class Statement:
     # the size of what was refused. 0 on every reading that is not fragmented, which is every
     # bank filing measured.
     split_figures: int = 0
+    # ⚠️ **THE INDEX OF A COLUMN THAT PRINTS THE SAME QUANTITY AS COLUMN 0 — `DPC-1`.**
+    # A Q1 income statement has FOUR columns and only TWO quantities: "Quý I" and "Lũy kế từ
+    # đầu năm" are the same three months, so the filing prints every figure TWICE, side by
+    # side, for this year and again for last. FPT's Q1-2015 is the case that forced this — a
+    # LANDSCAPE rotated scan the recogniser damages badly, where column 0 and column 2 are
+    # each wrong in a DIFFERENT set of cells and neither is right on its own at any DPI.
+    #
+    # Two independent OCR readings of one printed 13-digit figure agreeing exactly is not a
+    # coincidence, and measured on that page it is the strongest signal available: across five
+    # DPIs, **85 of 86 agreeing pairs are the figure the filing prints** (the one exception is
+    # a leading `4` read as `1` in both columns at 300 dpi, a confusion the recogniser makes
+    # the same way twice). Where they DISAGREE at most one is right, and `_first_value` returns
+    # None rather than guessing — §5 rule 2.
+    #
+    # `None` on every statement the parser has not measured this on, which leaves `_first_value`
+    # exactly as it was. Set only by a layer carrying `duplicate_period` — see
+    # `PdfParser._detect_duplicate_period`, which is where the evidence is measured.
+    duplicate_column: Optional[int] = None
+
+    def duplicate_pair(self, values: List[Optional[int]]) -> Optional[Tuple[int, int]]:
+        """The two disagreeing readings of this row's current period, or None.
+
+        `DPC-1`. `_first_value` drops a cell the duplicate column contradicts; this is what
+        the caller needs to do better than dropping it — `FinancialsBuilder` offers both to
+        the operating-profit identity and keeps an assignment only when exactly ONE closes it
+        to the đồng. Returns None where the two agree, where either is absent, or where this
+        statement carries no duplicate column at all.
+        """
+        k = self.duplicate_column
+        if k is None or len(values) <= k:
+            return None
+        a, b = values[0], values[k]
+        if a is None or b is None or a == b:
+            return None
+        return a, b
 
     @property
     def cash_flow_method(self) -> Optional[str]:
@@ -119,11 +154,23 @@ class Statement:
 
         The over-segmentation this guards against needs three or more columns by definition —
         a spurious column plus the two real ones — so the two cases cannot collide.
+
+        ⚠️ **AND WHERE A DUPLICATE COLUMN PRINTS THE SAME QUANTITY, IT HAS TO AGREE —
+        `DPC-1`.** A Q1 filing prints "Quý I" and "Lũy kế từ đầu năm" side by side and they
+        are the same three months, so the figure is read TWICE. Two readings that agree
+        corroborate each other; two that disagree mean at most one is right and nothing on the
+        page says which, so this returns None rather than the leftmost of them. See
+        `Statement.duplicate_column`, which is None on every statement no layer measured it on.
         """
         if not values:
             return None
         if self.n_columns == 2 and len(values) == 2 and values[0] is None:
             return None
+        k = self.duplicate_column
+        if k is not None and len(values) > k:
+            a, b = values[0], values[k]
+            if a is not None and b is not None:
+                return a if a == b else None
         return next((v for v in values if v is not None), None)
 
     def find(self, *needles: str, reject: Sequence[str] = ()) -> Optional[int]:
@@ -573,6 +620,8 @@ class PdfParser:
         self.condensed_form = False
         # set per PARSE LAYER; see _classify_income_by_columns
         self.income_by_columns = False
+        # set per PARSE LAYER; see `_duplicate_period` and `Statement.duplicate_column`
+        self.duplicate_period = False
         # ⚠️ **PROGRESS HOOK, AND THE ONLY DENOMINATOR IN THIS FILE THAT PREDICTS TIME.**
         # `on_page(index, total)` is called once per page of `scan`, before it is read. Pages
         # of one document cost roughly the same (0.87 s/page at onnx@200, measured for `P41`),
@@ -792,6 +841,15 @@ class PdfParser:
         all, so an ordinary filing is untouched whether the flag is set or not.
         """
         self.condensed_form = bool(on)
+
+    def set_duplicate_period(self, on: bool) -> None:
+        """MEASURE whether a column repeats the current period, and believe only what
+        both readings agree on — `DPC-1`. See `PdfParser._duplicate_period`.
+
+        Off by default, so `Statement.duplicate_column` is None and `_first_value`
+        behaves exactly as it always has on every statement no layer measured this on.
+        """
+        self.duplicate_period = bool(on)
 
     def set_income_by_columns(self, on: bool) -> None:
         """Name an unclassified table page the income statement by its COLUMN HEADINGS.
@@ -1080,6 +1138,11 @@ class PdfParser:
     # year-to-date column. Accents stripped and spaces removed, like every other header test.
     QUARTER_COL_NS = ("quy",)
     CUMULATIVE_COL_NS = ("luyke", "luykotudaunam", "luykotu")
+    # ⚠️ `DPC-1`. The two columns are the same quantity ONLY in a Q1 — in Q2 the cumulative
+    # column is six months and in Q3 nine. Matched against the same normalised, space-stripped
+    # header `_prints_quarter_column` reads, where "Quý I" becomes `quy1`/`quyi` and "Quý III"
+    # `quyiii`; the trailing guard is what keeps `quyi` from answering for `quyii`.
+    FIRST_QUARTER_RE = re.compile(r"quy(?:1|i(?![iv]))")
 
     def _prints_quarter_column(self, text: str) -> bool:
         """Does this income statement print a standalone-quarter column beside the cumulative
@@ -1089,10 +1152,78 @@ class PdfParser:
         cumulative and must still be de-cumulated; "Quý" alone appears in ordinary prose. Only
         the two together mean column 0 is already the quarter.
         """
-        header = "\n".join([l for l in text.splitlines() if l.strip()][:self.HEADER_LINES])
-        ns = self.norm(header).replace(" ", "")
+        ns = self._header_ns(text)
         return (any(q in ns for q in self.QUARTER_COL_NS)
                 and any(c in ns for c in self.CUMULATIVE_COL_NS))
+
+    def _header_ns(self, text: str) -> str:
+        """This page's header block, normalised and space-stripped — ONE definition.
+
+        `_prints_quarter_column` and `_duplicate_period` read the same words out of the
+        same block (`DPC-1` is licensed by the first and then narrowed to a Q1), and two
+        copies of a normalisation are two places for one rule to drift apart.
+        """
+        header = "\n".join(
+            [l for l in text.splitlines() if l.strip()][:self.HEADER_LINES])
+        return self.norm(header).replace(" ", "")
+
+    # `DPC-1`. Two independent readings of one printed figure agreeing exactly is the evidence;
+    # these two numbers say how much of it is needed before `_first_value` starts believing it.
+    #
+    # ⚠️ **THE FLOOR IS DELIBERATELY LOW (half), AND THAT IS WHAT THE PAGE THIS EXISTS FOR
+    # LOOKS LIKE.** FPT's Q1-2015 income statement is a LANDSCAPE rotated scan, and across five
+    # DPIs the two columns agree on only 8-14 of ~21 comparable rows — the reading is badly
+    # damaged, which is exactly why it needs corroborating. What the floor has to exclude is a
+    # statement whose column `k` is a DIFFERENT quantity, and there agreement is near zero, not
+    # near half: the comparative column of an ordinary statement agrees with the current one on
+    # 0-2 rows (blank lines and small round figures), never on eight.
+    DUP_MIN_AGREE_RATIO = 0.50
+    # And a floor in ABSOLUTE terms, because a ratio over three rows says nothing.
+    DUP_MIN_AGREE_ROWS = 6
+
+    def _duplicate_period(self, report: str, rows: list, quarter_column: bool,
+                          text: str) -> Optional[int]:
+        """The index of a column printing the SAME quantity as column 0, or None — `DPC-1`.
+
+        A Q1 income statement has four columns and two quantities. "Quý I" is 1 Jan - 31 Mar and
+        "Lũy kế từ đầu năm đến cuối quý" is 1 Jan - 31 Mar, so the filing prints each figure
+        twice for this year and twice for last: FPT's Q1-2015 prints 1.235 / 1.051 / 1.235 /
+        1.051 across its four columns for basic EPS, and every other line the same way.
+
+        ⚠️ **THE LICENCE IS THE HEADER, AND THE PROOF IS THE FIGURES.** `quarter_column` is the
+        filing stating outright that it prints both a quarter and a cumulative column
+        (`_prints_quarter_column`) — without it a four-column reading is far more likely to be
+        an over-segmented two-column one, which is what `_first_value`'s fall-through is for.
+        With it, the columns still have to be MEASURED to repeat, because the header says
+        nothing about which index landed where.
+
+        ⚠️ **AND IT IS ONLY EVER TRUE OF A Q1**, which is why the period is read off the page
+        rather than assumed: in Q2 the cumulative column is six months and in Q3 nine, so the
+        two are different quantities and treating them as one would drop every cell of a sound
+        statement. `_prints_quarter_column` cannot tell those apart — it only says both kinds
+        of column are present — so the quarter number is required as well.
+
+        ⚠️ Returns the FIRST index that qualifies, scanning from 2: index 1 is the comparative
+        (last year's quarter), never a repeat of index 0.
+        """
+        if not self.duplicate_period:
+            return None
+        if report != INCOME_STATEMENT or not quarter_column or not rows:
+            return None
+        if not self.FIRST_QUARTER_RE.search(self._header_ns(text)):
+            return None
+        width = max((len(r.values) for r in rows), default=0)
+        for k in range(2, width):
+            agree = differ = 0
+            for r in rows:
+                v = r.values
+                if len(v) > k and v[0] is not None and v[k] is not None:
+                    agree += (v[0] == v[k])
+                    differ += (v[0] != v[k])
+            if (agree >= self.DUP_MIN_AGREE_ROWS
+                    and agree >= self.DUP_MIN_AGREE_RATIO * (agree + differ)):
+                return k
+        return None
 
     def _title_score(self, header_ns: str, needles: List[str]) -> float:
         """How well the header matches a statement's title: 1.0 for a verbatim hit, else the best
@@ -3170,6 +3301,9 @@ class PdfParser:
                                         condensed_income=(report == INCOME_STATEMENT
                                                           and self.condensed_income(pages, on)),
                                         split_figures=self.split_figures(words_by_page, width),
+                                        duplicate_column=self._duplicate_period(
+                                            report, rows, qcol,
+                                            pages[on[0]]["text"]),
                                         publish_date=published,
                                         shares_authorized=shares["shares_authorized"],
                                         shares_issued=shares["shares_issued"],
