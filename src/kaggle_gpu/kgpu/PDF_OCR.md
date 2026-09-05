@@ -603,6 +603,59 @@ outstanding cells** on all three statements. ⚠️ **`complete` ALONE IS NOT TH
 continuity from the START of the filing chain, so ACB, BID and BSR read `True` today with 5, 7
 and 2 cells still open. **Read `outstanding` beside it**, and delete only on both. ⚠️ `RUN__pdf_ocr_control_tcb.ipynb` is KEPT for now although TCB is 171/171 from Q2-2012 — Q4-2008 is still open and the ticker's own note records two conclusions that were withdrawn (§8a), which is the thing a future session most needs and which no table carries.
 
+### ⭐ THE SNAPSHOT — measured 2026-09-05, and **130 missing cells are 56 worth buying**
+
+Every `statements/**/*.csv` against `documents(allow_parent=True)` and `settled_absences`. No OCR,
+no network, seconds to recompute.
+
+| ticker | tmpl | `pdf` / cells | missing | no filing | SETTLED | **winnable** |
+|---|---|---|---|---|---|---|
+| **CTG** | bank | **210 / 210** | 0 | — | — | **0** ✅ |
+| **VCB** | bank | **210 / 210** | 0 | — | — | **0** ✅ |
+| **FPT** | corp | **210 / 213** | 3 | 0 | 2 | **1** |
+| TCB | bank | 180 / 204 | 24 | 21 | 2 | **1** |
+| ACB | bank | 202 / 219 | 17 | 12 | 3 | **2** |
+| BSR | corp | 40 / 51 | 11 | 9 | 0 | **2** |
+| BID | bank | 182 / 210 | 28 | 24 | 0 | **4** |
+| **VIC** | corp | 163 / 210 | 47 | 0 | 1 | **46** |
+| | | **1,397 / 1,527** | **130** | **66** | **8** | **56** |
+
+⚠️ **THE THREE-WAY SPLIT IS THE WHOLE POINT, AND THE `pdf` COLUMN ALONE INVERTS THE RANKING.**
+BID looks like the second-worst ticker at 182/210 and has **4** cells left to win; **51 % of the
+corpus's missing cells are quarters the company never filed**, where `missing` is the correct
+answer and no run can change it (§5 rule 24). Read the last column.
+
+⚠️ **AND 46 OF THE 56 ARE ONE TICKER.** VIC is the only parsed ticker with **no unfiled
+quarter at all** — every one of its 47 missing cells has a filing on disk — so it is where the
+next OCR hour goes, and the other five tickers are 10 cells between them.
+
+The winnable cells, `[b]`alance sheet `[i]`ncome statement `[c]`ash flow:
+
+| ticker | |
+|---|---|
+| ACB | 2008-Q1 `[i]` · 2009-Q3 `[c]` |
+| BID | 2008-Q4 `[i]` · 2009-Q4 `[i]` · 2010-Q4 `[ci]` |
+| BSR | 2017-Q3 `[b]` · 2017-Q4 `[b]` |
+| FPT | 2012-Q1 `[c]` — ⚠️ **diagnosed and NOT winnable by a tail repair**: the whole financing section is slid one row, so moving 40/50/60/70 writes three right figures over ~20 wrong line items past both gates (`SLD-1`). CLAUDE.md §6-2-septsexagies |
+| TCB | 2008-Q4 `[b]` |
+| **VIC** | 2008-Q2 `[b]` · 2008-Q3 `[bci]` · 2009-Q1 `[b]` · 2009-Q3 `[b]` · 2010-Q1 `[b]` · 2010-Q3 `[b]` · 2010-Q4 `[bi]` · 2011-Q1 `[c]` · 2011-Q3 `[c]` · 2011-Q4 `[c]` · 2013-Q2 `[i]` · 2013-Q4 `[i]` · 2014-Q1 `[c]` · 2015-Q3 `[i]` · 2015-Q4 `[i]` · 2016-Q2 `[bi]` · 2016-Q4 `[i]` · 2017-Q4 `[bi]` · 2018-Q2 `[i]` · 2018-Q4 `[i]` · 2019-Q2 `[c]` · 2019-Q4 `[i]` · 2020-Q2 `[c]` · 2020-Q3 `[c]` · 2020-Q4 `[ci]` · 2021-Q3 `[i]` · 2021-Q4 `[i]` · 2022-Q1 `[i]` · 2022-Q2 `[ci]` · 2022-Q3 `[i]` · 2022-Q4 `[i]` · 2023-Q4 `[i]` · 2024-Q2 `[b]` · 2024-Q4 `[ci]` · 2025-Q1 `[i]` · 2025-Q2 `[ci]` · 2025-Q3 `[i]` |
+
+⚠️ **27 OF VIC'S 46 ARE INCOME STATEMENTS AND MOST NAME THE OPERAND THEY WAIT FOR.** A
+cumulative Q2/Q4 cannot be de-cumulated while its own Q1/Q3 is `missing`, so the income statement
+lags the other two by design and unblocks in cascade as they land — which is why VIC's list is
+long and is not 46 separate problems.
+
+⚠️ **A `SETTLED` CELL IS A MEASUREMENT AND NOT A VERDICT (`SET-2`).** The 8 above were recorded
+by a run whose every layer said `no such statement on any page of this filing`, and that is a
+verdict on `_page_kind` as much as on the document — every settled FPT cell was re-tried after the
+2026-09-04/05 classifier changes and **six of eight were winnable**. Re-test the settled column
+after any change to page classification; `ONLY_MISSING = True` drops those cells before any OCR,
+so re-testing one means naming its quarter in `QUARTERS` explicitly.
+
+⚠️ **AND NEITHER `complete` NOR THE `pdf` COUNT IS THIS COLUMN.** `complete` measures
+continuity from the START of the filing chain, so ACB, BID, BSR and FPT read `True` today with 2,
+4, 2 and 1 cells still open.
+
 ```powershell
 jupyter lab src\kaggle_gpu\RUN__pdf_ocr_summary.ipynb    # read-only: no OCR, no network, no write
 ```

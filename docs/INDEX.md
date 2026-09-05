@@ -25,7 +25,7 @@
 
 | file | ~tokens | what it answers |
 |---|---|---|
-| [../CLAUDE.md](../CLAUDE.md) | **155.8k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state |
+| [../CLAUDE.md](../CLAUDE.md) | **162.7k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state |
 | **docs/INDEX.md** *(this file)* | ~2k | *where is everything else, and what does it cost to open?* |
 
 ## Tier 1 — the four registers + the result write-ups (`docs/`)
@@ -38,7 +38,7 @@ TODO item leaves its measurement in `CLAUDE.md` or a `CONTEXT.md` and is **delet
 |---|---|---|
 | [RUNBOOK.md](RUNBOOK.md) | **15.9k** | *how do I RUN it?* 8 stages with measured runtimes, the two flags that destroy things, §8 rule 1 (the gate on quoting any number), **§8c the before-you-commit state check** |
 | [ISSUES.md](ISSUES.md) | **42.2k** | *what is BROKEN?* 95 open / 38 resolved, codes permanent. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`), `CFB-1` before quoting a BID cash flow, `CFV-1` before believing any cash flow accepted at a STRICT layer, and `TPL-1`/`CRP-1` before any non-bank financials parse |
-| [TODO.md](TODO.md) | **28.8k** | *what is NEXT?* ⚠️ **NUMBERS FROZEN 2026-08-23** — a `P<n>` is a permanent NAME and **PRIORITY IS THE ROW ORDER**, so read top-down and cite the number. Seven groups — ⭐ top rows are group **0 · PARSER** (`P54`, `P55`, `P51`, `P46`, `P47`(a), `P43`, `P48`, `P44`, `P45`), then **A data `P2`**, **B OCR `P37`/`P38`/`P6`/`P5`/`P4`**, C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ⚠️ A HYPHENATED code is RETIRED, and a bare `P<n>` written BEFORE 2026-08-23 means a different item — the crosswalks resolve it |
+| [TODO.md](TODO.md) | **30.8k** | *what is NEXT?* ⚠️ **NUMBERS FROZEN 2026-08-23** — a `P<n>` is a permanent NAME and **PRIORITY IS THE ROW ORDER**, so read top-down and cite the number. Seven groups — ⭐ top rows are group **0 · PARSER** (`P54`, `P55`, `P51`, `P46`, `P47`(a), `P43`, `P48`, `P44`, `P45`), then **A data `P2`**, **B OCR `P37`/`P38`/`P6`/`P5`/`P4`**, C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ⚠️ A HYPHENATED code is RETIRED, and a bare `P<n>` written BEFORE 2026-08-23 means a different item — the crosswalks resolve it |
 | [pipeline.md](pipeline.md) | **4.8k** | *which ticker, on which date?* What the chain OUTPUTS — `(date, ticker, weight)`, 4,720 picks across 236 books. §6 is why there is no book for today; **§9d is the tradability gate that takes the CAGR from +181 % to +36.5 %** |
 | [PIPELINE_h10_CAGR74.md](PIPELINE_h10_CAGR74.md) | **7.2k** | *how does ONE number get made, end to end?* The h=10 chain returning CAGR +74.0 %/yr. **§12 is the caveat section and is why the file exists** |
 | [feature_groups.md](feature_groups.md) | **0.8k** | naming a feature group — the canonical taxonomy |
@@ -85,7 +85,7 @@ locality is what keeps them true. **~232k tokens total — never open more than 
 
 | open this | ~tokens | when you are… |
 |---|---|---|
-| [../src/kaggle_gpu/kgpu/PDF_OCR.md](../src/kaggle_gpu/kgpu/PDF_OCR.md) | 13.0k | **running the FILING OCR on a T4** — the control notebook, the `QUARTERS` filter, what a verdict means, and the five things that have gone wrong. ⚠️ **§1a is what *"OCR ticker `<SYM>` LOCAL\|KAGGLE"* means** — a prepared per-ticker clone that WAITS, and how each parameter is decided from disk; §6 is when a recovered quarter may be merged; **§8 is what is still MISSING across every ticker at once** |
+| [../src/kaggle_gpu/kgpu/PDF_OCR.md](../src/kaggle_gpu/kgpu/PDF_OCR.md) | 14.3k | **running the FILING OCR on a T4** — the control notebook, the `QUARTERS` filter, what a verdict means, and the five things that have gone wrong. ⚠️ **§1a is what *"OCR ticker `<SYM>` LOCAL\|KAGGLE"* means** — a prepared per-ticker clone that WAITS, and how each parameter is decided from disk; §6 is when a recovered quarter may be merged; **§8 is what is still MISSING across every ticker at once** — 130 cells, of which **56 winnable and 46 of those VIC** |
 | [../src/kaggle_gpu/README.md](../src/kaggle_gpu/README.md) | 8.0k | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE**, and §7's five measured traps |
 | [../src/feature_selection/docs/RANKER_COMPARISON.md](../src/feature_selection/docs/RANKER_COMPARISON.md) | 4.5k | asking which ranker to keep, drop or add — the scorecard behind `feature_selection` §19 |
 | [../src/orchestration/preprocessor/FUNDAMENTAL_INDICATORS.md](../src/orchestration/preprocessor/FUNDAMENTAL_INDICATORS.md) | 3.4k | the fundamental indicator definitions |

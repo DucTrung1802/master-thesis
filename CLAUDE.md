@@ -8834,6 +8834,33 @@ same bar refuses **7 distinct statements**, every one a misread digit.
 liabilities side is not. What `SEC-1` and now `GTL-1` add are real gates where there was none;
 that is not the same thing as a checked balance sheet.
 
+#### ⭐ AND THE CORPUS-WIDE COUNT, MEASURED THE SAME DAY — 130 missing cells are **56** worth buying
+
+Every `statements/**/*.csv` against `documents(allow_parent=True)` and `settled_absences`. No OCR,
+no network, seconds to recompute; the full cell list is `kgpu/PDF_OCR.md` §8.
+
+| | CTG | VCB | **FPT** | TCB | ACB | BSR | BID | **VIC** | total |
+|---|---|---|---|---|---|---|---|---|---|
+| `pdf` / cells | **210/210** | **210/210** | **210/213** | 180/204 | 202/219 | 40/51 | 182/210 | 163/210 | 1,397/1,527 |
+| missing | 0 | 0 | 3 | 24 | 17 | 11 | 28 | 47 | **130** |
+| → no filing | — | — | 0 | 21 | 12 | 9 | 24 | **0** | **66** |
+| → SETTLED | — | — | 2 | 2 | 3 | 0 | 0 | 1 | **8** |
+| → **winnable** | **0** | **0** | **1** | **1** | **2** | **2** | **4** | **46** | **56** |
+
+⚠️ **THE `pdf` COLUMN ALONE INVERTS THE RANKING.** BID looks like the second-worst ticker and has
+**four** cells left to win; **51 % of the corpus's missing cells are quarters the company never
+filed**, where `missing` is the correct answer and no run can change it (§5 rule 24).
+
+⚠️ **46 OF THE 56 ARE ONE TICKER.** VIC is the only parsed ticker with **no unfiled quarter at
+all**, and the other five are **10 cells between them**. ✅ 27 of VIC's 46 are INCOME STATEMENTS
+that name the operand they wait for — a cumulative Q2/Q4 cannot be de-cumulated while its own
+Q1/Q3 is `missing` — so they unblock in cascade rather than being 27 separate problems.
+⚠️ VIC is `corp`, so `CRP-1` stands whatever the count reaches. TODO `P65`.
+
+⚠️ **AND THE SETTLED ROW IS A MEASUREMENT, NOT A VERDICT (`SET-2`)** — six of FPT's eight
+settled cells turned out winnable after the 2026-09-04/05 classifier changes, so the split must be
+re-run after any `_page_kind` work.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
