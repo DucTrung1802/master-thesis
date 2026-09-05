@@ -3,9 +3,17 @@
 > **AUTO-LOADED.** `CLAUDE.md` imports this file with `@docs/INDEX.md`, so every session starts
 > holding this map. Nothing else here is loaded until you ask for it.
 >
-> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 127 `.md` files, **~705k tokens** — about 3× a full context
+> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 128 `.md` files, **~705k tokens** — about 3× a full context
 > window. The routing below is the whole point: **open ONE file, when you touch that thing.** Every
 > row carries its measured cost so you can budget before you read.
+>
+> ⚠️ **THE ALWAYS-LOADED HALF FELL FROM 165.7k TO 47.2k ON 2026-09-06**, and the corpus total did
+> not move: `CLAUDE.md` §6-2-septies…undeseptuagies was **relocated verbatim** to
+> [OCR_PARSER_LOG.md](OCR_PARSER_LOG.md), which is Tier 1 and lazily loaded. The hub had grown to
+> 165.3k tokens of content while its own header called this index "routing and not content" — so
+> the move is the rule being obeyed, not a change of policy. **No measurement was condensed or
+> dropped**, and all ~196 `§6-2-*` citations across the repo still resolve, because they cite by
+> section NAME rather than by anchor.
 >
 > Costs are `chars/4000`, re-measured 2026-09-03 (the five `SGN-1` touched). ⚠️ **Ten of them had drifted** — `ISSUES.md`
 > was quoted at 40.6k in CLAUDE.md §7 against a measured 29.1k, a 40 % overstatement, which is
@@ -25,7 +33,7 @@
 
 | file | ~tokens | what it answers |
 |---|---|---|
-| [../CLAUDE.md](../CLAUDE.md) | **162.7k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state |
+| [../CLAUDE.md](../CLAUDE.md) | **44.2k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state. ⚠️ **Was 162.7k until 2026-09-06** — the filings/OCR chronicle moved to Tier 1 |
 | **docs/INDEX.md** *(this file)* | ~2k | *where is everything else, and what does it cost to open?* |
 
 ## Tier 1 — the four registers + the result write-ups (`docs/`)
@@ -39,6 +47,7 @@ TODO item leaves its measurement in `CLAUDE.md` or a `CONTEXT.md` and is **delet
 | [RUNBOOK.md](RUNBOOK.md) | **15.9k** | *how do I RUN it?* 8 stages with measured runtimes, the two flags that destroy things, §8 rule 1 (the gate on quoting any number), **§8c the before-you-commit state check** |
 | [ISSUES.md](ISSUES.md) | **42.2k** | *what is BROKEN?* 97 open / 38 resolved, codes permanent. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`), `CFB-1` before quoting a BID cash flow, `CFV-1` before believing any cash flow accepted at a STRICT layer, and `TPL-1`/`CRP-1` before any non-bank financials parse |
 | [TODO.md](TODO.md) | **30.8k** | *what is NEXT?* ⚠️ **NUMBERS FROZEN 2026-08-23** — a `P<n>` is a permanent NAME and **PRIORITY IS THE ROW ORDER**, so read top-down and cite the number. Seven groups — ⭐ top rows are group **0 · PARSER** (`P54`, `P55`, `P51`, `P46`, `P47`(a), `P43`, `P48`, `P44`, `P45`), then **A data `P2`**, **B OCR `P37`/`P38`/`P6`/`P5`/`P4`**, C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ⚠️ A HYPHENATED code is RETIRED, and a bare `P<n>` written BEFORE 2026-08-23 means a different item — the crosswalks resolve it |
+| **[OCR_PARSER_LOG.md](OCR_PARSER_LOG.md)** | **123.6k** ⚠️ | *what did the filings/OCR parser actually do, and why is this quarter `missing`?* `CLAUDE.md` §6-2-septies…undeseptuagies, moved here verbatim 2026-09-06. **Every `§6-2-*` citation in the repo resolves here.** ⚠️ **The biggest file in the corpus — open it for ONE section, never whole**, and only when you touch `src/web_scraper/`'s parser. The hub's §6-2 summary carries what a session needs without it |
 | [pipeline.md](pipeline.md) | **4.8k** | *which ticker, on which date?* What the chain OUTPUTS — `(date, ticker, weight)`, 4,720 picks across 236 books. §6 is why there is no book for today; **§9d is the tradability gate that takes the CAGR from +181 % to +36.5 %** |
 | [PIPELINE_h10_CAGR74.md](PIPELINE_h10_CAGR74.md) | **7.2k** | *how does ONE number get made, end to end?* The h=10 chain returning CAGR +74.0 %/yr. **§12 is the caveat section and is why the file exists** |
 | [feature_groups.md](feature_groups.md) | **0.8k** | naming a feature group — the canonical taxonomy |
