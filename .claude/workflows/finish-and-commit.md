@@ -22,7 +22,7 @@ inside its Open table on purpose, so a naive row-counter disagrees with the head
 | the check | what a failure means |
 |---|---|
 | **`CLAUDE.md` §6 date** | the heading is older than the `.md` files in this commit. If the commit changes what the project KNOWS, bump the date and write the measurement in; if it is a typo fix, ignore the row |
-| **`CONTEXT.md` ↔ `CLAUDE.md`** | a package `CONTEXT.md` changed and the hub did not. ⚠️ **A measurement that never reaches the hub is invisible.** *"The detail stays local"* is valid — but decide it |
+| **`context/` ↔ `CLAUDE.md`** | a package doc under `.claude/context/` changed and the hub did not. ⚠️ **A measurement that never reaches the hub is invisible.** *"The detail stays local"* is valid — but decide it |
 | **issue counts** | the hub's *"N open, M resolved"* disagrees with `ISSUES.md`'s headings. **Re-SCAN; do not decrement** |
 | **`INDEX.md` completeness** | a `.md` exists that the index does not route. **A file missing from the index is a file no session knows exists** |
 | **`INDEX.md` token costs** | a claimed cost drifted >20 % from measured. ⚠️ This check exists because **all 16** of the hub's costs had gone stale at once |
@@ -32,9 +32,9 @@ inside its Open table on purpose, so a naive row-counter disagrees with the head
 
 | you changed | it goes in |
 |---|---|
-| a new measurement, or one that moves a verdict | `CLAUDE.md` §6 (+ bump the date), or the package's `CONTEXT.md` |
+| a new measurement, or one that moves a verdict | `CLAUDE.md` §6 (+ bump the date), or the package's file under `.claude/context/` |
 | a new defect | `../current_state/ISSUES.md`, with a **permanent** code |
-| a finished backlog item | its number moves to `CLAUDE.md` / `CONTEXT.md`; the item is **deleted from `../current_state/TODO.md`, not ticked** |
+| a finished backlog item | its number moves to `CLAUDE.md` / `.claude/context/`; the item is **deleted from `../current_state/TODO.md`, not ticked** |
 | a new `.md` file | a row in `../current_state/INDEX.md` |
 | a new command, flag or stage | [../runbook/RUNBOOK.md](../runbook/RUNBOOK.md) |
 | a new rules file under `.claude/rules/` | ⚠️ **its `@` import in `CLAUDE.md`, in the SAME commit** — a rules file is not auto-loaded by itself, and without the import it is a file nobody reads |

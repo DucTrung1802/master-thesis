@@ -566,7 +566,7 @@ def test_every_line_is_one_shape_and_leads_with_the_overall_percent(tmp_path):
 
 
 def test_each_fraction_still_says_what_it_is_a_fraction_OF(tmp_path):
-    """⚠️ `kaggle_gpu/README.md` §3 records that this repo's progress readouts have different
+    """⚠️ `.claude/docs/kaggle_gpu.md` §3 records that this repo's progress readouts have different
     denominators and only one predicts time. The denominators did not go away when the line
     was flattened — they moved into the segments, where `doc 1/3`, `layer 12/47` and
     `page 1/10` each name their own. Printing a number without its denominator is how "32 %"

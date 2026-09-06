@@ -33,7 +33,7 @@
 - **Model 1 output (materialised):** `silver.cafef_news_sentiment` — one row per news
   `row_id`, written by `data_preprocessor._ingest_silver_cafef_news_sentiment` (gated by the
   `data_preprocessor/data_quality_silver/news_sentiment` switch leaf). See
-  `data_preprocessor/CONTEXT.md` for the ETL; the scoring itself is this module.
+  `data_.claude/context/orchestration-preprocessor.md` for the ETL; the scoring itself is this module.
 - **Model 2:** experimental only — prototypes below read those tables and print
   out-of-sample metrics. **Nothing from Model 2 is written to the DB** (it found no signal
   worth persisting).

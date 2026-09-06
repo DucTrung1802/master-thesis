@@ -588,7 +588,7 @@ class FeatureSelector:
     # exactly these and inherits the six rankers, the ensemble, the prune, the
     # stability pass and the holdout protocol unchanged. That is the point of
     # factoring them out: the cross-sectional study has to be the SAME pipeline on a
-    # different panel shape, or its numbers are not comparable with §6 of CONTEXT.md.
+    # different panel shape, or its numbers are not comparable with §6 of .claude/context/feature_selection.md.
 
     def _on_development(self, frame: pd.DataFrame) -> None:
         """Called once, with the final development frame, before X is built."""

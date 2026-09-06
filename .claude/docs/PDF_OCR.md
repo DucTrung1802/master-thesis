@@ -4,11 +4,11 @@
 >
 > | | |
 > |---|---|
-> | **[`src/kaggle_gpu/RUN__pdf_ocr_control.ipynb`](../RUN__pdf_ocr_control.ipynb)** | the one you open. **One parameter cell**, and `ENVIRONMENT` decides where the OCR happens: `"LOCAL"` parses on this machine, `"KAGGLE"` builds the job, ships the filings, starts the kernel, waits and pulls the run folder back |
+> | **[`src/kaggle_gpu/RUN__pdf_ocr_control.ipynb`](../../src/kaggle_gpu/RUN__pdf_ocr_control.ipynb)** | the one you open. **One parameter cell**, and `ENVIRONMENT` decides where the OCR happens: `"LOCAL"` parses on this machine, `"KAGGLE"` builds the job, ships the filings, starts the kernel, waits and pulls the run folder back |
 > | `src/web_scraper/RUN__pdf_ocr.ipynb` | runs **on Kaggle**. `kgpu` patches its parameter cell and uploads it — you do not open or edit it |
 >
 > ⚠️ **A THIRD NOTEBOOK EXISTS AND PARSES NOTHING.**
-> [`RUN__pdf_ocr_summary.ipynb`](../RUN__pdf_ocr_summary.ipynb) is read-only and answers the
+> [`RUN__pdf_ocr_summary.ipynb`](../../src/kaggle_gpu/RUN__pdf_ocr_summary.ipynb) is read-only and answers the
 > planning question instead — *which quarters are still missing, on every ticker at once*
 > ([§8](#8-what-is-still-missing--across-every-ticker-at-once)).
 >
@@ -16,7 +16,7 @@
 > name is where its Kaggle half staged its payload from long before it had a LOCAL half; the
 > guide beside it is this file, which is why it was not moved.
 >
-> Nothing is written to `kaggle_config.json`: [`pdf_ocr.py`](pdf_ocr.py) computes the job from
+> Nothing is written to `kaggle_config.json`: [`pdf_ocr.py`](../../src/kaggle_gpu/kgpu/pdf_ocr.py) computes the job from
 > your parameters and hands it to the **same** `config._validate` a file-borne job goes
 > through, so every guard still fires.
 >
@@ -836,8 +836,8 @@ to the đồng. Which period those openings anchor to is **not established**.
 
 | | |
 |---|---|
-| the parse itself — the cascade, the gates, the 47 layers | [`src/web_scraper/CONTEXT.md`](../../web_scraper/CONTEXT.md) §3a, §3b |
-| `kgpu` in general — payload modes, the measured traps | [`README.md`](../README.md) |
+| the parse itself — the cascade, the gates, the 47 layers | [`.claude/context/web_scraper.md`](../context/web_scraper.md) §3a, §3b |
+| `kgpu` in general — payload modes, the measured traps | [`README.md`](kaggle_gpu.md) |
 | what the OCR has produced, ticker by ticker | `CLAUDE.md` §6-2-octies … §6-2-unsexagies |
-| open defects — read `CRP-1` before quoting any non-bank figure, and `SET-2`/`ALT-1` before calling a quarter unparseable | [`../../../.claude/current_state/ISSUES.md`](../../../.claude/current_state/ISSUES.md) |
-| what to run next | [`../../../.claude/current_state/TODO.md`](../../../.claude/current_state/TODO.md) — `P38`, `P6`, `P5` |
+| open defects — read `CRP-1` before quoting any non-bank figure, and `SET-2`/`ALT-1` before calling a quarter unparseable | [`../../../.claude/current_state/ISSUES.md`](../current_state/ISSUES.md) |
+| what to run next | [`../../../.claude/current_state/TODO.md`](../current_state/TODO.md) — `P38`, `P6`, `P5` |

@@ -8,7 +8,7 @@ writing, scoring, the registry row — happens here, once.
 
 ## ⚠️ Why this is not a copy of `lstm/train.py`
 
-`model/CONTEXT.md` §7 says a new model is "a `train.py` copying `lstm/train.py`". That
+`.claude/context/model.md` §7 says a new model is "a `train.py` copying `lstm/train.py`". That
 recipe is what this module replaces, and the repo's own history is the argument: issue
 **TGT-1** was `final_features._stored_target` duplicated "in a second place that could
 drift from it", and the fix was to have exactly one authority. `train.py` is 346 lines
@@ -66,7 +66,7 @@ from utils import runtime
 _SRC = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Every model's runs share one folder and one `index.csv`, so a `<model>__` prefix on
-# `run_name` is what keeps them apart. See `model/CONTEXT.md` §2.
+# `run_name` is what keeps them apart. See `.claude/context/model.md` §2.
 RUNS_DIR = os.path.join(_SRC, "model", "runs")
 
 # The loss each task trains with. ⚠️ A classifier's model emits a raw LOGIT and
@@ -123,7 +123,7 @@ def load_config(path: str) -> Dict:
         raise ValueError(
             f"config filename {stem!r} != run_name {config['run_name']!r}. A run has "
             f"ONE name: rename the file to {config['run_name']}.yaml. See "
-            f"model/CONTEXT.md §RUN STANDARD."
+            f".claude/context/model.md §RUN STANDARD."
         )
     return config
 
@@ -543,7 +543,7 @@ def run_cli(
 
     ⚠️ **The banner is here, not in the six bindings.** `model/lstm/train.py` and its
     five siblings are ~30 lines each that name a model module and a config directory
-    (`model/CONTEXT.md` §7); anything they would all have to repeat belongs in the
+    (`.claude/context/model.md` §7); anything they would all have to repeat belongs in the
     engine, which is the same rule that put `_verify` and `_write_predictions` here.
     """
     argv = list(sys.argv[1:] if argv is None else argv)

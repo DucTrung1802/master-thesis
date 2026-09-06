@@ -5,13 +5,13 @@
 
 ⚠️ **THE PER-FOLD TABLE IS THE POINT, NOT THE AVERAGE.** PRF-1 exists because a single
 number over 2017-2026 cannot tell *"the edge decayed"* from *"one split was lucky"* — and
-`backtest/CONTEXT.md` §8g already shows the two halves disagreeing. An average over a
+`.claude/context/backtest.md` §8g already shows the two halves disagreeing. An average over a
 regime that worked and one that does not would hide exactly the thing being measured, so
 the fold series is printed first and the pooled figure second.
 
 ⚠️ **The pooled track is a real walk-forward backtest**: every prediction in it was made
 by a model that saw only earlier data, and no `(date, ticker)` appears twice (asserted in
-`run.collect`). It is therefore the honest version of `backtest/CONTEXT.md` §4, whose
+`run.collect`). It is therefore the honest version of `.claude/context/backtest.md` §4, whose
 single test window happened to be a +20.2 %/yr bull market.
 
 ⚠️ **The price band is applied here** (`PRF-0`): a name at its exchange ceiling on the

@@ -23,7 +23,7 @@ against 0.0372). That comparison is currently made *inside* a run, as the
 ⚠️ **The capacity argument is the reason to expect these to do as well as the
 networks.** Train carries 2,939 windows but `n_eff` is `n/h` = **588** (label overlap)
 and `n/(d+h-1)` = **122** (window overlap). A 25-parameter ridge is the model this
-sample size supports; a 4,961-parameter LSTM is not, and `feature_selection/CONTEXT.md`
+sample size supports; a 4,961-parameter LSTM is not, and `.claude/context/feature_selection.md`
 §6d puts the observations needed to separate an IC of 0.05 from zero at ~1,500.
 
 ⚠️ **`LassoCV` already zeroed every coefficient on this pool** (§4) — no linear signal
@@ -34,7 +34,7 @@ far stronger statement about the data than another network reaching it.
 ## ⚠️ Everything is fitted on the TRAIN SPLIT ONLY
 
 The dataset's features are already standardised with train-slice statistics
-(`train_test_creator/CONTEXT.md` §6) and its target is already scaled, so these fit on
+(`.claude/context/train_test_creator.md` §6) and its target is already scaled, so these fit on
 `X_train`/`y_train` and never look at val or test. `Ridge` uses a fixed `alpha` rather
 than `RidgeCV`: a CV inside the train split would be a second selection step that the
 evaluator's null does not price in (issue **NUL-1**), and the whole point of a baseline

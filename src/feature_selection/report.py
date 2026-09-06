@@ -17,7 +17,7 @@ label is already the last segment.
 
 ## ⚠️ Why the metadata is this long
 
-Because §8 of CONTEXT.md is a list of ways two runs can look comparable and not be.
+Because §8 of .claude/context/feature_selection.md is a list of ways two runs can look comparable and not be.
 A ranking is meaningless without the target, the representation, the purge gap and
 the null that was current when it was produced — `zscore` moved its own bar 43 %
 without touching the data, and `device` changes the kept set outright. A CSV of
@@ -132,7 +132,7 @@ def env_fingerprint() -> str:
 
     ⚠️ **THIS EXISTS BECAUSE A KAGGLE RUN AND A LOCAL RUN WERE GROUPABLE INTO ONE
     TABLE.** Measured 2026-08-17: this machine runs torch 2.5.1+cu121 while Kaggle's GPU
-    image runs **torch 2.10.0+cu128**, and `feature_selection/CONTEXT.md` §16 records
+    image runs **torch 2.10.0+cu128**, and `.claude/context/feature_selection.md` §16 records
     xgboost/sklearn/numpy differing too. CLAUDE.md §3d already states the conclusion —
     *"A Kaggle run is a different PROCEDURE, not the same one on faster hardware"* — but
     `contract.SETUP_KEYS` did not know it, so `final_features` would have unioned the two
@@ -630,7 +630,7 @@ def _readme(metadata: Dict, result, files: Sequence[str]) -> str:
     else:
         lines.append(
             "- ⚠️ **NO NULL WAS COMPUTED FOR THIS RUN.** A positive IC is not a "
-            "result on its own — see `CONTEXT.md` §6b and §8. Treat the ranking "
+            "result on its own — see `.claude/context/feature_selection.md` §6b and §8. Treat the ranking "
             "below as descriptive until a shuffled-label null has been run for "
             "*this* configuration."
         )

@@ -11,7 +11,7 @@ A run folder is finished when it holds `results/predictions_<split>.csv`. Everyt
 after that — the metrics, the bar, the verdict — is a **reading** of that file and
 needs no model, no GPU and no training. Keeping it separate has one concrete payoff
 the project already used once: `dir_auc` was backfilled across every existing run
-without retraining any of them. `model/CONTEXT.md` §9 records that. Anything computed
+without retraining any of them. `.claude/context/model.md` §9 records that. Anything computed
 inside a training notebook cannot be fixed that way.
 
 ## ⚠️ Every model type is scored by the SAME core
@@ -84,7 +84,7 @@ def _score_column(frame: pd.DataFrame) -> str:
 
 
 # Pulled out of a `run_id` when the run folder has no `metadata.json`. The format is
-# `<model>__<target>__lb<L>__final__<timestamp>` (model/CONTEXT.md §3).
+# `<model>__<target>__lb<L>__final__<timestamp>` (.claude/context/model.md §3).
 _LOOKBACK_IN_NAME = re.compile(r"__(?:lb|d)(\d+)")
 _HORIZON_IN_NAME = re.compile(r"(?:^|_)(\d+)day|__h(\d+)")
 
@@ -402,7 +402,7 @@ def leaderboard(
             "model": (meta.get("model") or {}).get("type")
             or (meta.get("config", {}).get("model") or {}).get("type")
             # A pruned run folder has no metadata; the run_id is `<model>__…` by
-            # convention (model/CONTEXT.md §3), so the prefix is the last resort.
+            # convention (.claude/context/model.md §3), so the prefix is the last resort.
             or run_id.split("__")[0].upper(),
             "task": setup["task"],
             "dataset": (meta.get("dataset") or {}).get("dataset_name"),

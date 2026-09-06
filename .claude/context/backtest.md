@@ -59,7 +59,7 @@ trip; a book replacing a fraction `τ` pays `½ × 2τ = τ`. `ROUND_TRIP_COST =
 **same constant** `sentiment/weekly_xsec.py` uses, deliberately, because two costed
 backtests in one repo disagreeing about the cost is a defect and not a study.
 
-⚠️ **`model/CONTEXT.md` §11 measured the cross-sectional strategy DEAD AT 40 bps, which
+⚠️ **`.claude/context/model.md` §11 measured the cross-sectional strategy DEAD AT 40 bps, which
 is below this.** That is a finding, not a parameter to tune away.
 
 The identity that decides the horizon question, pinned in `test_portfolio.py`:
@@ -250,7 +250,7 @@ that not one of 23 papers reports a naive baseline, reproduced from the inside.
 | CAGR | +29.7 % | +19.5 % | +14.7 % | **+10.0 %** | +5.6 % | −2.7 % |
 | Sharpe | 0.99 | 0.73 | 0.60 | **0.465** | 0.33 | 0.07 |
 
-⚠️ **It ties the market at exactly 40 bps and loses above it** — `model/CONTEXT.md` §11
+⚠️ **It ties the market at exactly 40 bps and loses above it** — `.claude/context/model.md` §11
 said "dead at 40 bps" from a different study, a different feature set and a different
 period. Two independent measurements, one threshold.
 
@@ -472,7 +472,7 @@ far more than that. Same universe, same architecture, same test window, top-20:
 
 ⚠️ **Do not read this as "h=10 is the better horizon" yet.** It is ONE split at each
 horizon, `se_sharpe` 0.24-0.25, and the h=20 figure has a 10-fold walk-forward behind it
-(`walkforward/CONTEXT.md`, pooled +1.991 over 118 periods) while this one does not. **The
+(`.claude/context/walkforward.md`, pooled +1.991 over 118 periods) while this one does not. **The
 walk-forward at h=10 is the run that would settle it.** What is already solid is the
 comparison inside this table — model vs hand, paired, on one panel.
 
@@ -536,7 +536,7 @@ is largely a **latency trade**. The channels a daily trader can actually hold ar
 ones, precisely because a one-day lag costs them nothing.
 
 ⚠️ **`drv_foreign_flow_ratio_21` measures ~ZERO at either lag**, which CONTRADICTS
-`model/CONTEXT.md` §11's *"foreign flow is the one signal that survives"*. The two measure
+`.claude/context/model.md` §11's *"foreign flow is the one signal that survives"*. The two measure
 different things — §11 used `gold_schema.stocks.foreign_net_value` through a classifier,
 this is `pool__basic`'s ratio univariately — and **which is right is unresolved**. Do not
 quote either without the other.

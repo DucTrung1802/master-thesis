@@ -9,7 +9,7 @@ same words, from the same code:
 * **what hardware it ran on, and how long it took** — because `device` is part of the
   experimental setup here (`feature_selection/gpu.py` §1: the same selection on `cuda`
   and on `cpu` keeps a *different* feature set), and because the runtime is the number
-  the cost model in `feature_selection/CONTEXT.md` §15c is fitted on.
+  the cost model in `.claude/context/feature_selection.md` §15c is fitted on.
 
 ## ⚠️ Why GMT+7 is a FIXED OFFSET and not `ZoneInfo("Asia/Ho_Chi_Minh")`
 

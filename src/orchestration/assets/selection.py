@@ -35,7 +35,7 @@ human decision rather than a number to raise until it stops complaining.
 EXTRAPOLATION.** The original fit came from the archive's own `timings_seconds`
 (`vietnam` 113 ch → 3.7 min, `usa` 1,458 ch → 428 min), which gave the exponent 2.00
 almost exactly — but **every one of those runs was `device="cpu"`**, and the GPU
-conversion (`feature_selection/CONTEXT.md` §16) cut the same `vietnam` selection to
+conversion (`.claude/context/feature_selection.md` §16) cut the same `vietnam` selection to
 **1.1 min**. The reference point below is that measured GPU number. The EXPONENT is
 still the CPU-era one and has **not** been re-fitted on a GPU run at width, because
 that measurement needs a real `usa` run and nobody has done one — so the wide end is
@@ -121,7 +121,7 @@ ECONOMY_PARTITIONS = StaticPartitionsDefinition(
 #
 # The REFERENCE POINT is a fresh measurement: the same `basic+economy_vietnam`
 # selection that took 3.7 min on the CPU takes **1.1 min** after the GPU conversion
-# (feature_selection/CONTEXT.md §16). Anchoring on the old 8.7 would over-estimate
+# (.claude/context/feature_selection.md §16). Anchoring on the old 8.7 would over-estimate
 # every partition by ~3.3x.
 #
 # ⚠️ The exponent has NOT been re-fitted on a GPU run at width — that needs a real
@@ -181,7 +181,7 @@ class EconomySelectionConfig(Config):
     random_state: int = Field(
         default=18,
         description="the SELECTOR's seed. Part of the setup; a run is bit-reproducible "
-        "at a fixed (seed, device) - see feature_selection/CONTEXT.md section 16f.",
+        "at a fixed (seed, device) - see .claude/context/feature_selection.md section 16f.",
     )
     stability: bool = Field(default=True, description="per-fold SHAP ranking; cheap")
     null_draws: int = Field(
@@ -198,7 +198,7 @@ class EconomySelectionConfig(Config):
         "AND (seed 18 everywhere) a setup, so final_features UNIONS them into one "
         "table unless each build names its own feature block with --scope. Pass "
         "--scope economy_<country> when building from a sweep run — "
-        "pipeline/CONTEXT.md §5c.",
+        ".claude/context/pipeline.md §5c.",
     )
     budget_minutes: float = Field(
         default=240.0,

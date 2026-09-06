@@ -108,7 +108,7 @@ It was ONE stage from the archive to the final table, and that hop was making **
 different claims under one name**. Layer 1 is N runs over `pool__basic + one` other
 pool, so its output is a UNION — a macro channel offered to one run could never be a
 candidate in another, and 725 of the old table's 750 channels were "chosen by exactly
-one run" as arithmetic (`final_features/CONTEXT.md` §6). Layer 2 is the one run in
+one run" as arithmetic (`.claude/context/final_features.md` §6). Layer 2 is the one run in
 which the survivors compete. A table built from each is a different object, and the
 chain now says which one it is looking at.
 
@@ -314,9 +314,9 @@ that is not ready reports **`MANUAL — cannot be produced here`**.
 **Vouch for anything.** A green pipeline means the five stages agree with each other.
 It says nothing about whether the features are worth having, and the answer to that is
 recorded at every level: **18 of 19 source runs computed no null and the 19th failed
-its own** (`feature_selection/CONTEXT.md` §14b), 725 of 750 channels were chosen by
-exactly one run (`final_features/CONTEXT.md` §6), and the run trained on them shows
-**no skill on either split** (`result_evaluator/CONTEXT.md` §6).
+its own** (`.claude/context/feature_selection.md` §14b), 725 of 750 channels were chosen by
+exactly one run (`.claude/context/final_features.md` §6), and the run trained on them shows
+**no skill on either split** (`.claude/context/result_evaluator.md` §6).
 
 ⚠️ **`status()` cannot see any of that.** It compares fingerprints over
 `(source_table, channel)`, so a run gaining a null moves its `evidence` and no
@@ -352,7 +352,7 @@ pool, one command per stage.
 detectors averaged over the window. That is a statement about the data. It is also
 **two draws at one question**: the evaluator's null prices in neither the architecture
 choice nor the selection (**NUL-1**), so had either cleared it would have been a second
-attempt rather than a discovery. `model/CONTEXT.md` §13.
+attempt rather than a discovery. `.claude/context/model.md` §13.
 
 ⚠️ **The narrow chain is LESS BAD, and that is the STL-1 argument arriving from the other
 direction.** `R²` goes −0.90 → −0.059 and test IC −0.072 → −0.034 on the same ticker,
@@ -364,7 +364,7 @@ removes most of the damage. **Neither shows skill** — both sit inside their ow
 ⚠️ **The selection cleared its bar and the model did not clear its own.** `z = +2.15` at
 the selection stage bought nothing downstream. That is the two bars doing their job, and
 it is the single most useful thing this prototype measured — see
-`feature_selection/CONTEXT.md` §10d for why `z = +2.15` on 20 draws is weak anyway.
+`.claude/context/feature_selection.md` §10d for why `z = +2.15` on 20 draws is weak anyway.
 
 ⚠️ **Four defects surfaced by running it, all fixed, all instances of documented rules:**
 
@@ -403,7 +403,7 @@ reports it as a `pools_behind` count rather than failing, because failing would 
 ⚠️ **The counts above are post-STL-1 and this table was stale until 2026-08-09** — it
 still read `4,235 × 207` and `× 202`, the widths from before the measured cut replaced
 `max_features=12`. The table is now 750 channels and the dataset keeps **724** of them
-(26 dropped as constant across the train slice, `train_test_creator/CONTEXT.md` §5).
+(26 dropped as constant across the train slice, `.claude/context/train_test_creator.md` §5).
 Both fingerprints currently match their shortlists, so nothing in the chain is stale.
 
 ## 5c. ⚠️ `--root` and `--scope` — running a NARROWER experiment without breaking the wide one
@@ -465,10 +465,10 @@ python -m pipeline --ticker bank --table rank_5day__final__d20_h5 \
 
 ⚠️ **The bank table is named `rank_5day` and stores `return_5day`.** A rank's value
 depends on which other names are in the panel, so `final_features` refuses to freeze
-one into a table (`final_features/CONTEXT.md` §5). `train_test_creator.resolve_target`
+one into a table (`.claude/context/final_features.md` §5). `train_test_creator.resolve_target`
 reads the column the table actually has; the *cross-sectional* reading is recovered at
 the other end by `result_evaluator`, which scores per date and averages
-(`result_evaluator/CONTEXT.md` §3c). Nothing in the chain ever materialises a rank.
+(`.claude/context/result_evaluator.md` §3c). Nothing in the chain ever materialises a rank.
 
 ⚠️ **A 20-ticker panel changes the scoring, not just the data.** `n_eff` becomes
 `n_dates/h` rather than `n/h` (130.6, not 2,606), the IC becomes per-date, and the

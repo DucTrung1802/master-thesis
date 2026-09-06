@@ -14,7 +14,7 @@ Six checks, in the order they usually break::
     python state_check.py
 
 1. `CLAUDE.md` §6 "State today" date vs. the newest `.md` change in the tree
-2. package `CONTEXT.md` files changed without `CLAUDE.md` being touched alongside
+2. package docs under `.claude/context/` changed without `CLAUDE.md` being touched alongside
 3. issue counts: what `CLAUDE.md` claims vs. what `ISSUES.md`'s own headers say
 4. `.claude/current_state/INDEX.md` completeness (delegates to `check_index.py`)
 5. `.claude/current_state/INDEX.md` token costs vs. measured — the failure that had gone stale by 2.7×
@@ -110,12 +110,22 @@ def carries_measurements(path: str) -> bool:
     that always fires is a check nobody reads, so the trigger is narrowed to the files that
     actually carry numbers. `README.md`, `.claude/current_state/INDEX.md` and the thesis
     write-ups are deliberately NOT here: changing them cannot make §6 stale.
+
+    ⚠️ **The package docs are matched by DIRECTORY since 2026-09-06**, when the twelve
+    `src/*/CONTEXT.md` moved to `.claude/context/<package>.md`. An `endswith("CONTEXT.md")`
+    test survived the move by passing silently on every commit — a monitor that stops
+    monitoring and says nothing, which is `DEP-1`'s shape.
+
+    ⚠️ **And two entries here had ALREADY gone dead the same way**: `../docs/pipeline.md`
+    and `../docs/PIPELINE_h10_CAGR74.md` are relative paths that a repo-relative `git`
+    path can never equal, left behind by the `docs/` → `.claude/` merge. Fixed in the same
+    pass, because a whitelist nobody re-reads is how the first defect got here.
     """
-    return path.endswith("CONTEXT.md") or path in {
+    return path.startswith(".claude/context/") or path in {
         ".claude/current_state/ISSUES.md",
         ".claude/current_state/TODO.md",
-        "../docs/pipeline.md",
-        "../docs/PIPELINE_h10_CAGR74.md",
+        ".claude/docs/pipeline.md",
+        ".claude/docs/PIPELINE_h10_CAGR74.md",
     }
 
 
@@ -139,17 +149,17 @@ def check_state_date(rep: Report) -> None:
 
 
 def check_context_without_hub(rep: Report) -> None:
-    """A measurement written into a CONTEXT.md that never reached the hub is invisible."""
+    """A measurement written into a package doc that never reached the hub is invisible."""
     changed = changed_markdown()
-    contexts = sorted(p for p in changed if p.endswith("CONTEXT.md"))
+    contexts = sorted(p for p in changed if p.startswith(".claude/context/"))
     if not contexts:
-        rep.ok("CONTEXT.md ↔ CLAUDE.md", "no package CONTEXT.md in this commit")
+        rep.ok("context/ ↔ CLAUDE.md", "no package context doc in this commit")
         return
     if "CLAUDE.md" in changed:
-        rep.ok("CONTEXT.md ↔ CLAUDE.md", f"{len(contexts)} changed, CLAUDE.md updated too")
+        rep.ok("context/ ↔ CLAUDE.md", f"{len(contexts)} changed, CLAUDE.md updated too")
         return
     rep.warn(
-        "CONTEXT.md ↔ CLAUDE.md",
+        "context/ ↔ CLAUDE.md",
         f"{', '.join(contexts)} changed but CLAUDE.md did not — "
         "does the hub need the finding?",
     )

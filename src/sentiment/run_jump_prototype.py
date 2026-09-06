@@ -9,7 +9,7 @@ Run:  python -m sentiment.run_jump_prototype                       # H=5, thr=5%
       python -m sentiment.run_jump_prototype --rescore             # re-run Model 1 first
 
 Sentiment-only features by request. Target base rate ~11% (VCB/FPT/PNJ), so metrics are
-ranking/calibration, not accuracy. See `sentiment/CONTEXT.md`.
+ranking/calibration, not accuracy. See `.claude/context/sentiment.md`.
 """
 
 from __future__ import annotations

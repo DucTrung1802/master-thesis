@@ -16,7 +16,7 @@ modes), and the FISTA path (thousands of chained cuBLAS matmuls).
 
 ⚠️ **The whole-selection version of this is not in the suite because it takes ~70 s
 per run.** It was measured out of band instead, twice from a COLD interpreter, and
-`feature_selection/CONTEXT.md` §16f records the result: identical sha256 over the raw
+`.claude/context/feature_selection.md` §16f records the result: identical sha256 over the raw
 float64 bytes of `scores`, `ranks`, `target_corr`, `corr`, `stability` and
 `validation`, plus an identical kept list.
 """

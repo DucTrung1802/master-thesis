@@ -36,10 +36,11 @@ Three subfolders, all added 2026-08-16 and none of them importable API:
 
     tests/      the 8 test modules (85 tests). ⚠️ `tests/__init__.py` is load-bearing
     studies/    the four finished `study_*.ipynb` write-ups — the record, not entry points
-    docs/       NULL_DRAWS.md, NULL_DRAWS_VI.md, RANKER_COMPARISON.md
 
-⚠️ `CONTEXT.md` stays at the top level — every package in this repo keeps its
-CONTEXT.md at its root, and CLAUDE.md §7 links them all by that path.
+⚠️ **This package's prose does NOT live here any more (moved 2026-09-06).** The evidence
+file is `.claude/context/feature_selection.md` and the three long-form guides are
+`.claude/docs/NULL_DRAWS.md`, `.claude/docs/NULL_DRAWS_VI.md` and
+`.claude/docs/RANKER_COMPARISON.md`. `.claude/current_state/INDEX.md` routes all of them.
 """
 
 from feature_selection.unified_reader import (

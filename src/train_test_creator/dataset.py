@@ -68,7 +68,7 @@ and records the reason; `"keep"` and `"raise"` are there for when that is not wa
 ## What this stage does NOT assert
 
 That the features are worth having. Every source run of the VCB table computed no
-null (`feature_selection/CONTEXT.md` §14b), so the 203 channels are what some run
+null (`.claude/context/feature_selection.md` §14b), so the 203 channels are what some run
 ranked highly and nothing more. This module reshapes them; it does not vouch for them.
 """
 
@@ -122,7 +122,7 @@ _LAYER_CLAUSE = re.compile(r"Selection layer\s*(?P<layer>\d+)\s*:")
 _EVIDENCE_GLOSS = {
     "no_null": (
         "⚠️ no bar was computed for that run — a ranking without a null is "
-        "descriptive, not evidence (feature_selection/CONTEXT.md §14b)"
+        "descriptive, not evidence (.claude/context/feature_selection.md §14b)"
     ),
     "failed_null": (
         "⚠️ that run was measured against a shuffled-label null AND DID NOT CLEAR IT. "
@@ -159,12 +159,12 @@ def _selection_note(comment: str) -> str:
     if layer >= 2:
         return (
             f"done upstream by feature_selection, selection layer {layer}: the channels "
-            "COMPETED in one run over pool__shortlist__* (final_features/CONTEXT.md §8). "
+            "COMPETED in one run over pool__shortlist__* (.claude/context/final_features.md §8). "
             "Nothing is selected here."
         )
     return (
         "done upstream by feature_selection, selection layer 1: this table is the UNION "
-        "of its runs' shortlists (final_features/CONTEXT.md §6), which is arithmetic and "
+        "of its runs' shortlists (.claude/context/final_features.md §6), which is arithmetic and "
         "not consensus — a channel one run never saw could not be chosen twice. Nothing "
         "is selected here."
     )
@@ -288,7 +288,7 @@ class WindowedDataset:
     rows_unlabelled: int = 0
     # ⚠️ `target` is what `y` IS; `stored_target` is the column that was READ. For a
     # cross-sectional label the two differ — the table stores `return_{h}day` because a
-    # rank belongs to a run and not to a row (`final_features/CONTEXT.md` §5) — and
+    # rank belongs to a run and not to a row (`.claude/context/final_features.md` §5) — and
     # `label_recipe` is how the first was made from the second. Before RNK-1 was fixed
     # there was only one field, it held the STORED column, and `y` was that column.
     stored_target: str = ""
@@ -469,7 +469,7 @@ class TrainTestCreator:
         ⚠️ **`outstanding.csv`'s own `target` column is NOT the answer** and cannot be.
         It reads `cs_rank_5day` for the bank runs — a rank is computed within a date
         across a chosen universe and is deliberately never stored
-        (`final_features/CONTEXT.md` §5). That value is what the channels were
+        (`.claude/context/final_features.md` §5). That value is what the channels were
         SELECTED for, and it is recorded as `selected_for`; the column that exists is
         `return_5day`.
         """
@@ -512,7 +512,7 @@ class TrainTestCreator:
 
         self.stored_target = self.resolve_target(frame.columns, label_columns)
         # ⚠️ Taken from the shortlists, not rebuilt from the table name — the name
-        # drops a `cs_` prefix (final_features/CONTEXT.md §3), so it cannot say
+        # drops a `cs_` prefix (.claude/context/final_features.md §3), so it cannot say
         # whether the selection target was cross-sectional.
         selected = sorted(set(self.selection()["target"]))
         self.selected_for = selected[0] if len(selected) == 1 else ", ".join(selected)

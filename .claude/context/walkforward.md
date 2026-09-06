@@ -3,8 +3,8 @@
 > **The question**: every backtested number in this repo came from ONE train/val/test
 > split whose test window happened to be a **+20.2 %/yr VNINDEX bull market**. A single
 > split cannot tell *"the edge decayed"* from *"this split was lucky"*.
-> `model/CONTEXT.md` §11 used 28 expanding folds; this brings the current chain to that
-> standard. Read `backtest/CONTEXT.md` first — this file is the walk-forward version of
+> `.claude/context/model.md` §11 used 28 expanding folds; this brings the current chain to that
+> standard. Read `.claude/context/backtest.md` first — this file is the walk-forward version of
 > its §4.
 
 ---
@@ -104,7 +104,7 @@ straddle zero."*
   +0.90 / +1.39**, all clearly positive and all above their market.
 
 ⚠️ **This CONTRADICTS the h=5 and h=10 hand-built screens**, which were *negative* through
-2022-2026 (`backtest/CONTEXT.md` §8g), and it contradicts §11's regime wall. The variable
+2022-2026 (`.claude/context/backtest.md` §8g), and it contradicts §11's regime wall. The variable
 that differs is once again the **horizon** — plus 13 selected channels against 3 hand-picked
 ones. **2022 is the only bad fold, and it is bad for everyone**: the market itself ran
 Sharpe −0.94 that year, and the strategy lost 3.6 % where the universe lost 37.1 %.
@@ -457,7 +457,7 @@ estimates, each with `se` ~0.13-0.16 — **suggestive, and not the paired test �
 for a difference this size**. §5c is the standing warning: eleven architectures once spread
 IC across 0.227 and the whole spread was one error bar.
 
-⚠️ **AND THE COST IDENTITY CUTS THE OTHER WAY.** `backtest/CONTEXT.md` §3: at turnover 0.70
+⚠️ **AND THE COST IDENTITY CUTS THE OTHER WAY.** `.claude/context/backtest.md` §3: at turnover 0.70
 and 50 bps the annual fee drag is **8.8 % at h=10 against 4.4 % at h=20**. Every figure above
 is already net of that, so h=10 wins *after* paying double — but it also means h=10's edge is
 the more fragile of the two to any cost the backtest still does not charge (`PRF-4`: ADV cap,
@@ -585,7 +585,7 @@ the published +1.991 and +2.531. That equality is what licenses reading anything
    real and large h=10 advantage is entirely consistent with this data. **Underpowered, not
    settled**, and the honest next move is more OOS sessions rather than a third test.
 3. **Costs are the one thing that moves the answer directionally**: ΔSharpe falls 0.478 →
-   0.373 from 20 to 50 bps and its p nearly doubles, which is `backtest/CONTEXT.md` §3's
+   0.373 from 20 to 50 bps and its p nearly doubles, which is `.claude/context/backtest.md` §3's
    identity showing up — h=10 pays double the fee drag. Any cost `PRF-4` adds hurts h=10
    more.
 4. **One `k`, one universe, one architecture, two horizons.** h=5 was never run.

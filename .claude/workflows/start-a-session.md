@@ -51,15 +51,17 @@ anything reading one number.
 
 | your job | open | cost |
 |---|---|---|
-| a Dagster asset, a table, a scrape, the filter layer | `src/orchestration/CONTEXT.md` | 47.5k |
-| a scraper or the PDF/OCR parser | `src/web_scraper/CONTEXT.md` | 61.9k |
-| a selection, an IC, a null, a bar | `src/feature_selection/CONTEXT.md` | 45.0k |
-| whether a result survives more than one split | `src/walkforward/CONTEXT.md` | 16.0k |
-| what a module's code actually contains | `.claude/module_descriptions/<module>.md` | ~3k |
+| a Dagster asset, a table, a scrape, the filter layer | `.claude/context/orchestration.md` | 47.5k |
+| a scraper or the PDF/OCR parser | `.claude/context/web_scraper.md` | 64.9k |
+| a selection, an IC, a null, a bar | `.claude/context/feature_selection.md` | 45.4k |
+| whether a result survives more than one split | `.claude/context/walkforward.md` | 16.0k |
+| what a module's code actually contains | `.claude/context/<module>.md` | ~3k |
 
-⚠️ **A `CONTEXT.md` answers *"what did we measure and what did it prove"*; a
-`module_descriptions/` file answers *"what is in this folder and what will bite me"*.** They are
-different questions — pick the one you are asking.
+⚠️ **ONE FILE PER `src/` SUBFOLDER, NAMED AFTER IT — and two kinds of file share that folder.**
+A package doc answers *"what did we measure and what did it prove"*; a module description answers
+*"what is in this folder and what will bite me"*. Different questions, same naming rule — pick the
+one you are asking. ⚠️ **They were `src/<pkg>/CONTEXT.md` until 2026-09-06**, so an older message
+naming that path means the file now at `.claude/context/<pkg>.md`.
 
 ## 5. Check the calendar on what you just read
 
@@ -75,7 +77,7 @@ different questions — pick the one you are asking.
 
 - [ ] **O1** shows a stage list you understand, including which rows are `MANUAL` by design
 - [ ] **O3** shows a freshness shape you can name — cliff or scatter
-- [ ] you know which single `CONTEXT.md` (if any) your job needs, and have opened at most one
+- [ ] you know which single package context file (if any) your job needs, and have opened at most one
 - [ ] you know which `ISSUES.md` codes constrain the numbers you are about to touch
 
 ## Traps

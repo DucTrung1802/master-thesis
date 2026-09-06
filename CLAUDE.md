@@ -3,10 +3,13 @@
 @.claude/current_state/INDEX.md
 @.claude/rules/common.md
 
-> **ONE FILE, WHOLE PROJECT.** This is the map. The twelve `CONTEXT.md` files are the
-> evidence behind it (**~246k tokens** — re-measured 2026-09-06; the ~243k this line carried
-> since 2026-09-04 has drifted with them) — **open one only when you touch that package**, and §7 says
-> which. Hub written 2026-08-10 against the state at commit `fcac8904`.
+> **ONE FILE, WHOLE PROJECT.** This is the map. The twelve package files in
+> [`.claude/context/`](.claude/context/) are the evidence behind it (**~247k tokens** —
+> re-measured 2026-09-06) — **open one only when you touch that package**, and §7 says which.
+> ⚠️ **They were `src/<package>/CONTEXT.md` until 2026-09-06**; every `.md` under `src/` moved
+> to `.claude/` that day, so a package folder no longer carries its own prose and this file
+> plus the index are the only routing. Hub written 2026-08-10 against the state at commit
+> `fcac8904`.
 >
 > ⚠️ **AND THIS FILE WAS 165.3k TOKENS UNTIL 2026-09-06, WHICH IS THE RULE BELOW BEING BROKEN BY
 > THE FILE THAT STATES IT.** §6-2-septies…undeseptuagies — the filings/OCR chronicle, **465,178
@@ -15,12 +18,12 @@
 > down** — `git show ea07d4aa` is where they were last recorded. **44.2k tokens now.**
 > ⚠️ *A hub that grows without bound stops being a map — measure this file when you add to it.*
 >
-> ⚠️ **ALL PROSE DOCUMENTATION LIVES IN [`.claude/`](.claude/) SINCE 2026-09-06** (in `docs/` from 2026-08-22 until then), and the line
+> ⚠️ **ALL PROSE DOCUMENTATION LIVES IN [`.claude/`](.claude) SINCE 2026-09-06** (in `docs/` from 2026-08-22 until then, and in `src/` for the twelve package files until later the same day — **no `.md` remains under `src/`**), and the line
 > above this paragraph is why: `@.claude/current_state/INDEX.md` imports the documentation map into every
-> session automatically. **[.claude/current_state/INDEX.md](.claude/current_state/INDEX.md) routes all 117 `.md` files with
+> session automatically. **[.claude/current_state/INDEX.md](.claude/current_state/INDEX.md) routes all 115 `.md` files with
 > a measured token cost each** — read it before opening anything, and add a row to it when
 > you write a new doc (`python .claude/tools/check_index.py` fails if you forget). ⚠️ **The corpus
-> is ~659k tokens (re-measured 2026-09-06), ~3× a context window, so it can never be bulk-loaded** — the index is
+> is ~520k tokens (re-measured 2026-09-06 — the ~659k this line carried counted `docs/OCR_PARSER_LOG.md`, which commit `4348eb5d` DELETED rather than relocated), ~2.5× a context window, so it can never be bulk-loaded** — the index is
 > deliberately routing and not content. `CLAUDE.md` itself stays at the repo root because
 > that is the only place Claude Code auto-loads it from.
 >
@@ -40,7 +43,7 @@
 > Movement between them is one-way and worth knowing: a TODO item that turns out to be a
 > defect **graduates to ISSUES.md with a code**; an ISSUES entry that gets fixed keeps its
 > row and is struck through; a TODO item that gets done leaves its measurement in CLAUDE.md
-> or a `CONTEXT.md` and is **deleted, not ticked**. Anything a future session must not
+> or a package file under `.claude/context/` and is **deleted, not ticked**. Anything a future session must not
 > rediscover belongs in CLAUDE.md, not here.
 
 ---
@@ -281,7 +284,7 @@ what is true is that the target's own denominator is now a feature. Its order-fl
 foreign-flow measures are the closest anything in this database gets to §2d's top lever.
 ⚠️ `pool__funds` is **31.7% NULL by construction** and its widest column IS the VN30
 index. ⚠️ On `pool__bonds` **the slope is the signal and it is not a column**:
-`vn10y − vn02y` must be derived. `orchestration/CONTEXT.md` §"`pool__forex`" /
+`vn10y − vn02y` must be derived. `.claude/context/orchestration.md` §"`pool__forex`" /
 §"`pool__funds`" / §"`pool__bonds`" / §"`pool__stock_market`".
 
 ⚠️ **`unified/pool__basic_bank` (2026-08-14) is the fifth, and the only one with NO
@@ -316,7 +319,7 @@ which existed anywhere), **normalisation** (13 — `close_z_*`, `close_pos_*`,
 (7 — Amihud, VWAP), **cross-sectional** (5, universe only — per §2b the one block
 anything has ever survived a null in).
 
-⚠️ **Five traps, all measured** (`orchestration/CONTEXT.md`): silver's `open/high/low`
+⚠️ **Five traps, all measured** (`.claude/context/orchestration.md`): silver's `open/high/low`
 are **RAW** and track `close_raw` (4,266/4,266 vs 248 on VCB), so the bar is
 split-adjusted first; **`value_matched` is BILLIONS of VND** while `foreign_*_value` /
 `prop_*_val` are plain VND (the first draft reported a participation ratio of
@@ -441,7 +444,7 @@ archives a run folder; `feature_selection` is read-only by design. It defaults t
 **20-draw null** (the 18 hand-launched country runs all used 0) and **raises** both when
 the country pool is behind `pool__basic`'s calendar and when its fitted cost estimate
 exceeds `budget_minutes` — `usa` is 1,458 channels, 7.2 h with no null and **6.3 days**
-at 20 draws. `feature_selection/CONTEXT.md` §15.
+at 20 draws. `.claude/context/feature_selection.md` §15.
 
 ### ⚠️ 3a-bis. THE FILTER LAYER — a universe is a DECLARED SCREEN now (2026-08-22)
 
@@ -507,7 +510,7 @@ Four things worth carrying forward:
 its log-scope string was `predicate.replace('%s', repr(*params))`, correct for all three
 original sentinels (each binds exactly one value) and `TypeError: repr() takes exactly
 one argument (0 given)` for a screen, whose sub-select binds none. **A display helper
-took down a build.** Fixed and pinned. `orchestration/CONTEXT.md` §"FILTER".
+took down a build.** Fixed and pinned. `.claude/context/orchestration.md` §"FILTER".
 
 ### 3b. Model — EIGHT stages, each `python -m <pkg>`, dry-run by default
 
@@ -544,7 +547,7 @@ tickers or fetches nothing.
 pools** — so a `pool__basic`-only run archived into the default root silently widens
 `return_5day__final__d20_h5` and triggers the STL-1 domino. `--root` keeps the run out of
 that group; `--scope basic` names its table `…__d20_h5__basic`. Both are needed.
-`src/pipeline/CONTEXT.md` §5c.
+`.claude/context/pipeline.md` §5c.
 
 ⚠️ **`d` and `h` come from the source TABLE NAME**, never a parameter. They flow
 `return_5day__final__d20_h5` → dataset `metadata.json` → asserted against the model config.
@@ -559,7 +562,7 @@ without one is skipped by `final_features.plan_from_reports` **without a word**.
 state while `final_features` planned 19 runs and reported no error. The notebook now
 writes and validates the shortlist (`contract.validate_shortlist`) and prints
 `contract.describe()` — the handoff as the next stage will see it.
-`feature_selection/CONTEXT.md` §18.
+`.claude/context/feature_selection.md` §18.
 
 ⚠️ **EVERY ENTRY POINT PRINTS ITS GPU AND ITS RUNTIME NOW** (`utils/runtime.py`, one
 clock and one GPU probe, GMT+7). `pipeline` and `kgpu` were the two that were left and
@@ -568,7 +571,7 @@ calls the stages IN-PROCESS, so each module's own banner lives in its `main()` a
 fires — a `--apply` run printed no per-stage timing at all. Its `runtime` column is
 **empty, never `0`**, for a skipped or planned stage. **`kgpu` prints no GPU on purpose**:
 the card that matters is a Kaggle T4, and its clock is the ROUND TRIP, not the selection.
-`feature_selection/CONTEXT.md` §18a.
+`.claude/context/feature_selection.md` §18a.
 
 ### 3c. ⚠️ TWO selection layers, and the pool between them (2026-08-13, REBUILT 2026-08-16)
 
@@ -576,7 +579,7 @@ the card that matters is a Kaggle T4, and its clock is the ROUND TRIP, not the s
 written and RUN on 2026-08-13 — `pool__shortlist__close_adjust_5day__d20_h5` (4,266 ×
 892) sat in the database with its source runs named in its own `COMMENT` — and **never
 committed**: `git log --all -S"Pre-final shortlist"` finds no commit, `final_features`
-on disk had no `--shape` flag, and the `final_features/CONTEXT.md §8` this section
+on disk had no `--shape` flag, and the `.claude/context/final_features.md §8` this section
 cites did not exist. Rewritten 2026-08-16 from that table's `COMMENT` and this section.
 **A documented feature is not a shipped one, and the check that catches it is `grep`.**
 
@@ -603,7 +606,7 @@ cheap version — the one run over the 889 **survivors** instead of ~3,000 candi
   fingerprint, so a stale table reports STALE rather than being accepted.
 - ⚠️ **`--apply` stops at `shortlist_pool`**: the layer-2 run must exist before
   `final_features` can use it, and that run is manual. `selection_2` reports
-  `MANUAL — cannot be produced here`. `final_features/CONTEXT.md` §8.
+  `MANUAL — cannot be produced here`. `.claude/context/final_features.md` §8.
 
 **First build, 2026-08-13**: `pool__shortlist__close_adjust_5day__d20_h5`, **4,266 × 892**
 (889 channels + 3 keys), all 20 source pools on one calendar so the INNER join loses 0
@@ -624,10 +627,10 @@ nothing.** The +0.0324 is two folds out of five (**+0.489, +0.527, −0.677, −
 ρ 0.996), `hit_rate` is 1.000 and R² −8.11 because the target is a price LEVEL, and no
 null was paid for. The 59 spread over 17 countries with 2 price channels — what a
 selection returns when there is nothing to find. **Fixing the union did not fix the
-target**; the next run worth doing is this one on `return_5day`. `final_features/CONTEXT.md`
+target**; the next run worth doing is this one on `return_5day`. `.claude/context/final_features.md`
 §8f.
 
-⚠️ **The cost model in `feature_selection/CONTEXT.md` §15c was re-fitted on this run**
+⚠️ **The cost model in `.claude/context/feature_selection.md` §15c was re-fitted on this run**
 (§15c-refit): across 21 GPU runs, `minutes ≈ 0.364 × channels^0.77`, R² 0.87 — **not**
 the CPU-era `k = 2.00`, which under-predicts narrow runs ~5× and over-predicts wide ones
 ~35%. A wide run with no null is ~1 h, not 3.
@@ -670,7 +673,7 @@ the version NUMBER to move. `rehearse` runs both payload shapes.
 
 ⚠️ **A T4 run does not reproduce an RTX 3050 run, and the LIBRARY STACK differs
 too.** XGBoost subsamples from a different RNG stream per device
-(`feature_selection/CONTEXT.md` §16), and Kaggle's image is **xgboost 3.2.0 /
+(`.claude/context/feature_selection.md` §16), and Kaggle's image is **xgboost 3.2.0 /
 sklearn 1.6.1 / numpy 2.0.2** against `mt_env`'s **2.1.1 / 1.7.2 / 2.2.6**
 (measured 2026-08-15 from the two `environment` blocks) — a major version of the
 ranker itself. A Kaggle run is a different **procedure**, not the same one on
@@ -826,7 +829,7 @@ dagster asset materialize -f src/orchestration/definitions.py `
 
 ⚠️ **`usa` raises at the default budget and is meant to.** ~1,458 channels is ~3.1 h
 with no null and ~2.7 days at 20 draws; override `budget_minutes` for that ONE
-partition rather than lowering the default. `feature_selection/CONTEXT.md` §15c.
+partition rather than lowering the default. `.claude/context/feature_selection.md` §15c.
 
 ⚠️ **THE COST MODEL HAS NO TERM FOR THE TARGET AND IT IS WORTH 13.7×** (2026-08-14).
 `minutes ≈ 0.364 × channels^0.77` was fitted on 21 runs, **20 of them on the price
@@ -835,11 +838,11 @@ on that target and **146 s** on `return_5day`, because `lasso` — the dominant 
 zeroes every coefficient on a return and converges at once. **A 20-draw null on a wide
 pool is affordable for a return target** (357 channels + 20 draws = 41 min, measured),
 where the fitted model implies ~12 h. `evidence=no_null` on a return run is now a
-choice, not a budget. `feature_selection/CONTEXT.md` §15c-target.
+choice, not a budget. `.claude/context/feature_selection.md` §15c-target.
 
 ⚠️ **AND THE 13.7× WAS `lasso`, WHICH IS OUT OF THE DEFAULT ENSEMBLE SINCE 2026-08-16.**
 The six rankers were chosen in 2026-08-03 for what each one SEES and **had never been
-measured against each other**. They now have been (`feature_selection/CONTEXT.md` §19 —
+measured against each other**. They now have been (`.claude/context/feature_selection.md` §19 —
 two targets × two widths, each method's own top-k scored out of sample against a 40-draw
 random-k control), and **`METHODS` is now `spearman, xgb_shap, permutation`**:
 
@@ -891,7 +894,7 @@ Spearman built a 584 MB p×p matrix to keep one column. Both were rewritten and 
 was reimplemented (FISTA, same objective, same purged folds, identical selected alpha);
 the same run is now **1,046 s → 66.9 s** and the default is `device="auto"`. ⚠️ **A GPU
 re-run does NOT reproduce an archived one** — XGBoost subsamples from a different RNG
-stream per device, so the kept set moves (58 of 62 in common). `feature_selection/CONTEXT.md`
+stream per device, so the kept set moves (58 of 62 in common). `.claude/context/feature_selection.md`
 §16, and §16d for the one step that was converted, verified exact, measured 4-8× SLOWER
 and deliberately left on the host.
 
@@ -1006,7 +1009,7 @@ and 10 draws sample the tail half as well.
     run was lost entirely to a `TextIOWrapper` that re-buffered on top of `python -u`.
 
 **A finished run is not a run that checked itself** (added 2026-08-14, all three
-measured on one `pool__forex` selection — `feature_selection/CONTEXT.md` §17)
+measured on one `pool__forex` selection — `.claude/context/feature_selection.md` §17)
 
 21. **A metric that CANNOT FAIL is not a pass — withdraw it.** `hit_rate` is
     `sign(pred) == sign(y)`, and on a price-LEVEL target (`close_adjust_{h}day`) every
@@ -1060,7 +1063,7 @@ disk**, verified 2026-08-10:
 `switches` dict handed in, and **no default path**. Seeing it in the code is not evidence
 that a config file drives anything.
 
-⚠️ **Two CONTEXT.md files gave deleted-file instructions until 2026-08-10** — both §5s,
+⚠️ **Two package context files gave deleted-file instructions until 2026-08-10** — both §5s,
 in `web_scraper` and `orchestration/preprocessor`, opened with *"edit
 `src/switch_config.json`, then `python src\main.py`"*. Both are now rewritten with the
 old text quoted as history. If you find a third, fix it the same way rather than deleting
@@ -1073,7 +1076,7 @@ it: the old mechanism explains the shape of what replaced it.
 | `charts/`, `pdfs/` | 2025-era chart PNGs and report PDFs — outputs of the viz notebooks below | ✅ tracked, `git checkout` |
 | `src/visualization/`, `src/visualizer/`, `src/test/` | 4 viz notebooks + their helper + `compare.ipynb`. **Verified dead**: `visualizer` was imported only by those notebooks; they were imported by nothing | ✅ tracked |
 | `ocr_env8/`, `ocr_env9/` | the two OCR venvs for experiments 8/9 (1.9 GB) | ❌ rebuild — recipe in each experiment's README. Production parsing is unaffected (`CAFEF_OCR_ENGINE=onnx` in `mt_env`) |
-| `raw_data/_archive/` | the pre-2026-08-05 TradingView CSVs (803 MB) | ❌ **re-scrape only** — see `orchestration/CONTEXT.md`. Budget ~2 h for forex |
+| `raw_data/_archive/` | the pre-2026-08-05 TradingView CSVs (803 MB) | ❌ **re-scrape only** — see `.claude/context/orchestration.md`. Budget ~2 h for forex |
 | `src/logs/`, 38 × `__pycache__` | stale duplicate log dir; bytecode | n/a — regenerable |
 
 ⚠️ **`src/utils/constants.py` still defines `{SILVER,GOLD,ARIMA}_VISUALIZATION_LOG_FILE_BASE`.**
@@ -1138,7 +1141,7 @@ best are the ones whose magnitudes are most wrong — `GBT` R² = −2.11, `ridg
 
 ⚠️ **Capacity is real but not the whole story.** The LSTM *flips sign* on capacity alone
 (h=32 → −0.0345, h=8 → **+0.0346**), yet the 257-parameter MLP is the worst on the board
-on the same design a 25-parameter ridge does best on. `model/CONTEXT.md` §14–§15.
+on the same design a 25-parameter ridge does best on. `.claude/context/model.md` §14–§15.
 
 ⚠️ **Nothing here changes §2 and everything strengthens it.** Six model families
 spanning 0 to 276k parameters all land inside their own nulls.
@@ -1162,11 +1165,11 @@ fail, and §13d's reading stands — a sector co-moves, so there is less to rank
 ⚠️ **NEW ISSUE NUL-3: the evaluator's panel null is not label-neutral.** Its centre moved
 with the MODEL (−0.0171 / +0.0076 / +0.0109) and it got both ends wrong — manufacturing a
 clear for the weakest model and failing the strongest. **On a panel, quote the daily-IC
-t-stat, not `ic_clears`.** `model/CONTEXT.md` §16.
+t-stat, not `ic_clears`.** `.claude/context/model.md` §16.
 
 ⚠️ **The selection cleared its bar; the model did not clear its own.** `z = +2.15` bought
 nothing downstream — which is the two bars working, and the most useful thing the run
-measured. `feature_selection/CONTEXT.md` §10d has why `z = +2.15` on 20 draws is weak in
+measured. `.claude/context/feature_selection.md` §10d has why `z = +2.15` on 20 draws is weak in
 its own right: `p = 0.0476` is the `1/(n+1)` floor, the null is fat-tailed, and this is
 the **third** measurement of this pool (§6b `z = +1.56` ❌, §10b `z = +1.46` ❌) under a
 third procedure.
@@ -1226,7 +1229,7 @@ p rises 0.067 → 0.141 as costs do — `backtest` §3's identity showing throug
 double the fee drag. ⚠️ **A non-significant ΔSharpe is not evidence of equality**: the CI
 reaches +1.04, so this is underpowered, not settled. **The chain stays at h=20** — not
 because h=10 lost, but because it has not won the test that matters.
-`walkforward/CONTEXT.md` §10.
+`.claude/context/walkforward.md` §10.
 
 **The chain that produced it**, and every stage is reproducible:
 
@@ -1238,7 +1241,7 @@ because h=10 lost, but because it has not won the test that matters.
 | 7 · model | `lstm__all__rank_20day__final__d20_h20__20260818-195738` | 4m 23s; test IC +0.0863, **t = +3.47** (`ICT-1` fixed) |
 | 8 · result_evaluator | scored + indexed | clears its block-shuffled bar on `ic` and `dir_auc` — ⚠️ a floor, not a result (`NUL-1`) |
 | 9 · backtest | `src/model/runs/<run_id>/results/backtest_test.csv` ⚠️ **inside the RUN FOLDER, which is gitignored (`RPR-1`)** — not repo-root `results/` | top-15 of 150, 50 bps, **ceiling-screened by default since 2026-08-19**: **+1.5512** test / **+1.7385** val |
-| **W · walkforward** *(NEW 2026-08-19)* | `results/walkforward/` + 10 run folders | the table above. `walkforward/CONTEXT.md` |
+| **W · walkforward** *(NEW 2026-08-19)* | `results/walkforward/` + 10 run folders | the table above. `.claude/context/walkforward.md` |
 | **W · walkforward @ h=10** *(NEW 2026-08-20)* | `results/walkforward_h10/` + 10 run folders | Sharpe@30 **+2.531**, 236 periods, z = +18.58 — §6-0-bis-3. ⚠️ `--out` is REQUIRED or it overwrites the row above |
 
 ### ⚠️ 6-0-a. FOUR THINGS CLOSED ON 2026-08-19, AND WHAT EACH ONE SETTLED
@@ -1293,7 +1296,7 @@ below observed, `n_eff`/fold **76.6** against h=20's 38.1). Test window 2023-11 
 Paired (ρ 0.74): **ΔSharpe +2.71, `t` = +5.94**. Model run: IC +0.1393, `ic_t` +8.19,
 85.8 % of days positive, `mase` **0.9874** ✅.
 
-⚠️ **THE BREAK AFTER 2022 IS IN THE FEATURES, NOT IN THE MARKET.** `model/CONTEXT.md` §11
+⚠️ **THE BREAK AFTER 2022 IS IN THE FEATURES, NOT IN THE MARKET.** `.claude/context/model.md` §11
 and `backtest` §8g both found the edge dying post-2022 and read it as a regime wall. Hold
 the window, the universe and the horizon fixed and move only the FEATURE SET: 19 selected
 channels return +2.44 where three hand-picked ones return −0.26. **The market did not stop
@@ -1351,8 +1354,8 @@ probe put first. **10 of the 12 shortlist misses are in the early KEPT set**; on
 h=20's misses too. ⚠️ The early run shortlists **9 against 19** because `n_eff_per_fold` is
 **28.9 against 76.6** — that is POWER, not the market. ⚠️ **It bounds the optimism, it does
 not remove it**: these 19 channels were still chosen over 2009-2026 including every test
-fold. `walkforward/CONTEXT.md` §9e.
-⚠️ Survivorship protects `z = +18.6` and **not** +74.0 %/yr (§2c). `walkforward/CONTEXT.md` §9.
+fold. `.claude/context/walkforward.md` §9e.
+⚠️ Survivorship protects `z = +18.6` and **not** +74.0 %/yr (§2c). `.claude/context/walkforward.md` §9.
 
 ⚠️ **`--out` IS LOAD-BEARING AND OMITTING IT DESTROYS `PRF-1`.** `walkforward`'s
 `DEFAULT_OUT` is `results/walkforward/`, which holds the h=20 track; every artefact is
@@ -1410,7 +1413,7 @@ the reference once the search is priced.**
 ✅ **AND THE SEED FLOOR UNDER THIS WHOLE TABLE WAS MEASURED 2026-08-21 — it is
 `|d_sharpe| ≈ 0.09`.** Every config in the repo is `seed: 42` (32 of 32) and every row above
 is ONE fit per arm per fold, so five `gbt` arms differing only in the seed were run over the
-identical folds (13m 16s; `walkforward/CONTEXT.md` §15). Pooled Sharpe@30 came back
+identical folds (13m 16s; `.claude/context/walkforward.md` §15). Pooled Sharpe@30 came back
 **2.845 … 2.979, sd 0.054**, max paired `d_sharpe` **0.088**. Reading the table against it:
 
 | arm | `d_sharpe` | × the seed floor | verdict |
@@ -1460,7 +1463,7 @@ been run on the arms — so read it as two independent estimates.
 ⚠️ **AND "BEST EPOCH IS 1" IS AN LSTM PROPERTY, NOT A PROPERTY OF THE PROBLEM.** That
 sentence has been quoted four times here as evidence capacity is worthless. Across these 70
 runs only **43** stop by epoch 2: `cnn` averages **7.7** (max 20) and `tcn` **5.7** (max 13).
-Attach it to an architecture from now on. `walkforward/CONTEXT.md` §11.
+Attach it to an architecture from now on. `.claude/context/walkforward.md` §11.
 
 ### ⚠️ 6-0-ter-3. AND NEITHER DO THE DATASET SETTINGS — 2026-08-21
 
@@ -1485,7 +1488,7 @@ net it would not be**, and choosing `gbt` for speed made that one setting unansw
 the family that uses it. ⚠️ `rank_min_width` was REFUSED by `compare` as a different
 experiment (349,371 rows against 349,581) — it moves the LABEL, not the split.
 ⚠️ **`lookback` was never swept and is the one that would matter**: `d` comes from the
-source TABLE NAME, so each value needs its own selection run. `walkforward/CONTEXT.md` §12.
+source TABLE NAME, so each value needs its own selection run. `.claude/context/walkforward.md` §12.
 
 ### ⚠️ 6-0-quater. PRF-9 — MORE FEATURES DO NOT PAY EITHER, AND THAT CLOSES THE SECOND LEVER
 
@@ -1515,7 +1518,7 @@ in 44m 12s: **21 shortlisted, 18 `pool__basic` and 3 `pool__ta`**, top NINE all
 chains SHARE — daily IC **+0.1520 vs +0.1484**, Sharpe@30 **+2.8136 vs +2.8910**, paired
 over 236 periods at ρ 0.943: **`t` = +0.46**. ⚠️ **IC up, Sharpe down — the same split
 `PRF-9` found**, and the paired test separates neither from zero.
-`walkforward/CONTEXT.md` §13.
+`.claude/context/walkforward.md` §13.
 
 ⚠️ **WITH `PRF-8`, TWO OF THE THREE OBVIOUS LEVERS ARE NOW CLOSED BY MEASUREMENT.** A model
 101× smaller ties; 30 more candidate channels tie. **The 13 original channels are the
@@ -1592,7 +1595,7 @@ trades gives Sharpe −0.65…+0.38 on 1-12 periods, and none of it beats holdin
 turnover 0.70 and 50 bps the annual fee drag is **17.6 % at h=5**, 8.8 % at h=10, **4.4 %
 at h=20** — against a top-100 benchmark CAGR of 9.75 % (§2a-bis). **At h=5 the fees alone
 exceed the market's entire return.** Four single-stock defeats at `h=5` were never going
-to be rescued by a better model. `backtest/CONTEXT.md` §3.
+to be rescued by a better model. `.claude/context/backtest.md` §3.
 
 ⚠️ **What stage 9 does NOT establish**: `NUL-1` in full force (the null prices in the
 universe, cost, schedule and `k` — never the feature selection, the architecture search or
@@ -1650,7 +1653,7 @@ EXECUTION (`PRF-4`/`PRF-5`) and new DATA (`PRF-6`). ⚠️ It also makes `PRF-7`
 selection look-ahead close to the WHOLE story about where this Sharpe comes from rather
 than part of it — the only other candidate has been ruled out. ⚠️ **Not a claim that the
 small model should replace the big one**: nothing was re-tuned for it, and a tie under one
-schedule is not an optimum. `walkforward/CONTEXT.md` §8.
+schedule is not an optimum. `.claude/context/walkforward.md` §8.
 
 ⚠️ **TWO CONCURRENT `walkforward` SWEEPS SILENTLY CORRUPT EACH OTHER** (measured on this
 run, and it cost the first attempt). Every fold writes
@@ -2154,7 +2157,7 @@ alone costs **26.5 s** (17 GB, 946 columns) against silver's 1.0 s. ✅ `EXPLAIN
 `WHERE layer='silver'` prunes the other 38 branches on the constant. ⚠️ The first draft of
 the per-ticker query **timed out at 5 minutes** — a correlated count per ticker; ranking
 the calendar once with `ROW_NUMBER()` is **1.4 s** on the same table.
-`pipeline/CONTEXT.md` §1a-bis.
+`.claude/context/pipeline.md` §1a-bis.
 
 ### ⚠️ 6-2-sexies. `DEP-1` — THE MONITOR BLOCKED THE REPAIR, and it was live for one hour
 
@@ -2194,7 +2197,7 @@ result.**
 ⚠️ **The general lesson is not about views.** Anything that observes a table takes a lock
 or a dependency on it, and the observer is written by someone who is not thinking about
 the writer. Ask of any new monitor: *what does this stop the repair path from doing?*
-`pipeline/CONTEXT.md` §1a-bis; `ISSUES.md` `DEP-1`.
+`.claude/context/pipeline.md` §1a-bis; `ISSUES.md` `DEP-1`.
 
 ### ⚠️ 6-2. THE FILINGS/OCR PARSER — the state summary
 
@@ -2244,7 +2247,7 @@ any `_page_kind` change), and **17 quarters have only a standalone filing**, rea
 `allow_parent=True`.
 
 ⚠️ **AND THE STANDING REQUEST-SHAPE IS §8's, NOT THE LOG'S**: *"OCR ticker `<SYM>` LOCAL|KAGGLE"*
-is a request for a PREPARED NOTEBOOK that then WAITS — never for a run. `kgpu/PDF_OCR.md` §1a.
+is a request for a PREPARED NOTEBOOK that then WAITS — never for a run. `.claude/docs/PDF_OCR.md` §1a.
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
@@ -2397,27 +2400,29 @@ sit below 0.95 coverage; `RPR-1` datasets and run folders are git-ignored.
 ⚠️ **[.claude/current_state/INDEX.md](.claude/current_state/INDEX.md) is the complete map and it is already in your context**
 (`@.claude/current_state/INDEX.md`, top of this file). This table is the same routing for the packages,
 kept here because the *when you are…* column is the part worth reading twice.
-⚠️ **The token costs below were re-measured 2026-08-22 and every one of the 16 had gone
-stale as the files grew** — `walkforward` was listed at 6k against a true 16.0k, and
-`feature_selection` at 25k against 45.0k. A stale cost is worse than none, because it is
-what a session budgets against.
+⚠️ **These files moved to [`.claude/context/`](.claude/context/) on 2026-09-06** — one file per
+`src/` subfolder, named after it — and the long-form guides to `.claude/docs/`. The paths below
+are the new ones; nothing about what each file SAYS changed.
+⚠️ **The token costs below are re-measured on every edit to this table** — they had gone stale by
+1.8× once (`walkforward` listed at 6k against a true 16.0k), and a stale cost is worse than none,
+because it is what a session budgets against.
 
 | open this | ~tokens | when you are… |
 |---|---|---|
-| [src/orchestration/CONTEXT.md](src/orchestration/CONTEXT.md) | **47.5k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER" — screens, `filter_schema`, and why a screen is not point-in-time) |
-| [src/orchestration/preprocessor/CONTEXT.md](src/orchestration/preprocessor/CONTEXT.md) | **26.1k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
-| [src/web_scraper/CONTEXT.md](src/web_scraper/CONTEXT.md) | **61.9k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
-| [src/feature_selection/CONTEXT.md](src/feature_selection/CONTEXT.md) | **45.0k** | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
-| [src/feature_selection/docs/RANKER_COMPARISON.md](src/feature_selection/docs/RANKER_COMPARISON.md) | **4.5k** | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
-| [src/final_features/CONTEXT.md](src/final_features/CONTEXT.md) | **6.8k** | building or rebuilding a `__final__` table |
-| [src/train_test_creator/CONTEXT.md](src/train_test_creator/CONTEXT.md) | **4.9k** | building a dataset, or asking about the purge/impute/scale/window steps |
-| **[src/model/CONTEXT.md](src/model/CONTEXT.md)** | **12.0k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |
-| **[src/walkforward/CONTEXT.md](src/walkforward/CONTEXT.md)** | **16.0k** | asking whether a result survives more than ONE split, or which MODEL to use. §3 the 10-fold h=20 result (pooled Sharpe **+1.991**, IC positive 9/10 folds, beats the market 10/10); §4 the recorded prediction that was half wrong; §5 the no-mechanical-leak check; **§8 is PRF-8 — three architectures from 205 k params to 1,400 tree nodes, all tied**, and §8c the concurrency trap that voided a whole sweep |
-| **[src/backtest/CONTEXT.md](src/backtest/CONTEXT.md)** | **8.1k** | asking whether a signal is TRADABLE — stage 9, the costed non-overlapping backtest. §3 is the cost identity that decides the horizon (h=5 pays **17.6 %/yr** in fees, above the top-100 benchmark's entire return); §4 the first result here to clear a costed null (top-15, z = **+4.29** test / +6.10 val); **§5 is the single-stock answer and it is "no trade"** |
-| [src/result_evaluator/CONTEXT.md](src/result_evaluator/CONTEXT.md) | **4.1k** | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
-| [src/pipeline/CONTEXT.md](src/pipeline/CONTEXT.md) | **7.4k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
-| [src/sentiment/CONTEXT.md](src/sentiment/CONTEXT.md) | **3.4k** | anything news/text/PhoBERT |
-| [src/kaggle_gpu/README.md](src/kaggle_gpu/README.md) | **8.0k** | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
+| [.claude/context/orchestration.md](.claude/context/orchestration.md) | **47.6k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, the browser budget, a scrape, or ⚠️ **the FILTER layer** (§"FILTER" — screens, `filter_schema`, and why a screen is not point-in-time) |
+| [.claude/context/orchestration-preprocessor.md](.claude/context/orchestration-preprocessor.md) | **26.1k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library the assets wrap |
+| [.claude/context/web_scraper.md](.claude/context/web_scraper.md) | **64.9k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
+| [.claude/context/feature_selection.md](.claude/context/feature_selection.md) | **45.4k** | running or reading a selection, or quoting any IC / null / bar number. **§15a is the STEP-BY-STEP UI GUIDE** for the country sweep (§15a-cli is the same in PowerShell); §15b-§15d the two guards and the cost table; **§16 is the GPU conversion** — what moved, what was measured slower and left alone; §14c is the measured cut that replaced `max_features=12` |
+| [.claude/docs/RANKER_COMPARISON.md](.claude/docs/RANKER_COMPARISON.md) | **4.6k** | asking which ranker to keep, drop or add, or quoting any per-ranker cost. The full scorecard behind `feature_selection` §19 — advantage vs a random-k control, both cost regimes, the ρ=0.864 duplicate pair, the REJECTED mRMR addition, and the two errors the measurement had to correct |
+| [.claude/context/final_features.md](.claude/context/final_features.md) | **6.8k** | building or rebuilding a `__final__` table |
+| [.claude/context/train_test_creator.md](.claude/context/train_test_creator.md) | **5.0k** | building a dataset, or asking about the purge/impute/scale/window steps |
+| **[.claude/context/model.md](.claude/context/model.md)** | **12.0k** | training, adding a model type, or quoting any run's numbers. **§1a is the RUN STANDARD** (naming/input/output, enforced); §7 the new-model recipe; **§13–§16 are today's results** — CNN, Tier 1, Tier 2, the bank panel; §10–§11 the older research log ⚠️ now a citation without its evidence (RPR-1) |
+| **[.claude/context/walkforward.md](.claude/context/walkforward.md)** | **16.0k** | asking whether a result survives more than ONE split, or which MODEL to use. §3 the 10-fold h=20 result (pooled Sharpe **+1.991**, IC positive 9/10 folds, beats the market 10/10); §4 the recorded prediction that was half wrong; §5 the no-mechanical-leak check; **§8 is PRF-8 — three architectures from 205 k params to 1,400 tree nodes, all tied**, and §8c the concurrency trap that voided a whole sweep |
+| **[.claude/context/backtest.md](.claude/context/backtest.md)** | **8.1k** | asking whether a signal is TRADABLE — stage 9, the costed non-overlapping backtest. §3 is the cost identity that decides the horizon (h=5 pays **17.6 %/yr** in fees, above the top-100 benchmark's entire return); §4 the first result here to clear a costed null (top-15, z = **+4.29** test / +6.10 val); **§5 is the single-stock answer and it is "no trade"** |
+| [.claude/context/result_evaluator.md](.claude/context/result_evaluator.md) | **4.1k** | scoring, the metric set, or panel-vs-series grain. ⚠️ **STALE — it predates `index.py`, the `rebuild_index` schema change and issue NUL-3.** Nothing in it is false; it is silent about all three |
+| [.claude/context/pipeline.md](.claude/context/pipeline.md) | **7.4k** | the **six**-stage chain, staleness, `--root`/`--scope`, `--rescrape`, adding a stage or a second target |
+| [.claude/context/sentiment.md](.claude/context/sentiment.md) | **3.4k** | anything news/text/PhoBERT |
+| [.claude/docs/kaggle_gpu.md](.claude/docs/kaggle_gpu.md) | **8.1k** | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE** (the one job that ships no pools), and §7's five measured traps (all five are "a green step is not evidence"; the fifth, `KGP-1`, had no green step at all) |
 
 ⚠️ **[ISSUES.md](.claude/current_state/ISSUES.md) (~42.2k) is the second file to open, not an afterthought.**
 **97** open issues — ⚠️ *(this line read "96" earlier on 2026-09-06, "70" until 2026-09-05, "69", "68" and "67" earlier on 2026-09-04, "66" and "63" earlier on 2026-09-03, "59", "55" and "51" earlier on 2026-09-02, "48" earlier on 2026-09-01, "42" and "40" earlier on 2026-08-30, "34" and "28" earlier on 2026-08-29, "22" until 2026-08-28 and "(~4k)"/"Sixteen" until
@@ -2463,10 +2468,10 @@ shape: a claim whose evidence is one `git checkout` away.
 | `.claude/docs/THESIS_PROGRESS_2026*.md`, `.claude/docs/THESIS_SUMMARY_2026_VI.md` | deliverable write-ups (EN + VI) | writing the thesis, not running the pipeline |
 | `.claude/docs/feature_groups.md` | canonical feature taxonomy | naming a feature group |
 | `vn30.csv` / `vn100.csv` | index membership — ⚠️ **current, not point-in-time**; ⚠️ **repo ROOT, they are data not docs** | never as a historical universe |
-| **[.claude/current_state/INDEX.md](.claude/current_state/INDEX.md)** | ⚠️ **the auto-loaded map** — all 117 `.md` files routed with a measured token cost each, in four tiers. `CLAUDE.md` pulls it in via `@.claude/current_state/INDEX.md`; `python .claude/tools/check_index.py` fails if a doc is unrouted | before opening ANY file below, and whenever you add one |
+| **[.claude/current_state/INDEX.md](.claude/current_state/INDEX.md)** | ⚠️ **the auto-loaded map** — all 115 `.md` files routed with a measured token cost each, in four tiers. `CLAUDE.md` pulls it in via `@.claude/current_state/INDEX.md`; `python .claude/tools/check_index.py` fails if a doc is unrouted | before opening ANY file below, and whenever you add one |
 
 ⚠️ **`TODO.md` absorbed `src/orchestration/todo.md` on 2026-08-17** (28 items, Vietnamese).
-If an older message or `CONTEXT.md` points at that path, it is a history reference —
+If an older message or a package context file points at that path, it is a history reference —
 `git show 6059c183^:src/orchestration/todo.md` is the file.
 
 **Working preferences** (test.py usage, notebook DataFrame display, the paper-analysis
@@ -2479,7 +2484,7 @@ workflow, log truncation) live in the auto-loaded memory index and are not dupli
 - ⚠️ **BEFORE YOU COMMIT, RECORD THE STATE.** Run **`python .claude/tools/state_check.py`** and
   resolve what it reports. A commit that changes what this project KNOWS must also change
   where that knowledge is read: a new measurement lands in `CLAUDE.md` (§6 "State today",
-  and its date is bumped) or in the package's own `CONTEXT.md`; a new defect gets a
+  and its date is bumped) or in the package's own file under `.claude/context/`; a new defect gets a
   permanent code in `.claude/current_state/ISSUES.md`; a finished item leaves its number behind and is
   deleted from `.claude/current_state/TODO.md`; a new `.md` file gets a row in `.claude/current_state/INDEX.md`. ⚠️ **The
   script REPORTS and never rewrites** — the counts here are a SCAN, not a decrement
@@ -2501,7 +2506,7 @@ workflow, log truncation) live in the auto-loaded memory index and are not dupli
   ticker is done, on `complete = True` AND `outstanding = 0`** — never on `complete` alone,
   which measures continuity from the start of the filing chain and reads `True` on tickers
   with open cells. The full procedure, and how each parameter is decided, is
-  `src/kaggle_gpu/kgpu/PDF_OCR.md` §1a.
+  `.claude/docs/PDF_OCR.md` §1a.
 - ⚠️ **ANYTHING THAT REPORTS PROGRESS PRINTS `xx.x% - task - sub-task - detail`, LEADING WITH
   THE OVERALL %** — the fraction of the WHOLE thing the reader started, never of the current
   file, step or cell. Standing since 2026-09-04, and formatted by **`src/utils/progress.py`
@@ -2522,7 +2527,7 @@ workflow, log truncation) live in the auto-loaded memory index and are not dupli
   text stays in ordinary type. Struck-out text renders as damaged and reads as *"ignore
   this"*, which is the opposite of what a closed row is for here: **the measurement it
   leaves behind is the point**, and `ISSUES.md` rows are cited BY CODE from this file and
-  from the `CONTEXT.md` files. Nothing was lost in the removal — every struck row already
+  from the package context files. Nothing was lost in the removal — every struck row already
   carried its status in words beside the markup.
 - ⚠️ **A `TODO.md` number is a permanent NAME and priority is the ROW ORDER** (frozen
   2026-08-23). Codes are never renumbered or reused, exactly as in `ISSUES.md`; the list

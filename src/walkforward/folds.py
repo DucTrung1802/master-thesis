@@ -2,11 +2,11 @@
 """Fold geometry for an expanding walk-forward, and the builder that honours it.
 
 ⚠️ **WHY THIS EXISTS.** Every backtested number in this repo — including the
-`Sharpe +1.484` in `backtest/CONTEXT.md` §4 — comes from ONE train/val/test split whose
+`Sharpe +1.484` in `.claude/context/backtest.md` §4 — comes from ONE train/val/test split whose
 test window happens to be a +20.2 %/yr VNINDEX bull market. A single split cannot tell
 *"the edge decayed"* from *"this split was lucky"*, and the 2022-2026 rows in
-`backtest/CONTEXT.md` §8g are exactly the case where those two readings disagree.
-`model/CONTEXT.md` §11 used 28 expanding folds; this brings the current chain to the
+`.claude/context/backtest.md` §8g are exactly the case where those two readings disagree.
+`.claude/context/model.md` §11 used 28 expanding folds; this brings the current chain to the
 same standard. TODO **PRF-1**.
 
 **The geometry.** For a fold whose test block is `[t_i, t_{i+1})`:
@@ -31,7 +31,7 @@ the WHOLE sample against the label. Re-running the selection per fold is ~6 GPU-
 fold on a T4 and is not affordable here (§15c). So the LEVEL of every fold is optimistic;
 what stays honest is the SHAPE — the comparison across folds, since every fold carries the
 identical advantage. A decaying fold series is therefore still evidence of decay.
-`model/CONTEXT.md` §11 made the same trade.
+`.claude/context/model.md` §11 made the same trade.
 """
 
 from __future__ import annotations

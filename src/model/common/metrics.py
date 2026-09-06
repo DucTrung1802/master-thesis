@@ -4,7 +4,7 @@
 lives in `result_evaluator/metrics.py`, because a metric computed inside the training
 stage can only be improved by retraining, while a metric computed from
 `results/predictions_<split>.csv` can be backfilled across every past run without a
-GPU. `model/CONTEXT.md` §9 records the one time that mattered.
+GPU. `.claude/context/model.md` §9 records the one time that mattered.
 
 These two functions are kept so the existing notebooks
 (`lstm_return_5day.ipynb`, `lstm_direction_5day.ipynb`) keep running unchanged. New

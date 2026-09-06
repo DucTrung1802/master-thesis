@@ -81,11 +81,11 @@
 >
 > ## ⚠️ ONE NOTEBOOK IS MEANT TO BE RUN. THE OTHER FOUR ARE WRITE-UPS.
 >
-> **[RUN__feature_importance_report.ipynb](RUN__feature_importance_report.ipynb)** —
+> **[RUN__feature_importance_report.ipynb](../../src/feature_selection/RUN__feature_importance_report.ipynb)** —
 > the `RUN__` prefix is the whole point of the name. Set the parameter cell, Run All,
 > get an archived run folder. §10.
 >
-> **[run.py](run.py) is the same thing as a command** (added 2026-08-10):
+> **[run.py](../../src/feature_selection/run.py) is the same thing as a command** (added 2026-08-10):
 >
 > ```
 > python -m feature_selection.run --pools pool__basic --null-draws 20
@@ -111,7 +111,7 @@
 >    `(schema, target, setup)`** — a key with no term for *which pools*. A new
 >    `pool__basic` run archived beside a country run joins it behind
 >    `return_5day__final__d20_h5` and silently widens that table. See
->    `final_features/CONTEXT.md` §0a.
+>    `.claude/context/final_features.md` §0a.
 >
 >    ⚠️ **`--root` no longer separates anything by default (2026-08-10).** The three
 >    extra roots (`_basic`, `_economy`, `_superseded`) were merged into
@@ -131,10 +131,10 @@
 >
 > | study notebook | one sample is | established |
 > |---|---|---|
-> | [study_1__vcb_unwindowed.ipynb](studies/study_1__vcb_unwindowed.ipynb) | one row → `y_N` | a per-row model. `lookback=1`. §6 |
-> | [study_2__vcb_windowed.ipynb](studies/study_2__vcb_windowed.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}`. §6a |
-> | [study_3__null_and_holdout.ipynb](studies/study_3__null_and_holdout.ipynb) | — | **whether either result is real.** It is not: §6b-6d |
-> | **[study_4__cross_sectional.ipynb](studies/study_4__cross_sectional.ipynb)** | a `(d, n)` window → **`y` = the stock's RANK on day `N`** | **the one that works.** §9 |
+> | [study_1__vcb_unwindowed.ipynb](../../src/feature_selection/studies/study_1__vcb_unwindowed.ipynb) | one row → `y_N` | a per-row model. `lookback=1`. §6 |
+> | [study_2__vcb_windowed.ipynb](../../src/feature_selection/studies/study_2__vcb_windowed.ipynb) | a `(d, n)` window → `y_N` | **a sequence model.** `d=20`, `h ∈ {5, 10}`. §6a |
+> | [study_3__null_and_holdout.ipynb](../../src/feature_selection/studies/study_3__null_and_holdout.ipynb) | — | **whether either result is real.** It is not: §6b-6d |
+> | **[study_4__cross_sectional.ipynb](../../src/feature_selection/studies/study_4__cross_sectional.ipynb)** | a `(d, n)` window → **`y` = the stock's RANK on day `N`** | **the one that works.** §9 |
 >
 > **Read study 4, then study 3.**
 >
@@ -150,10 +150,10 @@
 ## 0. ⚠️ THE INTERFACE — the only two files that cross into `final_features`
 
 > **This section is normative and it is MIRRORED in
-> [`final_features/CONTEXT.md` §0](../final_features/CONTEXT.md).** This is the
+> [`.claude/context/final_features.md` §0](final_features.md).** This is the
 > PRODUCER's half: what this package promises to write. That file is the CONSUMER's
 > half: what the next stage promises to read. Neither may be changed alone — the
-> definition they both import is [contract.py](contract.py), and a column added on
+> definition they both import is [contract.py](../../src/feature_selection/contract.py), and a column added on
 > one side and not the other is an **import error**, not a discovery three stages
 > later.
 
@@ -259,20 +259,20 @@ where the run that caused it is no longer the thing being run.
 
 | file | does |
 |---|---|
-| [unified_reader.py](unified_reader.py) | connect, introspect, read with the right dtypes, join on `(exchange, ticker, date)` ∩ |
-| [windows.py](windows.py) | daily panel → windowed samples; scoring CHANNELS, not columns |
-| [selector.py](selector.py) | six rankers → ensemble → correlation prune → purged walk-forward → holdout |
-| **[cross_sectional.py](cross_sectional.py)** | **N × T panels** — per-date target, per-date IC, date-grouped CV, panel-aware null |
-| [evaluation.py](evaluation.py) | **the BAR** — the shuffled-label null, `n_eff`, and the IC summary that reports trend |
-| [gpu.py](gpu.py) | the CUDA paths, the size heuristic, the batched permutation loop, and which step is on the host **by measurement** (§16) |
-| **[gpu_rankers.py](gpu_rankers.py)** | **the two rankers sklearn defines, reimplemented for the GPU** — a FISTA `LassoCV` and a Kraskov `mutual_info`. Different in kind from `gpu.py`, so each owes a comparison against the original (§16) |
-| [plots.py](plots.py) | the figures — one theme, one palette, applied by the job each colour does |
-| **[report.py](report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
-| **[outstanding.py](outstanding.py)** | **one run → its final feature list** — kept channels only, ties broken, each mapped back to the pool table it must be read from (§14) |
-| **[selection_cut.py](selection_cut.py)** | **how many channels a run supports** — a shuffled-methods null + a per-method knee, replacing `max_features=12` (§14c) |
-| **[ranker_eval.py](ranker_eval.py)** | **what each ranker is WORTH** — advantage vs a random-k control, cost from the archive's own timings, necessity by leave-one-out. The module behind §19; the long form is [RANKER_COMPARISON.md](docs/RANKER_COMPARISON.md) |
-| **[contract.py](contract.py)** | ⚠️ **THE INTERFACE TO `final_features`, DEFINED ONCE AND IMPORTED BY BOTH SIDES** — the two filenames, the keys, the required columns, and the two checks. §0 below |
-| **[run.py](run.py)** | **the scripted entry point** — `python -m feature_selection.run --pools … --null-draws …`. The same run the notebook does, without the notebook. ⚠️ It was missing from this table until 2026-08-16 |
+| [unified_reader.py](../../src/feature_selection/unified_reader.py) | connect, introspect, read with the right dtypes, join on `(exchange, ticker, date)` ∩ |
+| [windows.py](../../src/feature_selection/windows.py) | daily panel → windowed samples; scoring CHANNELS, not columns |
+| [selector.py](../../src/feature_selection/selector.py) | six rankers → ensemble → correlation prune → purged walk-forward → holdout |
+| **[cross_sectional.py](../../src/feature_selection/cross_sectional.py)** | **N × T panels** — per-date target, per-date IC, date-grouped CV, panel-aware null |
+| [evaluation.py](../../src/feature_selection/evaluation.py) | **the BAR** — the shuffled-label null, `n_eff`, and the IC summary that reports trend |
+| [gpu.py](../../src/feature_selection/gpu.py) | the CUDA paths, the size heuristic, the batched permutation loop, and which step is on the host **by measurement** (§16) |
+| **[gpu_rankers.py](../../src/feature_selection/gpu_rankers.py)** | **the two rankers sklearn defines, reimplemented for the GPU** — a FISTA `LassoCV` and a Kraskov `mutual_info`. Different in kind from `gpu.py`, so each owes a comparison against the original (§16) |
+| [plots.py](../../src/feature_selection/plots.py) | the figures — one theme, one palette, applied by the job each colour does |
+| **[report.py](../../src/feature_selection/report.py)** | **one run → one self-describing folder** — CSVs, PNGs and a `metadata.json` that records what may be compared with what (§10) |
+| **[outstanding.py](../../src/feature_selection/outstanding.py)** | **one run → its final feature list** — kept channels only, ties broken, each mapped back to the pool table it must be read from (§14) |
+| **[selection_cut.py](../../src/feature_selection/selection_cut.py)** | **how many channels a run supports** — a shuffled-methods null + a per-method knee, replacing `max_features=12` (§14c) |
+| **[ranker_eval.py](../../src/feature_selection/ranker_eval.py)** | **what each ranker is WORTH** — advantage vs a random-k control, cost from the archive's own timings, necessity by leave-one-out. The module behind §19; the long form is [RANKER_COMPARISON.md](../docs/RANKER_COMPARISON.md) |
+| **[contract.py](../../src/feature_selection/contract.py)** | ⚠️ **THE INTERFACE TO `final_features`, DEFINED ONCE AND IMPORTED BY BOTH SIDES** — the two filenames, the keys, the required columns, and the two checks. §0 below |
+| **[run.py](../../src/feature_selection/run.py)** | **the scripted entry point** — `python -m feature_selection.run --pools … --null-draws …`. The same run the notebook does, without the notebook. ⚠️ It was missing from this table until 2026-08-16 |
 
 ### Layout (2026-08-16)
 
@@ -281,12 +281,18 @@ was moved down one level, so the top level is now what you run and what you impo
 
 | folder | holds | importable? |
 |---|---|---|
-| [tests/](tests/) | the 8 test modules, **85 tests**. ⚠️ `tests/__init__.py` is load-bearing — it keeps pytest's package import mode, so a same-named test in another package cannot shadow one of these | no |
-| [studies/](studies/) | the four finished `study_*.ipynb` write-ups — the record, not entry points | no |
-| [docs/](docs/) | [RANKER_COMPARISON.md](docs/RANKER_COMPARISON.md), [NULL_DRAWS.md](docs/NULL_DRAWS.md), [NULL_DRAWS_VI.md](docs/NULL_DRAWS_VI.md) | no |
+| [tests/](../../src/feature_selection/tests) | the 8 test modules, **85 tests**. ⚠️ `tests/__init__.py` is load-bearing — it keeps pytest's package import mode, so a same-named test in another package cannot shadow one of these | no |
+| [studies/](../../src/feature_selection/studies) | the four finished `study_*.ipynb` write-ups — the record, not entry points | no |
 
-⚠️ **`CONTEXT.md` deliberately did NOT move** — every package in this repo keeps its
-CONTEXT.md at its root and CLAUDE.md §7 links them all by that path.
+⚠️ **THE PROSE MOVED OUT OF THE PACKAGE ON 2026-09-06, AND THIS SECTION SAID THE OPPOSITE
+UNTIL THEN.** It read *"`CONTEXT.md` deliberately did NOT move — every package in this repo
+keeps its CONTEXT.md at its root"*, which was true for as long as it was written down. This
+file is now `.claude/context/feature_selection.md`; the three long-form guides that were
+`docs/` are `.claude/docs/`[RANKER_COMPARISON.md](../docs/RANKER_COMPARISON.md),
+[NULL_DRAWS.md](../docs/NULL_DRAWS.md) and [NULL_DRAWS_VI.md](../docs/NULL_DRAWS_VI.md);
+`src/feature_selection/docs/` is gone. **`.claude/current_state/INDEX.md` is the routing
+now, not the directory layout** — which is the cost of the move and is worth stating where
+the old claim stood.
 
 ⚠️ **Nine of the fourteen modules are imported BY NAME from outside this package** and
 their paths are therefore API, not an internal detail: `unified_reader`, `report`,
@@ -303,7 +309,7 @@ THIS  →  final_features  →  train_test_creator  →  model.lstm  →  result
 ```
 
 `python -m pipeline` prints the state of all five and runs the stale ones
-(`src/pipeline/CONTEXT.md`). ⚠️ **The runs in this package stay MANUAL** — a selection
+(`.claude/context/pipeline.md`). ⚠️ **The runs in this package stay MANUAL** — a selection
 is hours of GPU and a judgement about which pools to join, so the pipeline only
 refreshes `outstanding.csv` from the runs that already exist.
 
@@ -328,14 +334,14 @@ set, counted from `--collect-only` rather than from memory:
 
 | file | n | pins |
 |---|---|---|
-| [test_gpu_rankers.py](tests/test_gpu_rankers.py) | 14 | the two rankers `gpu_rankers.py` reimplements, against the sklearn originals they replace (§16) |
-| [test_selection_cut.py](tests/test_selection_cut.py) | 13 | one per way the cut could manufacture a list (§14c) |
-| **[test_cross_sectional.py](tests/test_cross_sectional.py)** | 13 | one per way of faking a cross-sectional result |
-| [test_ranker_eval.py](tests/test_ranker_eval.py) | 11 | the §19 scorecard — and keeps `ranker_eval.ALL_TARGETS` in step with `run.py` rather than by hand |
-| [test_gpu_determinism.py](tests/test_gpu_determinism.py) | 11 | each component's bit-identity, plus **the two devices still disagreeing on the trees** (§16e) |
-| [test_gpu_permutation.py](tests/test_gpu_permutation.py) | 9 | the batched permutation loop vs sklearn's chained one — statistical, not bit-exact, and it says why |
-| [test_gpu_spearman.py](tests/test_gpu_spearman.py) | 7 | that the GPU Spearman matches `scipy` **exactly**, not merely closely |
-| [test_evaluation_null.py](tests/test_evaluation_null.py) | 7 | **NUL-4** — the add-one p-value estimator, after the floor read as significant |
+| [test_gpu_rankers.py](../../src/feature_selection/tests/test_gpu_rankers.py) | 14 | the two rankers `gpu_rankers.py` reimplements, against the sklearn originals they replace (§16) |
+| [test_selection_cut.py](../../src/feature_selection/tests/test_selection_cut.py) | 13 | one per way the cut could manufacture a list (§14c) |
+| **[test_cross_sectional.py](../../src/feature_selection/tests/test_cross_sectional.py)** | 13 | one per way of faking a cross-sectional result |
+| [test_ranker_eval.py](../../src/feature_selection/tests/test_ranker_eval.py) | 11 | the §19 scorecard — and keeps `ranker_eval.ALL_TARGETS` in step with `run.py` rather than by hand |
+| [test_gpu_determinism.py](../../src/feature_selection/tests/test_gpu_determinism.py) | 11 | each component's bit-identity, plus **the two devices still disagreeing on the trees** (§16e) |
+| [test_gpu_permutation.py](../../src/feature_selection/tests/test_gpu_permutation.py) | 9 | the batched permutation loop vs sklearn's chained one — statistical, not bit-exact, and it says why |
+| [test_gpu_spearman.py](../../src/feature_selection/tests/test_gpu_spearman.py) | 7 | that the GPU Spearman matches `scipy` **exactly**, not merely closely |
+| [test_evaluation_null.py](../../src/feature_selection/tests/test_evaluation_null.py) | 7 | **NUL-4** — the add-one p-value estimator, after the floor read as significant |
 
 ⚠️ **`cross_sectional.py` re-implements NO ranker.** `CrossSectionalSelector`
 overrides six hooks on `FeatureSelector` — `_design`, `_splits`, `_ic`,
@@ -350,7 +356,7 @@ run gives bit-identical fold ICs before and after.
 branch.** `train_test_creator/unified_schema_creator.ipynb` cell 23 still imports
 it; that import fails here. The old class ranked with an XGB+SHAP+LASSO+ElasticNet
 blend and wrote `<target>__lb<N>__<group>__<n>` tables — see
-`orchestration/CONTEXT.md` §UNIFIED for what happened to those (all 135 dropped
+`.claude/context/orchestration.md` §UNIFIED for what happened to those (all 135 dropped
 2026-08-03). **Nothing in this package writes to the database**; a selection is a
 result object and a set of figures, not a table.
 
@@ -506,7 +512,7 @@ selection.
 launch. `device="auto"` therefore stays on the host below
 `gpu.AUTO_CUDA_MIN_FEATURES` (200) and says so in `device_report()["reason"]`;
 `device="cuda"` forces the GPU everywhere a path exists and raises if there is
-none. Full tables in [gpu.py](gpu.py).
+none. Full tables in [gpu.py](../../src/feature_selection/gpu.py).
 
 ⚠️ **The correlation-matrix win is the ALGORITHM, not the GPU.** Five matmuls
 instead of pandas' pairwise Cython loop is worth 46-80×; the GPU adds 1.0-2.0× on
@@ -533,7 +539,7 @@ on CUDA it runs there with the model already resident. Verified equal to
 ⚠️ **Read the scale before the ranking.** Nothing in `pool__basic` clears |ρ| ≈ 0.1
 against the forward 5-day return, and the IC is carried by the early folds and
 turns negative in the last. The honest reading is that this pool does not predict
-this target, which is the same conclusion `model/CONTEXT.md` and memory
+this target, which is the same conclusion `.claude/context/model.md` and memory
 `project-cross-sectional-strategy` already point at — the ranking below that is
 ordering noise.
 
@@ -611,7 +617,7 @@ the data, not the code.
 Run at `d=20, h=5`, holdout `2024-06-01` onward (487 samples), 20-draw block-shuffled
 null per configuration.
 
-### Step 3 — the null, built into the package ([evaluation.py](evaluation.py))
+### Step 3 — the null, built into the package ([evaluation.py](../../src/feature_selection/evaluation.py))
 
 `null_distribution` re-runs the WHOLE pipeline (selection included) on block-shuffled
 labels. `ic_summary` reports mean **and trend** with an `n_eff = n/h` error bar.
@@ -725,7 +731,7 @@ a different proposition — there is something for the extra features to add to.
 ⚠️ **`unified_schema_<ticker>` still cannot express any of this.** It is one company
 by construction and `pool__basic` asserts `COUNT(DISTINCT ticker) = 1`.
 `unified_schema_all` is that assertion's sibling, not its replacement — see
-`data_preprocessor/CONTEXT.md` §"ticker = ALL" for the sentinel and the three
+`data_.claude/context/orchestration-preprocessor.md` §"ticker = ALL" for the sentinel and the three
 assertions that had to become series-aware.
 
 ### 7a. The other two pools now exist — `pool__ta` and `pool__fa` (2026-08-04)
@@ -767,7 +773,7 @@ chart of accounts. A cross-sectional FA study is not possible from this table.
 ⚠️ **`pool__fa` is safe only because of `publish_date`**, which the ingest asserts
 (0 rows published after their own date). The lag reaches **0 days**, so shift it
 forward one session before trusting any FA-driven result — see
-`data_preprocessor/CONTEXT.md`.
+`data_.claude/context/orchestration-preprocessor.md`.
 
 ⚠️ **207 of `pool__ta`'s columns are BOOLEAN** and `_prepare` drops bool dtypes, so
 a naive run scores **717 of the 921**, not all of them. §12 casts them to 0/1 in the
@@ -823,7 +829,7 @@ evidence there is nothing for it to measure; build it after §7 step 1.
 
 ## 9. THE CROSS-SECTIONAL STUDY (2026-08-04) — the first result that survives
 
-Read [cross_sectional.py](cross_sectional.py)'s module docstring before changing
+Read [cross_sectional.py](../../src/feature_selection/cross_sectional.py)'s module docstring before changing
 anything here; it names the three specific mistakes that manufacture a
 cross-sectional result, and all three produce numbers that look *better* than these.
 
@@ -1241,7 +1247,7 @@ because draw 10 crashed.
 
 ## 10. THE REPORT PIPELINE — one run in, one self-describing folder out
 
-[report.py](report.py) + [RUN__feature_importance_report.ipynb](RUN__feature_importance_report.ipynb).
+[report.py](../../src/feature_selection/report.py) + [RUN__feature_importance_report.ipynb](../../src/feature_selection/RUN__feature_importance_report.ipynb).
 Set the parameters, Run All, get an archived run. This is the operational half of
 the package; §6 and §9 are the studies.
 
@@ -1432,7 +1438,7 @@ this one's does not. `outstanding.csv` records it as **`evidence=cleared_p95_not
    measurements, not one repeated three times: 31 more sessions, and the measured cut
    (14 kept) in place of the flat `max_features=12`. §8 requires a bar per configuration
    and this run has its own — the observed and its null share `build()` in
-   [run.py](run.py), so the comparison is internally valid. It is the comparison ACROSS
+   [run.py](../../src/feature_selection/run.py), so the comparison is internally valid. It is the comparison ACROSS
    rows that is not.
 4. ⚠️ **AND THE MODEL TRAINED ON IT SHOWS NO SKILL.** `lstm__vcb__return_5day__final__
    d20_h5__basic__20260810-035257`: test IC **−0.0345** against a bar of +0.1348
@@ -1454,7 +1460,7 @@ defect COV-1 describes, at a scale small enough to read in one table.
 
 ### 10c. ⚠️ The figure specs — and the three faults the first version shipped
 
-[plots.py](plots.py) was rewritten 2026-08-04 after rendering the prototype and
+[plots.py](../../src/feature_selection/plots.py) was rewritten 2026-08-04 after rendering the prototype and
 looking at it. The palette was never the problem — it was **computed, not
 eyeballed**, and passes every check (all-pairs CVD ΔE **9.2** against a target of
 8.0, normal-vision ΔE **24.0** against a floor of 15.0). The faults were in FORM
@@ -1603,7 +1609,7 @@ events, and neither adds any.
    for VCB — honestly small, rather than 4,230 rows pretending to be.
 3. **Shift `publish_date` forward one session** before believing anything: the lag
    reaches 0 days, so a statement released after the close is a half-day leak this
-   layer cannot detect (`data_preprocessor/CONTEXT.md`).
+   layer cannot detect (`data_.claude/context/orchestration-preprocessor.md`).
 
 ## 12. ⚠️ THE TA RUN (2026-08-04) — clears its p95 bar, and STILL is not a pass
 
@@ -1742,7 +1748,7 @@ judges is a different procedure.
 with a control. **The §9c protocol with one thing changed: the universe is a GICS
 SECTOR instead of an index.**
 Report: `reports/feature_selection/2026-08-05_004241__bank__basic__cs_rank_5day`
-→ `unified_schema_bank.rank_5day__final__d20_h5` (`final_features/CONTEXT.md`).
+→ `unified_schema_bank.rank_5day__final__d20_h5` (`.claude/context/final_features.md`).
 
 | | observed | null mean | null sd | **p95 BAR** | null max | **z** | p | clears |
 |---|---|---|---|---|---|---|---|---|
@@ -1858,7 +1864,7 @@ shuffled labels. §9j found a large effect at 301 names using the same 27 channe
 
 ## 14. ⚠️ `outstanding.csv` (2026-08-09) — one final feature list PER RUN
 
-[outstanding.py](outstanding.py) reduces each archived run to the channels it
+[outstanding.py](../../src/feature_selection/outstanding.py) reduces each archived run to the channels it
 actually chose, and writes the result **into that run's own folder**:
 
 ```
@@ -1929,7 +1935,7 @@ STL-1 fingerprint is a digest of the `(source_table, channel)` SET
 across all 20 runs after the rebuild, and `final_features` still reports
 `505fbe21a1f0 matches`. **Filtering on the flag would NOT have been safe**: dropping
 248 rows changes the set, and that is the full STL-1 domino (§7 of
-`final_features/CONTEXT.md`).
+`.claude/context/final_features.md`).
 
 ### 14a. ⚠️ WHAT COMPARING THE FILES SHOWS — THE INSTABILITY IS IN THE *ORDERING*, NOT THE MEMBERSHIP
 
@@ -1966,7 +1972,7 @@ cut got wider, not because the runs started agreeing.**
 
 ⚠️ **The 725 singletons are mostly ARITHMETIC, not disagreement** — 723 of them are
 economy channels, and each `pool__economy_<country>` block is a candidate in exactly
-one run, so it *cannot* be chosen twice. `final_features/CONTEXT.md` §6 makes the same
+one run, so it *cannot* be chosen twice. `.claude/context/final_features.md` §6 makes the same
 point about the table this union builds.
 
 ⚠️ **`foreign_own` tops that table and §9e ranked it LAST of 27** on the VN100
@@ -2011,7 +2017,7 @@ are what would make even one of them affordable, and §8's rule then requires th
 
 ### 14c. ⚠️ THE COUNT IS NOW MEASURED PER RUN — `max_features=12` is gone (2026-08-09)
 
-[selection_cut.py](selection_cut.py). **Twelve was chosen for a 27-channel
+[selection_cut.py](../../src/feature_selection/selection_cut.py). **Twelve was chosen for a 27-channel
 single-ticker pool and then applied to a 1,458-channel one.** §9i and §13c had already
 measured what that costs — at 780 names and in the bank sector, *all* channels beat the
 pruned 12 in *every* fold. It also truncated the record: `_prune` **broke** at the cap,
@@ -2246,7 +2252,7 @@ so 19 new `d20_h5` runs land in the same group as everything else and silently w
 since the 2026-08-10 root merge the asset's `root` default IS `reports/feature_selection`,
 the same root a `pool__basic` run uses, at the same seed 18. **`--scope` is the whole
 defence now** (`--scope basic` for the narrow build, `--scope economy_<country>` for a
-country one, `pipeline/CONTEXT.md` §5c); set `root` in the asset config only to quarantine
+country one, `.claude/context/pipeline.md` §5c); set `root` in the asset config only to quarantine
 a run deliberately, and give any new root its own `.gitignore` pair.
 
 ### 15b. ⚠️ GUARD 1 — the country pool must share `pool__basic`'s calendar
@@ -2817,7 +2823,7 @@ nothing: a T4 run is a different **procedure**, not the same one on faster hardw
 
 ## 19. ⚠️ THE RANKERS, EVALUATED — six became three (2026-08-16)
 
-> 📄 **The long form is [RANKER_COMPARISON.md](docs/RANKER_COMPARISON.md)** — the full
+> 📄 **The long form is [RANKER_COMPARISON.md](../docs/RANKER_COMPARISON.md)** — the full
 > scorecard, the correlation matrix, both cost regimes, the rejected addition and the
 > two errors the measurement itself had to correct. This section is the summary.
 > The measurement is code: `python -m feature_selection.ranker_eval --cost-only`
@@ -3048,7 +3054,7 @@ not exist.
 group, 19 runs, 885 features**. Add one three-ranker run and it becomes **two groups that
 still want one table name** (`close_adjust_5day__final__d20_h5`), so `plan_from_reports`
 **raises on the collision instead of unioning** — the guard working, not a regression.
-Pass `--scope basic`, which is what §5c of `pipeline/CONTEXT.md` already prescribes.
+Pass `--scope basic`, which is what §5c of `.claude/context/pipeline.md` already prescribes.
 
 Pinned by `tests/test_contract.py` (19 tests), including that a genuinely missing
 SETUP_KEY is still reported — the defaults table papers over exactly one thing and no

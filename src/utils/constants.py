@@ -203,7 +203,7 @@ SIMPLIZE_RAW_DATA_DIR = f"{RAW_DATA_DIR}/simplize"
 
 def _vn100_symbols() -> list[tuple[str, str]]:
     """VN100 constituents from the repo-root `vn100.csv` (utf-8-BOM, see
-    web_scraper/CONTEXT.md §8). Falls back to VN30 (UNIFIED_TICKERS, all HOSE) if the
+    .claude/context/web_scraper.md §8). Falls back to VN30 (UNIFIED_TICKERS, all HOSE) if the
     file is absent, so an import never fails on a missing reference file."""
     path = os.path.join(os.path.dirname(__file__), "..", "..", "vn100.csv")
     try:

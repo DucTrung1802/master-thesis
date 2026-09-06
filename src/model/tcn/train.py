@@ -10,7 +10,7 @@
 `ticker` column that tells `result_evaluator` a run is a panel), the lineage block and
 the registry row. A TCN run and an LSTM run therefore land in `index.csv`
 scored by identical code, which is the only reason the two rows may be read against
-each other. `model/CONTEXT.md` §7.
+each other. `.claude/context/model.md` §7.
 
 This module names three things: the model module, the `model_type` string, and its own
 `configs/` directory.
@@ -30,7 +30,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_DIR = os.path.join(_HERE, "configs")
 # ⚠️ The filename is prefixed with the model. `pipeline._config_path` resolves a bare
 # `--config` name across `model/*/configs/`, so a name shared with another package is
-# ambiguous — `model/CONTEXT.md` §2 (issue CFG-1).
+# ambiguous — `.claude/context/model.md` §2 (issue CFG-1).
 DEFAULT_CONFIG = os.path.join(
     CONFIG_DIR, "tcn__all__rank_10day__final__d20_h10.yaml"
 )

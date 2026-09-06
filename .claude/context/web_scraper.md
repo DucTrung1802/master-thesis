@@ -16,9 +16,9 @@
 > **Nothing here is run by editing a config file any more.** `src/main.py` and
 > `src/switch_config.json` were deleted on 2026-08-05/06 (orchestration phase 5), and
 > so was `src/data_preprocessor` — its contents moved to
-> [`src/orchestration/preprocessor/`](../orchestration/preprocessor/CONTEXT.md).
+> [`src/orchestration/preprocessor/`](orchestration-preprocessor.md).
 > **Every scraper is now a Dagster asset and `--select` is the run plan**; see
-> [`src/orchestration/CONTEXT.md`](../orchestration/CONTEXT.md).
+> [`.claude/context/orchestration.md`](orchestration.md).
 >
 > **Not one line of the scrapers changed**, which is why the rest of this file is still
 > accurate. What changed is who calls them. The two places that described the old
@@ -62,7 +62,7 @@ dagster asset materialize -f src/orchestration/definitions.py --select "…"
   so TV must run first; the other two enrich the same universe. ⚠️ **This is now a
   declared Dagster edge on the `stocks` PARTITION only**
   (`SpecificPartitionsPartitionMapping(["stocks"])`) — CafeF and Simplize do not need
-  the other eight asset classes. `orchestration/CONTEXT.md` §2 has the full audit,
+  the other eight asset classes. `.claude/context/orchestration.md` §2 has the full audit,
   including three edges the prose here originally got wrong.
   - **`CafeFIndexScraper` is the exception — it needs no links at all.** An index has
     no TradingView link CSV, so its universe is a fixed six-entry list on the class
@@ -726,7 +726,6 @@ CLAUDE.md §6-2-duotricies; `ISSUES.md` `CRP-1`.
 
 ```
 src/web_scraper/
-├── CONTEXT.md                ← this file
 ├── base_scraper.py           BaseScraper ABC + SCRAPER_REGISTRY + @register_scraper + build_scraper
 ├── trading_view_scraper.py   SOURCE_NAME="trading_view"  (Selenium/Chrome + BS4, ~1600 lines)
 ├── cafef_scraper.py          SOURCE_NAME="cafef"         (requests → CafeF AJAX; the 5 daily tabs)
@@ -828,7 +827,7 @@ Each registers its own `SOURCE_NAME` and writes its own folder under `raw_data/c
   **The folder name tells you nothing; the filename does** — every file is named
   `<EXCHANGE>_<SYMBOL>_<start>_<end>.csv` and the EXCHANGE in it is correct.
   ⚠️ It also means a re-scrape of a contaminated broker is a multi-day job for data that
-  is not that broker's book: `parameters.data_only` (see `orchestration/CONTEXT.md`)
+  is not that broker's book: `parameters.data_only` (see `.claude/context/orchestration.md`)
   exists to keep the fetch on the 27 that work while links still enumerate all 47.
 
 - **⚠️ `_add_generic_link_data_tasks` READS ONE LINKS CSV PER LEAF** —
@@ -3295,7 +3294,7 @@ Matches the bronze-source decision (memory `project-bronze-source-per-field`):
 - **CafeF is the sole source** of the order-flow tabs that neither Simplize nor TV
   expose — order-placement stats (`order_stats/`), proprietary-desk trades
   (`prop_trading/`), and insider/major-shareholder transactions (`insider_txn/`); see
-  §3. These are orthogonal signals worth noting for modelling (cf. `src/model/CONTEXT.md`).
+  §3. These are orthogonal signals worth noting for modelling (cf. `.claude/context/model.md`).
 
 ## 5. How it's driven — ⚠️ REWRITTEN 2026-08-10: the run plan is `--select`
 
@@ -3327,7 +3326,7 @@ Truncate `logs/app.log` first; it is still the record of what the scraper itself
 The distinction is the whole point: the tree no longer decides **whether** a scrape
 runs (that is `--select`), only **what a running scrape enumerates** — which countries,
 sectors and categories. Its 295 leaves live in
-[`orchestration/config.json`](../orchestration/config.json)'s `parameters` section, and
+[`orchestration/config.json`](../../src/orchestration/config.json)'s `parameters` section, and
 `orchestration/enabled.py::trading_view_switches()` rebuilds the flat
 `web_scraper/trading_view/<phase>/…` paths from it and hands them to an ordinary
 `SwitchHandler`. **Not one line of the scrapers changed** — the fifteen

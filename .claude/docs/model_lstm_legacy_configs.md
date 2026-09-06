@@ -17,7 +17,12 @@ exists:
 | scoring | metrics in-notebook, **no null** | `result_evaluator`, block-shuffled bar |
 | `dir_accuracy` | sign hit rate at 0 | now called `sign_accuracy`; the core's `hit_rate` is at the score's median |
 
-The current configs are one directory up: `vcb__return_5day__final__d20_h5.yaml` and
+The configs themselves are in `src/model/lstm/configs/_legacy/`; ⚠️ **this warning used to sit
+beside them as that folder's `README.md` and moved here on 2026-09-06**, so nothing in the folder
+says any more that its contents are retired — read this file before reaching for one.
+
+The current configs are one directory up from them, in `src/model/lstm/configs/`:
+`vcb__return_5day__final__d20_h5.yaml` and
 `bank__rank_5day__final__d20_h5.yaml`.
 
 ⚠️ A run produced from a legacy config lands in `runs/index.csv` with the core

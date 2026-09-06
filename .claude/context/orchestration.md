@@ -17,8 +17,8 @@
 > ## ⚙️ ONE CONFIG FILE: `config.json` (2026-08-05, completed 2026-08-06)
 >
 > `assets_enabled.json`, `tv_full_refresh.yaml` **and `src/switch_config.json`** are all
-> **gone**, folded into [config.json](config.json) with four sections — and
-> [enabled.py](enabled.py) is the only thing that reads it:
+> **gone**, folded into [config.json](../../src/orchestration/config.json) with four sections — and
+> [enabled.py](../../src/orchestration/enabled.py) is the only thing that reads it:
 >
 > ```jsonc
 > {
@@ -127,12 +127,12 @@
 > src/orchestration/
 >   definitions.py  resources.py  _bootstrap.py  enabled.py  config.json
 >   assets/         scrape · bronze · silver · gold · unified · selection  ← the 75 assets
->   preprocessor/   preprocessor.py + CONTEXT.md                ← the transform library
+>   preprocessor/   preprocessor.py                             ← the transform library
 > ```
 >
 > `from orchestration.preprocessor import DataPreprocessor`. Read
-> [preprocessor/CONTEXT.md](preprocessor/CONTEXT.md) for how a table is BUILT; add new
-> pipeline steps as assets in [assets/](assets/).
+> [.claude/context/orchestration-preprocessor.md](orchestration-preprocessor.md) for how a table is BUILT; add new
+> pipeline steps as assets in [assets/](../../src/orchestration/assets).
 >
 > ⚠️ **It is still a LIBRARY and still has no entry point.** The move did not turn it
 > into an orchestrator, and the assets did not absorb its logic — they still wrap it.
@@ -155,9 +155,9 @@
 > was taken against it.
 
 `main.py` was already a DAG, written as `if switch: call()`. The evidence is
-[preprocessor/preprocessor.py:3495-3525](preprocessor/preprocessor.py#L3495-L3525),
+[preprocessor/preprocessor.py:3495-3525](../../src/orchestration/preprocessor/preprocessor.py#L3495-L3525),
 a hand-written list of `(leaf_name, callable)` pairs iterated against the switch
-config, and [cafef_scraper.py:516-534](../web_scraper/cafef_scraper.py#L516-L534),
+config, and [cafef_scraper.py:516-534](../../src/web_scraper/cafef_scraper.py#L516-L534),
 the same shape for the scrapers. The dependency edges (TV links → CafeF/Simplize
 universe; `raw_data/<folder>` → one bronze table; bronze → silver → gold) exist only
 as source-code ORDER plus comments.
@@ -169,7 +169,7 @@ What Dagster adds that is not already there:
 | run plan = hand-edit two lines of a 382-key JSON | asset selection, from the UI or `--select` |
 | a failed ingest logs one line and **returns normally** | the asset fails and the run is red |
 | "what ran" = read `logs/app.log` | per-asset run history with timestamps |
-| row counts maintained by hand in CONTEXT.md tables | materialisation metadata, recorded per run |
+| row counts maintained by hand in context-doc tables | materialisation metadata, recorded per run |
 | ticker scoping = edit `CAFEF_FINANCIALS_TICKERS` in constants.py | a partition per ticker, re-runnable one at a time |
 
 **Scope is smaller than the switch count suggests.** Of 382 keys, **320 are
@@ -180,11 +180,11 @@ PARTITIONS of two assets, not 320 assets. The remaining 61 map to ~55-65 assets.
 
 **80 assets: 19 landing + 20 bronze + 20 silver + 10 gold + 10 unified + 1 analysis** (was 75
 until the four date-broadcast pools were added 2026-08-13). Every scraper
-lands to `raw_data/` as an asset ([assets/scrape.py](assets/scrape.py)); every
-bronze ingest leaf is an asset ([assets/bronze.py](assets/bronze.py), 20 leaves → 25
-tables); silver has twenty ([assets/silver.py](assets/silver.py)), gold ten
-([assets/gold.py](assets/gold.py)) and the per-ticker unified schema two
-([assets/unified.py](assets/unified.py)).
+lands to `raw_data/` as an asset ([assets/scrape.py](../../src/orchestration/assets/scrape.py)); every
+bronze ingest leaf is an asset ([assets/bronze.py](../../src/orchestration/assets/bronze.py), 20 leaves → 25
+tables); silver has twenty ([assets/silver.py](../../src/orchestration/assets/silver.py)), gold ten
+([assets/gold.py](../../src/orchestration/assets/gold.py)) and the per-ticker unified schema two
+([assets/unified.py](../../src/orchestration/assets/unified.py)).
 They are separate modules on purpose: the
 landing layer is correct-on-disk and re-runnable with no database at all.
 
@@ -241,7 +241,7 @@ raw/cafef_financials[t] ─► bronze/cafef_financials ─► silver/cafef_finan
 ### ⚠️ The edges, read out of the code (2026-07-31 correction)
 
 The first version of this graph took "TradingView is the universe authority" from
-`web_scraper/CONTEXT.md` §1 and hung CafeF/Simplize/pdfs off
+`.claude/context/web_scraper.md` §1 and hung CafeF/Simplize/pdfs off
 `trading_view_collected_links`. **Three of those edges were wrong.** What each consumer
 actually opens:
 
@@ -339,7 +339,7 @@ opposite:
 
 The second hides best under expensive work, which is exactly where it was found.
 
-[src/utils/inputs.py](../utils/inputs.py) makes the choice explicit at the read
+[src/utils/inputs.py](../../src/utils/inputs.py) makes the choice explicit at the read
 site: **`require_file` / `require_dir`** raise `MissingSourceDataError` with *what* is
 missing, *what breaks*, and *how to fix it*; **`optional_file`** returns a bool and logs
 a WARNING that must name the degradation (`degrades=` is not decoration — "sector and
@@ -361,15 +361,15 @@ deliberately does NOT keep its own copy of those checks: a duplicated preconditi
 have left the orchestrator as the only caller that failed early, with the silent path
 still open everywhere else.
 
-> Both reads are now also documented in `web_scraper/CONTEXT.md` §3a. Neither appeared in
-> any CONTEXT.md before this audit — which is the point: they were invisible in the code
+> Both reads are now also documented in `.claude/context/web_scraper.md` §3a. Neither appeared in
+> any context doc before this audit — which is the point: they were invisible in the code
 > *and* in the prose, and only a "what does this actually open?" pass found them.
 
 **The lesson for the rest of the migration:** derive every edge from what the code
 opens, not from the prose. The prose was written for humans reading in order, so
 "TradingView must run first" was true while "CafeF reads the aggregate" was never
 stated and never checked — and neither the Simplize read nor the schema-file read
-appears in any CONTEXT.md at all.
+appears in any context doc at all.
 
 ### Why only these two things are partitioned
 
@@ -451,7 +451,7 @@ and options DATA steps, which are documented no-ops.
 the *previous* dated files are still in it — so `files` and `rows` both looked healthy
 and the asset went green. The check answers "is this folder empty?", not "did THIS run
 produce anything". The fix belongs in the scraper (it now raises — see
-`web_scraper/CONTEXT.md` §3 TradingView); if a per-run check is ever wanted here, it has
+`.claude/context/web_scraper.md` §3 TradingView); if a per-run check is ever wanted here, it has
 to compare against the run's own output file, not the folder.
 
 ### The original prototype slice
@@ -757,7 +757,7 @@ also thrown away, which is why the UI can look like it has never run anything.
 `stocks` (777 tickers, ~10 h), `futures`, `indices` and the two that legitimately queue 0
 tasks included. It cannot be fixed in the JOB: `define_asset_job(partitions_def=<subset>)`
 is rejected — *"Partitioning is inferred from the selected assets"*. It is fixed in
-[config.json](config.json)'s `partitions` section instead, one key per sub-source — see
+[config.json](../../src/orchestration/config.json)'s `partitions` section instead, one key per sub-source — see
 *Turning things off*, level 3.
 
 Two assets (`raw/trading_view_links` then `raw/trading_view_data`, same partition, one
@@ -849,7 +849,7 @@ in 1.13):
 --select "* and not group:cafef_filings"
 ```
 
-**3. Hard-disable it** — set it `false` under `assets` in [config.json](config.json). No
+**3. Hard-disable it** — set it `false` under `assets` in [config.json](../../src/orchestration/config.json). No
 Python edit. It then vanishes from the UI, from `*`, and from every selection. Reserve
 this for "must never load in this repo".
 
@@ -949,7 +949,7 @@ shrank to whatever was being fetched.**
   `<country>`. Deeper selection needs a path prefix, and inventing that before something
   needs it is how the last config reached 676 keys
 
-The loading moved out of `definitions.py` into [enabled.py](enabled.py), and that is not
+The loading moved out of `definitions.py` into [enabled.py](../../src/orchestration/enabled.py), and that is not
 tidiness: a partition toggle has to be applied where the `PartitionsDefinition` is BUILT
 — inside `assets/scrape.py` and `assets/unified.py`, at import time — which is long
 before `definitions.py` has an asset list to filter. `definitions.py` keeps the
@@ -1009,7 +1009,7 @@ per-table methods directly, so `--select` is the whole run plan. `config.json`'s
 materialisation the way `switch_config.json` could (§3).
 
 **Expected output of C**, which doubles as the acceptance test — the four counts match
-`preprocessor/CONTEXT.md` §8 exactly:
+`.claude/context/orchestration-preprocessor.md` §8 exactly:
 
 ```
 index_price:        6 files, 24962 rows   →  bronze.cafef_index_price:        24962 rows
@@ -1024,7 +1024,7 @@ report 80 assets and "All code locations passed validation").
 
 ### ✅ Phase 1a — the whole BRONZE layer, 20 assets (2026-08-01)
 
-[assets/bronze.py](assets/bronze.py) now covers **all 20 ingest leaves**, generated from
+[assets/bronze.py](../../src/orchestration/assets/bronze.py) now covers **all 20 ingest leaves**, generated from
 an `INGESTS` spec table (name, method, tables, upstream). The four `cafef_index_*` keys
 are unchanged, so their run history survives.
 
@@ -1041,7 +1041,7 @@ dagster asset materialize -f src/orchestration/definitions.py --select "group:br
 ```
 
 **20/20 green, ~9 minutes**, 10.6 M rows re-ingested. This run doubled as the acceptance
-test for the `symbol` → `ticker` refactor in `src/` (see `preprocessor/CONTEXT.md`
+test for the `symbol` → `ticker` refactor in `src/` (see `.claude/context/orchestration-preprocessor.md`
 §4-bronze): **22 of 25 tables reproduced their row count EXACTLY.** The three that moved
 were stale bronze catching up with raw data the scrapers had already written —
 `cafef_news` 5,599 → 405,320 (3 tickers → the full 777), `cafef_order_stats` 351,373 →
@@ -1237,7 +1237,7 @@ carries the dep and the row-count tables as separate fields.
 
 Three TradingView asset classes got a full chain on the same day, and they are **one
 spec table each in silver and gold** rather than six hand-written assets
-([silver.py](assets/silver.py) `PROJECTIONS`, [gold.py](assets/gold.py) `WIDE_PANELS`) —
+([silver.py](../../src/orchestration/assets/silver.py) `PROJECTIONS`, [gold.py](../../src/orchestration/assets/gold.py) `WIDE_PANELS`) —
 because the ASSERTIONS are the valuable part, and a copy-pasted panel gets the ones
 whoever wrote it remembered.
 
@@ -1286,7 +1286,7 @@ a warm run) and the tables are correct — but a green scrape is NOT evidence of
 data, which is the standing warning in §5 *Gotchas* made concrete.
 
 **The fix is now one flag:** `TradingViewDataConfig.skip_existing=False`
-([assets/scrape.py](assets/scrape.py)) re-fetches every symbol. Budget ~50 s per symbol
+([assets/scrape.py](../../src/orchestration/assets/scrape.py)) re-fetches every symbol. Budget ~50 s per symbol
 (the 8-second global gate dominates), so ~396 symbols across the three classes is
 roughly **5.5 hours**.
 
@@ -1597,7 +1597,7 @@ free). Any future asset that touches a lazily-imported repo module is covered.
 The COPY writer assumes an empty table, so the second run died on the primary key —
 `duplicate key value violates unique constraint … Key (exchange, ticker, date)=(HOSE,
 VCB, 2009-06-30) already exists`. Re-materialising is the normal life of an asset, so
-"drop the gold table first", which is what `preprocessor/CONTEXT.md` §7 told a
+"drop the gold table first", which is what `.claude/context/orchestration-preprocessor.md` §7 told a
 human to do, was never going to survive contact with an orchestrator. **Fixed**:
 `_ingest_gold_table` drops the table itself, as late as possible so an earlier failure
 leaves the old one intact — the same thing `_ingest_gold_economy` and
@@ -2554,8 +2554,8 @@ class constant.
 
 A **screen** is a named list of **conditions**; a condition measures ONE number per
 `(exchange, ticker)` and compares it to a threshold. Both live in
-[`preprocessor/filters.py`](preprocessor/filters.py), which is **pure** — no I/O, no
-database — so [`preprocessor/test_filters.py`](preprocessor/test_filters.py) pins the
+[`preprocessor/filters.py`](../../src/orchestration/preprocessor/filters.py), which is **pure** — no I/O, no
+database — so [`preprocessor/test_filters.py`](../../src/orchestration/preprocessor/test_filters.py) pins the
 whole definition half without PostgreSQL (**30 tests**).
 
 ```
@@ -2763,7 +2763,7 @@ the entry point; it is one number now.
 ⚠️ **Fixed 2026-07-31: the links phase ignored the semaphore.**
 `_scrape_links_attempt` created its driver outside it, so the effective cap there was
 the 16-thread pool — 16 browsers (~100-160 `chrome.exe` processes), twice what this
-table and `web_scraper/CONTEXT.md` both claimed. It now takes the permit before
+table and `.claude/context/web_scraper.md` both claimed. It now takes the permit before
 `webdriver.Chrome()` and holds it until `quit()`. Verified with a fake driver: 24 tasks
 (what the `stocks` links partition queues), 16 workers → **peak 8**.
 
@@ -2778,7 +2778,7 @@ Raise it only for work with no browser in it.
 
 ### The browser budget is ONE number, and it is a parameter
 
-`SCRAPER_MAX_CONCURRENT_BROWSERS` in [utils/constants.py](../utils/constants.py) —
+`SCRAPER_MAX_CONCURRENT_BROWSERS` in [utils/constants.py](../../src/utils/constants.py) —
 **default 12** (raised from 4 on 2026-08-22) — is the whole cap. Three ways to change it,
 in ascending precedence:
 
@@ -2799,7 +2799,7 @@ disagree in one of two useless ways: a pool wider than the cap buys threads that
 on a semaphore, and a pool narrower than the cap makes the cap unreachable. The second is
 what was actually shipped — `SCRAPER_MAX_CONCURRENT_BROWSERS = 1` in the code,
 `SCRAPER_MAX_WORKERS = 2` for the pool, and **8** in this file and in
-`web_scraper/CONTEXT.md`. The effective concurrency was 1.
+`.claude/context/web_scraper.md`. The effective concurrency was 1.
 
 ⚠️ **`_browser_slot()` replaced `with self._browser_semaphore:`** and counts live and
 peak browsers, so "at most N" is a number in `logs/app.log` and in the asset's
@@ -2827,7 +2827,7 @@ return to sequential execution.
   wrapping nothing. Making orchestration self-contained means MOVING ~6,200 lines into
   it, not removing a directory.
 - **Assets are generated from a spec table**, not copy-pasted — `TABS` in
-  [assets/scrape.py](assets/scrape.py) is four rows and produces eight
+  [assets/scrape.py](../../src/orchestration/assets/scrape.py) is four rows and produces eight
   assets (the bronze side is generated the same way from `assets/bronze.py`).
   ⚠️ **Path corrected 2026-08-27** — `assets/cafef_index.py` has never existed; the
   spec table lives in `scrape.py`. At ~60 assets this is the difference between maintainable and not.
@@ -2869,7 +2869,7 @@ return to sequential execution.
 ### 4.1 ✅ Phase 0 — exception propagation (DONE, 2026-07-31)
 
 A stage that did not do its work now raises. New module
-[src/utils/exceptions.py](../utils/exceptions.py): `PipelineError` base,
+[src/utils/exceptions.py](../../src/utils/exceptions.py): `PipelineError` base,
 `MissingSourceDataError` (input absent/empty), `DatabaseQueryError` (query failed).
 
 | was | now |
@@ -2905,7 +2905,7 @@ Verified:
 `DatabaseExecutionStatus.ERROR` enum that no caller checks. They are left alone
 because the live write path does not use them — `_helper_save_pandas_table_to_database`
 builds its own SQL and **already re-raises** from its worker threads
-([preprocessor/preprocessor.py:529-531](preprocessor/preprocessor.py#L529-L531))
+([preprocessor/preprocessor.py:529-531](../../src/orchestration/preprocessor/preprocessor.py#L529-L531))
 — and because a failed `create_table` surfaces immediately as a failed insert anyway.
 
 ⚠️ **Expect red on the first wide run.** Turning on a bronze leaf whose scraper has
@@ -2927,7 +2927,7 @@ split naturally, which is an improvement), and per gold leaf (6).
 
 Bronze has **no cross-table dependency** — each ingest reads its own `raw_data/`
 folder — so those 20 are a flat layer. Silver and gold edges are already documented in
-[data_preprocessor/CONTEXT.md](preprocessor/CONTEXT.md) §4 and can be
+[data_.claude/context/orchestration-preprocessor.md](orchestration-preprocessor.md) §4 and can be
 transcribed directly.
 
 Note `data_quality_unified` is a **dead switch** — no code reads it. Drop it.
@@ -2936,7 +2936,7 @@ Note `data_quality_unified` is a **dead switch** — no code reads it. Drop it.
 
 `cafef_index`, `cafef/{price,foreign,order_stats,prop_trading,insider_txn}`,
 `cafef_news`, `simplize/{stocks,industry}`, `gics/structure` are all assets in
-[assets/scrape.py](assets/scrape.py).
+[assets/scrape.py](../../src/orchestration/assets/scrape.py).
 
 ⚠️ **The planned `deps=[tv_collected_links]` edge was WRONG and is not what was built.**
 The audit in §2 found that CafeF and Simplize read `links/stocks/` directly, not the
@@ -3074,7 +3074,7 @@ silver leaves that were never separate tables and the two unified universes
   > and refreshed 29 series while leaving **328** ending 2026-06-08. A per-series max
   > date is the only honest freshness check; `landed()` and the row count both look
   > healthy. `TradingViewDataConfig.skip_existing=False` forces the full re-fetch. (Cf. the short-page pagination bug in
-  `web_scraper/CONTEXT.md §7`: the per-stock CSVs on disk predate the fix and
+  `.claude/context/web_scraper.md §7`: the per-stock CSVs on disk predate the fix and
   `skip_existing` will not refresh them.)
 - **The OCR venvs (`ocr_env8`/`ocr_env9`) are irrelevant here** — the production
   financials parse runs in `mt_env` with `CAFEF_OCR_ENGINE=onnx` against the
@@ -3087,14 +3087,14 @@ silver leaves that were never separate tables and the two unified universes
 
 ## The `analysis` group — the fifth layer writes no table (2026-08-10)
 
-[assets/selection.py](assets/selection.py), **one asset**:
+[assets/selection.py](../../src/orchestration/assets/selection.py), **one asset**:
 `analysis/feature_selection_economy`, partitioned by **COUNTRY (19 keys)**. It runs
 `feature_selection.run.run_selection` over `pool__basic + pool__economy_<country>` and
 archives a folder under `reports/feature_selection/` — ⚠️ **the SINGLE report root since
 2026-08-10**, where the config default was `reports/feature_selection_economy` before the
 four roots were merged. It shares that root, and its seed 18, with every hand-run
 selection, so `final_features` groups a country run WITH a `pool__basic` run unless each
-build passes `--scope` (`feature_selection/CONTEXT.md` §15a-after).
+build passes `--scope` (`.claude/context/feature_selection.md` §15a-after).
 
 ⚠️ **It is the only asset in this code location that writes no database table.**
 `feature_selection` is read-only by package design (CLAUDE.md §8) and `final_features`
@@ -3119,5 +3119,5 @@ this repo's own archived timings and is quadratic in channels, so `usa` at 1,458
 is 7.2 h with no null and 6.3 days at the default 20 draws.
 
 **The depth, the config knobs and the exact commands are
-[feature_selection/CONTEXT.md §15](../feature_selection/CONTEXT.md).** Do not duplicate
+[.claude/context/feature_selection.md §15](feature_selection.md).** Do not duplicate
 them here; this section exists so the group is discoverable from the orchestration side.

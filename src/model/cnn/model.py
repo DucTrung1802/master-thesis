@@ -24,7 +24,7 @@ its label is `return_5day[N]`, computed from `close[N+5]`. **Every row in the wi
 precedes the label**, so a filter reading forward *within the window* is reading the
 past, not the future. The leak that matters in this repo is across SAMPLES, and it is
 handled where it belongs — the `d + h - 1` purge at each split boundary
-(`train_test_creator/CONTEXT.md` §3).
+(`.claude/context/train_test_creator.md` §3).
 
 ## ⚠️ Global average pooling, not the last position
 
@@ -32,7 +32,7 @@ handled where it belongs — the `d + h - 1` purge at each split boundary
 instead would make this an LSTM with a different cell, and would inherit the failure
 mode §6b names: on this ticker the level at day `N` acts as an ERA PROXY — a
 seventeen-year price trend lets a model identify the year rather than predict the
-return, and `feature_selection/CONTEXT.md` §6c measured that removing the level removes
+return, and `.claude/context/feature_selection.md` §6c measured that removing the level removes
 the apparent signal. Averaging over the window is the weaker assumption, and `close_adjust`
 is one of the four channels.
 """

@@ -72,7 +72,7 @@ stays manual. This stage refreshes `outstanding.csv` from the runs that already 
 
 **Vouch for anything.** Every table, dataset and run downstream of the current archive
 carries the same warning: all 19 source runs computed no null
-(`feature_selection/CONTEXT.md` §14b). A green pipeline means the stages agree with
+(`.claude/context/feature_selection.md` §14b). A green pipeline means the stages agree with
 each other, not that the result means anything.
 """
 
@@ -515,7 +515,7 @@ def selected_for(ticker: str = DEFAULT_TICKER, table: str = DEFAULT_TABLE,
 
     ⚠️ **READ OFF THE SHORTLISTS, NEVER OFF THE TABLE NAME.** `final_features` drops the
     `cs_` prefix when it names a table (`cs_rank_20day` → `rank_20day__final__…`,
-    `final_features/CONTEXT.md` §3), so the name genuinely cannot say whether the
+    `.claude/context/final_features.md` §3), so the name genuinely cannot say whether the
     selection was cross-sectional. `TrainTestCreator.resolve_target` makes exactly this
     point and reads `outstanding.csv`'s `target` column; this is the same filter —
     `(schema, lookback_d, horizon_h)` — so the two cannot answer differently.
@@ -766,7 +766,7 @@ def apply_final_features(
     from final_features.builder import build_all
 
     # ⚠️ `replace=False`. Rebuilding a table silently would invalidate every dataset
-    # hash downstream; `final_features/CONTEXT.md` §7 makes the same argument. Pass
+    # hash downstream; `.claude/context/final_features.md` §7 makes the same argument. Pass
     # --replace to that module directly when the rebuild is intended.
     build_all(root=root or _report_root(), apply=True, replace=False, scope=scope)
 

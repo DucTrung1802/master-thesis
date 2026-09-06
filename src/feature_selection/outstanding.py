@@ -12,7 +12,7 @@ they can be read and joined on `date`.
     reports/feature_selection/<run>/outstanding.csv    ⭐ one per run, the deliverable
 
 ⚠️ **One file per run, deliberately — there is no combined file.** The runs are not
-one experiment. §8 of CONTEXT.md is a list of ways two runs look comparable and are
+one experiment. §8 of .claude/context/feature_selection.md is a list of ways two runs look comparable and are
 not, and a single merged shortlist is exactly the artefact that gets quoted against a
 configuration it was never computed for. Merging is the NEXT module's job, done
 knowingly, against the `run_id`, `target`, `lookback_d`, `grain` and `evidence` each

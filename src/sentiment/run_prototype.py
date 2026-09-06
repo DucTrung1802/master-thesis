@@ -13,7 +13,7 @@ Run:  python -m sentiment.run_prototype            # uses stored sentiment score
 a random walk, so the price head is judged against `close[t+H]=close[t]` and the direction
 head against the majority class / 0.5. On the current 3-ticker news set this chain does
 NOT beat those baselines — the prototype exists to measure that rigorously, not to imply
-the signal is tradeable. See `sentiment/CONTEXT.md`.
+the signal is tradeable. See `.claude/context/sentiment.md`.
 """
 
 from __future__ import annotations

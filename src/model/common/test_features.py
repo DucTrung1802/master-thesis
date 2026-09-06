@@ -9,7 +9,7 @@ eat; `mlp.model.window_statistics_torch` is the same six reductions inside an
 it". The duplication here is unavoidable (numpy cannot autograd, torch cannot be
 handed to xgboost), so it is pinned instead. If these two disagree, a ridge coefficient
 and an MLP weight stop describing the same feature and the capacity ladder in
-`model/CONTEXT.md` §14 compares models on different inputs.
+`.claude/context/model.md` §14 compares models on different inputs.
 
     python -m pytest model/common/test_features.py -q
 """

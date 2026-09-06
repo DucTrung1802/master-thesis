@@ -1,7 +1,7 @@
 # src\feature_selection\cross_sectional.py
 """The cross-sectional study — `unified_schema_all`, N stocks × T days, one target.
 
-This is CONTEXT.md §7 built. The single-ticker study ended at a verdict — nothing
+This is .claude/context/feature_selection.md §7 built. The single-ticker study ended at a verdict — nothing
 cleared its own null, and the binding constraint was `n_eff`, not features — with
 one way out: stop asking *will VCB go up* and start asking *which of these stocks
 will beat the others*. That question needs a panel, a per-date target, a per-date
@@ -40,7 +40,7 @@ observations when it has `T / h`.
 
 ## ⚠️ 2. What the cross-section actually buys — and what it does not
 
-§6d of CONTEXT.md priced the single-ticker study at ~850 independent observations
+§6d of .claude/context/feature_selection.md priced the single-ticker study at ~850 independent observations
 and said 1,500 were needed. It is tempting to read "N stocks × T days at the same
 `h` multiplies the independent count by N" as `850 × 100`. **It does not.**
 

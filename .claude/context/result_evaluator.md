@@ -21,7 +21,7 @@ that — the metric, the bar, the verdict — is a **reading** of that file and 
 model, no GPU and no training.
 
 The project already cashed that in once: `dir_auc` was backfilled across every
-existing run without retraining any of them (`model/CONTEXT.md` §9). It cashed in
+existing run without retraining any of them (`.claude/context/model.md` §9). It cashed in
 again during this build — **27 of the 28 run folders in this checkout have no
 `metadata.json` at all**, because `src/model/runs/*/` is git-ignored and only
 `results/` and `logs/` survived. A scorer that required the metadata could not read
@@ -111,7 +111,7 @@ measurement of a bad fit, and a bad measurement is still a measurement.
 
 ## 3. ⚠️ Every core metric carries a bar, and the bar is not zero
 
-`feature_selection/CONTEXT.md` §10 and `final_features/CONTEXT.md` §6 make the same
+`.claude/context/feature_selection.md` §10 and `.claude/context/final_features.md` §6 make the same
 point about selections: a number without a null is descriptive, not evidence. So `ic`
 and `dir_auc` are each reported with `<m>_p`, `<m>_bar` (the null's p95) and
 `<m>_clears`, from 200 block-shuffled draws.
@@ -235,7 +235,7 @@ carried until 2026-08-09** (`−0.0112` and `+0.0013`). Rebuilding the VCB table
 measured cut took it from 203 channels to 750, the dataset from 202 features to 724,
 and the test IC from −0.011 to **−0.072** with R² from −0.08 to **−0.90** — the
 expected consequence of handing an LSTM 724 channels on 2,918 training windows
-(issue **STL-1**, and see `train_test_creator/CONTEXT.md` §6 for the drift that came
+(issue **STL-1**, and see `.claude/context/train_test_creator.md` §6 for the drift that came
 with them). Both test ICs are now negative.
 
 Three run folders were removed in the same pass (issue **DUP-1**), which is why the
@@ -247,19 +247,19 @@ standard deviation of the realised one**. Visible in `figures_test.png` before a
 metric is read.
 
 ⚠️ The bank run is the more interesting negative: 20 tickers, 26,964 training windows
-and a cross-sectional reading — the direction `model/CONTEXT.md` §11 identified as the
+and a cross-sectional reading — the direction `.claude/context/model.md` §11 identified as the
 only tradeable one — and it still sits inside its own null. Note also that the panel
 null's mean `ic` is **+0.008, not zero**: shuffled labels pay something here, which is
 exactly why the bar is not zero.
 
-This reproduces `model/CONTEXT.md` §10–§11 on a completely rebuilt pipeline: freshly
+This reproduces `.claude/context/model.md` §10–§11 on a completely rebuilt pipeline: freshly
 selected channels, a purged split, a corrected null and a panel-aware reading did not
 change the answer.
 
 The **6** clearing split-metrics belong to **5 runs**: the
 `probability_gain_5pct_5day` runs at lb1/lb15/lb25 (`dir_auc` only) and the
 `return_5day` runs at lb1 (`ic`) and lb2 (**both** `ic` and `dir_auc`) — and §11 of
-`model/CONTEXT.md` already recorded why the first group is not trustworthy (val and
+`.claude/context/model.md` already recorded why the first group is not trustworthy (val and
 test ROC-AUC are decorrelated across lookbacks, so the apparent test edge is not
 selected-for and does not reproduce). **Not one of them is a current run**, and none
 reads a return from `pool__targets`: the two `return_5day` runs read

@@ -282,7 +282,7 @@ The ACB figure went `98 → 161 → 186 → 189 → 193 → 195` across five suc
 
 ## Open items as of 27 July 2026
 
-1. **Unfinished regression on the OCR pipeline (flagged in-repo).** Fixes 8 (`CROP_PAD_PT`) and 9 (`Y_TOL 3.0 → 4.0`) change the crop and line grouping on **every** ONNX page for **every** ticker, and their regression run was started three times and lost each time. `regress_cf` (16 accepted cash flows, expect 16/0) and `verify_cascade` must be re-run — ~50–60 min — before the parser is trusted beyond ACB. Instructions are in `src/web_scraper/CONTEXT.md`.
+1. **Unfinished regression on the OCR pipeline (flagged in-repo).** Fixes 8 (`CROP_PAD_PT`) and 9 (`Y_TOL 3.0 → 4.0`) change the crop and line grouping on **every** ONNX page for **every** ticker, and their regression run was started three times and lost each time. `regress_cf` (16 accepted cash flows, expect 16/0) and `verify_cascade` must be re-run — ~50–60 min — before the parser is trusted beyond ACB. Instructions are in `.claude/context/web_scraper.md`.
 2. **Parse gates prove subtotals, not every line.** A PDF-sourced row can be thinner than the CafeF row it replaces (28 items vs 47), and an interior line can be wrong while the statement reconciles. Consumers needing a minor line item should cross-check `from_api`.
 3. **Coverage is two tickers.** VCB and ACB are complete; the bank template is the only one parsed. Three templates (corp, securities, insurance) have schemas but no parsed tickers. Downstream, `silver.*_financials_bank_fa` currently holds VCB only.
 4. **Sentiment corpus is thin at the ticker level** for conclusions — news exists for the full 777-ticker universe now (~405 k rows), but the sentiment experiments ran on 3 tickers.

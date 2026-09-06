@@ -80,7 +80,7 @@ their daily **price ceiling** on the entry date dropped as unbuyable (**9,259 of
 | top 10 names' share of all picks | **17.9 %** |
 | turnover per rebalance | mean **65.1 %**, median 65.0 %, range 20-90 % → **8.2 %/yr** at 50 bps |
 
-✅ That turnover **confirms the `τ = 0.70` assumption** in `backtest/CONTEXT.md` §3 from the data —
+✅ That turnover **confirms the `τ = 0.70` assumption** in `.claude/context/backtest.md` §3 from the data —
 measured 0.651, predicted drag 8.8 %/yr against a measured 8.2 %.
 
 ### 4c. ⚠️ Where the picks come from — the model prefers the boards you can least trade

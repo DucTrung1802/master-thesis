@@ -109,7 +109,7 @@ def main() -> None:
 
     # ⚠️ Raw cursor with explicit float casts, not driver.select: the daily panel is 2.1M
     # rows and `numeric` comes back as Decimal→object, which is the thing that has stalled
-    # runs on stocks_basic before (sentiment/CONTEXT.md §5).
+    # runs on stocks_basic before (.claude/context/sentiment.md §5).
     with driver._cursor_ctx() as cur:
         cur.execute(
             f"SELECT column_name, data_type FROM information_schema.columns "

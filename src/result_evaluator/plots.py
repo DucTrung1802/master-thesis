@@ -65,7 +65,7 @@ __all__ = [
 def plot_loss_history(history: pd.DataFrame, best_epoch: Optional[int] = None, ax=None):
     """Train and val loss per epoch — two series, one axis.
 
-    ⚠️ The single most diagnostic chart for this project's runs: `model/CONTEXT.md`
+    ⚠️ The single most diagnostic chart for this project's runs: `.claude/context/model.md`
     §10 records that most classification runs stop at best epoch 1, train loss falling
     while val rises. That is visible here and in no metric.
     """

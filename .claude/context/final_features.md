@@ -9,7 +9,7 @@
 >
 > ⚠️ **This is the package that WRITES TO THE DATABASE.** `feature_selection`
 > deliberately does not — "a selection is a result object and a set of figures, not a
-> table" (`feature_selection/CONTEXT.md` §1). That rule is not bent here; the writing
+> table" (`.claude/context/feature_selection.md` §1). That rule is not bent here; the writing
 > step was made a **separate package** so the boundary is visible in the import graph
 > instead of living in a comment.
 
@@ -24,11 +24,11 @@ python -m final_features --apply --shape shortlist   # the layer-2 INPUT pool �
 ## 0. ⚠️ THE INTERFACE — the only two files this module may open
 
 > **This section is normative and it is MIRRORED in
-> [`feature_selection/CONTEXT.md` §0](../feature_selection/CONTEXT.md).** That file is
+> [`.claude/context/feature_selection.md` §0](feature_selection.md).** That file is
 > the PRODUCER's half: what a selection promises to write. This is the CONSUMER's
 > half: what this module promises to read, and nothing beyond it. Neither may be
 > changed alone — the definition they both import is
-> [`feature_selection/contract.py`](../feature_selection/contract.py), and a column
+> [`feature_selection/contract.py`](../../src/feature_selection/contract.py), and a column
 > added on one side and not the other is an **import error**, not a discovery three
 > stages later.
 
@@ -175,7 +175,7 @@ cut_corr_threshold`.
 `outstanding.csv`.** The shortlist used to carry only `lookback_d` and `horizon_h` —
 enough to read a row, not enough to decide two runs are the same experiment, and
 grouping on what it happened to carry would silently merge runs differing in
-`normalize` or `random_state` (`feature_selection/CONTEXT.md` §8 lists what that
+`normalize` or `random_state` (`.claude/context/feature_selection.md` §8 lists what that
 costs). But `metadata.json` describes the SELECTOR RUN, and the shortlist is now
 rebuilt afterwards by `selection_cut` — so the two parameters that determine the cut
 have to come from the file the cut wrote. See §5a.
@@ -307,7 +307,7 @@ Every table carries a `COMMENT ON TABLE` naming the source runs, the setup and t
 > computed for that run — a ranking without a null is descriptive, not evidence.
 
 ⚠️ **18 of the VCB table's 19 source runs computed NO NULL, and the 19th FAILED its
-own** (`pool__basic`, z = +1.46, measured 2026-08-09 — `feature_selection/CONTEXT.md`
+own** (`pool__basic`, z = +1.46, measured 2026-08-09 — `.claude/context/feature_selection.md`
 §10b). The bank table's single run also failed. So **not one surviving run in the
 archive clears anything** — 18 with no bar, 2 that failed their own. A row in one of
 these tables is a channel some run ranked highly. **That is all it is.** §10 of the
@@ -352,7 +352,7 @@ feature_selection  →  THIS  →  train_test_creator  →  model.lstm  →  res
 ```
 
 `python -m pipeline` prints the state of all five and runs the stale ones
-(`src/pipeline/CONTEXT.md`). Two things downstream depend on decisions made here:
+(`.claude/context/pipeline.md`). Two things downstream depend on decisions made here:
 
 - ⚠️ **The `d` and `h` in the table NAME are the only source of the window length and
   horizon downstream.** `train_test_creator.parse_final_table` reads them off it, so

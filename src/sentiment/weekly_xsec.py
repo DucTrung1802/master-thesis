@@ -184,7 +184,7 @@ class Result:
 
 
 def _make_model() -> HistGradientBoostingClassifier:
-    # HistGB, not exact GB: `sentiment/CONTEXT.md` §5 — exact GB is 1-2 orders slower and
+    # HistGB, not exact GB: `.claude/context/sentiment.md` §5 — exact GB is 1-2 orders slower and
     # this is 6 folds × 5 horizons × 3 feature sets.
     return HistGradientBoostingClassifier(
         max_iter=200, learning_rate=0.06, max_depth=4,

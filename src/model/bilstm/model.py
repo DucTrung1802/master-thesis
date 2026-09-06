@@ -2,7 +2,7 @@
 
 ⚠️ **BIDIRECTIONAL IS NOT LEAKAGE HERE, AND THE REASON IS THE WINDOW, NOT THE LAYER.**
 One sample is the window `t-d+1 … t` and the label is the target AT day `t`
-(`model/CONTEXT.md` §1). A backward pass reads that same window right-to-left; every
+(`.claude/context/model.md` §1). A backward pass reads that same window right-to-left; every
 timestep it touches is still on or before `t`. Nothing after `t` is in the tensor at
 all, so there is nothing for the backward direction to leak from.
 

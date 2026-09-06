@@ -158,9 +158,9 @@ raises on, and the surviving channel count is only known once the dataset is bui
 
 | you changed | it goes in |
 |---|---|
-| a new measurement, or one that moves a verdict | `CLAUDE.md` §6 (+ bump the date), or the package's `CONTEXT.md` |
+| a new measurement, or one that moves a verdict | `CLAUDE.md` §6 (+ bump the date), or the package's file under `.claude/context/` |
 | a new defect | `../current_state/ISSUES.md`, with a **permanent** code |
-| a finished backlog item | its number moves to `CLAUDE.md` / `CONTEXT.md`; the item is **deleted from `../current_state/TODO.md`, not ticked** |
+| a finished backlog item | its number moves to `CLAUDE.md` / `.claude/context/`; the item is **deleted from `../current_state/TODO.md`, not ticked** |
 | a new `.md` file | a row in `../current_state/INDEX.md` |
 | a new command or stage | **this file** |
 

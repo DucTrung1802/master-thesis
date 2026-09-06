@@ -12,7 +12,7 @@ table scores in ~12 s), else CPU. Labels are normalised to English
 derived as `p(positive) - p(negative)` for an ordered, model-agnostic feature.
 
 ⚠️ The CafeF news text is **Vietnamese**, so an English sentiment model would be
-wrong here — this model is chosen for that reason (see `sentiment/CONTEXT.md`).
+wrong here — this model is chosen for that reason (see `.claude/context/sentiment.md`).
 It is general-domain (not finance-fine-tuned), so treat the score as a directional
 signal, not a calibrated financial-tone measure.
 """

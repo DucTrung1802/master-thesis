@@ -343,7 +343,7 @@ def run_selection(
                 # here from the two tables' own columns. `cs_rank_{h}day` is deliberately
                 # absent: it is DERIVED after the read (`cross_sectional_rank`) and
                 # belongs to no table — which is the same reason `final_features` cannot
-                # store it (`final_features/CONTEXT.md` §5).
+                # store it (`.claude/context/final_features.md` §5).
                 columns_by_table = {
                     table: [
                         c

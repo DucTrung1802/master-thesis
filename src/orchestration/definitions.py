@@ -140,7 +140,7 @@ def _enabled(asset_defs):
 #     exists to avoid. ⚠️ This tag limit is per RUN; the multi-run escape hatch is shut
 #     by `max_concurrent_runs: 1` in `.dagster/dagster.yaml`, not here.
 #   * `gpu` (limit 1) — the OCR parse runs onnxruntime-gpu on a 4 GB RTX 3050. Two
-#     partitions is VRAM exhaustion, and `sentiment/CONTEXT.md` already records stale
+#     partitions is VRAM exhaustion, and `.claude/context/sentiment.md` already records stale
 #     GPU processes fragmenting that card.
 #
 # Everything else is `requests`-bound and safe to overlap: each scraper fans out on its
@@ -169,7 +169,7 @@ EXECUTOR = multiprocess_executor.configured(
 # `raw/trading_view_data` from the asset graph runs it with its DEFAULTS —
 # `skip_existing=True` — which refreshes only symbols absent from disk and leaves every
 # existing series at whatever date it already had. That is the documented trap in
-# `CONTEXT.md` §5 and it has already produced a green, two-hour, mostly-stale forex run.
+# `.claude/context/orchestration.md` §5 and it has already produced a green, two-hour, mostly-stale forex run.
 # A job carries `skip_existing=False` with it, so a full refresh is a button rather than
 # a YAML snippet somebody has to remember to paste into the launchpad.
 #

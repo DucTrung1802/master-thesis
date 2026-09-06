@@ -38,7 +38,7 @@ standardised and 3 are bounded. Dataset hash `686ff164619b29d9`.
 
 ⚠️ **These widths are post-STL-1 and this section read `202` of `203` until
 2026-08-09.** The table grew from 203 channels to 750 when the measured cut replaced
-`max_features=12` upstream (`feature_selection/CONTEXT.md` §14c) — so the screen now
+`max_features=12` upstream (`.claude/context/feature_selection.md` §14c) — so the screen now
 drops 26 channels rather than 1, and every shape here is 3.6× wider.
 
 ## 2. Why the old notebook could not be patched
@@ -166,7 +166,7 @@ sigma; the current worst two are
 `united_kingdom__…__gbmr` (+12.6) and `european_union__…__euppi` (+12.4) behind them.
 These are macro **level** series that trend monotonically; standardising
 them maps the test period to a region the training set never occupied. This is
-reported, not filtered — `feature_selection/CONTEXT.md` makes the same argument about
+reported, not filtered — `.claude/context/feature_selection.md` makes the same argument about
 raw levels in a window, and the fix belongs upstream (a differenced channel) rather
 than in a silent drop here.
 
@@ -187,7 +187,7 @@ windows whose first days belong to one company and last days to another.
 as the unsuffixed table. The suffix names the **feature block** a table was built from —
 `pool__basic` alone, rather than the archive's union of 19 shortlists — and it exists
 because `final_features` groups on `(schema, target, setup)`, a key with no term for
-*which pools* (`final_features/CONTEXT.md` §0a). Without it the narrow build and the wide
+*which pools* (`.claude/context/final_features.md` §0a). Without it the narrow build and the wide
 build collide on one name and the narrow one can only be created by DROPPING the wide.
 
 ⚠️ **Nothing in this module branches on it.** `d` and `h` still come from the same place,
@@ -200,7 +200,7 @@ folder states which one it read.
 
 `rank_5day__final__d20_h5` **stores `return_5day`**: a rank's value for a stock-date
 depends on which other names are in the panel, so `final_features` refuses to freeze
-one into a table (`final_features/CONTEXT.md` §5). Reading the name and demanding that
+one into a table (`.claude/context/final_features.md` §5). Reading the name and demanding that
 column made the entire bank schema unreachable — the table was fine, the reader was
 wrong (issue **BNK-1**, fixed 2026-08-09).
 
@@ -260,7 +260,7 @@ which is precisely how a 20-ticker panel gets silently scored as one series. Pin
 
 `final_features` does **not** store `cs_rank_{h}day`. A rank is computed within a date
 across a chosen universe, so its value depends on which names are in the panel and on
-`min_width` — properties of the RUN, not of the row (`final_features/CONTEXT.md` §5). It
+`min_width` — properties of the RUN, not of the row (`.claude/context/final_features.md` §5). It
 stores `return_{h}day` instead, *"and the reader re-ranks"*.
 
 ⚠️ **No reader re-ranked.** `y` was the stored return while the shortlist above it had
@@ -296,7 +296,7 @@ final_features  →  THIS  →  model.lstm  →  result_evaluator
 ```
 
 `python -m pipeline` prints the state of all five stages and runs the stale ones; see
-`src/pipeline/CONTEXT.md`. Downstream, `model/lstm/train.py` **asserts** its config
+`.claude/context/pipeline.md`. Downstream, `model/lstm/train.py` **asserts** its config
 against the `metadata.json` written here — `lookback`, `n_features` and (for a
 classifier) the absence of a target scaler — and copies §1's source `COMMENT` into
 every run's `lineage`, so the provenance travels one more hop.
@@ -325,8 +325,8 @@ fresh tensors passes every check it makes.
 ## 9. ⚠️ What this stage does NOT assert
 
 That the features are worth having. **18 of this table's 19 source runs computed no
-null, and the 19th failed its own** (`feature_selection/CONTEXT.md` §14b), and 725 of
-the 750 channels were chosen by exactly one run (`final_features/CONTEXT.md` §6) — the
+null, and the 19th failed its own** (`.claude/context/feature_selection.md` §14b), and 725 of
+the 750 channels were chosen by exactly one run (`.claude/context/final_features.md` §6) — the
 table is a union of disjoint shortlists, not a consensus.
 
 ⚠️ **This dataset's `metadata.json` still says "runs that computed no null", which is

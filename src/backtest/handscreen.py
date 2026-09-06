@@ -3,7 +3,7 @@
 
     python -m backtest.handscreen --run <run_id> --split test --top-k 20
 
-⚠️ **WHY THIS EXISTS.** `backtest/CONTEXT.md` §8g measured a hand-built rank at h=10 —
+⚠️ **WHY THIS EXISTS.** `.claude/context/backtest.md` §8g measured a hand-built rank at h=10 —
 Sharpe **+0.652** at 30 bps, z = +4.72 — and §4 measured a fitted LSTM at h=20. **Nobody
 has ever put the two on one panel**, so *how much a fitted model adds over three ranked
 columns* is unknown at EVERY horizon. That is the question `PRF-2` exists to answer, and
@@ -25,7 +25,7 @@ within-date percentile rank** of `drv_order_vol_imb_5`, the trailing 5-day retur
 2. **Same-close, not t+1.** §8g's own figure lags the signal one session. The model's
    `y_pred` at date `t` is paired with the forward return from `t`, so pricing the hand
    score at `t+1` while the model trades at `t` would hand the model a free session.
-   ⚠️ **Neither convention is the tradable one** — `backtest/CONTEXT.md` records the 5-day
+   ⚠️ **Neither convention is the tradable one** — `.claude/context/backtest.md` records the 5-day
    signal decaying inside ONE session (+24.4 % same-close against +5.6 % at t+1), which is
    `PRF-6`'s intraday-data argument. What matters here is only that both sides use one.
 

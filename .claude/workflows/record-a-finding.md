@@ -4,7 +4,7 @@
 > read it. **Cost: minutes.**
 >
 > ⚠️ **A measurement that never reaches the hub is invisible.** Every session loads `CLAUDE.md`;
-> almost none open a given `CONTEXT.md`. *"The detail stays local"* is a valid answer — but it is
+> almost none open a given package file under `.claude/context/`. *"The detail stays local"* is a valid answer — but it is
 > a **decision**, and this workflow is where it gets made rather than defaulted into.
 
 ---
@@ -23,7 +23,7 @@
 ```
 TODO item that turns out to be a defect  →  graduates to ISSUES.md with a code
 ISSUES entry that gets fixed             →  keeps its row, marked ✅ FIXED <date> in WORDS
-TODO item that gets done                 →  leaves its measurement in CLAUDE.md or a CONTEXT.md,
+TODO item that gets done                 →  leaves its measurement in CLAUDE.md or .claude/context/,
                                             and is DELETED, not ticked
 ```
 
@@ -37,7 +37,7 @@ order, cite the number.
       trusted months later because they are reproducible checks.
 - [ ] give it a **date**. A number without one cannot be told from a stale one.
 - [ ] put it where it was made: `CLAUDE.md` §6 for anything that changes the state or a verdict,
-      the package's `CONTEXT.md` for detail that stays local — **and decide which, explicitly**.
+      the package's file under `.claude/context/` for detail that stays local — **and decide which, explicitly**.
 - [ ] if it changes §6, **bump §6's date in the heading**.
 - [ ] add a `⚠️` if it cost something to learn. **Do not strip existing ones.**
 - [ ] run it through [quote-a-number.md](quote-a-number.md) first — a finding recorded without its
@@ -64,7 +64,7 @@ is left in."* That is the convention working.
 
 ## 4. If it is a FINISHED ITEM
 
-- [ ] move its measurement into `CLAUDE.md` or the package's `CONTEXT.md`
+- [ ] move its measurement into `CLAUDE.md` or the package's file under `.claude/context/`
 - [ ] **DELETE the item from `../current_state/TODO.md`** — do not tick it. Its number stays a permanent name
       wherever it is cited.
 

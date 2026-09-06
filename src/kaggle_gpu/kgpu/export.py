@@ -294,7 +294,7 @@ def _export_panel(cfg, folder: Path, manifest: dict, quiet: bool = False) -> Non
         # The two pools the panel is made of, each restricted to the columns the frame
         # actually carries. ⚠️ `cs_rank_{h}day` belongs to NEITHER: it is derived after
         # the read, which is the same reason `final_features` cannot store it
-        # (`final_features/CONTEXT.md` §5). It is the target, never a candidate.
+        # (`.claude/context/final_features.md` §5). It is the target, never a candidate.
         "columns_by_table": {
             table: [
                 c

@@ -10,7 +10,7 @@ relocation, not the multi-week rewrite it looks like from the line count.
 ⚠️ **This is still a library and still has no entry point.** The three
 `ingest_*_data()` methods and `_run_layer` went in phase 5 (2026-08-05); every
 `_ingest_*` method here is called directly by the asset that wraps it, so an exception
-propagates and the asset goes red. Read [CONTEXT.md](CONTEXT.md) for how a table is
+propagates and the asset goes red. Read [.claude/context/orchestration-preprocessor.md](../../../.claude/context/orchestration-preprocessor.md) for how a table is
 BUILT; add new pipeline steps as assets in `../assets/`.
 
 `DataPreprocessor` is re-exported so callers write

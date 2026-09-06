@@ -223,7 +223,7 @@ def _with_channels(creator, channels, target="return_2day"):
 def test_a_rank_table_reads_the_column_it_actually_stores():
     """`rank_5day__final__d20_h5` STORES `return_5day` — a rank's value depends on
     which other names are in the panel, so final_features refuses to freeze one
-    (final_features/CONTEXT.md §5). Demanding the name's target made the whole bank
+    (.claude/context/final_features.md §5). Demanding the name's target made the whole bank
     schema unreachable: the table was fine, the reader was wrong."""
     creator = TrainTestCreator(ticker="test", table="rank_5day__final__d5_h2")
     creator = _with_channels(creator, ["f0", "f1"], target="cs_rank_2day")

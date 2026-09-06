@@ -85,7 +85,7 @@ chain exists and gives a *different* number (§11). The 74 % is the ten folds po
 browser-gated); **CafeF** the matched/negotiated turnover split, foreign and proprietary flow, news
 and filing PDFs; **Simplize** adjusted daily OHLC and foreign flow through a plain JSON endpoint;
 **MSCI GICS** the industry tree that `drv_cs_ret_vs_industry` needs. **Orchestration** is Dagster,
-83 assets — see [src/orchestration/CONTEXT.md](../../src/orchestration/CONTEXT.md). Nothing here is a
+83 assets — see [.claude/context/orchestration.md](../context/orchestration.md). Nothing here is a
 manual step.
 
 ⚠️ **A green asset is not evidence of fresh data** (§5 rule 10): `landed()` asks *"is this folder
@@ -546,9 +546,9 @@ re-derivable from §13 in about 35 minutes.
 
 | open this | for |
 |---|---|
-| [src/walkforward/CONTEXT.md](../../src/walkforward/CONTEXT.md) | §9 the h=10 track · §9b the leak check · §9e the look-ahead probe · §11 seven architectures · **§15 the seed floor** |
-| [src/backtest/CONTEXT.md](../../src/backtest/CONTEXT.md) | §3 the cost identity · §5 the single-stock answer · §10 the indicator survey |
-| [src/feature_selection/CONTEXT.md](../../src/feature_selection/CONTEXT.md) | the selector, the nulls, the ranker comparison |
-| [src/orchestration/CONTEXT.md](../../src/orchestration/CONTEXT.md) | every asset, pool and source table above |
+| [.claude/context/walkforward.md](../context/walkforward.md) | §9 the h=10 track · §9b the leak check · §9e the look-ahead probe · §11 seven architectures · **§15 the seed floor** |
+| [.claude/context/backtest.md](../context/backtest.md) | §3 the cost identity · §5 the single-stock answer · §10 the indicator survey |
+| [.claude/context/feature_selection.md](../context/feature_selection.md) | the selector, the nulls, the ranker comparison |
+| [.claude/context/orchestration.md](../context/orchestration.md) | every asset, pool and source table above |
 | [ISSUES.md](../current_state/ISSUES.md) | `NUL-1`, `FNM-1`, `COV-1`, `DRF-1`, `RPR-1`, `STA-1`, `CSP-1` — all cited above |
 | [TODO.md](../current_state/TODO.md) | `P7` (live scoring), `P8` (the `FNM-1` fix), `P10` (portfolio construction), `P11` (execution realism); the fundamentals program is `P2`/`P37`/`P38`/`P6`/`P5`. ⚠️ Codes were FROZEN 2026-08-23 — a `P<n>` written before that date resolves through that file's crosswalks |

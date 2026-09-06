@@ -8,7 +8,7 @@
 > **STOP**. The wait is the point and is not a step to optimise away: a whole-ticker parse is
 > 60-70 filings and hours of GPU — one ticker was **185 minutes over 71 filings on a T4**.
 >
-> **The authority is [`src/kaggle_gpu/kgpu/PDF_OCR.md`](../../src/kaggle_gpu/kgpu/PDF_OCR.md) §1a.**
+> **The authority is [`.claude/docs/PDF_OCR.md`](../docs/PDF_OCR.md) §1a.**
 > This file is the order of operations; that one is how each parameter is decided.
 
 ---

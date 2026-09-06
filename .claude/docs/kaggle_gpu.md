@@ -291,7 +291,7 @@ wrote a report folder and stopped, one file short — and `final_features.plan_f
 **skips a folder with no shortlist without a word**. Measured 2026-08-15: the two runs
 produced through this command were both in that state, and `final_features` planned 19
 runs and reported no error (`feature_selection/contract.py` §2). The notebook writes and
-validates the shortlist itself since 2026-08-16 (`feature_selection/CONTEXT.md` §18), so
+validates the shortlist itself since 2026-08-16 (`.claude/context/feature_selection.md` §18), so
 `merge_results` now **checks** what came home rather than printing a reminder to go and
 do it by hand — a merged run without one is named as a WARNING.
 
@@ -309,7 +309,7 @@ ran. `manifest.json` carries the export timestamp beside it.
 BOTH MEASURED.**
 
 1. **The device.** XGBoost subsamples from a different RNG stream per device
-   (`feature_selection/CONTEXT.md` §16), so the kept set moves between a T4, an
+   (`.claude/context/feature_selection.md` §16), so the kept set moves between a T4, an
    RTX 3050 and a CPU even at the same seed.
 2. **The library stack is not the same one.** Measured 2026-08-15, same run,
    both `environment` blocks:

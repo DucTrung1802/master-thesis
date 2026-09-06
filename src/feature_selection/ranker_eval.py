@@ -5,7 +5,7 @@
     python -m feature_selection.ranker_eval --apply         # the full measurement
     python -m feature_selection.ranker_eval --apply --targets return_5day,return_rel_5day
 
-`CONTEXT.md` §4 has always said what each ranker SEES. That is a claim about its
+`.claude/context/feature_selection.md` §4 has always said what each ranker SEES. That is a claim about its
 inductive bias. This module measures a different claim — **does it pick channels that
 generalise** — and it is the module behind §19, where the default ensemble went from six
 rankers to three on 2026-08-16.

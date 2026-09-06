@@ -24,8 +24,8 @@ results/metrics.json + runs/index.csv                  scored against a shuffled
 ```
 
 `python -m pipeline` prints the state of all five and runs the stale ones —
-`src/pipeline/CONTEXT.md` is the chain-level document. Each stage's own CONTEXT.md
-covers its internals.
+`.claude/context/pipeline.md` is the chain-level document. Each stage's own file under
+`.claude/context/` covers its internals.
 
 - **One sample** = a `(d, n_features)` window ending on day *t*; **label** = the target
   at day *t* (for `return_5day`, `close[t+5]/close[t] − 1`).
@@ -109,7 +109,6 @@ an LSTM and a CNN can be read off the same table.
 
 ```
 src/model/
-├── CONTEXT.md            ← this file
 ├── __init__.py           makes `model` importable as a package (python -m model.lstm)
 ├── common/               ← shared framework lib (used by every model)
 │   ├── data.py           load_dataset (reference + hash), Dataset dataclass
@@ -202,7 +201,7 @@ logs/
 
 ## 4. Create a dataset — `python -m train_test_creator --save`
 
-`src/train_test_creator/CONTEXT.md` is the full document. What matters here:
+`.claude/context/train_test_creator.md` is the full document. What matters here:
 
 - The dataset folder **names its input**:
   `vcb__return_5day__final__d20_h5__tr70_val15_test15__std`.
@@ -241,7 +240,7 @@ that looks finished, lands in `index.csv` beside comparable runs, and is not one
 
 ⚠️ **No metric is computed here.** `evaluate_run` reads the prediction files, so
 `python -m result_evaluator --rescore` can add or correct a metric across every past
-run without a GPU — see `result_evaluator/CONTEXT.md` §1.
+run without a GPU — see `.claude/context/result_evaluator.md` §1.
 
 Runs go to the shared `src/model/runs/`. GPU is auto (`device: auto`). Compare:
 `tensorboard --logdir src/model/runs`, `src/model/runs/index.csv`, or
@@ -341,7 +340,7 @@ not be changeable that way.
   pools (`basic`/`calendar`) always full ensemble. `max_features` does NOT change
   fit cost (the fit is on all `n_features × lookback` columns).
 
-## 9. Metrics — see `result_evaluator/CONTEXT.md`
+## 9. Metrics — see `.claude/context/result_evaluator.md`
 
 ⚠️ **No metric is defined in this package any more.** `common/metrics.py` is a shim
 kept so the two legacy notebooks still run; the definitions live in
@@ -373,7 +372,7 @@ independent observations, and that figure is itself optimistic.
 Metrics remain **re-computable from `predictions_{val,test}.csv` without retraining** —
 `python -m result_evaluator --rescore`. That is how `dir_auc` was backfilled across all
 runs once, and how a p-value bug was corrected across all 28 during the 2026-08-09
-rebuild (`result_evaluator/CONTEXT.md` §3a).
+rebuild (`.claude/context/result_evaluator.md` §3a).
 
 ## 10. Current state (as of this handoff)
 
@@ -478,7 +477,7 @@ no sentiment, no intraday/tick, no point-in-time index membership in the DB.
 
 Both trained on `vcb__return_5day__final__d20_h5__basic__tr70_val15_test15__std`
 (2,939 / 615 / 640 × 20 × **4**, hash `08c7a0498ab2c934`), from the chain in
-`pipeline/CONTEXT.md` §5d. **Same dataset, splits, purge, seed and a byte-identical
+`.claude/context/pipeline.md` §5d. **Same dataset, splits, purge, seed and a byte-identical
 `train:` block — only the `model:` block differs**, so any gap is architecture.
 
 | | LSTM | CNN |
@@ -598,7 +597,7 @@ ordered by capacity:
 **Every model on this board is within 1.5 standard errors of zero, and the entire
 eleven-model spread is barely wider than ONE window-overlap standard error.** Ranking
 these architectures is reading noise. That is the same arithmetic
-`feature_selection/CONTEXT.md` §6d gives from the other direction: separating an IC of
+`.claude/context/feature_selection.md` §6d gives from the other direction: separating an IC of
 0.05 from zero needs ~1,500 independent observations and the test split carries 27.
 
 ### ⚠️ 15b. Two runs clear a bar. Expectation was 1.1.

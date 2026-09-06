@@ -9,7 +9,7 @@
 >
 > ⚠️ **This file is in the always-loaded budget**, alongside `CLAUDE.md` (44.2k) and
 > `../current_state/INDEX.md` (3.7k). Keep it to rules — a rule that needs a page of evidence belongs in
-> `CLAUDE.md` or a package `CONTEXT.md`, with a one-line pointer from here.
+> `CLAUDE.md` or a package file under `.claude/context/`, with a one-line pointer from here.
 >
 > **Scope:** how to WORK in this repo, in any session, regardless of the task. What the project
 > KNOWS lives in `CLAUDE.md`; what is BROKEN in `../current_state/ISSUES.md`; what is NEXT in `../current_state/TODO.md`.
@@ -35,7 +35,7 @@ Vietnamese so it is fast to read.** A rule that blurred the two would silently c
 
 1. **A `*_VI.md` file is a translation and is meant to be Vietnamese** — there are three today:
    `../docs/THESIS_PROGRESS_2026_VI.md`, `../docs/THESIS_SUMMARY_2026_VI.md`,
-   `src/feature_selection/docs/NULL_DRAWS_VI.md`. Each is a Vietnamese counterpart of an English
+   `.claude/docs/NULL_DRAWS_VI.md`. Each is a Vietnamese counterpart of an English
    original that carries the same content; **the `_VI` suffix is the marker, and a Vietnamese file
    without it is a defect, not an exception.**
 2. **Vietnamese data is data.** Ticker names, exchange labels, CafeF/Simplize field names, filing

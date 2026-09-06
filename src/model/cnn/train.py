@@ -5,7 +5,7 @@
     python -m model.cnn --config vcb__return_5day__final__d20_h5__basic.yaml
     python -m model.cnn --config <path> --dry-run                  # print the plan only
 
-⚠️ **This file holds no training logic and that is deliberate.** `model/CONTEXT.md` §7's
+⚠️ **This file holds no training logic and that is deliberate.** `.claude/context/model.md` §7's
 recipe was "a `train.py` copying `lstm/train.py`" — 346 lines of which eight are
 model-specific. The engine is `model/common/engine.py` instead, so `_verify`, the
 prediction writer (which inverse-transforms the target and inserts the `ticker` column
@@ -32,7 +32,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_DIR = os.path.join(_HERE, "configs")
 # ⚠️ The filename is prefixed with the model. `pipeline._config_path` resolves a bare
 # `--config` name across `model/*/configs/`, so a name shared with another package is
-# ambiguous — see `model/CONTEXT.md` §2 (issue CFG-1).
+# ambiguous — see `.claude/context/model.md` §2 (issue CFG-1).
 DEFAULT_CONFIG = os.path.join(
     CONFIG_DIR, "cnn__vcb__return_5day__final__d20_h5__basic.yaml"
 )

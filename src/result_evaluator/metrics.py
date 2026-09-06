@@ -20,8 +20,9 @@ and a ranker's rank are scored on one axis and land in one leaderboard. Nothing 
 is shared: RMSE is meaningless for a classifier and `log_loss` is meaningless for a
 regressor, so those stay in the per-task extras.
 
-⚠️ **Each of the three is reported with a BAR, not alone.** `feature_selection/
-CONTEXT.md` §10 and `final_features/CONTEXT.md` §6 make the same point about
+⚠️ **Each of the three is reported with a BAR, not alone.**
+`.claude/context/feature_selection.md` §10 and `.claude/context/final_features.md` §6
+make the same point about
 selections: a number without a null is descriptive, not evidence. `dir_auc = 0.54` on
 635 overlapping 5-day samples is roughly what noise pays. So every core metric carries
 `p_<metric>` and `bar_<metric>` from a block-shuffled null, and `clears_<metric>`.
@@ -83,7 +84,7 @@ puts it on an R²-like scale where 0 = "exactly the naive" and negative = worse.
 
 ### ⚠️ C separates ranking from calibration, which this project has measured apart
 
-`model/CONTEXT.md` §14 and CLAUDE.md §5c both record the same thing: **the models that
+`.claude/context/model.md` §14 and CLAUDE.md §5c both record the same thing: **the models that
 rank best are the ones whose magnitudes are most wrong** (`GBT` cleared its IC bar at
 R² = −2.11). `calibration_slope` is the OLS slope of realised on predicted — 1.0 is
 perfect, 0 means the prediction carries no magnitude information, and a slope far from 1
@@ -479,7 +480,7 @@ def panel_core_metrics(
     # The evaluator's panel null is not label-neutral — its centre moved with the MODEL
     # across three runs (−0.0171 / +0.0076 / +0.0109) and it got both ends wrong,
     # manufacturing a clear for the weakest model and failing the strongest
-    # (`model/CONTEXT.md` §16). The daily IC series needs no null: each date is one
+    # (`.claude/context/model.md` §16). The daily IC series needs no null: each date is one
     # cross-sectional observation, so its own spread IS the error bar. It was computed
     # inside this function all along and thrown away at the `np.mean` — reported since
     # 2026-08-16.

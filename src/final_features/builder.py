@@ -38,7 +38,7 @@ layer-2 selection has to be RUN in between, and running one is manual:
 One table per **(schema, target, setup)**. Runs that share all three describe the
 same experiment on different feature blocks, so their chosen channels belong in one
 table; runs that differ in any of them do not, and merging them would produce exactly
-the artefact `feature_selection/CONTEXT.md` §8 is a list of — two runs that look
+the artefact `.claude/context/feature_selection.md` §8 is a list of — two runs that look
 comparable and are not.
 
     unified_schema_vcb  / return_5day  / d=20 h=5   ← 19 runs (basic + each economy block)
@@ -92,7 +92,7 @@ rank. The `target` column of the plan still records what was selected for.
 
 That the features are worth having. 19 of the 20 runs computed no null at all and the
 twentieth failed its own, so **no surviving run in the archive clears anything**
-(`feature_selection/CONTEXT.md` §14b). Every table
+(`.claude/context/feature_selection.md` §14b). Every table
 gets a `COMMENT` naming its source runs and their `evidence`, so the provenance
 travels with the data — but a row in one of these tables is a channel some run ranked
 highly, nothing more.
@@ -337,7 +337,7 @@ class FinalTablePlan:
             "Selection layer 1: ⚠️ a UNION of per-pool runs, NOT a consensus - a "
             "channel offered to one run could never be a candidate in another, so "
             "agreement was not available to measure "
-            "(final_features/CONTEXT.md section 6). "
+            "(.claude/context/final_features.md section 6). "
         )
 
     def comment(self) -> str:
@@ -384,7 +384,7 @@ class FinalTablePlan:
             note += (
                 " ⚠️ evidence=no_null means no bar was computed for that run — a "
                 "ranking without a null is descriptive, not evidence "
-                "(feature_selection/CONTEXT.md §14b)."
+                "(.claude/context/feature_selection.md §14b)."
             )
         # ⚠️ `.item()` on the numpy scalars pandas leaves in the setup — without it
         # the comment reads `'lookback_d': np.int64(20)`, which is the repr of the
@@ -424,7 +424,7 @@ def _read_outstanding(root: str) -> pd.DataFrame:
     shortlist carries only `lookback_d` and `horizon_h` — enough to read a row, not
     enough to decide that two runs are the same experiment. Grouping on what the
     shortlist happens to carry would silently merge runs differing in `normalize`,
-    `max_features` or `random_state`, and §8 of `feature_selection/CONTEXT.md` is a
+    `max_features` or `random_state`, and §8 of `.claude/context/feature_selection.md` is a
     list of what that costs. `metadata.json` is the authority and records all 27 knobs.
 
     ⚠️ **A RUN FOLDER WITH NO `outstanding.csv` NOW RAISES** (2026-08-15). It used to

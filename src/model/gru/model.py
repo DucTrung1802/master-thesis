@@ -6,7 +6,7 @@ to an LSTM's four and no separate cell state, so at the same `hidden_size` it ca
 about 25% fewer parameters.
 
 ⚠️ **It is here as a third point on the capacity ladder, not because it is expected to
-differ.** `model/CONTEXT.md` §13 already measured an LSTM and a CNN — genuinely
+differ.** `.claude/context/model.md` §13 already measured an LSTM and a CNN — genuinely
 different inductive biases — converging on test IC ≈ −0.033. A GRU is the LSTM's near
 neighbour; if it lands anywhere else, that is evidence about run-to-run variance rather
 than about architecture, which is itself worth having on a board where every result so

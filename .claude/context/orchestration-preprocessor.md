@@ -1,17 +1,17 @@
 # Context — `src/orchestration/preprocessor` (bronze → silver → gold ETL)
 
-> 🗺️ **Project hub: [CLAUDE.md](../../../CLAUDE.md)** — the whole project in ~5k tokens
+> 🗺️ **Project hub: [CLAUDE.md](../../CLAUDE.md)** — the whole project in ~5k tokens
 > (verdict, chain, standing rules, routing). Read that first; this file is the depth
 > behind one stage.
 
 > # 📚 THIS IS A LIBRARY. IT HAS NO ENTRY POINT.
 >
-> **[`src/orchestration/`](../CONTEXT.md) is the only way to run anything, and
+> **[`src/orchestration/`](orchestration.md) is the only way to run anything, and
 > this package now lives INSIDE it** (moved from `src/data_preprocessor` 2026-08-05). Point new work there; read this file for how a table is BUILT.
 >
 > ⚠️ **THE DIRECTORY MUST NOT BE MOVED OR DELETED, and since 2026-08-05 that matters
 > more, not less.** All 73 Dagster assets are thin wrappers over the `_ingest_*` methods
-> in [preprocessor.py](preprocessor.py) — `orchestration/resources.py`
+> in [preprocessor.py](../../src/orchestration/preprocessor/preprocessor.py) — `orchestration/resources.py`
 > imports `DataPreprocessor` from here, and every materialisation executes the transform
 > logic here. Deleting this package would leave 73 assets wrapping nothing: it would
 > delete the pipeline and keep the scheduling, which is exactly backwards. Making
@@ -71,7 +71,7 @@ raw_data/<source>/*.csv,*.xlsx           (produced by src/web_scraper)
                   {bonds,economy,stock_market}          WIDE, PK (date)
 ```
 
-- **One file, one class.** [preprocessor.py](preprocessor.py) holds the
+- **One file, one class.** [preprocessor.py](../../src/orchestration/preprocessor/preprocessor.py) holds the
   whole ETL as `DataPreprocessor` (~1920 lines). The three public entry points
   (`ingest_bronze_data` / `ingest_silver_data` / `ingest_gold_data`) each
   connect, `CREATE DATABASE`/`CREATE SCHEMA` if needed, run the flag-gated
@@ -88,11 +88,11 @@ raw_data/<source>/*.csv,*.xlsx           (produced by src/web_scraper)
 
 `DataPreprocessor` owns a `PostgreSQLDriver` (psycopg2). Two files:
 
-- [tabular_database_driver_interface.py](../../tabular_database_driver/tabular_database_driver_interface.py)
+- [tabular_database_driver_interface.py](../../src/tabular_database_driver/tabular_database_driver_interface.py)
   — `TabularDatabaseDriverInterface(ABC)`: `connect/disconnect`, `create/drop_database`,
   `create/drop_schema`, `create/drop_table`, `insert/update/delete/select`. The
   Strategy contract so a different backend could be dropped in.
-- [postgre_sql_driver.py](../../tabular_database_driver/postgre_sql_driver.py) — the
+- [postgre_sql_driver.py](../../src/tabular_database_driver/postgre_sql_driver.py) — the
   psycopg2 implementation. Key design points a new session must know:
   - **Per-cursor concurrency.** `_cursor_ctx()` is a `@contextmanager` that opens a
     **brand-new cursor per DML/DDL call** and closes it on exit, so the preprocessor
@@ -139,7 +139,7 @@ rows, sanitizes values bound for `REAL` columns (±inf → NaN, subnormals → 0
   `ThreadPoolExecutor`, one cursor per chunk, counting inserted vs updated.
 
 DTO helpers come from
-[dtos/tabular_database_driver_dtos](../../dtos/tabular_database_driver_dtos/tabular_database_driver_dtos.py):
+[dtos/tabular_database_driver_dtos](../../src/dtos/tabular_database_driver_dtos/tabular_database_driver_dtos.py):
 `DataType` (classmethods returning SQL type strings), `Column`, `Condition`,
 `JoinModel`, `Record`. `CleanLayer` / `TransformLayer` / `CleanAction` /
 `TransformAction` live in `utils.enums` (imported via `from utils.enums import *`).
@@ -208,7 +208,7 @@ DTO helpers come from
     row is the base `100.0` on 2000-07-28, HOSE's opening day. Storing ×1000 would give
     1,824,090 for a 1824.09 close — internally consistent, plots fine, wrong by 10³.
   - **⚠️ Three of the four carry holes that are CAFEF'S, and bronze is faithful to them**
-    (see `web_scraper/CONTEXT.md §3`): `VN100-INDEX`'s price stops dead at **2025-04-29**;
+    (see `.claude/context/web_scraper.md §3`): `VN100-INDEX`'s price stops dead at **2025-04-29**;
     `order_stats` is **literally zero-filled** for VN30INDEX/VN100-INDEX and leaves
     `sell_order_vol` 0 on the HNX/UPCOM indices; `prop_trading` is effectively
     **exchange-level** (VN100-INDEX has ONE row) because a prop desk reports per exchange,
@@ -288,7 +288,7 @@ DTO helpers come from
       `viii_1_von_dieu_le / 10_000` par-value estimate. ⚠️ Reading them costs OCR of the
       notes pages (the scan runs from the last statement to EOF until it finds the note),
       which roughly DOUBLED the VCB rebuild to ~2.4h; not yet bounded. OCR misreads in a
-      handful of quarters were repaired offline (see `web_scraper/CONTEXT.md`), so the
+      handful of quarters were repaired offline (see `.claude/context/web_scraper.md`), so the
       panel is monotone.
   - `cafef_financial_reports` — the 14 per-DOCUMENT metadata columns (+`report`), split
     off because they describe the filing, not the accounts. ⚠️ **The parser gained a
@@ -573,7 +573,7 @@ DTO helpers come from
   (mapped to our report-prefixed line ids), per-quarter coverage, the reliable
   high-coverage subset vs the op-income-limited ones (`tong_thu_nhap_hoat_dong` is only
   25/78, so P/S, CIR and the bank margins are thin), the as-of build sketch, and the open
-  decisions live in [FUNDAMENTAL_INDICATORS.md](FUNDAMENTAL_INDICATORS.md) (refreshed
+  decisions live in [FUNDAMENTAL_INDICATORS.md](../docs/FUNDAMENTAL_INDICATORS.md) (refreshed
   2026-07-20 for the stored share count).
 - **`_ingest_silver_stocks_basic`** → writes **`silver.stocks_basic`** (renamed from
   `silver.stocks` on 2026-07-19). **REWRITTEN 2026-07-19: a CafeF-only four-way join,
@@ -890,7 +890,7 @@ DTO helpers come from
     silver column present, silver's type, silver's value — and the derived set is
     asserted as an **equality**, so a leaked CTE helper raises rather than becoming a
     candidate feature. Full write-up, including the five measured traps and the
-    causality test, in `orchestration/CONTEXT.md`.
+    causality test, in `.claude/context/orchestration.md`.
   - ⚠️ **The bar is split-adjusted BEFORE anything reads it.** Silver's
     `open`/`high`/`low` are RAW and track `close_raw` (`close_raw BETWEEN low AND high`
     on 4,266 of 4,266 VCB rows; `close_adjust` on 248) — the same fact
@@ -1016,7 +1016,7 @@ correctly-typed table, which is the failure mode that looks most like success.
 ⚠️ **And the MIRROR assertion was added**: a sentinel whose predicate matches fewer
 than 2 tickers now raises. A schema whose NAME promises a cross-section and whose
 CONTENTS are one time series is a silent version of the failure
-`feature_selection/CONTEXT.md` §9h documents — one that would be discovered only
+`.claude/context/feature_selection.md` §9h documents — one that would be discovered only
 after a study had been run on it.
 
 ⚠️ **The GICS predicate is PARAMETERISED even though the sentinel is interpolated.**
@@ -1025,7 +1025,7 @@ against `UNIFIED_TICKER_PATTERN` instead, while a GICS code is an ordinary value
 with no business being interpolated.
 
 ⚠️ **What the sector is good FOR is a separate question, and the answer so far is
-"not much".** `feature_selection/CONTEXT.md` §13 ran the §9c cross-sectional
+"not much".** `.claude/context/feature_selection.md` §13 ran the §9c cross-sectional
 protocol on it: `z = +0.11`, 11 of 20 shuffled draws beat the real data. Banks are
 VN's largest GICS industry at 20 names, against a resolvability threshold of ~100.
 
@@ -1226,7 +1226,7 @@ ingest one.
 
 ⚠️ **Neither pool is a Dagster asset.** They were built by calling the methods
 directly, the same way `unified_schema_all` was; `--select "group:unified_vcb"`
-rebuilds only `pool__basic` and `pool__targets`. See `orchestration/CONTEXT.md`.
+rebuilds only `pool__basic` and `pool__targets`. See `.claude/context/orchestration.md`.
 
 ⚠️ **`close_adjust` can be NEGATIVE in silver, and the universe build is what
 exposed it.** `VNX` carries `close_adjust = -10.0` for **968 sessions** (2010-11 to
@@ -1339,12 +1339,12 @@ data and still hold:
   same-day articles cannot be separated by it — order by
   `(exchange, ticker, timestamp, news_order)` for a deterministic chronology. And
   note `news_order` is numbered from the article's own `datePublished`, not from
-  CafeF's listing order (see `web_scraper/CONTEXT.md §3`).
+  CafeF's listing order (see `.claude/context/web_scraper.md §3`).
 - **CafeF is one bronze table per scraper folder** (`cafef_price`, `cafef_foreign`,
   `cafef_order_stats`, `cafef_prop_trading`, `cafef_insider_shareholder_transactions`
   ← from the `insider_txn/` folder, `cafef_news`) — the folder/column names are the contract, so
   renaming them upstream breaks the ingest (mirrors the note in
-  `web_scraper/CONTEXT.md §7`). **As of the 2026-07-19 rewrite, `silver.stocks_basic`
+  `.claude/context/web_scraper.md §7`). **As of the 2026-07-19 rewrite, `silver.stocks_basic`
   IS the four-way join of the daily CafeF tables** (`cafef_price` base LEFT JOIN
   order_stats/foreign/prop_trading on `(exchange, ticker, date)` — 38 cols incl. the
   GICS tree, base row count preserved; see §4 Silver). So `order_stats` / `prop_trading`

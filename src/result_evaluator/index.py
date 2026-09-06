@@ -114,7 +114,7 @@ def index_row(
     lineage = meta.get("lineage") or {}
 
     # ⚠️ The run_id is `<model>__<universe>__<target>__final__d<d>_h<h>[__<scope>]__<stamp>`
-    # by convention (model/CONTEXT.md §3), so it is the last-resort source for the
+    # by convention (.claude/context/model.md §3), so it is the last-resort source for the
     # identity columns when there is no metadata to read them from.
     parts = run_id.split("__")
 

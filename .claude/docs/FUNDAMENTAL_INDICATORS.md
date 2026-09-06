@@ -4,7 +4,7 @@
 > plan to compute for VN stocks, and the design of the new silver table that joins
 > **daily price** to **quarterly financials** correctly (point-in-time, on
 > `publish_date`). Grounded in what our data can actually produce — see
-> [CONTEXT.md](CONTEXT.md) for the ETL those inputs come from. Right now only the
+> [CONTEXT.md](../context/orchestration-preprocessor.md) for the ETL those inputs come from. Right now only the
 > `bank` template (VCB) is parsed, so the worked examples are bank-specific; the
 > *universal* ratios below apply to every template once `corp` / `securities` /
 > `insurance` are parsed.
@@ -57,7 +57,7 @@ a `publish_date`, the 6 earliest do not).
 off the filing's "Vốn cổ phần" note — `shares_outstanding` (đang lưu hành) and
 `shares_issued` (đã phát hành) — so **P/E, P/B, market cap and every per-share ratio use
 the real count**, not a proxy. VCB Q4-2019 = 3,708,877,448; the series is monotone
-1.21bn→8.36bn across its known capital events. See [CONTEXT.md](CONTEXT.md) (bronze/silver
+1.21bn→8.36bn across its known capital events. See [CONTEXT.md](../context/orchestration-preprocessor.md) (bronze/silver
 financials) for how the scan works.
 
 > **Fallback where the scan is null** (16/78 quarters — a cafef/missing quarter, or a note
@@ -215,7 +215,7 @@ Standard screens (Graham, Piotroski F-score, Altman Z) assume a **non-financial*
 firm — current ratio, inventory turnover, working capital, EBITDA. Those line items
 don't exist on a **bank** chart of accounts (a bank has no inventory or current/long
 -term split), which is exactly why the bronze layer keeps the four templates apart
-(see [CONTEXT.md](CONTEXT.md) §4). The catalog above is the subset that (a) is
+(see [CONTEXT.md](../context/orchestration-preprocessor.md) §4). The catalog above is the subset that (a) is
 meaningful for the template we have and (b) our parsed lines actually populate.
 
 ## 4. Not yet possible (documented gaps)

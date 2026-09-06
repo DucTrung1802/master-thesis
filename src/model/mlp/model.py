@@ -3,7 +3,7 @@
 A non-linear model actually sized for this sample: `(n, d, f)` → 6 statistics per
 channel → one hidden layer → scalar. At `f=4` and `hidden=8` that is **209 parameters**,
 between the 25-parameter ridge and the 3,745-parameter CNN, which is the gap the
-capacity ladder in `model/CONTEXT.md` §14 has.
+capacity ladder in `.claude/context/model.md` §14 has.
 
 ⚠️ **It eats the SAME design matrix as `baseline_ridge_stats` and `gbt`** — six
 statistics per channel, `model/common/features.window_statistics`. So the comparison

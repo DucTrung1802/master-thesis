@@ -36,7 +36,7 @@ import pandas as pd
 #: Round-trip transaction cost, as a fraction. VN brokerage ~0.15-0.35% a side plus the
 #: 0.1% sell tax. ⚠️ The same constant `sentiment/weekly_xsec.py` uses, deliberately —
 #: two costed backtests in one repo disagreeing about the cost is a defect, not a study.
-#: ⚠️ `model/CONTEXT.md` §11 measured the cross-sectional strategy **dead at 40 bps**,
+#: ⚠️ `.claude/context/model.md` §11 measured the cross-sectional strategy **dead at 40 bps**,
 #: which is BELOW this. That is a finding, not a parameter to tune away.
 ROUND_TRIP_COST = 0.005
 
@@ -48,7 +48,7 @@ COST_SWEEP = (0.0, 0.0030, 0.0050, 0.0070)
 #: literature and the difference is far inside any error bar here.
 SESSIONS_PER_YEAR = 252.0
 
-#: Hysteresis defaults, from `model/CONTEXT.md` §11's measured turnover control (EWMA
+#: Hysteresis defaults, from `.claude/context/model.md` §11's measured turnover control (EWMA
 #: span-10 + enter 0.90 / exit 0.75), which flipped net@20bps from Sharpe −1.5 to +0.46.
 #: ⚠️ Stated there as percentiles of the SCORE, so they are percentiles here too.
 ENTER_PERCENTILE = 0.90
@@ -57,7 +57,7 @@ EXIT_PERCENTILE = 0.75
 
 #: Daily price bands, per exchange. A close AT the band has no counterparty on that side:
 #: a name at its ceiling cannot be bought, one at its floor cannot be sold.
-#: ⚠️ Measured to matter: `backtest/CONTEXT.md` §8f found the 5-day hand screen picking
+#: ⚠️ Measured to matter: `.claude/context/backtest.md` §8f found the 5-day hand screen picking
 #: ceiling names **2.14× more often than chance**, and excluding them took that book from
 #: +19.3 % to +7.2 % CAGR. On the h=20 MODEL the bias is 1.33× and removing it slightly
 #: IMPROVES the result (§8h) — but that is a measurement, not a licence to skip it.

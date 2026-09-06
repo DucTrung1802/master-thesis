@@ -3,7 +3,7 @@
 
 One asset per bronze table, generated from the `INGESTS` spec table rather than
 copy-pasted, and every one a thin wrapper over the `_ingest_bronze_*` method that
-already exists in `src/` (`src/orchestration/CONTEXT.md` §3).
+already exists in `src/` (`.claude/context/orchestration.md` §3).
 
 **Bronze has no cross-table dependency** — each ingest reads its own `raw_data/` folder
 and nothing else — so these 20 are a FLAT layer. All the edges point upward, to the

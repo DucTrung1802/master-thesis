@@ -768,7 +768,7 @@ class DataPreprocessor:
         symbols under several folders. The unbatched shape deduped with `keep="first"`
         in glob order, which sorts the OLDER end-date first — so **where an old and a new
         file disagreed on a date's value, the STALE one won** (documented in
-        `orchestration/CONTEXT.md`). Upserting batch by batch makes the LAST write win,
+        `.claude/context/orchestration.md`). Upserting batch by batch makes the LAST write win,
         so the files are sorted by name — the name ends in the fetch date — and **the
         NEWEST file now wins**. That is the behaviour the old comment warned about,
         inverted on purpose.
@@ -1257,7 +1257,7 @@ class DataPreprocessor:
     # 100.0, on HOSE's opening day). Nothing here re-scales; don't add it.
     #
     # ⚠️ Three of the four series carry holes that are CAFEF'S, not ingest failures, and
-    # bronze is faithful to them (see web_scraper/CONTEXT.md §3, *CafeF indices*):
+    # bronze is faithful to them (see .claude/context/web_scraper.md §3, *CafeF indices*):
     # VN100-INDEX's price stops at 2025-04-29; `order_stats` is literally zero-filled for
     # VN30INDEX/VN100-INDEX and leaves `sell_order_vol` 0 on the HNX/UPCOM indices;
     # `prop_trading` is effectively exchange-level (VN100-INDEX has ONE row). A consumer
@@ -1626,7 +1626,7 @@ class DataPreprocessor:
         GICS sector/industry group beside the fingerprinted template so the two can be
         seen to disagree — HVA sits in the securities industry group and files on the
         CORPORATE template. The template is fingerprinted from the filing's own chart
-        of accounts, never classified from the sector (see web_scraper/CONTEXT.md)."""
+        of accounts, never classified from the sector (see .claude/context/web_scraper.md)."""
         self._logger.log_info("Ingesting bronze CafeF financial templates...")
 
         file_path = os.path.join(CAFEF_RAW_DATA_DIR, "financials", "templates.csv")
@@ -2418,7 +2418,7 @@ class DataPreprocessor:
 
         # RAISES rather than returning — a silent return leaves `silver.forex` holding
         # the last successful run's rows while reporting success. See
-        # `_ingest_silver_funds` and `src/orchestration/CONTEXT.md` §4.1.
+        # `_ingest_silver_funds` and `.claude/context/orchestration.md` §4.1.
         if df.empty:
             raise MissingSourceDataError(
                 f"{BRONZE_SCHEMA}.trading_view_forex is empty — run the bronze forex "
@@ -2449,7 +2449,7 @@ class DataPreprocessor:
         # siblings. A silent `return` here leaves `silver.funds` holding whatever the
         # LAST successful run wrote, and the caller — an orchestrator included —
         # cannot tell that from a table that was just rebuilt. That is the exact
-        # failure Phase 0 exists to close (`src/orchestration/CONTEXT.md` §4.1); the
+        # failure Phase 0 exists to close (`.claude/context/orchestration.md` §4.1); the
         # siblings still have it, and each is a one-line fix when its own asset lands.
         if df.empty:
             raise MissingSourceDataError(
@@ -3507,7 +3507,7 @@ class DataPreprocessor:
         headline (always) plus, for `editorial` rows, a lead slice of the body
         (`build_scored_text`) — disclosures are short filing stubs whose headline is
         the whole story. ⚠️ The news text is **Vietnamese**; an English sentiment
-        model would be wrong (see `sentiment/CONTEXT.md`).
+        model would be wrong (see `.claude/context/sentiment.md`).
 
         Output carries the bronze event keys and provenance — `row_id` (md5 PK,
         inherited so a re-score UPDATEs in place), `exchange`/`ticker`, `timestamp`,
@@ -5940,7 +5940,7 @@ class DataPreprocessor:
         ⚠️ `_ingest_gold_stock_market` and `_ingest_gold_bonds` still INLINE these same
         steps — they were written before this helper. Moving them onto it is a separate
         change, because each has a published exact round-trip check
-        (`src/orchestration/CONTEXT.md`) that has to be re-run to prove the move
+        (`.claude/context/orchestration.md`) that has to be re-run to prove the move
         preserved every value; a refactor that is only *probably* value-preserving is
         worth less than the duplication it removes.
         """
@@ -8182,7 +8182,7 @@ class DataPreprocessor:
     #
     # ⚠️ `gold_schema.stock_market`, NOT the retired `gold.indices` — the old
     # notebook's `return_rel_5day` read `gold.indices`, which was dropped on
-    # 2026-08-01 (see `orchestration/CONTEXT.md` §"Gold housekeeping"), so that
+    # 2026-08-01 (see `.claude/context/orchestration.md` §"Gold housekeeping"), so that
     # column could not be rebuilt as written. This is its replacement.
     #
     # ⚠️ Why a relative target exists at all: a single stock's ABSOLUTE forward
@@ -8707,7 +8707,7 @@ class DataPreprocessor:
         are stored but will not be scored until someone decides how to encode them —
         which is a modelling decision, not an ingest one.
 
-        ⚠️ **This is the pool §7 of `feature_selection/CONTEXT.md` says to widen to
+        ⚠️ **This is the pool §7 of `.claude/context/feature_selection.md` says to widen to
         LAST**, after a target has cleared its own null. On a single ticker it buys a
         longer list of nothing, more slowly, and with a higher bar.
         """

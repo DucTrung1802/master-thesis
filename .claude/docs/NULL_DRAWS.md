@@ -1,8 +1,8 @@
 # What `--null-draws 20` is, and why the run is worthless without it
 
-> Written 2026-08-15 against [evaluation.py](../evaluation.py), [run.py](../run.py),
-> [cross_sectional.py](../cross_sectional.py) and [outstanding.py](../outstanding.py).
-> Depth behind one line of [CONTEXT.md](../CONTEXT.md) §6b and CLAUDE.md §5 rule 1.
+> Written 2026-08-15 against [evaluation.py](../../src/feature_selection/evaluation.py), [run.py](../../src/feature_selection/run.py),
+> [cross_sectional.py](../../src/feature_selection/cross_sectional.py) and [outstanding.py](../../src/feature_selection/outstanding.py).
+> Depth behind one line of [CONTEXT.md](../context/feature_selection.md) §6b and CLAUDE.md §5 rule 1.
 >
 > Every number quoted here was measured in this repo. None is illustrative.
 
@@ -34,7 +34,7 @@ was measured.**
 still picks the best-fitting channels — there are always some — and then reports how
 well they fit. The selection step **manufactures a positive IC out of noise.**
 
-Measured on `pool__basic`, VCB, `d=20, h=5` ([CONTEXT.md](../CONTEXT.md) §6b):
+Measured on `pool__basic`, VCB, `d=20, h=5` ([CONTEXT.md](../context/feature_selection.md) §6b):
 
 | | |
 |---|---|
@@ -55,7 +55,7 @@ one shuffled draw scored **+0.0606, higher than the real data**.
 
 ## 3. What one draw actually does
 
-[evaluation.py:270-288](../evaluation.py#L270-L288), per draw:
+[evaluation.py:270-288](../../src/feature_selection/evaluation.py#L270-L288), per draw:
 
 1. Copy the joined panel.
 2. Replace the target column with `block_shuffle(y, block = lookback + horizon)`.
@@ -81,14 +81,14 @@ score.
 permutes rows, which on an N × T panel tears each date's cross-section apart and destroys
 the structure the target is computed *within*. `cross_sectional.cross_sectional_null`'s
 `date_block` mode pivots the label to `date × ticker` and permutes blocks of **dates**
-instead ([run.py:298-309](../run.py#L298-L309)). `run.py` picks the right one from the
+instead ([run.py:298-309](../../src/feature_selection/run.py#L298-L309)). `run.py` picks the right one from the
 `cs_` prefix on the target name; you do not pass a flag.
 
 ---
 
 ## 4. What the twenty numbers become
 
-[`NullResult`](../evaluation.py#L135) turns the draws into five quantities. All five go into
+[`NullResult`](../../src/feature_selection/evaluation.py#L135) turns the draws into five quantities. All five go into
 `metadata.json` and the run README.
 
 | quantity | is | how to read it |
@@ -116,7 +116,7 @@ observed IC.
 
 **20 draws buys a p-value resolution of ~0.05 and a usable z.** The p-value is floored at
 `1/(n+1)`, so 20 draws **cannot distinguish p = 0.05 from p = 0.001** — which is why
-every conclusion in [CONTEXT.md](../CONTEXT.md) is stated as a **z**, not a p.
+every conclusion in [CONTEXT.md](../context/feature_selection.md) is stated as a **z**, not a p.
 
 - **Fewer than ~10** and the sd is too poorly estimated for the z to mean anything.
 - **More than 20** only helps a result that is genuinely borderline. Nothing in this
@@ -137,7 +137,7 @@ dominates wall-clock. Measured:
 ⚠️ **Target choice moves the null's cost by 13.7×.** `lasso` dominates the bill and
 zeroes every coefficient on a return target, converging at once — the same 357-channel
 panel takes 2,016 s on `close_adjust_5day` and 146 s on `return_5day`
-([CONTEXT.md](../CONTEXT.md) §15c-target). **On a return target a 20-draw null is
+([CONTEXT.md](../context/feature_selection.md) §15c-target). **On a return target a 20-draw null is
 affordable even on a wide pool**, so `--null-draws 0` there is a choice, not a budget.
 
 ---
@@ -145,7 +145,7 @@ affordable even on a wide pool**, so `--null-draws 0` there is a choice, not a b
 ## 6. What happens downstream if you skip it
 
 `--null-draws 0` is legal and does not fail. It writes `"null": null` into
-`metadata.json`, and [outstanding.py:142](../outstanding.py#L142) turns that into
+`metadata.json`, and [outstanding.py:142](../../src/feature_selection/outstanding.py#L142) turns that into
 `evidence=no_null` on **every row of the shortlist**. From there the string travels
 verbatim:
 
@@ -170,7 +170,7 @@ and never implied to be a pass.** The three values `evidence` can take are
 ⚠️ **`evidence` and `kept_by` answer different questions and neither substitutes for the
 other.** `evidence` is the RUN's verdict against shuffled **labels** — does this pool
 predict this target at all. `kept_by=consensus` is a CHANNEL's verdict against shuffled
-**methods** ([selection_cut.py](../selection_cut.py)) — does this channel stand out *within*
+**methods** ([selection_cut.py](../../src/feature_selection/selection_cut.py)) — does this channel stand out *within*
 the run. A row can read `kept_by=consensus, evidence=no_null`: the six rankers agree
 about a channel in a run that was never shown to beat noise.
 
@@ -244,11 +244,11 @@ python -m feature_selection.run --pools pool__basic --null-draws 100
 
 - The null seed is `NULL_SEED = 7`, **fixed and separate from `--random-state`** — the
   bar must not move when the selector's seed does, or the bar and the number it judges
-  stop being comparable ([run.py:105](../run.py#L105)).
+  stop being comparable ([run.py:105](../../src/feature_selection/run.py#L105)).
 - ⚠️ **A failed null does not discard the observed run.** `run.py` catches it, prints a
   warning, records `evidence=no_null` and still writes the report — this was measured
   twice on 2026-08-10, each time costing a completed selection to an exception in a
-  summary f-string ([run.py:310-320](../run.py#L310-L320)).
+  summary f-string ([run.py:310-320](../../src/feature_selection/run.py#L310-L320)).
 - ⚠️ **A draw that raises is COUNTED, not skipped.** `failed_draws` is on the summary; a
   null built only from the draws that happened to succeed is a biased null.
 - Every draw's IC is written to `null_draws.csv` in the run folder. Read it — the twenty

@@ -9,7 +9,7 @@ import graph rather than living in a comment.
     python -m final_features                 # plan only, touches nothing
     python -m final_features --apply         # create the tables
 
-See `builder.py` for the grouping rule and `CONTEXT.md` for why the table name
+See `builder.py` for the grouping rule and `.claude/context/final_features.md` for why the table name
 carries the setup.
 """
 

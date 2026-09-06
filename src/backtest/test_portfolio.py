@@ -359,7 +359,7 @@ def test_two_runs_over_different_windows_are_priced_on_the_INTERSECTION(monkeypa
 
 def test_two_horizons_are_refused_rather_than_averaged(monkeypatch, tmp_path):
     """h is the rebalance period, so two horizons are two schedules AND two cost drags —
-    `backtest/CONTEXT.md` §3 puts the fee difference at 4.4 pp/yr between h=10 and h=20."""
+    `.claude/context/backtest.md` §3 puts the fee difference at 4.4 pp/yr between h=10 and h=20."""
     from backtest import head2head as H
 
     dates = pd.bdate_range("2024-01-01", periods=60)
