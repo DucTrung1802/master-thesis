@@ -104,7 +104,46 @@ def _rows(report):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# the band a decision was judged against
+# ──────────────────────────────────────────────────────────────────────────────
+def test_the_band_is_recorded_on_every_decision_it_reached(root, tmp_path):
+    """⚠️ **`0` IS "`sane` NEVER JUDGED THIS ROW", AND NOTHING ELSE CARRIES THAT FACT.** The
+    CSV has `method` and `source`; neither can say whether the magnitude guard was standing
+    when the figure went in. Since a complete quarter is now written band or no band
+    (`pdf_ocr_batch`), the difference between a guarded row and an unguarded one survives only
+    here and in the run folder's `merge` block — §5 rule 2, an absent guard recorded as absent.
+    """
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 1_000})},
+                         bands={r: {"True": 7, "False": 0} for r in fin.REPORTS})
+    report = merge.plan_merge(folder, reports=[fin.BALANCE_SHEET])
+    assert _reason(report, fin.BALANCE_SHEET).band == 7
+
+
+def test_an_unguarded_write_says_so_on_the_row_not_only_in_the_call(root, tmp_path):
+    """⚠️ `force_empty_band` is ONE argument covering a whole merge, so without a note on the
+    DECISION a reader of the log — or of the artefact months later — cannot tell which rows
+    `sane` judged from which it never saw."""
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: _statement(**{ASSETS: 1_000})},
+                         bands={r: {"True": 0, "False": 0} for r in fin.REPORTS})
+
+    refused = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]),
+                      fin.BALANCE_SHEET)
+    assert refused.action == "skip" and refused.band == 0
+
+    forced = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET],
+                                      force_empty_band=True), fin.BALANCE_SHEET)
+    assert forced.action == "write" and forced.band == 0
+    assert "UNGUARDED" in forced.note
+    # ⚠️ AND IT REACHES THE ARTEFACT, which is the copy a later reader has.
+    recorded = merge.merge_event(
+        merge.plan_merge(folder, reports=[fin.BALANCE_SHEET], force_empty_band=True))
+    assert recorded["decisions"][0]["band"] == 0
+    assert "UNGUARDED" in recorded["decisions"][0]["note"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # the dry run
+# ──────────────────────────────────────────────────────────────────────────────
 # ──────────────────────────────────────────────────────────────────────────────
 
 

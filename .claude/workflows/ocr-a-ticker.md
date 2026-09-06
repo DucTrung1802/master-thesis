@@ -49,7 +49,7 @@ run that never touched the payload.
 
 | parameter | when it is right |
 |---|---|
-| **`FORCE_EMPTY_BAND`** | ⚠️ **only when BOOTSTRAPPING a ticker with no history.** `BND-1`: `seed_history` rebuilds the sanity band from the `pdf` rows on disk, an empty band fails open, and the merge then refuses every statement the run produced — **the loop closes on itself.** This flag is the escape and **it lifts a real guard**; the arithmetic screens (`web_scraper/statement_screens.py`) are what stands in for it |
+| **`FORCE_EMPTY_BAND`** | ⚠️ **only when BOOTSTRAPPING a ticker with no history.** `BND-1`: `seed_history` rebuilds the sanity band from the `pdf` rows on disk, an empty band fails open, and the merge then refuses every statement the run produced — **the loop closes on itself.** ⚠️ **SINCE 2026-09-06 IT IS NOT THE ESCAPE FOR A BOOTSTRAP** — a quarter whose filing produced ALL THREE statements is written band or no band, so a new ticker starts on its own and the flag is left False. What it still decides is a filing that produced TWO of three. Either way **it lifts a real guard**, and the arithmetic screens (`web_scraper/statement_screens.py`) are what stands in for it |
 | **`OVERWRITE`** | only for a deliberate, scoped repair of a known-bad cell. Merging a quarter that DIFFERS from a good `pdf` row is a decision, not a default |
 
 ⚠️ **Neither is decidable from the ticker symbol alone** — both are judgements about *that

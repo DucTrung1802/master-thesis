@@ -1876,13 +1876,38 @@ and `merge_latest` both read it off `cfg.parameters["OVERWRITE"]`, and `config._
 refuses a job whose `data.documents.overwrite` disagrees with it, the same way it already
 refuses a quarters mismatch: one decides what is UPLOADED, the other what is OPENED.
 
-### ⚠️ WHICH TOOL STARTS A TICKER — `pdf_ocr_job` does NOT (`BND-1`, measured 2026-08-29)
+### ⚠️ WHICH TOOL STARTS A TICKER — `pdf_ocr_job` did NOT until 2026-09-06 (`BND-1`)
 
 `seed_history` rebuilds `sane`'s magnitude band from the `pdf` rows **on disk** and `run()`
 re-seeds it **per document**; `build()` does the opposite, appending to `history` after every
 quarter it accepts. So on a ticker with no statement CSV the band is EMPTY for every document and
 **`sane` fails open for the whole run** — and `pdf_ocr_merge` then refuses every empty-band
 statement, so nothing is written and the band stays empty. The loop closes on itself.
+
+⚠️ **THE LOOP WAS BROKEN 2026-09-06, BY REQUEST — AND THE MISSING GUARD WAS NOT REPLACED, ONLY
+RECORDED.** `pdf_ocr_batch` now writes a quarter whose filing produced **ALL THREE** statements
+band or no band, in both of its writers: `run_batch(merge_each=True)` upserts it BETWEEN
+DOCUMENTS as the run proceeds, and `merge_batch` lifts the same refusal for the same quarters in
+the sweep — one rule, so the two cannot disagree about one quarter. `FinancialsBuilder._write`
+creates the directory and the three CSVs, so a ticker starts itself.
+
+**What stands in the guard's place is a GATE and a RECORD, and neither is the guard.** The gate
+is `complete_periods` — all three statements off ONE filing, no layer having RAISED (`VCR-1`) —
+which is why the lift is scoped to it rather than applied to every accepted statement. The
+record is `Decision.band`, where **`0` means `sane` never judged this row**: printed beside the
+WRITE with the sentence saying so, carried into the run folder's `merge` block by
+`merge_event`, totalled at the end of `run_batch`, and listed again in the control notebook's
+§10. ⚠️ **The TCB measurement below is still what those rows are exposed to** — 9 of 169 cells
+convicted by two arithmetic screens — so `statement_screens.py` is not optional on a bootstrap
+run any more, it is the only check those figures get. A filing that produced **two of three** is
+untouched: still refused, still `FORCE_EMPTY_BAND`'s call, because that is a judgement about
+THAT filing.
+
+⚠️ **AND THE OTHER HALF OF `BND-1` — "the run finished" ≠ "the CSV changed" — IS WHAT THE
+PER-QUARTER WRITE ADDRESSES.** HOSE_FPT, 2026-09-04: a 185-minute T4 round trip over 71 filings
+accepted 128 of 213 statements, the sweep planned 96 WRITEs and **0** reached disk, because the
+write was a step further on than the session got. `_write` renders to a `.tmp` and
+`os.replace`s it, so a per-quarter write cannot lose more than the document in flight.
 
 **TCB paid 5h 21m to demonstrate it.** 59 filings, **169 of 177 cells parsed = 95.5 %** — and two
 screens over the finished artefact, doing by hand what the band would have done, convicted

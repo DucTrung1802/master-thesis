@@ -171,6 +171,221 @@ def test_a_folder_without_metadata_is_skipped_and_said(tmp_path):
     assert any("no metadata.json" in line for line in said), said
 
 
+# ── the immediate write: `merge_each` ─────────────────────────────────────────
+def _document(folder, symbol, period, accepted, **extra):
+    (folder / "documents" / f"HOSE_{symbol}__{period}.json").write_text(
+        json.dumps({"period": period, "exchange": "HOSE", "symbol": symbol,
+                    "template": "bank", "accepted": accepted, **extra}),
+        encoding="utf-8")
+
+
+def test_a_quarter_is_complete_only_with_all_three_statements(tmp_path):
+    """⚠️ THE GATE IS THE FILING, NOT THE STATEMENT. Two of three is a quarter whose CSVs
+    would move apart — a balance sheet on disk with no cash flow beside it — so it is HELD for
+    the sweep, where a person reads which statement is missing and why."""
+    folder = _folder(tmp_path, "20260101-000000__hose_ctg__pdf_ocr")
+    _document(folder, "CTG", "Q1-2019", {r: {"layer": "onnx@200", "items": 30}
+                                         for r in ("balance_sheet", "income_statement",
+                                                   "cash_flow")})
+    _document(folder, "CTG", "Q2-2019", {"balance_sheet": {"layer": "onnx@200", "items": 30}})
+
+    assert batch.complete_periods(folder) == ["Q1-2019"]
+    held = batch.held_periods(folder)
+    assert list(held) == ["Q2-2019"]
+    assert "cash_flow" in held["Q2-2019"] and "income_statement" in held["Q2-2019"]
+
+
+def test_a_raised_layer_makes_a_full_quarter_incomplete(tmp_path):
+    """⚠️ `VCR-1`: an exception measures the MACHINE, so whatever won the cascade won BY
+    DEFAULT — and the `accepted` block of such a document is indistinguishable from a good
+    one, a real layer and a real item count. `plan_merge` refuses it whole too; refusing it
+    here is what puts the reason in the batch log beside the document."""
+    folder = _folder(tmp_path, "20260101-000000__hose_ctg__pdf_ocr")
+    _document(folder, "CTG", "Q1-2019",
+              {r: {"layer": "tesseract@200", "items": 30}
+               for r in ("balance_sheet", "income_statement", "cash_flow")},
+              engine_errors=[["onnx@200", "CUDA failure 2: out of memory"]])
+
+    assert batch.complete_periods(folder) == []
+    assert "RAISED" in batch.held_periods(folder)["Q1-2019"]
+
+
+def test_an_interrupted_child_leaves_nothing_to_merge_and_does_not_raise(tmp_path):
+    """A subprocess killed before it wrote its `documents/*.json` leaves a folder with nothing
+    in it. The batch's job is to go on to the next filing — `wait_for_vram` takes the same
+    line — and the sweep reports the folder at the end."""
+    folder = _folder(tmp_path, "20260101-000000__hose_ctg__pdf_ocr")
+    assert batch.complete_periods(folder) == []
+    assert batch.held_periods(folder) == {}
+
+
+def test_the_write_happens_between_documents_and_never_forces(tmp_path, monkeypatch):
+    """⚠️ THE TWO PROPERTIES THE FLAG EXISTS FOR, PINNED TOGETHER.
+
+    (1) The merge of document N runs BEFORE document N+1 is opened — that is what makes an
+        interrupted run keep what it read (`BND-1`), and it is `SPN-1`'s ordering for free,
+        since `TickerPlan.quarters` is sorted and `YYYY-QQ` sorts chronologically.
+    (2) `force_differs` is NEVER passed. Four measured builds downgraded a quarter through an
+        automatic per-quarter write; what separates this from them is that every refusal
+        stays on, so a figure disagreeing with a `pdf` row on disk is still refused.
+    """
+    calls = []
+
+    class _Report:
+        decisions: list = []
+        to_write: list = []
+        backup = None
+
+        def lines(self):
+            return ["header"]
+
+    def fake_merge_run(folder, **kw):
+        calls.append(("merge", kw["periods"][0], kw))
+        return _Report()
+
+    from web_scraper import pdf_ocr_merge as real
+    monkeypatch.setattr(real, "merge_run", fake_merge_run)
+    monkeypatch.setattr(real, "record_merge", lambda *_a, **_kw: None)
+    monkeypatch.setattr(batch, "wait_for_vram", lambda *_a, **_kw: None)
+    monkeypatch.setattr(batch, "_engine_errors", lambda _f: 0)
+
+    three = {r: {"layer": "onnx@200", "items": 30}
+             for r in ("balance_sheet", "income_statement", "cash_flow")}
+    # ⚠️ ONE FOLDER PER DOCUMENT, because that is what a batch produces: `run_batch` spawns a
+    # child per quarter and `_newest_folder` claims the folder THAT child made. A fixture
+    # sharing one folder would have the second merge re-visit the first quarter and pin a
+    # behaviour the real driver never has.
+    made = {}
+
+    def fake_call(cmd, **_kw):
+        quarter = cmd[cmd.index("--quarters") + 1]
+        period = f"Q{quarter[-1]}-{quarter[:4]}"
+        calls.append(("parse", quarter, None))
+        made[quarter] = _folder(tmp_path, f"2026010{len(made) + 1}-000000__hose_ctg__pdf_ocr")
+        _document(made[quarter], "CTG", period, three)
+        return 0
+
+    monkeypatch.setattr(subprocess, "call", fake_call)
+    monkeypatch.setattr(batch, "_newest_folder",
+                        lambda *_a, **_kw: list(made.values())[-1])
+
+    plan = batch.TickerPlan(exchange="HOSE", symbol="CTG", template="bank",
+                            template_how="given", quarters=["2019-Q3", "2019-Q4"],
+                            operands=["2019-Q3"], filed=2, complete=0)
+    batch.run_batch([plan], out_root=tmp_path, merge_each=True, log=lambda _s: None)
+
+    # ⚠️ The Q3 SPAN OPERAND is written before Q4 is even parsed — which is the dependency the
+    # two-pass sweep exists to reproduce (`SPN-1`).
+    assert [(what, period) for what, period, _kw in calls] == [
+        ("parse", "2019-Q3"), ("merge", "Q3-2019"),
+        ("parse", "2019-Q4"), ("merge", "Q4-2019")]
+    assert all(not kw.get("force_differs") for _w, _p, kw in calls if kw)
+    # ⚠️ ONE BACKUP PER TICKER: asked for until a merge actually takes one. This fake never
+    # returns a backup path, so both calls still ask — `test_one_backup_per_ticker_not_one_per_period`
+    # is where the stopping is pinned.
+    assert [kw["backup"] for _w, _p, kw in calls if kw] == [True, True]
+
+
+def test_a_complete_quarter_is_written_even_with_no_magnitude_band(tmp_path, monkeypatch):
+    """⚠️ **BY REQUEST, 2026-09-06 — AND IT LIFTS A REAL GUARD.**
+
+    Refusing a statement whose `sane` band was empty is `BND-1`'s loop rather than a guard: no
+    `pdf` row on disk means no band, no band means every statement refused, and every statement
+    refused means there is still no `pdf` row and no CSV. So a quarter whose filing produced
+    ALL THREE statements is written whether or not `sane` had anything to judge it by, and
+    `run_batch` has no `force_empty_band` argument left to decide otherwise.
+
+    ⚠️ What replaces the guard is the GATE (all three, nothing raised) and the RECORD
+    (`Decision.band == 0`, printed beside the WRITE and carried into the run folder).
+    """
+    seen = []
+
+    class _Report:
+        decisions: list = []
+        to_write: list = []
+        backup = None
+
+        def lines(self):
+            return ["header"]
+
+    from web_scraper import pdf_ocr_merge as real
+    monkeypatch.setattr(real, "merge_run",
+                        lambda folder, **kw: seen.append(kw) or _Report())
+    monkeypatch.setattr(real, "record_merge", lambda *_a, **_kw: None)
+    monkeypatch.setattr(batch, "wait_for_vram", lambda *_a, **_kw: None)
+    monkeypatch.setattr(batch, "_engine_errors", lambda _f: 0)
+
+    folder = _folder(tmp_path, "20260101-000000__hose_ctg__pdf_ocr")
+    _document(folder, "CTG", "Q1-2019", {r: {"layer": "onnx@200", "items": 30}
+                                         for r in ("balance_sheet", "income_statement",
+                                                   "cash_flow")})
+    monkeypatch.setattr(subprocess, "call", lambda *_a, **_kw: 0)
+    monkeypatch.setattr(batch, "_newest_folder", lambda *_a, **_kw: folder)
+
+    plan = batch.TickerPlan(exchange="HOSE", symbol="CTG", template="bank",
+                            template_how="given", quarters=["2019-Q1"], filed=1, complete=0)
+    batch.run_batch([plan], out_root=tmp_path, merge_each=True, log=lambda _s: None)
+
+    assert [kw["force_empty_band"] for kw in seen] == [True]
+    # ⚠️ AND STILL UNFORCED WHERE IT MATTERS: two runs disagreeing about a figure is not
+    # settled by preferring the newer one, and the lift above does not touch that.
+    assert all(not kw.get("force_differs") for kw in seen)
+
+
+def test_the_sweep_lifts_the_band_for_a_complete_quarter_and_not_for_a_partial_one(
+        tmp_path, monkeypatch):
+    """⚠️ **THE TWO WRITERS MUST NOT DISAGREE ABOUT THE SAME QUARTER.** `merge_batch` applies
+    the same rule as the immediate path, so a quarter that produced all three statements lands
+    whichever one reaches it — and a filing that produced two of three stays the operator's
+    call, which is what `force_empty_band` still governs."""
+    folder = _folder(tmp_path, "20260101-000000__hose_ctg__pdf_ocr")
+    three = {r: {"layer": "onnx@200", "items": 30}
+             for r in ("balance_sheet", "income_statement", "cash_flow")}
+    _document(folder, "CTG", "Q1-2019", three)
+    _document(folder, "CTG", "Q2-2019", {"balance_sheet": {"layer": "onnx@200", "items": 30}})
+    (folder / "metadata.json").write_text(json.dumps({
+        "inputs": {"exchange": "HOSE", "symbol": "CTG"},
+        "results": [{"period": p, "report": "balance_sheet"}
+                    for p in ("Q1-2019", "Q2-2019")]}), encoding="utf-8")
+
+    seen = {}
+
+    class _Report:
+        decisions: list = []
+        to_write: list = []
+        backup = None
+
+        def lines(self):
+            return ["header"]
+
+    from web_scraper import pdf_ocr_merge as real
+    monkeypatch.setattr(real, "merge_run", lambda _f, **kw: seen.update(
+        {kw["periods"][0]: kw["force_empty_band"]}) or _Report())
+    monkeypatch.setattr(real, "record_merge", lambda *_a, **_kw: None)
+
+    batch.merge_batch([folder], apply=False, log=lambda _s: None)
+    assert seen == {"Q1-2019": True, "Q2-2019": False}
+
+
+def test_merge_each_is_off_by_default(tmp_path, monkeypatch):
+    """⚠️ THE DEFAULT IS STILL "THIS DRIVER WRITES NOTHING". `merge_batch` is the deliberate
+    act; a caller that has not asked for the immediate write must not get one."""
+    monkeypatch.setattr(batch, "wait_for_vram", lambda *_a, **_kw: None)
+    monkeypatch.setattr(subprocess, "call", lambda *_a, **_kw: 0)
+    monkeypatch.setattr(batch, "_engine_errors", lambda _f: 0)
+    monkeypatch.setattr(batch, "_newest_folder", lambda *_a, **_kw: tmp_path)
+
+    def boom(*_a, **_kw):
+        raise AssertionError("run_batch merged with merge_each unset")
+
+    from web_scraper import pdf_ocr_merge as real
+    monkeypatch.setattr(real, "merge_run", boom)
+
+    plan = batch.TickerPlan(exchange="HOSE", symbol="CTG", template="bank",
+                            template_how="given", quarters=["2019-Q3"], filed=1, complete=0)
+    assert batch.run_batch([plan], out_root=tmp_path, log=lambda _s: None) == [tmp_path]
+
+
 # ── the plan ──────────────────────────────────────────────────────────────────
 def test_the_ticker_key_is_exchange_and_symbol():
     plan = batch.TickerPlan(exchange="HOSE", symbol="CTG", template="bank",

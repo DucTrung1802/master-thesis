@@ -30,6 +30,44 @@ disk and writes afterwards, so a `months` span recorded for Q3 reaches Q4's plan
 NEXT call. `SPN-1` is exactly that dependency, so a batch that re-parses a span operand and the
 Q4 it unblocks MUST merge them in separate calls, oldest first. `force_differs` is never passed:
 two runs disagreeing is not settled by preferring the newer one.
+
+⚠️ **AND SINCE 2026-09-06 `run_batch(merge_each=True)` DOES THAT WRITE AS THE RUN PROCEEDS —
+one quarter at a time, the moment its filing has produced ALL THREE statements.** It is the
+same `merge_run` call `merge_batch` makes, with `force_differs` still never passed and three
+of the four refusals untouched; what changes is WHEN, and that is the whole point:
+
+  * **A run that is interrupted keeps what it has already read.** ⚠️ The measurement is
+    HOSE_FPT, 2026-09-04, and its CAUSE was a knob rather than an interrupt: a 185-minute T4
+    round trip over 71 filings accepted 128 of 213 statements, the sweep planned **96 WRITEs**
+    and **0** of them reached disk, because `MERGE_APPLY` was off and two knobs had to be
+    flipped by hand afterwards. What it measures for this flag is the SHAPE both share —
+    **the parse is durable in the run folder and the CSVs are not touched until a later step
+    that may never run** (`BND-1`). A per-quarter write cannot lose more than the document in
+    flight: `_write` renders to a `.tmp` and `os.replace`s it.
+  * **It is the ORDER `SPN-1` asks for, for free.** `TickerPlan.quarters` is sorted, and
+    `YYYY-QQ` sorts chronologically, so a span operand is parsed AND written before the Q4 it
+    exists to unblock is planned. The two-pass sweep reproduces that order deliberately; here
+    it falls out of the loop.
+  * ⚠️ **THE GATE IS ALL THREE STATEMENTS, NOT "SOMETHING WAS ACCEPTED"** (`complete_periods`).
+    A filing that produced two of three is left to the sweep at the end of the run, where a
+    person is reading the refusals — the CSVs move together or they do not move.
+
+⚠️ **AND IT LIFTS EXACTLY ONE GUARD, DELIBERATELY, FOR EXACTLY THAT GATE (2026-09-06, by
+request).** A complete quarter is written whether or not `sane` had a magnitude band to judge
+it by. Refusal 2 — *"the band was EMPTY, so `sane` failed open and this figure passed no
+guard"* — is real, but on a ticker with nothing on disk it CLOSES A LOOP: no `pdf` row means no
+band, no band means every statement refused, and every statement refused means there is still
+no `pdf` row and no CSV. `BND-1`. The three CSVs are created by `FinancialsBuilder._write` the
+moment something clears the refusals, so a ticker bootstraps itself now instead of waiting for
+a person to notice and set a flag after the parse has already been spent.
+
+⚠️ **WHAT STANDS IN THAT GUARD'S PLACE IS THE GATE AND THE RECORD.** The gate is all three
+statements off one filing with no layer raised; the record is `Decision.band == 0`, printed
+beside the WRITE and carried into the run folder's `merge` block, and it says in as many words
+that **the figure passed no magnitude guard and must be screened by arithmetic before being
+quoted.** The other three refusals are untouched: a cumulative income statement whose priors
+are unavailable, a figure that DIFFERS from a `pdf` row on disk, and a document any of whose
+layers RAISED are all still refused, here as in the sweep.
 """
 from __future__ import annotations
 
@@ -40,7 +78,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from web_scraper import cafef_financials as fin
 from web_scraper import pdf_ocr_job as job
@@ -189,18 +227,178 @@ def plan_batch(tickers: Sequence[str], *, exchange: str = "HOSE",
     return plans
 
 
+def complete_periods(folder: os.PathLike | str) -> List[str]:
+    """The periods this run folder read in ALL THREE statements, oldest first.
+
+    ⚠️ **THIS IS THE GATE FOR THE IMMEDIATE WRITE, AND IT IS STRICTER THAN THE MERGE'S ON
+    PURPOSE.** `merge_batch` asks of each STATEMENT whether it cleared the refusals; this asks
+    of the FILING whether it produced the whole quarter. A document that accepted two of
+    three is not written as the run proceeds — it is held for the sweep at the end, where a
+    person is reading the refusals and can see which statement is missing and why. The three
+    CSVs of a quarter move together or they do not move.
+
+    ⚠️ **A DOCUMENT WHOSE LAYERS RAISED IS NOT COMPLETE, WHATEVER ITS `accepted` BLOCK SAYS**
+    (`VCR-1`, and `GPU-1` for how it happens): an exception measures the MACHINE, so whatever
+    won the cascade won by default and the block looks exactly like a good one — a real layer,
+    a real item count. `plan_merge` refuses such a document whole as well; refusing it HERE is
+    what puts the reason in the batch log, beside the document it belongs to, rather than
+    hours later in a merge nobody was watching.
+
+    ⚠️ **AN INTERRUPTED CHILD IS SILENTLY NOT COMPLETE.** A subprocess killed before it wrote
+    its `documents/*.json` leaves a folder with nothing to read, and this returns `[]` rather
+    than raising — the batch's job is to go on to the next filing (`wait_for_vram` takes the
+    same line), and `merge_batch` will report the folder at the end.
+    """
+    ready: List[str] = []
+    for doc in sorted((Path(folder) / "documents").glob("*.json")):
+        try:
+            data = json.loads(doc.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if data.get("error") or data.get("engine_errors"):
+            continue
+        accepted = data.get("accepted") or {}
+        if all(name in accepted for name in fin.REPORTS):
+            ready.append(data["period"])
+    return sorted(ready, key=fin._period_key)
+
+
+def held_periods(folder: os.PathLike | str) -> Dict[str, str]:
+    """`{period: why it was not written as the run proceeded}` — the complement of the above.
+
+    ⚠️ **SAID, NEVER SILENT.** A quarter the immediate write passes over is a quarter whose
+    statements are on disk in the run folder and NOT in the CSVs, which is `BND-1`'s shape
+    exactly: the work is done, the file does not have it, and a green run says nothing about
+    which. One line per held quarter here, and `merge_batch` is what picks them up.
+    """
+    held: Dict[str, str] = {}
+    for doc in sorted((Path(folder) / "documents").glob("*.json")):
+        try:
+            data = json.loads(doc.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        period = data.get("period") or doc.stem
+        if data.get("error"):
+            held[period] = f"the run errored: {data['error']}"
+            continue
+        if data.get("engine_errors"):
+            held[period] = (f"{len(data['engine_errors'])} layer(s) RAISED — whatever won this "
+                            f"document won BY DEFAULT (`VCR-1`)")
+            continue
+        accepted = data.get("accepted") or {}
+        missing = [name for name in fin.REPORTS if name not in accepted]
+        if missing:
+            held[period] = (f"{len(accepted)} of {len(fin.REPORTS)} statement(s) accepted — "
+                            f"no {', '.join(missing)}")
+    return held
+
+
+def _merge_finished_quarters(folder: Path, plan: TickerPlan, *, apply: bool,
+                             reports: Optional[Sequence[str]], backed: set,
+                             say: Callable[[str], None]) -> Tuple[int, int]:
+    """Upsert the quarters this ONE document finished, right now. `(written, unguarded)`.
+
+    ⚠️ **ONE PERIOD PER CALL, exactly as `merge_batch` does it** — same function, same
+    refusals, `force_differs` never passed. The only difference is that disk is read a
+    document later than it was in the sweep, which is the direction `SPN-1` wants.
+
+    ⚠️ **REFUSAL 2 IS LIFTED HERE, WITHOUT A KNOB, AND THAT IS A DECISION rather than an
+    oversight (2026-09-06, by request).** A quarter whose filing produced ALL THREE statements
+    is written whether or not `sane` had a magnitude band to judge it by. The refusal exists
+    for a real reason — an empty band means `sane` FAILED OPEN, so the figure passed no guard
+    — but refusing on it CLOSES A LOOP rather than opening one: a ticker with nothing on disk
+    has no band, so every statement is refused, so there is still nothing on disk and the CSV
+    is never created. That is `BND-1`, and the old way out was a person setting
+    `FORCE_EMPTY_BAND` after a whole-ticker parse had already been spent for nothing.
+
+    ⚠️ **WHAT STANDS IN THE GUARD'S PLACE IS THE GATE AND THE RECORD, and neither is the same
+    thing as the guard.** The gate is `complete_periods` — all three statements off ONE
+    filing, no layer having raised — which is a real screen, and is why the lift is scoped to
+    it rather than applied to every accepted statement. The record is `Decision.band == 0`,
+    carried into the run folder's `merge` block and printed beside every such WRITE: **those
+    figures passed no magnitude guard and must be screened by arithmetic before being
+    quoted.** The other three refusals are untouched — a cumulative income statement whose
+    priors are unavailable, a figure that DIFFERS from a `pdf` row on disk, and a document any
+    of whose layers RAISED are all still refused.
+
+    ⚠️ **A MERGE THAT RAISES MUST NOT END THE BATCH.** The parse is the expensive half — 71
+    filings were 185 minutes on a T4 (HOSE_FPT, 2026-09-04) — and every accepted statement is
+    already durable in the run folder, so a merge that blows up costs one sweep at the end and
+    not a re-parse. It is reported at the document it happened on, not swallowed.
+    """
+    from web_scraper import pdf_ocr_merge
+
+    written = unguarded = 0
+    for period in complete_periods(folder):
+        try:
+            report = pdf_ocr_merge.merge_run(
+                folder, apply=apply, periods=[period], reports=reports,
+                force_empty_band=True, backup=plan.key not in backed, quiet=True)
+        except Exception as exc:                # noqa: BLE001 — see the docstring
+            say(f"   ⚠️ the merge of {period} RAISED: {exc}")
+            say(f"      nothing was written for it; the sweep at the end of the run is what "
+                f"picks it up.")
+            continue
+        for line in report.lines()[1:]:         # [0] repeats the ticker header
+            say("   " + line.strip())
+        # ⚠️ RECORDED, NOT RE-PRINTED: `MergeReport.lines()` already prints the backup path
+        # (and `— (taken earlier in this run)` once one exists), so saying it again here would
+        # put the same path on two lines of the same document's log.
+        if getattr(report, "backup", None):
+            backed.add(plan.key)
+        if apply:
+            pdf_ocr_merge.record_merge(folder, report)
+        # ⚠️ THE DECISIONS, NOT `report.written` — that field is `{csv: pdf rows on disk AFTER
+        # the upsert}`, so summing it reports the ticker's whole history as this run's work
+        # (`MRG-1`, and `merge_batch` carries the same warning).
+        written += len(report.to_write) if apply else 0
+        # ⚠️ COUNTED, not merely printed. "How many rows of this ticker did `sane` never
+        # judge?" is the question the lift above creates, and a question nobody totals is a
+        # question nobody asks. `band == 0` is the fact; the note beside the WRITE is its
+        # sentence, and both reach the run folder through `merge_event`.
+        unguarded += sum(1 for d in report.to_write if not d.band) if apply else 0
+    for period, why in sorted(held_periods(folder).items(), key=lambda kv: fin._period_key(kv[0])):
+        say(f"   {period} HELD — {why}")
+    return written, unguarded
+
+
 def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = None,
               out_root: Optional[os.PathLike | str] = None,
               allow_parent: bool = True, overwrite: bool = True,
               compare: bool = True, notes: str = "",
               vram_floor_mb: int = VRAM_FLOOR_MB, retries: int = RETRIES,
+              merge_each: bool = False, merge_apply: bool = True,
+              merge_reports: Optional[Sequence[str]] = None,
               log: Optional[Callable[[str], None]] = None, progress=None) -> List[Path]:
     """Parse every document of every plan, ONE PER PROCESS. Returns the run folders, in order.
 
-    ⚠️ **NOTHING IS MERGED HERE.** `merge_batch` is a separate, deliberate act, because the
-    merge is where a wrong figure would reach disk — and this repo has measured four builds in
-    which an automatic per-quarter write silently downgraded a quarter it had been given only
-    for history.
+    ⚠️ **NOTHING IS MERGED HERE UNLESS `merge_each` SAYS SO — IT IS OFF BY DEFAULT.** The
+    merge is where a wrong figure would reach disk, and this repo has measured four builds in
+    which an automatic per-quarter write silently DOWNGRADED a quarter it had been given only
+    for history (CLAUDE.md §6-2-vicies, §6-2-unvicies, §6-2-quatervicies, §6-2-quinvicies). So
+    `merge_batch` stays the deliberate sweep, and the default of this driver is still to write
+    nothing.
+
+    ⚠️ **WHAT MAKES `merge_each=True` A DIFFERENT PROPOSITION FROM THOSE FOUR IS WHAT IT
+    STILL REFUSES.** `force_differs` is not passed here and cannot be from this signature, so
+    a figure that disagrees with a `pdf` row on disk is refused exactly as it is in the sweep,
+    and so are a cumulative income statement whose priors are unavailable and a document any
+    of whose layers RAISED. A backup of the three CSVs is taken by the first call that writes.
+    The gate is `complete_periods` — all three statements off ONE filing, no layer having
+    raised. What it buys is that an interrupted run keeps what it has already read, which
+    `BND-1` and the 185-minute HOSE_FPT round trip of 2026-09-04 are the standing argument for.
+
+    ⚠️ **THE ONE REFUSAL IT DOES LIFT IS THE EMPTY MAGNITUDE BAND, and there is no knob for
+    it.** A quarter that clears the gate is written even where `sane` had nothing to judge it
+    by — see `_merge_finished_quarters` for why refusing there is a loop and not a guard — and
+    every such row is counted, printed and recorded as unguarded. This is why `run_batch` has
+    no `force_empty_band` argument: on this path it would have nothing left to decide.
+
+    ⚠️ **`merge_each` DOES NOT REPLACE THE SWEEP.** Quarters it holds back — two statements of
+    three, a document whose layers raised — are still on disk in the run folder and still
+    outside the CSVs, and `merge_batch` over the returned folders is what picks them up. Each
+    held quarter is named in the log as it happens (`held_periods`), because a quarter parsed
+    and not written is `BND-1`'s exact shape and silence is how it survives.
 
     `progress` is an optional `utils.progress.Stages`, positioned on the stage this batch IS.
     Given one, every line here comes out as `xx.x% - <task> - <sub> - <detail>` and the overall
@@ -223,6 +421,11 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
     total = sum(len(p.quarters) for p in plans)
     folders: List[Path] = []
     raised: List[str] = []
+    # ⚠️ ONE BACKUP PER TICKER, not one per quarter — `merge_batch` and
+    # `pdf_ocr_job._upsert_period` both take this line, and for the same reason: seventy
+    # timestamped copies of three CSVs answer "what did this run change?" worse than one.
+    backed: set = set()
+    merged = unguarded = 0
     done = 0
     for plan in plans:
         for quarter in plan.quarters:
@@ -282,6 +485,17 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
                 raised.append(f"{plan.key} {quarter}")
                 say(f"   ⚠️ STILL raising after {retries} retr(ies) — whatever won this "
                     f"document won BY DEFAULT, and the merge refuses it whole (`GPU-1`)")
+            # ⚠️ **HERE, BEFORE THE NEXT DOCUMENT IS OPENED — that is the whole point of the
+            # flag.** `_write` renders to a `.tmp` and `os.replace`s it, so an interrupt can
+            # lose the quarter in flight and never one already on disk; and the next filing's
+            # `plan_merge` reads a disk this one has already updated, which is the ordering
+            # `SPN-1` needs and the reason the sweep has to be two-pass to imitate it.
+            if merge_each:
+                _wrote, _unguarded = _merge_finished_quarters(
+                    folder, plan, apply=merge_apply, reports=merge_reports,
+                    backed=backed, say=say)
+                merged += _wrote
+                unguarded += _unguarded
     if raised:
         # ⚠️ Said ONCE at the end as well as per document: a raised layer is invisible in the
         # verdict table, which reports `pdf` with a real layer and a real item count.
@@ -290,6 +504,22 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
             + (" …" if len(raised) > 8 else ""))
         say("   If the cause is `out of memory`, another CUDA process held the card. "
             "Nothing from those documents may be merged.")
+    if merge_each:
+        # ⚠️ **THE STATEMENTS THAT REACHED `raw_data/`, NOT THE ONES THAT PARSED** — the two
+        # came apart on a run that finished green and created no CSV at all (`BND-1`), and
+        # only the second number was ever the point. `0` here on a run that accepted plenty
+        # means every write was refused: the sweep prints the reasons, most common first.
+        say("")
+        say(f"-> {merged} statement(s) reached the CSVs as the run proceeded"
+            + ("" if merge_apply else "   (nothing was written — merge_apply=False)"))
+        if unguarded:
+            # ⚠️ SAID AGAIN AT THE END, because it is the one thing about such a run a reader
+            # must carry away: those rows are on disk and `sane` never judged them.
+            say(f"⚠️ {unguarded} of them passed NO MAGNITUDE GUARD — this ticker had no `pdf` "
+                f"history for `seed_history` to rebuild a band from, so `sane` failed open "
+                f"(`BND-1`).")
+            say("   Screen those figures by arithmetic — two statements agreeing on one "
+                "figure, a printed subtotal closing — before quoting any of them.")
     return folders
 
 
@@ -302,6 +532,13 @@ def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
     ⚠️ **THE ORDER IS THE WHOLE POINT** and it is per TICKER: `merge_run` plans against disk and
     writes afterwards, so a span recorded for Q3 reaches Q4's planner only in the following call.
     A batch that re-parsed a span operand and the Q4 it unblocks gets both only in this order.
+
+    ⚠️ **AFTER A `merge_each=True` RUN THIS IS THE SWEEP, AND IT IS STILL WORTH RUNNING.** What
+    the run already wrote comes back `identical to the row already on disk` — a re-plan against
+    disk, which is a check and not a second write — and what it HELD BACK is what this picks
+    up: a filing that produced two statements of three, a document whose layers raised and was
+    re-run since, a quarter whose span operand only landed later in the run. A quarter parsed
+    and never merged is `BND-1`, so the sweep is the thing that closes it.
 
     ⚠️ **ONE BACKUP PER TICKER**, taken by the first call that actually writes — seventy
     timestamped copies of three CSVs answer "what did this change?" worse than one.
@@ -323,12 +560,26 @@ def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
     tasks.sort(key=lambda t: (t[0], t[1]))
 
     say(f"{'APPLY' if apply else 'PLAN'} — {len(tasks)} (ticker, period) pass(es), oldest first")
-    written = skipped = 0
+    written = skipped = already = 0
     backed: set = set()
+    # ⚠️ **ONE FOLDER IS READ ONCE.** The one-process path writes every document of a run into
+    # a single folder, so asking `complete_periods` per (ticker, period) task would re-parse
+    # 70 documents 70 times — each of which carries a `row_dump` and is 100-200 KB
+    # (`_documents` records the same trap).
+    complete: Dict[Path, List[str]] = {}
     for ticker, _order, period, folder in tasks:
+        # ⚠️ **A QUARTER WHOSE FILING PRODUCED ALL THREE STATEMENTS IS WRITTEN WHETHER OR NOT
+        # `sane` HAD A BAND — the same rule `run_batch(merge_each=True)` applies, so the two
+        # writers cannot disagree about the same quarter (2026-09-06, by request).** Refusing
+        # it is `BND-1`'s loop: no `pdf` row, no band, every statement refused, still no `pdf`
+        # row. `force_empty_band` still governs everything this gate does NOT cover — a filing
+        # that produced two statements of three is the operator's call, and stays one.
+        if folder not in complete:
+            complete[folder] = complete_periods(folder)
         report = pdf_ocr_merge.merge_run(
             folder, apply=apply, periods=[period], reports=reports,
-            force_empty_band=force_empty_band, backup=ticker not in backed, quiet=True)
+            force_empty_band=force_empty_band or period in complete[folder],
+            backup=ticker not in backed, quiet=True)
         for line in report.lines()[1:]:
             say("  " + line.strip())
         if getattr(report, "backup", None):
@@ -339,13 +590,22 @@ def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
         # whole history as this batch's work. `MRG-1` records the same mistake being made
         # once already.
         written += len(report.to_write)
-        skipped += len(report.decisions) - len(report.to_write)
+        # ⚠️ **"ALREADY ON DISK" IS NOT A REFUSAL, AND AFTER A `merge_each=True` RUN IT IS
+        # MOST OF WHAT THIS PASS SEES.** Counting the two together reported a clean sweep of
+        # a fully-written ticker as *"0 written, 12 refused"*, which reads as a failure and
+        # is the opposite of what happened. The predicate is `pdf_ocr_merge.IDENTICAL`, the
+        # module's own constant, so it cannot drift from the reason it counts.
+        _same = sum(1 for d in report.decisions if d.reason == pdf_ocr_merge.IDENTICAL)
+        already += _same
+        skipped += len(report.decisions) - len(report.to_write) - _same
         if apply:
             pdf_ocr_merge.record_merge(folder, report)
     say("")
-    say(f"-> {written} statement(s) written, {skipped} refused"
+    say(f"-> {written} statement(s) written, {already} already on disk unchanged, "
+        f"{skipped} refused"
         + ("" if apply else "   (nothing was written — this was a PLAN)"))
-    return {"written": written, "skipped": skipped, "passes": len(tasks)}
+    return {"written": written, "skipped": skipped, "already": already,
+            "passes": len(tasks)}
 
 
 def _newest_folder(out_root: Path, exchange: str, symbol: str,

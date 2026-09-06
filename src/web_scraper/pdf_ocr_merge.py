@@ -83,6 +83,12 @@ from web_scraper.cafef_financials import FinancialsBuilder, REPORTS, statement_p
 # tool said it was.
 BACKUP_ROOT = Path(__file__).resolve().parents[2] / "raw_data" / "_backup" / "statements"
 
+# ⚠️ **THE ONE PLACE THIS SENTENCE IS WRITTEN.** It is a REASON printed to a person and a
+# PREDICATE a caller counts on (`pdf_ocr_batch.merge_batch` separates "already on disk" from
+# "refused" with it), and two copies of it drift the first time one is reworded — after which
+# the counter silently reports every such row as a refusal.
+IDENTICAL = "identical to the row already on disk"
+
 
 @dataclass
 class Decision:
@@ -103,6 +109,15 @@ class Decision:
     # A caveat printed beside a WRITE. A write with a note is still a write — what the note
     # says is what a reader would otherwise have to reconstruct from the PDF index.
     note: str = ""
+    # ⚠️ **HOW MANY PROBES `sane`'s MAGNITUDE BAND HELD WHEN THIS STATEMENT WAS JUDGED — AND
+    # `0` MEANS IT WAS NOT JUDGED AT ALL.** With no band `sane` fails open, so a `0` here on a
+    # WRITE says the figure passed no magnitude guard; refusal 2 is what normally stops such a
+    # row, and `force_empty_band` is the caller deciding to take it anyway. Recorded on the
+    # decision, and from there into the run folder's `merge` block, because otherwise the
+    # difference between a guarded row and an unguarded one survives nowhere: the CSV carries
+    # `method` and `source`, and neither of them can say it (§5 rule 2 — an absent guard is
+    # recorded as absent, never implied to be a pass).
+    band: Optional[int] = None
     # ⚠️ **THE FIGURES TO WRITE, WHEN THEY ARE NOT THE RUN'S OWN.** Set only where refusal 1
     # DE-CUMULATED a year-to-date income statement into its standalone quarter; `None`
     # everywhere else, and `merge_run` then takes the run's `values` unchanged. It lives on the
@@ -153,6 +168,15 @@ class MergeReport:
         if self.applied:
             out.append(f"  backup: {self.backup or '— (taken earlier in this run)'}")
             out.append(f"  written: {self.written}")
+        elif not self.to_write:
+            # ⚠️ **`applied` IS SET ONLY WHEN SOMETHING WAS ACTUALLY WRITTEN**, so a merge
+            # asked to APPLY that found nothing to do used to print *"DRY RUN … Pass
+            # apply=True to write them"* — an instruction to do the thing the caller had just
+            # done, over a report of zero writes. Harmless until the immediate per-quarter
+            # write made the sweep's usual outcome exactly this (2026-09-06), at which point
+            # a whole clean run reads as a run nobody applied.
+            out.append("  nothing to write — every statement was refused, or is already on "
+                       "disk unchanged")
         else:
             out.append(f"  DRY RUN — {len(self.to_write)} statement(s) would be written. "
                        f"Pass apply=True to write them.")
@@ -466,12 +490,25 @@ def plan_merge(folder: os.PathLike | str,
 
             # ── refusal 2: `sane` had no band, so it could not have refused anything ──
             band = (bands.get(name) or {}).get(doc.get("consolidated", "True"), 0)
+            decision.band = band
             if not band and not force_empty_band:
                 decision.action = "skip"
                 decision.reason = ("the magnitude band was EMPTY — `sane` failed open, so "
                                    "this figure passed no guard")
                 report.decisions.append(decision)
                 continue
+            if not band:
+                # ⚠️ **THE LIFTED GUARD IS SAID AT THE ROW, NOT ONLY IN THE CALL THAT LIFTED
+                # IT.** `force_empty_band` is one argument covering a whole merge, so without
+                # this a reader of the log — or of the run folder months later — cannot tell
+                # which rows `sane` actually judged from which ones it never saw. `lines()`
+                # prints a note beside a WRITE, and `merge_event` carries it into the
+                # artefact, so the two readers get the same sentence.
+                decision.note = "; ".join(filter(None, [
+                    decision.note,
+                    "⚠️ WRITTEN UNGUARDED — the magnitude band was EMPTY, so `sane` failed "
+                    "open and this figure passed no magnitude guard. Screen it by arithmetic "
+                    "(two statements agreeing, a printed subtotal closing) before quoting it"]))
 
             # ── refusal 3: two runs disagree about a figure already on disk ───────────
             # ⚠️ THE FIGURES THIS DECISION WOULD WRITE — which is the run's own set unless
@@ -511,7 +548,7 @@ def plan_merge(folder: os.PathLike | str,
                 fills_span = bool(span_known) and span_on_disk != span_known
                 if not changed and disk.get("method") == got.get("layer") and not fills_span:
                     decision.action = "skip"
-                    decision.reason = "identical to the row already on disk"
+                    decision.reason = IDENTICAL
                     report.decisions.append(decision)
                     continue
                 if not changed and fills_span:
@@ -676,6 +713,10 @@ def merge_event(report: MergeReport) -> dict:
             {"period": d.period, "report": d.report, "action": d.action,
              "reason": d.reason, "layer": d.layer, "items": d.items,
              "on_disk": d.on_disk, "months": d.months, "note": d.note,
+             # ⚠️ `0` is "`sane` never judged this row", `None` is "this decision never got
+             # as far as looking" — a refusal 1 or 4 skip. They are different facts and the
+             # artefact keeps them apart (§5 rule 2).
+             "band": d.band,
              "columns_changed": len(d.changed)}
             for d in sorted(report.decisions, key=lambda d: (d.period, d.report))
         ],

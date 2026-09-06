@@ -73,8 +73,9 @@ ONLY_MISSING = False         # True narrows an EMPTY list to the gaps. ⚠️ Th
                              #   two types in one parameter cost three measured readings.
 OVERWRITE = False            # False = fill the GAPS; True = re-parse and replace
 MERGE_INTO_CSV = True        # upsert into raw_data/.../statements/
-FORCE_EMPTY_BAND = True      # write even when `sane` had no band — the only way a
-                             # NEW ticker is ever bootstrapped. See below.
+FORCE_EMPTY_BAND = False     # write even when `sane` had no band. ⚠️ NO LONGER what
+                             # bootstraps a new ticker — since 2026-09-06 a quarter with
+                             # all three statements is written band or no band. See below.
 PERIODS  = None              # optional; the repo-native form; intersects with QUARTERS
 TEMPLATE = "corp"            # None = resolve it and record which route answered
 ```
@@ -308,6 +309,12 @@ the point.** They came apart twice: HOSE_BSR (14 documents) and HOSE_CTG (**8 h 
 accepted cells**) both finished green, wrote complete run folders and created **no statement
 CSV at all**, because every statement was refused for an empty `sane` band (`BND-1`).
 
+⚠️ **THAT PARTICULAR WAY OF COMING APART WAS CLOSED 2026-09-06, BY REQUEST** — a quarter whose
+filing produced ALL THREE statements is written band or no band, and the notebook writes it
+BETWEEN DOCUMENTS (`MERGE_EACH`) rather than at the end, so an interrupted run keeps what it
+has read. **The two facts are still different**, and the sections below are still how you tell
+them apart: what changed is which refusal stands between them, not the need to check.
+
 Since 2026-08-30 there are three places to look, and the notebook's sections **7-9** are them:
 
 | | says |
@@ -487,7 +494,7 @@ makes a merge reversible went where nobody looks. It is anchored to the repo now
 |---|---|---|
 | a **cumulative income statement whose priors WERE filed** | an annual or half-year filing prints the year to date; the CSV column holds the standalone quarter, and this job cannot de-cumulate — a one-document run has no Q1..Q(q-1). An authoritative `build()` over the whole ticker CAN, so writing the YTD figure now would pre-empt a better answer with a worse one | `force_cumulative` |
 | ⚠️ *(not refused)* **a cumulative income statement whose priors were NEVER filed** | nothing will ever subtract quarters that were not reported, so the choice is *cumulative now or nothing, ever*. It is WRITTEN, with `months = 6` or `12` saying what it covers — BSR Q4-2016, whose only 2016 filing is the FY-2016 annual. ⚠️ **Read `months` before summing or diffing two rows of one column** | — |
-| a statement whose **`sane` band was empty** | with no band the magnitude guard fails open, so the figure passed no guard at all. A ticker with nothing on disk yet has no band by construction — ⚠️ **so a green run on a NEW ticker writes NOTHING until this is overridden**, and the band then stays empty for the next run too (`BND-1`). Measured on HOSE_BSR, 2026-08-30: 14 documents, 0 of 42 statements written | `force_empty_band` — `FORCE_EMPTY_BAND` in the notebook, `--force-empty-band` on either CLI. ⚠️ It lifts the guard, so screen the artefact (unit per report, total assets quarter on quarter) before quoting anything |
+| a statement whose **`sane` band was empty** ⚠️ *(lifted 2026-09-06 for a quarter with ALL THREE statements — see below)* | with no band the magnitude guard fails open, so the figure passed no guard at all. A ticker with nothing on disk yet has no band by construction — ⚠️ **so a green run on a NEW ticker writes NOTHING until this is overridden**, and the band then stays empty for the next run too (`BND-1`). Measured on HOSE_BSR, 2026-08-30: 14 documents, 0 of 42 statements written | `force_empty_band` — `FORCE_EMPTY_BAND` in the notebook, `--force-empty-band` on either CLI. ⚠️ It lifts the guard, so screen the artefact (unit per report, total assets quarter on quarter) before quoting anything |
 | a figure that **DIFFERS from a good `pdf` row** | `compare()` already scored it; two runs disagreeing about a number is not resolved by taking the newer one | `force_differs` |
 | a document whose parse **RAISED** | a layer that refuses has measured the FILING; one that raises has measured the MACHINE, so whatever won did so by default. Measured 2026-08-29: `vocr.vn`'s certificate expired, every `onnx@*` layer raised, and `tesseract@200` rewrote 13 columns of a filing that had reproduced 98 of 98 cells (`VCR-1`) | `force_engine_errors` |
 
@@ -504,7 +511,10 @@ accepts is not a statement a full run would accept**, and the merge cannot tell 
 ### ⚠️ SCREEN BEFORE YOU MERGE A BOOTSTRAP RUN — `statement_screens.py` (2026-09-04)
 
 `FORCE_EMPTY_BAND` lifts a real guard (`BND-1`), and **the arithmetic screens are what replaces
-it**. They are CODE now (`P47`(b)) rather than a script rewritten per ticker — free, no OCR, no
+it**. ⚠️ **AND SINCE 2026-09-06 A BOOTSTRAP HAPPENS WITHOUT THE FLAG** — a quarter with all
+three statements is written band or no band — so this section is no longer something you opt
+into: **every row a bootstrap run writes needs screening**, and the run names them for you
+(`band: 0` on each decision, a count at the end of the run, and the notebook's §10). They are CODE now (`P47`(b)) rather than a script rewritten per ticker — free, no OCR, no
 network:
 
 ```python

@@ -214,7 +214,8 @@ through gold and unified, `gold.stocks_ta` rebuilt (`STA-1`, `SKW-1` both closed
 a **DISTRIBUTION** now (`pipeline.freshness`, `health_schema.ticker_freshness('<layer>')`).
 ⚠️ **Fundamentals are 10 tickers of 781** — 1,570 of 1,740 filing cells parsed, and the remaining
 wall is **schema** (761 of 781 names are not banks against a bank-only reconcile anchor set,
-`TPL-1`/`CRP-1`), not disk and not time.
+`TPL-1`/`CRP-1`), not disk and not time. ⚠️ **`BND-1`'s lock broke 2026-09-06** — a quarter with
+all three statements now writes its own CSVs as the run goes, UNGUARDED (`band: 0`).
 
 [ISSUES.md](.claude/current_state/ISSUES.md) — **98 open**, 38 resolved, codes permanent. ⚠️ **SEVEN
 change how a number may be READ and are the ones to open before quoting anything**: `NUL-1` (no null
