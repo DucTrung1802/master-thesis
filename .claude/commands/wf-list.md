@@ -7,7 +7,7 @@ slash command that launches each workflow:
 
 | command | the job | first step |
 |---|---|---|
-| `/wf-start-a-session` | I just opened this repo and do not know what state it is in | `O1` + `O3` |
+| `/wf-start-a-session` | open a new Claude tab and work in that one | `O8`, then ⛔ stop — no arguments, and ⚠️ `TAB-1` is why that is measured, not preference |
 | `/wf-run-the-chain` | train a model on a target and score it honestly — stages 1→9 | `O1` |
 | `/wf-run-a-selection` | which channels carry signal? — stage 2/4 | decide the ROOT |
 | `/wf-refresh-the-data` | the corpus is stale — scrape → carry up → verify | `O3` |

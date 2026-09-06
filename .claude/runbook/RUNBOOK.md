@@ -26,9 +26,12 @@ cd src                                                # every `python -m` below 
 ```
 
 ⚠️ **`cd src` matters** — every stage is a package under `src\`; from the repo root
-`python -m pipeline` raises `ModuleNotFoundError`. ⚠️ **`dagster asset materialize` is the
-exception** — its `-f` path in this table is written from the REPO ROOT
-(`src/orchestration/definitions.py`).
+`python -m pipeline` raises `ModuleNotFoundError`. ⚠️ **Two kinds of row are the exception and are
+written from the REPO ROOT**: `dagster asset materialize`'s `-f` path
+(`src/orchestration/definitions.py`), and the `.claude/tools/` scripts in `O5`, `O6` and `O8`,
+which are not packages and import nothing from `src\`. ⚠️ **`O5`/`O6` read `python ../tools/…`
+until 2026-09-06** — a path left behind by the move into `.claude/`, and one that resolves to
+nothing from either directory.
 
 ---
 
@@ -45,9 +48,10 @@ runtime that was MEASURED, never an estimate — an unmeasured cell reads `—`.
 | **O2** | know what is stale for ONE experiment | `python -m pipeline --ticker <TICKER> --table <TABLE> --config <CFG>.yaml` | 5.8 s | — → ⚠️ `--config` is NOT optional; without it the `model` row scores the DEFAULT chain's run |
 | **O3** | know whether the DATA is fresh | `python -m pipeline.freshness --layer <LAYER>` | ~1 s (silver) · ~33 s (all 39) | — → read the SHAPE: a cliff is a scrape scope, scatter is delistings |
 | **O4** | see which tickers are behind | `SELECT ticker, last_date, sessions_behind FROM health_schema.ticker_freshness('<LAYER>') WHERE NOT is_current ORDER BY sessions_behind DESC;` | 0.25 s | O3 → ⚠️ **pass the layer as the ARGUMENT**; a `WHERE layer = …` written after the call costs 32.9 s instead |
-| **O5** | check the docs before committing | `python ../tools/state_check.py` | ~2 s | — → resolve every row it reports; it REPORTS and never rewrites |
-| **O6** | check a new `.md` is routed | `python ../tools/check_index.py` | ~1 s | wrote a `.md` → add its row to `../current_state/INDEX.md` |
+| **O5** | check the docs before committing | `python .claude/tools/state_check.py` | ~2 s | — → resolve every row it reports; it REPORTS and never rewrites |
+| **O6** | check a new `.md` is routed | `python .claude/tools/check_index.py` | ~1 s | wrote a `.md` → add its row to `../current_state/INDEX.md` |
 | **O7** | re-read what a finished track scored | `python -m walkforward.evaluate --top-k 20 --draws 0 --universe all --out <DIR>` | ~2 min | — → ⚠️ **it REWRITES `per_fold.csv`**, and at a different `--top-k` it OVERWRITES the published table |
+| **O8** | open a new Claude tab with Remote Control on | `python .claude/tools/open_claude_tab.py [--check]` | 0.11 s (`--check`) · 0.30 s (refused) | — → ⚠️ **NEEDS AN ATTENDED DESKTOP, measured 2026-09-06.** It checks `remoteControlAtStartup` and the keybinding, then the FOREGROUND, and **exits 1 with the fix** rather than sending. ⚠️ Then the OLD session STOPS — two sessions on one tree is how a `git status` stops describing the tree. **§2.O8** |
 
 ### B · The chain — stages 0-9, in order
 
@@ -163,6 +167,61 @@ raises on, and the surviving channel count is only known once the dataset is bui
 | a finished backlog item | its number moves to `CLAUDE.md` / `.claude/context/`; the item is **deleted from `../current_state/TODO.md`, not ticked** |
 | a new `.md` file | a row in `../current_state/INDEX.md` |
 | a new command or stage | **this file** |
+
+### O8 · Opening a Claude tab, and the three routes that do NOT work
+
+⚠️ **A SHELL CANNOT OPEN A CLAUDE TAB *DIRECTLY*, AND THREE ROUTES WERE MEASURED DEAD**
+(2026-09-06, VS Code 1.136.1, extension 2.1.261). ⚠️ **The FOURTH route — a SYNTHESISED KEYSTROKE
+— was never among them, and it is what `O8` does**: `open_claude_tab.py` foregrounds the Code.exe
+window and sends the bound key through `SendInput`. **The three below stay dead; do not retry one
+because the fourth works.**
+
+| route | what happened |
+|---|---|
+| the `code` CLI | there is no `--command`; `-n` opens a WINDOW and never a session inside it |
+| `vscode://Anthropic.claude-code/open?prompt=…` | the handler EXISTS — `registerUriHandler` in `extension.js` routes `/open` to `claude-vscode.primaryEditor.open(session, prompt)` — and a built-in `vscode://file/…` URI does reach the running window. The Claude URI produced no tab either way |
+| the IDE WebSocket server (`~/.claude/ide/<port>.lock`) | **12 MCP tools** — `openDiff`, `openFile`, `close_tab`, `executeCode`, … — and **none opens a conversation**. `new_conversation_tab` is a WEBVIEW→extension message, reachable only from inside the chat UI. ⚠️ The server also accepts **one client at a time**, so connecting to it **disconnects the session's own IDE link** |
+
+⚠️ **And from a sandboxed shell only `explorer.exe "<uri>"` launches a protocol URI at all** —
+`Start-Process`, `cmd /c start` and `rundll32 url.dll,FileProtocolHandler` are swallowed with no
+error and no process. Measure the process table, not the exit code.
+
+⚠️ **THE ATTENDED-DESKTOP REFUSAL IS A CORRECT ANSWER, NOT A BUG** (measured 2026-09-06). On an
+unattended machine — `quser` idle 5+ days, **screen not locked**, input desktop still `Default` —
+`GetForegroundWindow` returns NULL and both `SetForegroundWindow` and `SwitchToThisWindow` fail
+returning 0 with `GetLastError() == 0`. Nothing has keyboard focus, so the key would go nowhere;
+`O8` **refuses to send and exits 1** rather than firing into the void. The fallback is one line to
+the user: press **`Ctrl+Alt+C`**.
+
+⚠️ **AND `O8` TAKES NO PARAMETERS BECAUSE EVERY ROUTE FOR ONE IS DEAD, measured 2026-09-06.** A
+session name, a model and an effort level were asked for, built and withdrawn. The finding that
+explains all of it: **a synthesised keystroke reaches VS Code's KEYBINDING DISPATCHER and almost
+nothing else** — a bound chord works from anywhere, including from inside the Claude webview, while
+a character needs a focused DOM element.
+
+| attempted | result |
+|---|---|
+| `/model sonnet` + Enter into the tab | model stayed `claude-opus-5` — on a fresh tab, on one open for minutes, and with `Escape` first to dismiss the slash menu |
+| the command palette (`ctrl+shift+p`) from a Claude tab | never opened. Control test: *Preferences: Open Settings (UI)* never opened Settings |
+| `claude-vscode.renameSessionTab` fired by a BOUND key | tab title unchanged — with a transcript on disk and without one |
+| plain text + Enter, **after** firing `claude-vscode.focus` | ✅ the one route that works: `ping` became a real message. Before that command runs, a new tab holds **no keyboard focus in its input** and characters go nowhere |
+
+⚠️ **THE FALSE POSITIVE IS THE PART WORTH REMEMBERING.** The new session's transcript read back
+`effort: xhigh`, which looked like proof that `/effort xhigh` had landed — until the control, a
+session **never typed into**, read back `xhigh` as well. `"ultracode": true` in
+`~/.claude/settings.json` sets it. **§5 rule 21: a metric that cannot fail is not a pass.**
+
+⚠️ **NEVER SYNTHESISE `ctrl+escape`** — it is the extension's own `claude-vscode.blur` binding and
+**Windows takes it for the Start Menu** before VS Code sees it. Sending it put the following
+keystrokes into Windows Search and Enter launched a browser. Same class as `ctrl+shift+escape`
+below. Two user keybindings were added on 2026-09-06 to work around exactly this —
+`ctrl+alt+r` → `renameSessionTab` and `ctrl+alt+i` → `claude-vscode.focus` — and **they are useful
+by hand and useless to automation**; `ISSUES.md` `TAB-1` carries the whole record.
+
+⚠️ **The script does not hardcode `ctrl+alt+c`; it fires whatever `keybindings.json` binds to
+`claude-vscode.editor.open`**, so a rebind moves this row with it. ⚠️ **Never `Ctrl+Shift+Esc`** —
+the extension really does bind it on Windows (`win: ctrl+shift+escape`, `package.json`) and Windows
+takes it for Task Manager before VS Code ever sees it.
 
 ---
 

@@ -1,92 +1,60 @@
 # Workflow — start a session
 
-> **Goal:** know what state this repo is in, and what you are allowed to believe about it, before
-> touching anything. **Cost: about ten minutes, of which ~40 seconds is commands.**
+> **Goal:** open a new Claude tab, and stop. **Cost: 0.3 s, one command.**
 >
-> ⚠️ **The expensive mistake this prevents is reading the corpus.** It is **106 `.md` files,
-> ~639k tokens, about 3× a context window** — bulk-loading it is not slow, it is impossible.
-> `CLAUDE.md` and `../current_state/INDEX.md` are already in context; **everything else is opened one file at
-> a time, when you touch that thing.**
+> ⚠️ **THE TAB IS THE WHOLE DELIVERABLE.** No parameters, no orientation, no `O1`, no freshness
+> check — what the new session works on is decided *in the new session*. The tab comes up with
+> Remote Control on, so the job can be driven from a phone.
+>
+> ⚠️ **This workflow takes NO arguments** — `/wf-start-a-session` and nothing after it — and §1b is
+> why that is a MEASUREMENT and not a preference.
 
 ---
 
-## 1. Read what is already loaded — 0 s
+## 1. Open the tab — row `O8`
 
-`CLAUDE.md` (44.2k), `../current_state/INDEX.md` and `.claude/rules/common.md` load themselves. Two sections
-carry the answer to most questions:
+```powershell
+python .claude/tools/open_claude_tab.py
+```
 
-- **§2 — THE VERDICT.** Single-stock short-horizon prediction has failed **five** independent
-  times here. If the job in front of you is "try a model on one stock at h=5", §2 has already
-  answered it.
-- **§6 — State today.** ⚠️ **Its own header says that when it disagrees with the database, the
-  database is right and the section is the bug.** It has been seven days stale once.
+Run from the **repo root** — it is not a package under `src\` and imports nothing from there.
 
-## 2. Ask the machine, not the file — ~40 s
+It checks `remoteControlAtStartup`, the keybinding and the foreground window, then fires the key
+bound to `claude-vscode.editor.open`, and **exits 1 at the first thing that is false with the fix
+beside it**. Details, and the routes that do NOT work, are [`../runbook/RUNBOOK.md`](../runbook/RUNBOOK.md) §2 `O8`.
 
-| step | runbook ID | what you are testing |
-|---|---|---|
-| 2a | **O1** `python -m pipeline` | is any stage of the chain stale? Read the `why` column, not the colour |
-| 2b | **O3** `python -m pipeline.freshness --layer silver` | is the DATA fresh, and for **how many tickers**? |
+**If it exits non-zero, hand the user one line and stop:** press **`Ctrl+Alt+C`**.
 
-⚠️ **2b is not optional and `MAX(date)` is not a substitute.** It once read 2026-08-19 from **five
-tickers** while 757 of 781 were frozen — a 24-name cross-section looks like a working pipeline to
-anything reading one number.
+### 1b. ⚠️ Why there are no parameters — measured 2026-09-06, do not re-derive
 
-**Read the shape of what O3 returns:**
+`--session-name`, `--model` and `--effort` were asked for, built, and **withdrawn after every
+delivery route was measured dead.** A synthetic keystroke reaches VS Code's **keybinding
+dispatcher** and very little else:
 
-| shape | means |
+| attempted | result |
 |---|---|
-| many tickers stopping on ONE date (a **cliff**) | a scrape scope — 599 of 781 on one date was 77 % |
-| **scattered** end dates, largest group tiny | delistings and suspensions — 5 of 784 is 0.6 %, and correct |
+| `/model sonnet` + Enter into the new tab | model stayed `claude-opus-5` — on a fresh tab AND on one open for minutes, with and without `Escape` to dismiss the slash menu |
+| the command palette from a Claude tab | never opened — the rename changed no title, and a control (*Preferences: Open Settings (UI)*) never opened Settings |
+| `claude-vscode.renameSessionTab` fired by a bound key | title unchanged, with a transcript on disk and without |
+| plain text + Enter, after firing `claude-vscode.focus` | ✅ **the one thing that works** — `ping` became a real message |
 
-## 3. Find out what is broken before you trust a number
+⚠️ **AND ONE FALSE POSITIVE ALMOST CLOSED IT AS A SUCCESS.** `effortLevel` read back as `xhigh`
+from the new session's transcript, which looked like proof that `/effort xhigh` had landed — until
+a session that was **never typed into** read back `xhigh` too. `"ultracode": true` sets it.
+That is `CLAUDE.md` §5 rule 21 exactly: **a metric that cannot fail is not a pass.**
 
-`../current_state/ISSUES.md` is **42.2k and you do not open it whole.** Seven codes change how a number may be
-*read*, and `CLAUDE.md` §6's closing table lists them: `NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`, `CFB-1`,
-`TPL-1`/`CRP-1`, `FLT-1`/`SHP-1`. **Open the file only for the code that touches your job.**
+`TAB-1` in [`../current_state/ISSUES.md`](../current_state/ISSUES.md) carries this; the runbook has
+the routes. ⚠️ **`ctrl+escape` is the Start Menu, not VS Code** — synthesising it opened Windows
+Search and launched a browser.
 
-## 4. Route to the ONE file you need
+## 2. Stop
 
-`../current_state/INDEX.md` is the map and it carries a measured token cost per row. Budget against it.
-
-| your job | open | cost |
-|---|---|---|
-| a Dagster asset, a table, a scrape, the filter layer | `.claude/context/orchestration.md` | 47.5k |
-| a scraper or the PDF/OCR parser | `.claude/context/web_scraper.md` | 64.9k |
-| a selection, an IC, a null, a bar | `.claude/context/feature_selection.md` | 45.4k |
-| whether a result survives more than one split | `.claude/context/walkforward.md` | 16.0k |
-| what a module's code actually contains | `.claude/context/<module>.md` | ~3k |
-
-⚠️ **ONE FILE PER `src/` SUBFOLDER, NAMED AFTER IT — and two kinds of file share that folder.**
-A package doc answers *"what did we measure and what did it prove"*; a module description answers
-*"what is in this folder and what will bite me"*. Different questions, same naming rule — pick the
-one you are asking. ⚠️ **They were `src/<pkg>/CONTEXT.md` until 2026-09-06**, so an older message
-naming that path means the file now at `.claude/context/<pkg>.md`.
-
-## 5. Check the calendar on what you just read
-
-- **A number without a date cannot be told from a stale one.** Dates are on findings by convention
-  here; if one is missing, treat the number as unverified.
-- ⚠️ **A `P<n>` in `../current_state/TODO.md` written before 2026-08-23 means a DIFFERENT item** — three
-  renumbers preceded the freeze. Take the date of what you are reading, then TODO's crosswalks.
-- ⚠️ **A HYPHENATED code (`P1-9`, `PRF-8`, `M-3`) is RETIRED.** A bare `P<n>` is live.
+⚠️ **This session does nothing else.** Two sessions on one working tree is how a `git status` in
+one stops describing what the other is half-way through writing.
 
 ---
 
 ## Done when
 
-- [ ] **O1** shows a stage list you understand, including which rows are `MANUAL` by design
-- [ ] **O3** shows a freshness shape you can name — cliff or scatter
-- [ ] you know which single package context file (if any) your job needs, and have opened at most one
-- [ ] you know which `ISSUES.md` codes constrain the numbers you are about to touch
-
-## Traps
-
-⚠️ **"I will just skim a few CONTEXT files to get oriented."** That is 150k+ tokens for context
-the hub already summarises. The hub exists precisely so this is unnecessary.
-
-⚠️ **Trusting §6 over the database.** The section says so itself. When they disagree, measure and
-then fix the section — see [record-a-finding.md](record-a-finding.md).
-
-⚠️ **Treating a memory as current.** Recalled memories reflect what was true when written. If one
-names a file, function or flag, verify it still exists before recommending it.
+- [ ] a new Claude tab is open — by `O8`, or by the user pressing `Ctrl+Alt+C` after it refused
+- [ ] this session ran nothing else and stopped

@@ -24,7 +24,7 @@
 
 | open this | run it with | when the job is… | first step |
 |---|---|---|---|
-| [start-a-session.md](start-a-session.md) | `/wf-start-a-session` | *"I have just opened this repo and I do not know what state it is in"* | `O1` + `O3` — two commands, ~6 s, before reading anything |
+| [start-a-session.md](start-a-session.md) | `/wf-start-a-session` | *"open a new Claude tab and work in that one"* | `O8` — one command, then ⛔ stop. **No arguments, nothing else** — §1b is the measurement behind that |
 | [run-the-chain.md](run-the-chain.md) | `/wf-run-the-chain` | *"train a model on a target and score it honestly"* — stages 1→9 | `O1`, and read its `why` column |
 | [run-a-selection.md](run-a-selection.md) | `/wf-run-a-selection` | *"which channels carry signal?"* — stage 2/4, local or on a T4 | decide the ROOT before the draws |
 | [refresh-the-data.md](refresh-the-data.md) | `/wf-refresh-the-data` | *"the corpus is stale"* — scrape → carry up → verify | `O3`, to see whether it actually is |
