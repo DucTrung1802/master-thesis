@@ -7,11 +7,19 @@
 > window. The routing below is the whole point: **open ONE file, when you touch that thing.** Every
 > row carries its measured cost so you can budget before you read.
 >
-> ⚠️ **THE ALWAYS-LOADED HALF FELL FROM 165.7k TO 49.4k ON 2026-09-06.** The hub had grown to
-> 165.3k tokens of content while its own header called this index "routing and not content", so
-> `CLAUDE.md` §6-2-septies…undeseptuagies came out of it — **the move is the rule being obeyed,
-> not a change of policy.** ~196 `§6-2-*` citations across the repo still name those sections,
-> and they cite by section NAME rather than by anchor.
+> ⚠️ **THE ALWAYS-LOADED HALF FELL FROM 165.7k TO 49.4k AND THEN TO 11.7k, ALL ON 2026-09-06.**
+> The hub had grown to 165.3k tokens of content while its own header called this index "routing and
+> not content", so `CLAUDE.md` §6-2-septies…undeseptuagies came out of it — **the move is the rule
+> being obeyed, not a change of policy.** ~196 `§6-2-*` citations across the repo still name those
+> sections, and they cite by section NAME rather than by anchor.
+>
+> ⚠️ **AND THE SECOND CUT MADE THE RULE ENFORCEABLE.** The hub was still **2,549 lines** after the
+> first; §2-§6's evidence moved VERBATIM to [`../findings/`](../findings/) and §5's rule bodies to
+> [`../rules/standing-rules.md`](../rules/standing-rules.md), **each keeping its original heading**,
+> so a `§2b-bis` / `§6-1` / `§5 rule 24` citation still resolves — to those files.
+> [`common.md`](../rules/common.md) **R2 now caps `CLAUDE.md` at 300 lines** and
+> `state_check.py`'s first check fails when it is over. ⚠️ **A cap that is only written down is the
+> cap the hub already broke twice**; this one is measured on every run.
 >
 > ⚠️ **AND THIS PARAGRAPH SAID THE CHRONICLE WAS "RELOCATED VERBATIM TO A SEPARATE FILE" AND THE
 > CORPUS TOTAL "DID NOT MOVE". BOTH WERE WRONG, measured 2026-09-06.** `docs/OCR_PARSER_LOG.md`
@@ -42,9 +50,9 @@
 
 | file | ~tokens | what it answers |
 |---|---|---|
-| [../CLAUDE.md](../../CLAUDE.md) | **44.9k** | *what is this project, and what has it PROVED?* The map and the verdict. §2 is the headline negative, §6 the current state. ⚠️ **Was 162.7k until 2026-09-06** — the filings/OCR chronicle moved to Tier 1 |
-| **.claude/current_state/INDEX.md** *(this file)* | **3.7k** | *where is everything else, and what does it cost to open?* |
-| [../.claude/rules/common.md](../rules/common.md) | **0.9k** | *what rules hold in EVERY session, whatever the task?* Added 2026-09-06; auto-loaded via `@.claude/rules/common.md` in `CLAUDE.md`. **R1: everything written into a file is English** (the conversation stays Vietnamese; `*_VI.md` and Vietnamese DATA are the two named exceptions). ⚠️ **A new file in `.claude/rules/` is loaded only if `CLAUDE.md` imports it** — add the `@` line in the same commit |
+| [../CLAUDE.md](../../CLAUDE.md) | **5.5k** | *what is this project, and what has it PROVED?* **The map and the verdict, and nothing else** — §2 the headline negative, §6 the current state, **§7 the module→file routing you are meant to lazy-load from**. ⚠️ **Was 162.7k, then 2,549 lines, both on 2026-09-06**; the evidence is in Tier 1's `findings/` rows and the hub is capped at 300 lines by R2 |
+| **.claude/current_state/INDEX.md** *(this file)* | **4.0k** | *where is everything else, and what does it cost to open?* |
+| [../.claude/rules/common.md](../rules/common.md) | **1.4k** | *what rules hold in EVERY session, whatever the task?* Added 2026-09-06; auto-loaded via `@.claude/rules/common.md` in `CLAUDE.md`. **R1: everything written into a file is English** (the conversation stays Vietnamese; `*_VI.md` and Vietnamese DATA are the two named exceptions). **R2: `CLAUDE.md` is at most 300 lines**, checked by `state_check.py`, with the table saying where displaced prose goes. ⚠️ **A new file in `.claude/rules/` is loaded only if `CLAUDE.md` imports it** — add the `@` line in the same commit |
 
 ## Tier 1 — the four registers + the result write-ups (`docs/`)
 
@@ -59,6 +67,23 @@ TODO item leaves its measurement in `CLAUDE.md` or a `.claude/context/` file and
 | [pipeline.md](../docs/pipeline.md) | **4.8k** | *which ticker, on which date?* What the chain OUTPUTS — `(date, ticker, weight)`, 4,720 picks across 236 books. §6 is why there is no book for today; **§9d is the tradability gate that takes the CAGR from +181 % to +36.5 %** |
 | [PIPELINE_h10_CAGR74.md](../docs/PIPELINE_h10_CAGR74.md) | **7.2k** | *how does ONE number get made, end to end?* The h=10 chain returning CAGR +74.0 %/yr. **§12 is the caveat section and is why the file exists** |
 | [feature_groups.md](../docs/feature_groups.md) | **0.8k** | naming a feature group — the canonical taxonomy |
+
+### The research record — `.claude/findings/` (**this is `CLAUDE.md` §2-§6's evidence**)
+
+⚠️ **Moved out of the hub on 2026-09-06 when R2 capped it at 300 lines, VERBATIM and with every
+heading unchanged**, so a `§2b-bis`, `§3a-bis`, `§5c` or `§6-1-quater` citation written anywhere in
+this repo still resolves — **to one of these six files**. `CLAUDE.md` carries the headline number
+and a 📂 link; **the table it came from is here.** ⚠️ These are the *narrative* — what a measurement
+MEANS — and are not [`current_state/`](README.md) snapshots, which hold what a command PRINTED.
+
+| open this | ~tokens | when you are… |
+|---|---|---|
+| [verdict.md](../findings/verdict.md) | **2.3k** | ⚠️ **about to propose any modelling work.** §2 in full — the five defeats, the horizon nobody controlled for, the width ladder that survived, its caveats, and §2d's one remaining lever |
+| [data-state.md](../findings/data-state.md) | **9.8k** | asking what the DATA looks like today. §6-2-§6-3 — the `pool__ta` prune, the 2026-08-23 re-scrape and carry-up, the freshness distribution, `DEP-1`, the filings/OCR summary, the audit |
+| [cross-sectional.md](../findings/cross-sectional.md) | **8.5k** | quoting the headline result. §6-0-§6-0-ter — the walk-forward, seven architectures, the dataset sweep. ⚠️ **§6-0-c is the caveat list and is why the rest is readable** |
+| [model-chain.md](../findings/model-chain.md) | **6.9k** | running the chain end to end. §3b-§3d-bis + §4 — the eight stages, the two selection layers, Kaggle panel mode. ⚠️ the COMMANDS are the [runbook](../runbook/RUNBOOK.md)'s; this is the reasoning around them |
+| [data-layers.md](../findings/data-layers.md) | **5.6k** | asking where a column comes from. §3a-§3a-bis — the 83 assets, all ten `pool__*` tables and what each measured, the forex ingest, the FILTER layer |
+| [single-stock.md](../findings/single-stock.md) | **4.2k** | asked for a signal on ONE ticker. §5c, §5d, §6-1-§6-1-quater — eleven architectures inside one error bar, the BANK panel, the five-ticker h=10 run, the VN30 run whose POOLED answer flips |
 
 ### Thesis deliverables — `.claude/docs/`
 
@@ -118,6 +143,7 @@ front of you.** ⚠️ **The runbook here is the only runbook.**
 
 | open this | ~tokens | when you are… |
 |---|---|---|
+| [../.claude/rules/standing-rules.md](../rules/standing-rules.md) | **4.9k** | ⚠️ **about to lean on one of the 24 numbered rules.** `CLAUDE.md` §5 carries them as one-liners and is auto-loaded; **this is the EVIDENCE behind each**, plus §5a what was RETIRED (`src/main.py`, `switch_config.json`, …), §5b what was REMOVED, and §8's conventions. ⚠️ **Not auto-loaded** — `common.md` is the only rules file `CLAUDE.md` imports, and that is deliberate: the one-liners fit the always-loaded budget and the war stories do not |
 | [../.claude/workflows/README.md](../workflows/README.md) | **0.9k** | starting any recurring JOB — it routes the eight step-by-step guides below |
 | `.claude/workflows/*.md` | **13.6k** total | *start a session* (1.2k) · *run the chain* (1.6k) · *run a selection* (1.8k) · *refresh the data* (1.6k) · *OCR a ticker* (1.8k) · *quote a number* (1.8k) · *record a finding* (1.5k) · *finish and commit* (1.4k). ⚠️ **Each is the ORDER; the commands are cited by runbook row ID** so a flag changes in one place |
 | [.claude/runbook/RUNBOOK.md](../runbook/RUNBOOK.md) | **3.9k** | you want the COMMAND — ~40 templates as one table (`O`/`C`/`W`/`D`/`E`/`F` row IDs), each with what it writes, its measured cost, and the step that must follow it |

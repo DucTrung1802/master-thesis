@@ -13,7 +13,7 @@
 
 | register | answers | your finding belongs here if… |
 |---|---|---|
-| **`CLAUDE.md`** | *what is this, and what has it PROVED?* | it changes what the project KNOWS, or moves a verdict |
+| **`CLAUDE.md`** | *what is this, and what has it PROVED?* | it changes what the project KNOWS, or moves a verdict. ⚠️ **The hub takes the HEADLINE only** — one line and a 📂 link, because [R2](../rules/common.md) caps it at 300 lines. **The table itself goes in [../findings/](../findings/)** |
 | [../runbook/RUNBOOK.md](../runbook/RUNBOOK.md) | *how do I RUN it?* | it is a command, a flag, a stage, or a measured runtime |
 | **`../current_state/ISSUES.md`** | *what is BROKEN?* | it is a defect — and it gets a **permanent code** |
 | **`../current_state/TODO.md`** | *what is NEXT?* | it is work not yet done |
@@ -23,8 +23,8 @@
 ```
 TODO item that turns out to be a defect  →  graduates to ISSUES.md with a code
 ISSUES entry that gets fixed             →  keeps its row, marked ✅ FIXED <date> in WORDS
-TODO item that gets done                 →  leaves its measurement in CLAUDE.md or .claude/context/,
-                                            and is DELETED, not ticked
+TODO item that gets done                 →  leaves its measurement in .claude/findings/ (or
+                                            .claude/context/), and is DELETED, not ticked
 ```
 
 ⚠️ **A `P<n>` and an `ISSUES` code are permanent NAMES.** They are never renumbered or reused, so
@@ -36,9 +36,12 @@ order, cite the number.
 - [ ] write **what was measured**, not what was concluded. The tables in these files are still
       trusted months later because they are reproducible checks.
 - [ ] give it a **date**. A number without one cannot be told from a stale one.
-- [ ] put it where it was made: `CLAUDE.md` §6 for anything that changes the state or a verdict,
-      the package's file under `.claude/context/` for detail that stays local — **and decide which, explicitly**.
-- [ ] if it changes §6, **bump §6's date in the heading**.
+- [ ] put it where it was made: **[../findings/](../findings/)** for anything that changes the state
+      or a verdict, the package's file under `.claude/context/` for detail that stays local —
+      **and decide which, explicitly**.
+- [ ] if it changes the state or a verdict, put **one line and a 📂 link** in `CLAUDE.md` §2 or §6
+      and **bump §6's date in the heading**. ⚠️ **Check the line count** — `state_check.py`'s first
+      row, or `(Get-Content CLAUDE.md).Count`. R2 is 300 and it is a cap, not a target.
 - [ ] add a `⚠️` if it cost something to learn. **Do not strip existing ones.**
 - [ ] run it through [quote-a-number.md](quote-a-number.md) first — a finding recorded without its
       null is a finding that gets over-read later.
@@ -64,7 +67,7 @@ is left in."* That is the convention working.
 
 ## 4. If it is a FINISHED ITEM
 
-- [ ] move its measurement into `CLAUDE.md` or the package's file under `.claude/context/`
+- [ ] move its measurement into [../findings/](../findings/) or the package's file under `.claude/context/`
 - [ ] **DELETE the item from `../current_state/TODO.md`** — do not tick it. Its number stays a permanent name
       wherever it is cited.
 

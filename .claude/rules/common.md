@@ -7,9 +7,11 @@
 > another rules file here, add its `@` import to `CLAUDE.md` in the same commit, or it is a file
 > nobody reads.**
 >
-> ⚠️ **This file is in the always-loaded budget**, alongside `CLAUDE.md` (44.2k) and
-> `../current_state/INDEX.md` (3.7k). Keep it to rules — a rule that needs a page of evidence belongs in
-> `CLAUDE.md` or a package file under `.claude/context/`, with a one-line pointer from here.
+> ⚠️ **This file is in the always-loaded budget** — `CLAUDE.md` (5.5k) + `../current_state/INDEX.md`
+> (4.8k) + this (1.4k) = **11.7k**, re-measured 2026-09-06 and down from 165.7k. Keep it to rules: a
+> rule that needs a page of evidence belongs in [`standing-rules.md`](standing-rules.md) or a package
+> file under `.claude/context/`, with a one-line pointer from here. ⚠️ **`CLAUDE.md` is no longer the
+> place to put displaced prose** — R2 caps it at 300 lines; R2's own table says where each kind goes.
 >
 > **Scope:** how to WORK in this repo, in any session, regardless of the task. What the project
 > KNOWS lives in `CLAUDE.md`; what is BROKEN in `../current_state/ISSUES.md`; what is NEXT in `../current_state/TODO.md`.
@@ -53,3 +55,38 @@ translation is a separate decision, made by the user, with the diff reviewed.
 ⚠️ **Encoding, because English does not make this go away** (`CLAUDE.md` §5 rule 18): the corpus
 is UTF-8 and carries `⚠️` throughout. Open files with `encoding="utf-8"`, start any one-off script
 with `sys.stdout.reconfigure(encoding="utf-8")`, and never put `⚠️` into matplotlib chart text.
+
+---
+
+## R2 — `CLAUDE.md` is at most 300 lines
+
+**Added 2026-09-06.**
+
+**`CLAUDE.md` must never exceed 300 lines.** It is auto-loaded into every session, so every line it
+carries is a line every session pays for whether or not the task touches that subject.
+`python ../tools/state_check.py` measures it and **exits 1 when the file is over** — the check is
+the rule, not a reminder of it.
+
+⚠️ **THE RULE EXISTS BECAUSE THE FILE THAT STATES IT BROKE IT TWICE.** The hub's own header called
+it *"the map"* while it stood at **165.3k tokens**; the filings/OCR chronicle came out on
+2026-09-06 and it was still **2,549 lines**. Both times the growth was invisible because it was
+incremental — nobody adds 2,000 lines, everybody adds twelve.
+
+**When the file is at the cap and you have something to add, the answer is never to trim a warning
+to make room.** Move the PROSE and leave the POINTER:
+
+| what you are adding | where it goes | what stays in `CLAUDE.md` |
+|---|---|---|
+| a measurement, a result, a table | [`.claude/findings/`](../findings/) — by subject | one line in §2 or §6 with the number and a 📂 link |
+| a rule's evidence, a trap, a war story | [`standing-rules.md`](standing-rules.md) | the rule as **one line** in §5, keeping its number |
+| anything about ONE `src/` package | `.claude/context/<pkg>.md` | a row in §7's routing table |
+| a command | [`../runbook/RUNBOOK.md`](../runbook/RUNBOOK.md) | nothing — cite the row ID |
+| the ORDER of a recurring job | [`../workflows/`](../workflows/) | nothing — §7 routes the folder |
+
+⚠️ **A SECTION MOVED OUT KEEPS ITS ORIGINAL HEADING, VERBATIM.** `CLAUDE.md` §1-§8 are cited from
+across the repo by number; ~196 `§6-2-*` citations were already orphaned once by a deletion that
+did not think about them. **Moving is cheap and renaming is not** — carry the heading with the
+prose, and say in the destination's header where it came from.
+
+⚠️ **Measure it, do not estimate it**: `(Get-Content CLAUDE.md).Count` in PowerShell, or run
+`state_check.py`, which reports the count either way. A file *"about 300 lines"* is a file at 340.

@@ -1,0 +1,570 @@
+# State of the data — freshness, the carry-up, the filings, the audit
+
+> **Moved out of `CLAUDE.md` on 2026-09-06, VERBATIM.** The hub had grown to 2,549 lines while its
+> own header called itself a map; [`.claude/rules/common.md`](../rules/common.md) R2 now caps it at
+> **300 lines**, so the evidence lives here and the hub routes to it.
+>
+> ⚠️ **THE SECTION HEADINGS BELOW ARE UNCHANGED ON PURPOSE.** ~196 `§6-2-*` citations across this
+> repo were already pointing at sections deleted from the hub earlier the same day; a `§6-2`
+> citation written before this move still resolves — **to this file**. Nothing was rewritten but
+> the relative links, which climb one directory less.
+>
+> **`CLAUDE.md` §6-2 through §6-3 in full** — the `pool__ta` prune, what exists right now, the
+> 2026-08-23 re-scrape and its carry-up, the freshness distribution, `DEP-1`, the filings/OCR
+> summary, and the data audit. ⚠️ **If a number here disagrees with the database, the database is
+> right and this file is the bug.**
+
+---
+
+### ⚠️ 6-2. `pool__ta` REDUCED 711 → 145, LABEL-FREE — and the prune exposed `SKW-1` as a NUMBER
+
+Measured 2026-08-20 on a 295,193-row / 538-date sample of `unified_schema_all.pool__ta`.
+The question was "which technical indicators are worth keeping?", and the answer had to be
+reached **without the label**, because ranking channels by their correlation with the
+target would build `PRF-7`'s look-ahead into the candidate set before any null could see
+it (`prune.py`'s own argument).
+
+**What `pool__ta`'s 922 columns actually are**: 3 keys + **208 BOOLEAN flags**
+(`close_gt_ema_50`, `rsi_14_gt_70`, `macd_…_cross_above` — each a thresholded copy of a
+numeric channel that is already present) + **711 numeric**. Of the 711, **278 (39 %) are
+moving-average machinery** across 15 MA types and **143 are pairwise MA-vs-MA
+combinatorics** (`close_wma_7_14_dist`, `_direction`, `_crossover_up`, `_bars_since`).
+Only **164 distinct indicator roots** exist, and **122 of them carry ≤2 columns**.
+
+| step, in order | left | why it is label-free |
+|---|---|---|
+| all columns | 922 | |
+| − 208 booleans − 3 keys | **711** | `prune.numeric_channels` already excludes them |
+| − coverage < 0.95 | 596 | `COV-1` |
+| − 133 pairwise MA-vs-MA − 26 `_dist_abs` | 437 | **construction, not movement** — a distance between two MAs is a deterministic function of two channels the pool already carries, and `\|x\|` of a present channel is not a new one. Correlation cannot make this drop: at \|ρ\| ≥ 0.50 **24 pairwise columns still survive** |
+| − \|Spearman\| ≥ 0.70 redundancy | 152 | same operation `FeatureSelector` runs internally, moved earlier |
+| − 7 measured duplicates of `pool__basic` | **145** | see below |
+
+**The measured curve** (statistical prune alone vs semantic-then-statistical):
+
+| \|ρ\| | stat only | semantic + stat | roots |
+|---|---|---|---|
+| 0.95 | 448 | 303 | 117 |
+| **0.90** | **369** | 258 | 107 |
+| 0.85 | 308 | 220 | 98 |
+| 0.80 | 263 | 197 | 89 |
+| **0.70** | 196 | **152** | 76 |
+| 0.60 | 155 | 120 | 66 |
+| 0.50 | 115 | 94 | 61 |
+
+⚠️ **The 0.90 row reproduces `python -m feature_selection.prune`'s 369 EXACTLY**, and that
+equality is the check that the fast reimplementation is the same procedure. It earned its
+keep: a first numpy version returned **587** because `R.T @ R` propagates NaN where pandas
+`.corr()` uses pairwise-complete observations, so every `|corr| >= threshold` comparison
+silently evaluated False and nothing was pruned.
+
+### ⚠️ `SKW-1` IS NOW A NUMBER: the same stock-day, two answers, measured on VN30
+
+The last step above is new evidence, not hygiene. Joining `pool__basic` to `pool__ta`
+carries **STA-1's 13 legacy column names**, and they are not new measurements — they are
+the same measurements, taken before the `OUT-1` flow screen:
+
+| `pool__ta` | `pool__basic` | Pearson | Spearman | median ratio |
+|---|---|---|---|---|
+| `val_matched_bn` | `value_matched` | **+1.000000** | **+1.000000** | **1** |
+| `val_negotiated_bn` | `value_negotiated` | **+0.113** | **+0.988** | 1 |
+| `f_buy_val` | `foreign_buy_value` | +0.867 | +0.897 | 1 |
+| `f_net_val` | `foreign_net_value` | +0.862 | +0.973 | 1 |
+| `foreign_room` | `foreign_room_left` | +0.993 | +0.967 | ~1 |
+| **`close`** | `close_adjust` | +0.989 | **+0.997** | ~1 |
+
+⚠️ **`val_matched_bn` is an EXACT duplicate.** ⚠️ **The high-Spearman / low-Pearson pairs
+are `SKW-1` itself**: identical ordering, different extremes, because `pool__basic` was
+rebuilt with the `OUT-1` screen on 2026-08-16 and `pool__ta` could not be (`STA-1`). A run
+offering both hands the ranker one measurement twice and disagrees with itself about the
+outliers. ⚠️ And `pool__ta` carries a **price LEVEL** (`close`, ρ +0.997 with
+`close_adjust`) — in a cross-sectional rank problem that is the size proxy
+`cross_sectional.py` §3 exists to remove.
+
+### What exists right now
+
+| | VCB | BANK | **ALL (top-150)** |
+|---|---|---|---|
+| selection runs | **31** run folders in `reports/feature_selection/` | (shared) | 2 of the 31 |
+| `final_features` | `close_adjust_5day__final__d20_h5` 4,266 × 39 (35 ch) · `return_5day__final__d20_h5` 4,235 × 70 (66 ch) | `rank_5day__final__d20_h5` 53,921 × 18 · `…__basic` 54,528 × 16 | **`rank_20day__final__d20_h20` 624,448 × 17 (13 ch)** |
+| datasets on disk | 3 | 1 | **1** |
+| model runs | 2 | 0 | **31** — 1 single-split + 10 PRF-1 folds + 20 PRF-8 folds (2 arms × 10) |
+
+### ✅ 6-2-bis. `FRZ-1` CLOSED 2026-08-23 — the price universe is FRESH, and the fix was a SCRAPE MODE
+
+The audit below (§6-3) is what this answers, and its headline number is inverted:
+**771 of 784 tickers now carry data to 2026-08-21**, against 5 producing the max date the
+day before. The cross-section holds **771-783 names on EVERY session** from 2026-06-22 to
+2026-08-21 — the old `779 → 627 → 28 → 5` cliff is gone.
+
+| | before (2026-08-22) | after (2026-08-23) |
+|---|---|---|
+| `silver.stocks_basic` rows | 2,389,137 | **2,428,227** |
+| tickers at the max date | **5** of 781 | **771** of 784 |
+| names on the last session | **5** | **771** |
+| tickers stale (< 2026-08-01) | **757** | **13** |
+
+⚠️ **THE 13 STRAGGLERS ARE REAL, AND THEIR SHAPE IS HOW YOU KNOW.** IHK 2026-05-21, DDG
+06-23, VNE 06-26, SSN/STL 07-06, DSE/KOS/SIP/VPI/DZM 07-08, TCD/VE2 07-14, CYC 07-30 —
+**SEVEN distinct dates**, the largest group being **5 on 2026-07-08**, which is the
+signature of individual delistings and suspensions. A scrape failure clusters on ONE
+date; that is exactly what the old 599-tickers-all-on-2026-06-26 cliff was.
+
+⚠️ **THAT SENTENCE READ "thirteen distinct dates" UNTIL 2026-08-23, AND ITS OWN LIST
+DISPROVED IT** — `SSN/STL` share a date and `DSE/KOS/SIP/VPI/DZM` share another, so the
+prose was counting tickers while claiming to count dates. Found by `pipeline.freshness`
+(TODO `P1`) on its first run, and `ISSUES.md`'s `FRZ-1` carried the same wrong number.
+✅ **The CONCLUSION survives and was re-verified a second way**: each of the 13 raw CafeF
+price CSVs ends on exactly the date `silver.stocks_basic` holds, so the incremental scrape
+did attempt every one of them and the source returned nothing after. ⚠️ **But the
+diagnostic that separates a delisting from a scrape failure had been stated with a number
+that was wrong by 6, which is the whole argument for measuring the distribution rather
+than describing it.**
+
+#### ⚠️ The scrape could only refetch from 2009, and that is why it had not been done
+
+Measured 2026-08-22 before changing anything: a full 4-tab refetch of ONE ticker is
+**615 s** (price 200.5 / order_stats 157.7 / foreign 138.3 / prop 118.9). At the
+then-current `SCRAPER_MAX_WORKERS = 2` the universe was **~67 h** — which is the real
+reason `FRZ-1` sat open for two months while being a one-command fix in principle.
+
+Two changes made it a 65-minute job, and only the second is interesting:
+
+1. **`SCRAPER_MAX_WORKERS` 2 → 12**, on a measurement: per-ticker cost is **flat** at
+   200.5 s alone, 203.8 s with 8 concurrent, 206.8 s with 16 — CafeF was never
+   rate-limiting, and the old 2 left ~6× on the table. ⚠️ **This is the CafeF knob and it
+   is NOT the browser budget** — CafeF is `requests` against JSON `.ashx` endpoints and
+   opens no Chrome at all; `SCRAPER_MAX_CONCURRENT_BROWSERS` (also 12 now) is TradingView's
+   Selenium cap and is unrelated. Confusing the two is easy and buys nothing.
+2. ⭐ **A third scrape mode, `incremental=True`** — resume each CSV from its OWN last date
+   and merge, instead of refetching from `start_year`. **2.9-5.2 s** per stale ticker
+   against 615 s, and the resumed file reproduces the full scrape **cell for cell** (PNJ,
+   4,344 rows × 12 columns, zero differing cells).
+
+#### ⚠️ AND IT NEEDS A RESTATEMENT GUARD, WHICH FIRED ON 304 OF 780 TICKERS
+
+`close_adjust` **is not a fact about a day; it is a fact about a day as seen from today.**
+A split or dividend re-bases the WHOLE history, so appending fresh rows to stored ones
+splices two price bases into one series — a step change at the join that looks exactly
+like a real price move, and that **no freshness check can see**: the row count is right,
+the date range is right, the last date is today.
+
+So the resume refetches a **45-day overlap** behind the last stored date, compares it
+cell-by-cell against what is stored, and falls back to the full refetch on any
+disagreement. ⚠️ **It fired on 304 of 780 price tickers — 39 %** — because June-August is
+VN dividend season and the corpus had stood still for two months. **Those 304 series are
+exactly what a naive incremental scrape would have corrupted**, and the corruption would
+have been invisible. It fired on **0** of `order_stats`, `foreign` and `prop_trading`,
+which carry no adjusted column — the guard is specific, not trigger-happy.
+
+⚠️ **THE GUARD IS ALSO WHY `price` WAS THE SLOW TAB** (39 % paying 200 s each), while
+`foreign` and `order_stats` finished 780 tickers in ~2 minutes. **A high restatement rate
+is a property of how STALE the corpus is, not of the mechanism** — refreshed weekly it
+would approach zero and the whole run would be minutes.
+
+✅ **Verified 2026-08-23 by four checks on a throwaway folder before it touched
+`raw_data/`**: equivalence (cell-for-cell), cheapness (38.3×), restatement (halving
+`close_adjust` across 4,304 stored rows IS detected, and the fallback repairs history far
+outside the overlap), and no-false-positive (an honest stale CSV resumes in 2.9 s).
+⚠️ **An earlier version of check 3 corrupted a cell in 2017 and "failed" — the TEST was
+wrong, not the guard**: a date outside the overlap is never refetched, so no incremental
+scheme could see it. Recorded because the distinction is the whole design.
+
+⚠️ **`insider_txn` ACCEPTS `incremental` AND IGNORES IT** — it is paginated by event index
+with no date to resume from, and a row is amended in place upstream, so "rows after X" is
+not well defined. ⚠️ **`incremental` helps only where a CSV EXISTS**: 348 of 780 tickers
+have no prop-desk history at all and correctly take the full path every time.
+
+**Run:** 1h 05m, **0 errors**, all four tabs at 780/780. ⚠️ **`incremental: true` needs `skip_existing: false` beside it** or
+`skip_existing` returns first and the run refreshes nothing while going green.
+
+⚠️ **THIS CLOSED THE SCRAPE AND NOT THE CARRY-UP** — see §6-2-ter, which ran the same
+session. Gold was 30/54 sessions behind BEFORE this scrape and further behind after it.
+⚠️ **Both were `P1` and `P2` when this was written, and both left the list the same day** —
+as did `STA-1` a few hours later (§6-2-quater). TODO's codes shifted **down by 3** in total
+on 2026-08-23, so a `P<n>` written before that date means something else; the file's
+2026-08-23 crosswalk resolves it. ⚠️ **That was the LAST shift** — the numbers were frozen
+as permanent names later the same day, priority moved to the row order, and the two
+crosswalks are now the last two that will ever be needed.
+
+### ✅ 6-2-ter. THE CARRY-UP TO GOLD AND UNIFIED — 2026-08-23, same session
+
+A scrape that stops at `raw_data/` changes nothing a model reads (§5 rule 11). Every layer
+downstream of `silver.stocks_basic` was rebuilt in the same session, and **verified
+per-ticker, never by `MAX(date)`**:
+
+| layer | result |
+|---|---|
+| `bronze.cafef_price` / `_order_stats` / `_foreign` / `_prop_trading` | 2,428,227 / 2,549,544 / 1,810,336 / 76,368 rows |
+| `silver.stocks_basic` | **2,428,227 × 38**, 771 of 784 tickers at 2026-08-21 |
+| `gold.stocks` | **771 of 784 at 2026-08-21** — was 2026-07-08, 30 sessions behind |
+| `gold.market_breadth`, `gold.news_daily_panel`, `gold.news_weekly_panel` | rebuilt |
+| `filter_schema.universe__*` | ⚠️ **membership MOVED** — see below |
+| `unified_schema_all` | `pool__basic` + `pool__targets`, **2,428,227 rows, 771 names on the last session** |
+| `unified_schema_{price10k,liquid,quality}` | 1,454,674 / 710,683 / 688,466 rows, all to 2026-08-21 |
+
+⚠️ **THE SCREENS RE-MEASURED DIFFERENTLY ON FRESH DATA, AND THAT IS THE FILTER LAYER
+WORKING**: `PRICE10K` **480 → 461**, `LIQUID` **206 → 228**, `QUALITY` **200 → 222`. A
+screen is a window over data, so extending the data moves the membership — `PRICE10K` lost
+19 names that dipped below 10,000 VND in the newly-arrived June-August sessions, while
+`LIQUID` and `QUALITY` GAINED names that now clear the 200-session minimum. ⚠️ **They are
+still not point-in-time** (§3a-bis point 1); this changes which basket, not that caveat.
+
+⚠️ **RULE 14 BIT EXACTLY AS DOCUMENTED, AND IT IS WORTH SEEING ONCE.** After re-running
+`filter/universe` the three `unified_schema_*` still read **2026-08-19 with 5 names on the
+last session** — a fresh screen against a stale schema, with nothing raising. Re-running a
+screen does **not** mark its unified schema stale; the rebuild is a separate command and
+was issued explicitly.
+
+⚠️ **`gold.stocks_ta` WAS DELIBERATELY NOT REBUILT** and is now the widest gap in the repo:
+**2026-06-26 against silver's 2026-08-21**. That is `STA-1` — its own decision and never a
+side effect of the carry-up, because rebuilding it renames 13 legacy columns and moves
+~289k rows, and `pool__ta` inherits all of it. ✅ **It was taken and executed a few hours
+later the same day — see §6-2-quater**, which is also why the *"any `basic + ta` INNER join
+now truncates ~40 trading sessions"* warning that stood here is no longer true.
+
+### ✅ 6-2-quater. `STA-1` CLOSED 2026-08-23 — `gold.stocks_ta` is rebuilt, and it cost 40 minutes
+
+The table on disk had never been built by the builder that owns it: it was the
+2026-08-03 rename of a pre-2026-07-19 `gold.stocks`, carrying **13 legacy column names**
+that no Python in the repo produces. §6-2-ter deliberately left it, and the re-scrape had
+widened the gap to **56 calendar days**, which is what put it at the head of the list.
+
+**Rebuilt, and all three of `STA-1`'s signatures are gone:**
+
+| signature | before | after |
+|---|---|---|
+| rows | **2,678,167** over 777 tickers | **2,428,227** over **784** — matches `silver.stocks_basic` EXACTLY |
+| `MAX(date)` | **2026-06-26** | **2026-08-21**, same day as silver, **771 of 784** tickers producing it |
+| column names | 13 legacy (`val_matched_bn`, `f_net_val`, `vol_matched`, …) | **0 legacy**; silver's own names carried through, 946 columns |
+
+✅ **AND IT CLOSES `SKW-1` AS A NUMBER**: on VCB's 4,276 shared stock-days, `gold.stocks_ta`
+and `silver.stocks_basic` now disagree on `value_matched` for **0 rows**. Before the rebuild
+the same stock-day gave two answers — `pool__ta` carried pre-`OUT-1` flow values while
+`pool__basic` had been rebuilt with the screen — so a run offering both handed the ranker one
+measurement twice and disagreed with itself about the outliers.
+
+⚠️ **THE BLAST RADIUS WAS MEASURED BEFORE THE REBUILD, NOT ASSUMED, AND IT IS SMALLER THAN
+`STA-1` FEARED.** Querying `information_schema` for the 13 names across every table:
+
+- ✅ **The headline cross-sectional chain names NONE of them** — `rank_20day__final__d20_h20`,
+  `rank_10day__final__d20_h10` and both `__wide` variants carry **0 legacy columns**. The
+  result §6-0 quotes is untouched.
+- ⚠️ **Exactly two artefacts break**, both in the VCB `return_5day` chain that §6 already
+  marks *"do not quote it"*: `pool__shortlist__return_5day__d20_h5` (2 legacy columns) and
+  `return_5day__final__d20_h5` (1). They are stale now and must be rebuilt before reuse.
+- The other `information_schema` hits (`bronze.trading_view_*`, `silver.funds/indices`) are
+  the unrelated column `volume`, not this defect.
+
+⚠️ **"~11 GB and hours of compute" WAS AN OVERESTIMATE — it took 40 minutes** (10:49 → 11:29,
+784/784 tickers, 0 errors) and disk did not move measurably. The estimate had been carried in
+`STA-1` and TODO since 2026-08-16 without anyone running it, which is its own small lesson
+about unmeasured costs deterring work: **the item sat open for a week on a number that was
+wrong by an order of magnitude.**
+
+⚠️ **`pool__ta` INHERITS ALL OF IT AND MUST BE REBUILT PER PARTITION** — five exist
+(`all`, `vcb`, `bank`, `vn30`, `acb`), and a `pool__ta` not rebuilt still carries the legacy
+names, the extra ~250k rows and the pre-`OUT-1` flow values. Rule 14 again: gold moving does
+not mark the unified layer stale.
+
+### ✅ 6-2-quinquies. `P1` CLOSED 2026-08-23 — freshness is a DISTRIBUTION now, and it is queryable
+
+`FRZ-1` was fixed by a scrape; **the check that missed it for two months was not**, and
+that was `P1`. `pipeline.freshness` (new, 22 tests) replaces the scalar with a per-ticker
+distribution, in three places: `python -m pipeline.freshness`, the views
+`health_schema.session_calendar` / `health_schema.ticker_freshness`, and three new columns
+in `pipeline.status_data` (`tickers`, `tickers_current`, `tickers_stale`).
+
+```powershell
+python -m pipeline.freshness --install        # (re)create the two views, ~0.1 s
+python -m pipeline.freshness --layer silver   # one layer, 1.0 s
+```
+```sql
+SELECT * FROM health_schema.ticker_freshness WHERE layer='silver' AND NOT is_current;
+```
+
+⚠️ **THE DESIGN DECISION IS WHOSE CALENDAR, AND IT IS NOT OPTIONAL.** `sessions_behind` is
+counted against a reference calendar taken from the price spine, **never** against the
+measured table's own dates — a table's own dates cannot contain the sessions it is
+missing, so a **completely frozen table would report every ticker 0 behind**. That is the
+scalar's lie one level down, wearing a per-ticker shape.
+
+⚠️ **A CLIFF IS A SCRAPE SCOPE; SCATTER IS DELISTING — and the alarm is a SHARE, measured
+from this repo's own two regimes.** 599 of 781 on one date is **77 %**; the post-re-scrape
+stragglers' largest group is **5 of 784 = 0.6 %**. Only a cliff makes the stage
+`not ready`, or 13 permanently-delisted names hold the gate red forever. ⚠️ An absolute
+floor of 5 tickers was written first and **fired immediately on the real corpus**, calling
+five genuine delistings a failure — the regimes are separated by two orders of magnitude
+of share, not by a count.
+
+⚠️ **AND ITS FIRST RUN FOUND 28 SINGLE-NAME UNIFIED SCHEMAS STALE — 28 OF THE 30 THAT EXIST**, in three layers that
+are a fossil record of every scoped re-scrape this repo has run:
+
+| stuck at | sessions behind | schemas |
+|---|---|---|
+| **2026-08-19** | 2 | FPT, HPG, SSI, STB, VIC — the `SSK-1` single-stock track |
+| **2026-08-07** | 10 | BID, CTG, HDB, MBB, SHB, SSB, TCB, TPB, VIB, VPB — the bank re-scrape |
+| **2026-06-25** | 41 | BCM, BVH, GAS, GVR |
+| **2026-06-26** | 40 | MSN, MWG, PLX, POW, SAB, VHM, VJC, VNM, VRE |
+
+Only `unified_vcb` and `unified_acb` were current among the single names; the six
+multi-name schemas (`all`, `bank`, `vn30`, `price10k`, `liquid`, `quality`) all were.
+
+✅ **ALL 28 REBUILT THE SAME DAY (`SCH-1`) — `pool__basic` + `pool__targets`, 28 of 28,
+0 errors, and the tool that found them now reports `STALE: 0`.** Measured **21 s per
+schema** end to end, of which the two Dagster steps are **1.7 s**; the rest is process
+start-up, so the whole job was ~10 minutes. ⚠️ **Nothing downstream had been wrong**: all
+28 hold pools only — **0 non-pool tables** — so no `__final__` table or dataset was ever
+built from one. ⚠️ **The other 23 pools per schema were deliberately NOT rebuilt**
+(`pool__bonds`, the 19 `pool__economy_*`): they stay on the old calendar, which
+`status_data` already reports as `pools_behind`, and a wide join over one of these schemas
+would INNER-join back down to theirs.
+
+**Rule 14 from the other side, counted for the first time** — ⚠️ **and the first count was
+WRONG BY ONE**: this section said *"27"* for an hour on 2026-08-23 while its own table
+listed 28 names, because the prose was counted by eye and the table was not. Re-counted
+by query, which is the only reason it is right now — and none of it is visible to `MAX(date)`, which
+reads 2026-08-21 on the fresh schemas and says nothing about the other 27.
+
+⚠️ **FILTER THE VIEW BY `layer`** — it is a `UNION ALL` over 39 layers and `gold.stocks_ta`
+alone costs **26.5 s** (17 GB, 946 columns) against silver's 1.0 s. ✅ `EXPLAIN` verifies
+`WHERE layer='silver'` prunes the other 38 branches on the constant. ⚠️ The first draft of
+the per-ticker query **timed out at 5 minutes** — a correlated count per ticker; ranking
+the calendar once with `ROW_NUMBER()` is **1.4 s** on the same table.
+`.claude/context/pipeline.md` §1a-bis.
+
+### ⚠️ 6-2-sexies. `DEP-1` — THE MONITOR BLOCKED THE REPAIR, and it was live for one hour
+
+Opened and closed 2026-08-23, an hour after §6-2-quinquies shipped. It is the most
+reusable thing this session produced, because the failure is structural rather than a
+typo.
+
+`pipeline.freshness` first installed `health_schema.ticker_freshness` as a **VIEW**. The
+next rebuild died:
+
+> `psycopg2.errors.DependentObjectsStillExist: cannot drop table`
+> `unified_schema_vnm.pool__basic because other objects depend on it`
+> `DETAIL: view health_schema.ticker_freshness depends on table ...`
+
+⚠️ **PostgreSQL records a view's dependency on the tables beneath it, and EVERY BUILDER IN
+THIS REPO OPENS WITH `DROP TABLE IF EXISTS`** — `_ingest_unified_pool_basic` at
+`preprocessor.py:7994`, and the silver and gold builders identically. So the view did not
+break one asset; **it blocked the entire write path**, including the `gold.stocks_ta`
+rebuild that had finished hours earlier and every future carry-up. **A monitor that has to
+be uninstalled before the system can be repaired is worse than no monitor**, and it fails
+in the worst possible direction: the more there is to fix, the harder it is to fix it.
+
+✅ **Fixed by making all three health objects `plpgsql` FUNCTIONS.** A function body is not
+parsed for dependencies, so `DROP TABLE` is unaffected — verified directly by creating and
+dropping a table with the functions installed. Two things fell out for free:
+
+1. **The layer list is discovered at CALL time**, so a schema built later appears on its
+   own. The view had to freeze its list at install time and say so in a `COMMENT`.
+2. **The layer filter is an ARGUMENT**, so one layer means one table. The view relied on
+   the planner pruning `UNION ALL` branches on a constant.
+
+⚠️ **The cost, and it is real: `ticker_freshness(NULL)` walks EVERY layer.** A
+`WHERE layer = 'silver'` written AFTER the call cannot push into the function — 32.9 s
+against **0.25 s** for `ticker_freshness('silver')`. **Pass the layer; do not filter the
+result.**
+
+⚠️ **The general lesson is not about views.** Anything that observes a table takes a lock
+or a dependency on it, and the observer is written by someone who is not thinking about
+the writer. Ask of any new monitor: *what does this stop the repair path from doing?*
+`.claude/context/pipeline.md` §1a-bis; `ISSUES.md` `DEP-1`.
+
+### ⚠️ 6-2. THE FILINGS/OCR PARSER — the state summary
+
+#### What the filings/OCR work established
+
+| | |
+|---|---|
+| **the rule** | §5 rule 24 — a financial statement value comes from the filing PDF and nothing else. A quarter no readable PDF can produce is `missing`, and `missing` is the correct answer |
+| **`BND-1`** | ⚠️ `pdf_ocr_job` REPAIRS a ticker that already has history and cannot BOOTSTRAP one that does not: `seed_history` rebuilds `sane`'s band from the `pdf` rows on disk, an empty band fails open, and the merge then refuses every statement it produced — the loop closes on itself. `FORCE_EMPTY_BAND` is the escape and it **lifts a real guard**, so the arithmetic screens (`web_scraper/statement_screens.py`) are what replaces it |
+| **`CRP-1`** | ⚠️ **NOTHING FROM A NON-BANK TEMPLATE MAY BE QUOTED AS A FUNDAMENTAL.** `C_LIABILITIES` does not map on the `corp` chart, so `reconcile` tests `assets == resources` — true by construction on any page that reads both totals — and never `A = L + E` |
+| **`SET-2`** | ⚠️ a SETTLED absence is a verdict on the page CLASSIFIER wearing the words of one on the document. Re-test every settled cell after any `_page_kind` change; six of FPT's eight turned out winnable that way |
+| **`TPX-1`** | `templates.csv` names only ACB, BID, VCB — every other ticker resolves its template by a NETWORK call, and a ticker absent from **both** `CAFEF_FINANCIALS_TICKERS` and `orchestration/config.json` is silently unmaterialisable |
+| **the recurring shape** | ⚠️ **`SLD-1`'s family: a WRONG FIGURE that passes every gate.** Recorded six-plus times — a slid row, a lost bracket, a comparative column, a merged label, a seal over the digits. `reconcile` and `sane` are the only gates, and on a cash flow accepted at a STRICT layer the arithmetic identity never runs at all (`CFV-1`) |
+| **the method that keeps working** | ⚠️ **a VAS filing prints several of its figures twice, and checking one against the other is free** — the cash flow's closing balance is the balance sheet's cash line, a Q1 income statement's two columns are the same three months, a balance sheet's two grand totals are one number, and a cumulative cash flow prints one opening per year. Four of the 2026-09-05 defects were found that way, with no OCR and no network |
+
+#### Coverage, as last measured
+
+Measured **2026-09-06** by `RUN__pdf_ocr_summary.ipynb` over `statements/**/*.csv` against
+`documents(allow_parent=True)` and `settled_absences` — no OCR, no network, seconds to recompute.
+**Ten tickers now**, against the eight §6-2-septsexagies tabulated on 2026-09-05:
+
+| 2026-09-06 | CTG | VCB | FPT | ACB | VIC | TCB | BID | GAS | BSR | MSN | total |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `pdf` / cells | **210/210** | **210/210** | 210/213 | 202/219 | 192/216 | 180/204 | 182/210 | 123/180 | 40/51 | 21/27 | **1,570/1,740** |
+| missing | 0 | 0 | 3 | 17 | 24 | 24 | 28 | 57 | 11 | 6 | **170** |
+| `complete` | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ | ✅ | 7 of 10 |
+
+⚠️ **`complete` IS CONTINUITY FROM THE START OF THE FILING CHAIN, NOT COVERAGE, AND THE TWO
+DISAGREE HERE** — CTG reads ✅ at 210/210 and BSR reads ✅ at 40/51, while FPT reads ❌ at
+210/213. Read the cell count for coverage and `complete` for continuity.
+
+⚠️ **THE `pdf` COLUMN ALONE INVERTS THE RANKING**, and the 2026-09-05 measurement is why: of that
+day's 130 missing cells, **66 (51 %) were quarters the company never filed** — where `missing` is
+the correct answer and no run can change it — against only **56 winnable**, 46 of them one ticker
+(VIC), and 27 of those income statements waiting on a de-cumulation operand rather than on OCR.
+**Do not read a missing count as work available.** TODO `P65`.
+
+⚠️ **GAS AND MSN ARE MID-BOOTSTRAP, AND THEIR NUMBERS MEAN SOMETHING ELSE.** MSN's 21/27 is 9
+quarters parsed of **65 filed** — the ticker has barely started, so its `missing` column counts
+rows that exist, not quarters that failed. `BND-1`: a first run has an EMPTY `sane` band, so both
+were written under `FORCE_EMPTY_BAND` with the arithmetic screens standing in for the guard.
+
+⚠️ **AND ONE FILING IS IN THE INDEX WITH NO PDF ON DISK** — ACB `2009-Q3`, which still carries
+`pdf` rows parsed from a file that has since gone. It cannot be re-parsed; the notebook WARNs on
+it. **24 cells are SETTLED** (`SET-2` — a verdict on the page classifier, so re-test them after
+any `_page_kind` change), and **17 quarters have only a standalone filing**, reachable only with
+`allow_parent=True`.
+
+⚠️ **AND THE STANDING REQUEST-SHAPE IS §8's, NOT THE LOG'S**: *"OCR ticker `<SYM>` LOCAL|KAGGLE"*
+is a request for a PREPARED NOTEBOOK that then WAITS — never for a run. `.claude/docs/PDF_OCR.md` §1a.
+### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
+
+Measured across every ticker-keyed table in all three schemas. Full tables and the
+resulting program is in **[TODO.md](../current_state/TODO.md)** (⚠️ renumbered again 2026-08-23 when the first two items closed); three numbers belong
+here because they change how any current result is read.
+
+**1. ⚠️ `MAX(date)` SAYS 2026-08-19 AND FIVE TICKERS PRODUCE IT.** Names per session at
+the tail of `silver.stocks_basic`: **779** on 2026-06-25, **627** on 2026-06-26, then
+**28**, then **24**, then **5** from 2026-08-10. **757 of 781 tickers are stale**; 599 stop
+dead on 2026-06-26. `FRZ-1` recorded this as *"143 frozen tickers"* and that
+understates it — **the whole universe stops in late June** and a 24-name tail was refreshed
+after. §5 rule 10 at full scale: a 24-name cross-section looks like a working pipeline to
+anything reading one number.
+
+**2. ⚠️ GOLD IS BEHIND SILVER AND NOTHING SAYS SO.** `gold.stocks` stops **2026-07-08**
+(30 sessions), `gold.stocks_ta` **2026-06-26** (54 sessions, and `STA-1` on top). §5 rule
+11 — *"re-scraped" never implies "re-ingested"* — with a measured size. **`filter_schema`
+and every `unified_schema_*` sit downstream of both and re-materialise themselves never.**
+
+**3. ⚠️ FUNDAMENTALS ARE 2 OF 781 AND TWO WALLS STAND IN FRONT OF THE OTHER 779 —
+WAS THREE** — ✅ **the DISK wall fell on 2026-08-23 and it fell by being MEASURED, not by buying
+hardware** (§6-2-septies). It read *"PDFs for 112 tickers = 100 GB, median 906 MB each →
+~700 GB for the universe, against 144 GB free"*; counted from CafeF the whole universe is
+**555 GiB**, and phasing it by filing year makes the first half **286 GiB**. What remains:
+**time** (~2.4 h/ticker of OCR → **~78 days**), and **schema** — **761 of 781 names are
+not banks** (230 industrials, 117 materials, 93 consumer staples; only 20 are GICS
+401010), against a parser that has never once met a corporate filing. ⚠️ **The schema
+wall is the real one and is now the ONLY structural one**: with infinite disk and time
+the current parser reaches 20 names.
+
+⚠️ **BUT ITS DIAGNOSIS WAS WRONG UNTIL 2026-08-25, AND THE CORRECTION IS §6-2-quaterdecies.**
+This paragraph read *"`raw_data/cafef/financials/statements/` holds one template family,
+`bank`"* and was taken to mean a corporate template does not exist. ⚠️ **`statements/` is
+the parser's OUTPUT** — it holds one family because one family has been RUN. All **four**
+charts of accounts exist (12 files, 871 rows) and the parser is template-generic; what is
+bank-shaped is **seven hardcoded reconcile anchors**, two of which hand a non-bank cash
+flow the OPENING balance as its closing one. That is `TPL-1`, and it makes `P5` cheaper
+and its failure mode worse at the same time.
+
+⚠️ **AND THE ROUTE AROUND IT WAS CLOSED BY DECISION ON 2026-08-23: balance-sheet lines come
+from the CafeF PDFs.** `P3` had been a one-day gate — ask whether `api.simplize.vn` or
+`vnstock` returns balance-sheet lines for a non-bank, since a positive answer cancels the
+whole OCR program. It is archived **UNMEASURED**, so nothing may cite it as evidence that a
+JSON source does not work (§5 rule 2 — an absent measurement is absent, never inferred).
+What the decision changes is the ORDER: nothing gates the OCR program now, **`P6` (OCR the
+≤2020 corpus) is the top item of the whole backlog**, and `P5` — the non-bank template — is
+what decides whether that run reaches **20 names or 784**, rather than a task running
+beside it.
+
+⚠️ **AND THE DECISION WAS WIDENED ON 2026-08-24 INTO A STANDING RULE — §5 rule 24.** It
+is not only the JSON route that is closed: **the PDF is the ONLY permitted source for a
+financial statement, and every HTML/web transcription is forbidden, including CafeF's own
+tabs.** A quarter no PDF can produce is `missing`, and `missing` is the correct answer.
+⚠️ **This is retroactive and there is a bill**: 34 of the 456 report-rows on disk carry
+`source='cafef'` — 27 ACB, 7 VCB — because the fallback runs whenever a period is absent
+from the parse, without checking whether a PDF exists. ⚠️ **Only 4 of the 34 can be retried
+from a document on disk, all of them VCB**: `documents()` keeps `consolidated == "True"`
+only, and ACB filed no consolidated statement before 2010. That is `FIN-1`; §6-2-octies has
+the quarter-by-quarter table.
+
+⚠️ **Three gaps are deliberate and must NOT be filled**: `cafef_news_sentiment` (3 of 781 —
+§2a measured tone making models *worse*), `cafef_prop_trading` (431 of 781 — starts 2023,
+and §6-1 says EXCLUDE `prop_*` at this timescale, not extend it), `trading_view_stocks`
+(571 of 781 — ⚠️ **not in the price spine at all**; `silver.stocks_basic` is CafeF only,
+verified in `_ingest_silver_stocks_basic`).
+
+⚠️ **AND THREE SCREENED UNIVERSES SINCE 2026-08-22** — `unified_schema_price10k`
+(480 tickers, 1,503,958 rows), `unified_schema_liquid` (206, 657,892),
+`unified_schema_quality` (200, 635,919), each holding `pool__basic` + `pool__targets`
+only. Nothing has been SELECTED or MODELLED on any of them; they are universes, not
+results. §3a-bis.
+
+⚠️ **The 16 pre-2026-08-16 model runs were deleted on request** and archived to
+`D:\GIT\_archive\master-thesis\model_runs_2026-08-16.zip` (2.2 MB, outside the repo,
+untracked). `src/model/runs/*/` is gitignored (`RPR-1`), so **that zip is the only copy**
+of the numbers §5c and §5d quote.
+
+### The two VCB chains, and which to start new work on
+
+| target | evidence | verdict |
+|---|---|---|
+| `close_adjust_5day` *(still the `chain.py` default)* | `failed_null=1` | ❌ a price **LEVEL**. Its LSTM: R² **−85.6**, MASE **21.36** (21× worse than a random walk), ROC AUC **undefined**, and the whole test range sits **above** the training maximum |
+| **`return_5day`** | `cleared_p95_not_a_pass` | ⚠️ layer 2 "clears" at z = +4.48 — **do not quote it**, see TODO **P0-1** |
+
+### ⚠️ The 2026-08-17 return_5day sweep — six pools, real nulls, all six FAIL
+
+The first time this chain has ever run layer 1 with nulls on a **return** target.
+
+| pool | kept | `ic_mean` | null p95 | null MAX | z | p |
+|---|---|---|---|---|---|---|
+| `pool__fa` | 137 | +0.0564 | +0.0592 | +0.0794 | +1.24 | 0.182 |
+| `pool__ta` | 473 | +0.0434 | +0.0603 | +0.0673 | +0.78 | 0.364 |
+| `pool__stock_market` | 125 | +0.0386 | +0.0631 | +0.0672 | +0.48 | 0.364 |
+| `pool__news_daily` | 69 | +0.0285 | +0.0443 | +0.0469 | +0.53 | 0.455 |
+| `pool__bonds` | 99 | +0.0121 | +0.0339 | +0.0373 | +0.19 | 0.545 |
+| `pool__market_breadth` | 64 | +0.0196 | +0.0645 | +0.0745 | **−0.22** | 0.727 |
+
+⚠️ **In all six the null MAX exceeds the observed** — rule 3 applies to every row.
+⚠️ `pool__market_breadth` lands **below its null's mean**: its 8 channels were picked by
+measuring 7 candidates and keeping 3, and under a real null the advantage is gone. The
+selection-on-the-same-data lesson, demonstrated by a pool built to demonstrate something
+else. ⚠️ `pool__news_daily` did **not** fail for want of data (z = +0.53, mid-pack) — §2d's
+third lever is now measured and it says nothing.
+
+**Layer 2** then reports `ic_mean +0.1369` vs a p95 bar of +0.0428, z = +4.48. Four
+measured reasons that is not a result — the null does not price in layer 1, `p = 0.0909`
+is the 1/(n+1) floor, the fold trend is rule 23's data-arrival signature, and 9 of 66
+channels are constant in train — are in **TODO P0-1**, with a written prediction that a
+two-layer null will not clear it.
+
+⚠️ **`STA-1` costs this chain its last 31 sessions.** `pool__ta` stops 2026-06-26, and the
+INNER join drops the whole `return_5day` chain from 4,266 to **4,235 rows** — table and
+dataset both end 2026-06-25 rather than 2026-08-07.
+
+⚠️ **`--scope` is still the only thing keeping two experiments off one table name.**
+`final_features` groups on `(schema, target, setup)` — **no term for which pools** — so a
+`pool__basic`-only run and a `basic + X` run are ONE group and get unioned.
+
+**Open issues live in [ISSUES.md](../current_state/ISSUES.md)** — **97 open**, 38 resolved, codes permanent.
+⚠️ *(This count is a SCAN of the tables, not a running decrement, and it has been wrong before —
+it read 96 earlier on 2026-09-06, 70 until 2026-09-05, 22 until 2026-08-28. A stale count is what
+a session budgets against.)* ⚠️ **Several FIXED rows deliberately sit inside the Open table rather
+than moving** (`WFO-1`, `VRM-1`, `PNL-2`, `PRB-1`, `SCH-1`, `DEP-1`), each marked `✅ FIXED <date>`
+in words — **strikethrough was removed from the whole corpus on 2026-08-23**, so a row's status is
+read from its text and never from damaged type.
+
+⚠️ **SEVEN CHANGE HOW A NUMBER MAY BE READ, AND THEY ARE THE ONES TO OPEN BEFORE QUOTING ANYTHING:**
+
+| code | what it does to a number |
+|---|---|
+| **`NUL-1`** | no null anywhere in this repo prices in the feature selection, the architecture search, or the choice of horizon/universe/target |
+| **`NUL-3`** | the evaluator's panel null is **not label-neutral** — its centre moves with the MODEL. **On a panel quote the daily-IC t-stat, never `ic_clears`** |
+| **`RPR-1`** | 29 run folders were deleted 2026-08-10 and are unrecoverable — §5c and §5d are citations without their evidence |
+| **`OUT-1`** | one corrupt source cell (VCB 2026-01-05, `prop_buy_val` 4.001e17) manufactured a **+0.266** forward correlation. Check the extremes before selecting on any `foreign_*` or `prop_*` channel |
+| **`CFB-1`** | ⚠️ **before quoting a BID fundamental** — a cash-flow anchor can hold the wrong ACCOUNT with every gate passing: 7 BID quarters carry the 1-Jan opening in the CLOSING slot, and Q3-2011 holds a **negative** closing cash balance |
+| **`TPL-1` / `CRP-1`** | ⚠️ **before any non-bank financials parse** — two of the seven reconcile anchors return the OPENING cash balance as the closing one on `corp` and `insurance`, and a `corp` balance sheet reconciles on the trivial `assets == resources` |
+| **`FLT-1` / `SHP-1`** | bound what forex data can EXIST: 19 of 47 broker filters fail open, and a `value`-only filter silently discarded **71 % of the forex folder** on every run until 2026-08-14 — the same filter sits unchecked on `bonds`/`funds`/`economy`/`indices` |
+
+⚠️ **The OCR/filings issue codes** (`SLD-1`, `PAR-1`, `QUO-1`, `MSO-*`, `SEAL-*`, `SET-*`, `BND-1`,
+`VCR-1`, `CWD-1`, `GPU-1`, `SGN-*`, `NST-*`, `LSP-1`, …) **are in `ISSUES.md` in full.** A 27k-character inline digest of
+them stood here until 2026-09-06 — ⚠️ **read the register, not the snapshot.**
+
+Also worth knowing without opening the file: `EVD-1` the missing nulls are ~1,000 CPU-hours;
+`DRF-1` 18 channels put 100 % of test beyond 5 train-sigmas; `COV-1` 248 of 952 shortlisted rows
+sit below 0.95 coverage; `RPR-1` datasets and run folders are git-ignored.
+---

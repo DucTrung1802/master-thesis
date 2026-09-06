@@ -9,10 +9,11 @@ because it is what the next session budgets against.
 
 So every check below either passes, or hands you a decision. Nothing is auto-edited.
 
-Six checks, in the order they usually break::
+Seven checks, in the order they usually break::
 
     python state_check.py
 
+0. `CLAUDE.md` length vs. the 300-line cap (`.claude/rules/common.md` R2)
 1. `CLAUDE.md` §6 "State today" date vs. the newest `.md` change in the tree
 2. package docs under `.claude/context/` changed without `CLAUDE.md` being touched alongside
 3. issue counts: what `CLAUDE.md` claims vs. what `ISSUES.md`'s own headers say
@@ -42,6 +43,12 @@ from check_index import index_patterns, repo_markdown  # noqa: E402
 # A claimed cost may drift this far before it is worth a human's attention. Below this,
 # ordinary editing noise would make the check cry wolf on every commit.
 COST_TOLERANCE = 0.20
+
+# ⚠️ `.claude/rules/common.md` R2. `CLAUDE.md` is auto-loaded into EVERY session, so each line
+# is paid for by every task whether or not it touches the subject. The cap is checked rather
+# than remembered because the hub broke its own "this is a map" rule twice — at 165.3k tokens,
+# then again at 2,549 lines — and both times the growth was incremental enough to be invisible.
+HUB_MAX_LINES = 300
 
 
 class Report:
@@ -127,6 +134,25 @@ def carries_measurements(path: str) -> bool:
         ".claude/docs/pipeline.md",
         ".claude/docs/PIPELINE_h10_CAGR74.md",
     }
+
+
+def check_hub_length(rep: Report) -> None:
+    """`CLAUDE.md` must stay a map. R2 caps it at `HUB_MAX_LINES`.
+
+    ⚠️ **This is the one check that names the fix**, because the fix is never "delete a
+    warning to make room": the prose moves to `.claude/findings/` (or `standing-rules.md`,
+    or the package's `.claude/context/` file) and a pointer stays behind. R2 has the table.
+    """
+    lines = (REPO / "CLAUDE.md").read_text(encoding="utf-8").splitlines()
+    n = len(lines)
+    if n > HUB_MAX_LINES:
+        rep.warn(
+            "CLAUDE.md length",
+            f"{n} lines, {n - HUB_MAX_LINES} over the {HUB_MAX_LINES}-line cap (R2) — "
+            "move prose to .claude/findings/ and leave a pointer",
+        )
+    else:
+        rep.ok("CLAUDE.md length", f"{n} lines, {HUB_MAX_LINES - n} to spare under the R2 cap")
 
 
 def check_state_date(rep: Report) -> None:
@@ -256,6 +282,7 @@ def main() -> int:
             pass
 
     rep = Report()
+    check_hub_length(rep)
     check_state_date(rep)
     check_context_without_hub(rep)
     check_issue_counts(rep)

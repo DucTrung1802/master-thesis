@@ -32,9 +32,10 @@ inside its Open table on purpose, so a naive row-counter disagrees with the head
 
 | you changed | it goes in |
 |---|---|
-| a new measurement, or one that moves a verdict | `CLAUDE.md` §6 (+ bump the date), or the package's file under `.claude/context/` |
+| a new measurement, or one that moves a verdict | the TABLE goes in [../findings/](../findings/), by subject; **one line + a 📂 link** in `CLAUDE.md` §2 or §6 (+ bump §6's date). Detail that stays local goes in the package's file under `.claude/context/` |
 | a new defect | `../current_state/ISSUES.md`, with a **permanent** code |
-| a finished backlog item | its number moves to `CLAUDE.md` / `.claude/context/`; the item is **deleted from `../current_state/TODO.md`, not ticked** |
+| a finished backlog item | its number moves to `../findings/` or `.claude/context/`; the item is **deleted from `../current_state/TODO.md`, not ticked** |
+| ⚠️ anything that would push `CLAUDE.md` past **300 lines** | nothing — [R2](../rules/common.md) is a hard cap and `state_check.py`'s first row measures it. **Move the prose, leave the pointer**; R2's table says where each kind goes. Never trim a warning to make room |
 | a new `.md` file | a row in `../current_state/INDEX.md` |
 | a new command, flag or stage | [../runbook/RUNBOOK.md](../runbook/RUNBOOK.md) |
 | a new rules file under `.claude/rules/` | ⚠️ **its `@` import in `CLAUDE.md`, in the SAME commit** — a rules file is not auto-loaded by itself, and without the import it is a file nobody reads |
