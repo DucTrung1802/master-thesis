@@ -228,7 +228,7 @@ anywhere** — a closed row's status is read from its words, never from damaged 
 
 ## 7. ⚠️ Lazy loading — open ONE file, when you touch that thing
 
-⚠️ **NEVER BULK-LOAD.** 122 `.md` files, **~525k tokens** — ~2.5× a context window.
+⚠️ **NEVER BULK-LOAD.** 131 `.md` files, **~529k tokens** — ~2.5× a context window.
 [INDEX.md](.claude/current_state/INDEX.md) is the complete map with a measured cost per row **and is
 already in your context**; this is the routing worth reading twice. **THE MECHANICAL RULE: before
 you touch `src/<pkg>/`, open `.claude/context/<pkg>.md`** — one file per `src/` subfolder, named
@@ -254,7 +254,7 @@ after it, and a package folder no longer advertises its own evidence.
 | doing this JOB | open this |
 |---|---|
 | **the EVIDENCE behind a number in §2-§6** — six files, by subject, ~2-10k each | [.claude/findings/](.claude/findings/) — the 📂 links in §2/§3/§6 point into it; `standing-rules.md` holds §5's |
-| starting a session · running the chain · a selection · refreshing data · OCR a ticker · quoting a number · recording a finding · committing | [.claude/workflows/](.claude/workflows/README.md) — **8 guides, ~1.5k each. A workflow is the ORDER; the runbook is the COMMANDS** |
+| starting a session · running the chain · a selection · refreshing data · OCR a ticker · quoting a number · recording a finding · committing | [.claude/workflows/](.claude/workflows/README.md) — **8 guides, ~1.5k each; `/wf-list` names the slash command that runs each. A workflow is the ORDER; the runbook is the COMMANDS** |
 | you want the COMMAND | [.claude/runbook/RUNBOOK.md](.claude/runbook/RUNBOOK.md) — 3.9k |
 | **running the FILING OCR on a T4** (§1a is what *"OCR ticker `<SYM>`"* means; §8 what is missing) | [.claude/docs/PDF_OCR.md](.claude/docs/PDF_OCR.md) — 14.4k |
 | which ticker, on which date? · how ONE number gets made end to end | [.claude/docs/pipeline.md](.claude/docs/pipeline.md) 4.8k · [PIPELINE_h10_CAGR74.md](.claude/docs/PIPELINE_h10_CAGR74.md) 7.2k |

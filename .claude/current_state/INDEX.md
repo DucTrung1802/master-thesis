@@ -3,7 +3,7 @@
 > **AUTO-LOADED.** `CLAUDE.md` imports this file with `@.claude/current_state/INDEX.md`, so every session starts
 > holding this map. Nothing else here is loaded until you ask for it.
 >
-> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 115 `.md` files, **~520k tokens** — about 2.5× a full context
+> ⚠️ **NEVER BULK-LOAD THIS CORPUS.** 131 `.md` files, **~529k tokens** — about 2.5× a full context
 > window. The routing below is the whole point: **open ONE file, when you touch that thing.** Every
 > row carries its measured cost so you can budget before you read.
 >
@@ -144,8 +144,9 @@ front of you.** ⚠️ **The runbook here is the only runbook.**
 | open this | ~tokens | when you are… |
 |---|---|---|
 | [../.claude/rules/standing-rules.md](../rules/standing-rules.md) | **4.9k** | ⚠️ **about to lean on one of the 24 numbered rules.** `CLAUDE.md` §5 carries them as one-liners and is auto-loaded; **this is the EVIDENCE behind each**, plus §5a what was RETIRED (`src/main.py`, `switch_config.json`, …), §5b what was REMOVED, and §8's conventions. ⚠️ **Not auto-loaded** — `common.md` is the only rules file `CLAUDE.md` imports, and that is deliberate: the one-liners fit the always-loaded budget and the war stories do not |
-| [../.claude/workflows/README.md](../workflows/README.md) | **0.9k** | starting any recurring JOB — it routes the eight step-by-step guides below |
+| [../.claude/workflows/README.md](../workflows/README.md) | **1.1k** | starting any recurring JOB — it routes the eight step-by-step guides below |
 | `.claude/workflows/*.md` | **13.6k** total | *start a session* (1.2k) · *run the chain* (1.6k) · *run a selection* (1.8k) · *refresh the data* (1.6k) · *OCR a ticker* (1.8k) · *quote a number* (1.8k) · *record a finding* (1.5k) · *finish and commit* (1.4k). ⚠️ **Each is the ORDER; the commands are cited by runbook row ID** so a flag changes in one place |
+| `.claude/commands/*.md` | **3.7k** total | you want to LAUNCH a workflow rather than read it. Nine Claude Code slash commands, one per job plus `/wf-list` — `/wf-<workflow-name>` reads `.claude/workflows/<name>.md` and executes it in order. ⚠️ **A launcher copies NOTHING**: it names the workflow, the way a workflow names a runbook row, so a step changes in one place. ⚠️ **Added 2026-09-06** — a file dropped in this folder becomes a slash command with no registration step, which is also how a stale one keeps being offered |
 | [.claude/runbook/RUNBOOK.md](../runbook/RUNBOOK.md) | **3.9k** | you want the COMMAND — ~40 templates as one table (`O`/`C`/`W`/`D`/`E`/`F` row IDs), each with what it writes, its measured cost, and the step that must follow it |
 | [../.claude/current_state/README.md](README.md) | **1.3k** | writing a measured SNAPSHOT (freshness, coverage, what exists). ⚠️ **Not a fifth register** — `CLAUDE.md` §6 holds what the state MEANS; this holds what a command PRINTED, with the command named |
 | `.claude/current_state/*.md` | — | the snapshots themselves. ⚠️ **Empty until someone measures something, and that is the correct state** |

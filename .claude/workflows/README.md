@@ -12,21 +12,26 @@
 > **These are lazily loaded.** Nothing in this folder is auto-loaded into a session — only
 > `CLAUDE.md` and what it imports (`../current_state/INDEX.md`, `.claude/rules/common.md`) are. **Open the one
 > file for the job in front of you.**
+>
+> ⚠️ **Each job also has a slash command — `/wf-<the file's name>`, plus `/wf-list` for the
+> menu** (added 2026-09-06, [`../commands/`](../commands/wf-list.md)). The command READS the
+> workflow and executes it; it copies nothing, exactly as a workflow copies no command. **A
+> new workflow needs a launcher beside it or it is a job nobody can start by name.**
 
 ---
 
 ## The workflows
 
-| open this | when the job is… | first step |
-|---|---|---|
-| [start-a-session.md](start-a-session.md) | *"I have just opened this repo and I do not know what state it is in"* | `O1` + `O3` — two commands, ~6 s, before reading anything |
-| [run-the-chain.md](run-the-chain.md) | *"train a model on a target and score it honestly"* — stages 1→9 | `O1`, and read its `why` column |
-| [run-a-selection.md](run-a-selection.md) | *"which channels carry signal?"* — stage 2/4, local or on a T4 | decide the ROOT before the draws |
-| [refresh-the-data.md](refresh-the-data.md) | *"the corpus is stale"* — scrape → carry up → verify | `O3`, to see whether it actually is |
-| [ocr-a-ticker.md](ocr-a-ticker.md) | *"OCR ticker `<SYM>` LOCAL\|KAGGLE"* — the standing request shape | clone the control notebook, then **wait** |
-| [quote-a-number.md](quote-a-number.md) | *"is this number safe to put in a document?"* | `O1` — a green run on a stale table is a number about a table that no longer exists |
-| [record-a-finding.md](record-a-finding.md) | *"I measured something / I found a defect / I finished an item"* | decide which of the four registers owns it |
-| [finish-and-commit.md](finish-and-commit.md) | *"the work is done"* | `O5` — `python ../tools/state_check.py` |
+| open this | run it with | when the job is… | first step |
+|---|---|---|---|
+| [start-a-session.md](start-a-session.md) | `/wf-start-a-session` | *"I have just opened this repo and I do not know what state it is in"* | `O1` + `O3` — two commands, ~6 s, before reading anything |
+| [run-the-chain.md](run-the-chain.md) | `/wf-run-the-chain` | *"train a model on a target and score it honestly"* — stages 1→9 | `O1`, and read its `why` column |
+| [run-a-selection.md](run-a-selection.md) | `/wf-run-a-selection` | *"which channels carry signal?"* — stage 2/4, local or on a T4 | decide the ROOT before the draws |
+| [refresh-the-data.md](refresh-the-data.md) | `/wf-refresh-the-data` | *"the corpus is stale"* — scrape → carry up → verify | `O3`, to see whether it actually is |
+| [ocr-a-ticker.md](ocr-a-ticker.md) | `/wf-ocr-a-ticker` | *"OCR ticker `<SYM>` LOCAL\|KAGGLE"* — the standing request shape | clone the control notebook, then **wait** |
+| [quote-a-number.md](quote-a-number.md) | `/wf-quote-a-number` | *"is this number safe to put in a document?"* | `O1` — a green run on a stale table is a number about a table that no longer exists |
+| [record-a-finding.md](record-a-finding.md) | `/wf-record-a-finding` | *"I measured something / I found a defect / I finished an item"* | decide which of the four registers owns it |
+| [finish-and-commit.md](finish-and-commit.md) | `/wf-finish-and-commit` | *"the work is done"* | `O5` — `python ../tools/state_check.py` |
 
 ---
 
@@ -47,8 +52,11 @@
 2. **Cite runbook IDs, never copy commands.** A duplicated flag drifts; a cited one cannot.
 3. **Give it a "done when" section.** A job with no completion test is a job that gets
    half-finished twice.
-4. **Add its row to the table above, and a row to [../current_state/INDEX.md](../current_state/INDEX.md)** —
+4. **Give it a launcher.** `../commands/wf-<name>.md`, cloned from any existing one — the body
+   names the workflow and nothing else. ⚠️ **A workflow with no launcher is reachable only by
+   someone who already knows this folder exists.**
+5. **Add its row to the table above, and a row to [../current_state/INDEX.md](../current_state/INDEX.md)** —
    `python ../tools/check_index.py` fails on an unrouted `.md`, and an unrouted file is a file no
    session knows exists.
-5. **English, per [../rules/common.md](../rules/common.md) R1.** The file is the artefact; the
+6. **English, per [../rules/common.md](../rules/common.md) R1.** The file is the artefact; the
    conversation about it stays Vietnamese.
