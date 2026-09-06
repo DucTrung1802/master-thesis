@@ -51,7 +51,7 @@ runtime that was MEASURED, never an estimate — an unmeasured cell reads `—`.
 | **O5** | check the docs before committing | `python .claude/tools/state_check.py` | ~2 s | — → resolve every row it reports; it REPORTS and never rewrites |
 | **O6** | check a new `.md` is routed | `python .claude/tools/check_index.py` | ~1 s | wrote a `.md` → add its row to `../current_state/INDEX.md` |
 | **O7** | re-read what a finished track scored | `python -m walkforward.evaluate --top-k 20 --draws 0 --universe all --out <DIR>` | ~2 min | — → ⚠️ **it REWRITES `per_fold.csv`**, and at a different `--top-k` it OVERWRITES the published table |
-| **O8** | open a new Claude tab with Remote Control on | `python .claude/tools/open_claude_tab.py [--check]` | 0.11 s (`--check`) · 0.30 s (refused) | — → ⚠️ **NEEDS AN ATTENDED DESKTOP, measured 2026-09-06.** It checks `remoteControlAtStartup` and the keybinding, then the FOREGROUND, and **exits 1 with the fix** rather than sending. ⚠️ Then the OLD session STOPS — two sessions on one tree is how a `git status` stops describing the tree. **§2.O8** |
+| **O8** | open a new Claude tab with Remote Control on | `python .claude/tools/open_claude_tab.py [--check]` | 0.11 s (`--check`) · 0.30 s (refused) · 3.4 s (posted, verified) | — → ⚠️ **TWO ROUTES, AND ONLY THE FIRST IS RELIABLE (2026-09-06).** It checks `remoteControlAtStartup` and the keybinding, then takes the FOREGROUND and uses `SendInput`; with no foreground to take it POSTS the chord instead (`FGD-1`, 1-for-7) and **verifies by the window title**, exiting 1 whenever it cannot SHOW a tab opened. ⚠️ Then the OLD session STOPS — two sessions on one tree is how a `git status` stops describing the tree. **§2.O8** |
 
 ### B · The chain — stages 0-9, in order
 
@@ -186,12 +186,21 @@ because the fourth works.**
 `Start-Process`, `cmd /c start` and `rundll32 url.dll,FileProtocolHandler` are swallowed with no
 error and no process. Measure the process table, not the exit code.
 
-⚠️ **THE ATTENDED-DESKTOP REFUSAL IS A CORRECT ANSWER, NOT A BUG** (measured 2026-09-06). On an
-unattended machine — `quser` idle 5+ days, **screen not locked**, input desktop still `Default` —
-`GetForegroundWindow` returns NULL and both `SetForegroundWindow` and `SwitchToThisWindow` fail
-returning 0 with `GetLastError() == 0`. Nothing has keyboard focus, so the key would go nowhere;
-`O8` **refuses to send and exits 1** rather than firing into the void. The fallback is one line to
-the user: press **`Ctrl+Alt+C`**.
+⚠️ **THE UNATTENDED DESKTOP IS THE FIFTH ROUTE'S REASON, AND IT IS STILL NOT A FIX** (measured
+2026-09-06, `FGD-1`). On an unattended machine — `quser` idle 5+ days, **screen not locked**, input
+desktop still `Default` — `GetForegroundWindow` returns NULL, and the whole documented ladder
+fails: `SetForegroundWindow`, `SwitchToThisWindow`, `SPI_SETFOREGROUNDLOCKTIMEOUT=0` +
+`AllowSetForegroundWindow(ASFW_ANY)`, and an `AttachThreadInput` to the target thread. ⚠️ **A window
+this process CREATED — topmost, shown, `focus_force`d — could not take the foreground either**, so
+what is missing is the input session, not VS Code's cooperation.
+
+**The FIFTH route needs no foreground**: attach to VS Code's input queue so the two threads SHARE a
+key state, `SetKeyboardState` the modifiers, and `PostMessage` the letter to its window. ⚠️ **It is
+1-for-7** — it opened the tab on the first attempt and landed nothing on six more, the difference
+being a text editor holding focus versus a **Claude tab (a webview)**. So `O8` tries it, **verifies
+by the WINDOW TITLE**, and exits 1 whenever it cannot show a tab opened — including when a Claude
+tab was already active, because the title cannot decide and that is the exact state the six
+failures were in. The fallback is unchanged and is still the reliable one: press **`Ctrl+Alt+C`**.
 
 ⚠️ **AND `O8` TAKES NO PARAMETERS BECAUSE EVERY ROUTE FOR ONE IS DEAD, measured 2026-09-06.** A
 session name, a model and an effort level were asked for, built and withdrawn. The finding that

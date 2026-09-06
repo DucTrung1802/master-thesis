@@ -102,7 +102,7 @@ research record (`CLAUDE.md` and the `.claude/context/` files are).
 |---|---|
 | **`.claude/tools/state_check.py`** | ⚠️ **run this before you commit.** Six drift checks across `CLAUDE.md` and `.claude/`; reports, never rewrites; exits 1 on drift. the [runbook](../runbook/RUNBOOK.md) has the commands it checks |
 | `.claude/tools/check_index.py` | the narrower check: fails if any `.md` in the repo is unrouted by this index. Called by `state_check.py` |
-| `.claude/tools/open_claude_tab.py` | runbook `O8` — opens a new Claude tab by firing the key bound to `claude-vscode.editor.open`, after checking `remoteControlAtStartup` and that binding. ⚠️ **The FOURTH route**: the `code` CLI, the `vscode://` URI and the IDE WebSocket were all measured dead 2026-09-06 and stay dead. Windows only (`SendInput`) |
+| `.claude/tools/open_claude_tab.py` | runbook `O8` — opens a new Claude tab by firing the key bound to `claude-vscode.editor.open`, after checking `remoteControlAtStartup` and that binding. ⚠️ **The FOURTH route**: the `code` CLI, the `vscode://` URI and the IDE WebSocket were all measured dead 2026-09-06 and stay dead. Windows only (`SendInput`, and a FIFTH route added 2026-09-06 — a posted chord that needs no foreground window, **1-for-7**, `FGD-1`). ⚠️ It verifies by the WINDOW TITLE and exits 1 when it cannot show a tab opened |
 
 ## Tier 2 — package evidence (`.claude/context/`) — **open ONE, only when you touch it**
 

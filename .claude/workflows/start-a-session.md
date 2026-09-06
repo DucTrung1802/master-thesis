@@ -19,11 +19,21 @@ python .claude/tools/open_claude_tab.py
 
 Run from the **repo root** — it is not a package under `src\` and imports nothing from there.
 
-It checks `remoteControlAtStartup`, the keybinding and the foreground window, then fires the key
-bound to `claude-vscode.editor.open`, and **exits 1 at the first thing that is false with the fix
-beside it**. Details, and the routes that do NOT work, are [`../runbook/RUNBOOK.md`](../runbook/RUNBOOK.md) §2 `O8`.
+It checks `remoteControlAtStartup` and the keybinding, then delivers the key bound to
+`claude-vscode.editor.open` by one of two routes, and **exits 1 at the first thing that is false
+with the fix beside it**. Details, and the routes that do NOT work, are
+[`../runbook/RUNBOOK.md`](../runbook/RUNBOOK.md) §2 `O8`.
 
-**If it exits non-zero, hand the user one line and stop:** press **`Ctrl+Alt+C`**.
+⚠️ **THE SECOND ROUTE IS BEST-EFFORT AND THE COMMAND SAYS WHICH ONE RAN** (added 2026-09-06,
+`FGD-1`). With a foreground window it takes it and uses `SendInput` — real input, reliable. With
+**no** foreground — an unattended desktop, where nothing at all can hold one, not even a window
+this process creates — it POSTS the chord to VS Code instead, which needs no foreground and is
+**1-for-7**. Either way the outcome is measured by the **window title**, never by the send:
+`SENT` is a metric that cannot fail (§5 rule 21).
+
+**If it exits non-zero, hand the user one line and stop:** press **`Ctrl+Alt+C`**. ⚠️ That is
+still the reliable route on an unattended machine, and a `NOT VERIFIED` exit is the command
+saying so rather than guessing.
 
 ### 1b. ⚠️ Why there are no parameters — measured 2026-09-06, do not re-derive
 

@@ -16,7 +16,50 @@ WHAT IT DOES, in order, stopping at the first thing that is false:
      script does not hardcode ctrl+alt+c, so rebinding the key moves this
      command with it, and an unbound command is a precondition failure with
      the fix printed beside it.
-  3. finds the VS Code window, brings it to the foreground, sends that key.
+  3. finds the VS Code window and delivers that key to it, by whichever of two
+     routes the desktop allows -- see below.
+
+TWO DELIVERY ROUTES, AND THE SECOND IS WHY THIS WORKS UNATTENDED.
+
+  SendInput   the desktop has a foreground window: take it, then synthesise the
+              chord. Real input, aimed at the whole desktop.
+  PostMessage NOTHING holds the foreground -- `GetForegroundWindow()` returns
+              NULL and every documented way of taking it fails. Attach to VS
+              Code's own input queue, hold the modifiers in the key state the
+              two threads then SHARE, and POST the letter straight to its
+              window. No foreground is involved, so none is needed.
+
+⚠️ **THE POSTED ROUTE IS 1-FOR-7, AND THE SCORE IS THE POINT** (measured
+2026-09-06, all on one unattended desktop). It opened the tab on the FIRST
+attempt -- the title went from `bs_HOSE_FPT.csv - master-thesis - ...` to
+`Claude Code - master-thesis - ...` -- and then landed nothing on six further
+tries: `ctrl+,`, `ctrl+w` and `ctrl+pagedown`, to the top-level window and to the
+`Chrome_RenderWidgetHostHWND` child, before and after `SwitchToThisWindow`. **The
+one thing that had changed is which editor held focus**: a text editor when it
+worked, a Claude tab -- a WEBVIEW -- for every failure. That is a THEORY (a
+posted message reaches Chromium's focused frame, and a webview does not forward
+it to VS Code's keybinding dispatcher), not a measurement, and it is written
+down as one.
+
+⚠️ **SO THIS ROUTE IS BEST-EFFORT AND THE EXIT CODE SAYS SO.** It costs nothing
+to try, it cannot open a duplicate tab (every send is verified before a retry),
+and when it cannot be SHOWN to have opened a tab the command fails and tells you
+to press the key by hand. What it must never do is report the send as the
+outcome (rule 21).
+
+⚠️ **WHY SendInput CANNOT BE MADE TO WORK HERE, MEASURED THE SAME DAY.** Beyond
+the five foreground calls above, a window CREATED BY THIS PROCESS -- topmost,
+shown, `focus_force`d -- also failed to become the foreground: `GetForegroundWindow()`
+stayed 0 throughout. **On this desktop no process can hold the foreground at
+all**, which is a fact about the session and not about VS Code, and it is why
+"attend the machine" remains the reliable answer.
+
+⚠️ AND THE TITLE IS THE POST-CONDITION, NOT A DECORATION (rule 21). `SENT` is a
+metric that cannot fail -- SendInput and PostMessage both succeed into an empty
+desktop. What is checked is that the WINDOW TITLE CHANGED. ⚠️ It cannot decide
+when the active editor is ALREADY a Claude tab, because opening a second one
+does not change the title; that case is reported as unverifiable rather than as
+a pass (rule 2).
 
 NEVER SEND `ctrl+shift+escape` OR `ctrl+escape`. Both are taken by Windows
 before VS Code sees them -- Task Manager and the START MENU. ⚠️ MEASURED
@@ -41,7 +84,11 @@ precondition or a send that did not land.
 
   python .claude/tools/open_claude_tab.py --check     # resolve everything, send nothing
   python .claude/tools/open_claude_tab.py             # open the tab and leave it
-  python .claude/tools/open_claude_tab.py --session-name "pool__ta prune"       --model sonnet --effort xhigh
+
+⚠️ THOSE ARE THE ONLY TWO FORMS. A `--session-name / --model / --effort` example
+stood here until 2026-09-06, three flags this script has never had, directly
+under the paragraph saying it takes none -- `TAB-1` is the measurement that
+removed them and the example outlived it.
 """
 
 from __future__ import annotations
@@ -155,6 +202,15 @@ INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
 SW_RESTORE = 9
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+WM_KEYDOWN = 0x0100
+WM_KEYUP = 0x0101
+
+# ⚠️ A modifier's GENERIC virtual key is what `GetKeyState` answers, but an app
+# that asks for the specific side gets nothing unless the left-hand one is set
+# too -- so both go into the shared key state, and only for the modifiers this
+# chord actually names. Setting every side unconditionally is how a `ctrl+k`
+# would arrive carrying a phantom ALT.
+LEFT_OF = {0x11: 0xA2, 0x10: 0xA0, 0x12: 0xA4}
 
 ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
 
@@ -179,6 +235,10 @@ class INPUT(ctypes.Structure):
     _fields_ = [("type", wintypes.DWORD), ("u", _InputUnion)]
 
 
+user32.GetKeyboardState.argtypes = (ctypes.c_char_p,)
+user32.GetKeyboardState.restype = wintypes.BOOL
+user32.SetKeyboardState.argtypes = (ctypes.c_char_p,)
+user32.SetKeyboardState.restype = wintypes.BOOL
 user32.SendInput.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
 user32.SendInput.restype = wintypes.UINT
 user32.VkKeyScanW.argtypes = (wintypes.WCHAR,)
@@ -201,6 +261,12 @@ for _name, _argtypes, _restype in (
      wintypes.DWORD),
     ("AttachThreadInput", (wintypes.DWORD, wintypes.DWORD, wintypes.BOOL),
      wintypes.BOOL),
+    ("PostMessageW", (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM),
+     wintypes.BOOL),
+    ("MapVirtualKeyW", (wintypes.UINT, wintypes.UINT), wintypes.UINT),
+    ("GetClassNameW", (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int), ctypes.c_int),
+    ("SetActiveWindow", (wintypes.HWND,), wintypes.HWND),
+    ("SetFocus", (wintypes.HWND,), wintypes.HWND),
 ):
     _fn = getattr(user32, _name)
     _fn.argtypes = _argtypes
@@ -275,6 +341,61 @@ def send_chords(chords: list[tuple[list[int], int]]) -> None:
         time.sleep(0.05)
 
 
+def _lparam(vk: int, up: bool) -> int:
+    """The lParam a real WM_KEY* carries: repeat count 1, the scan code, and the
+    transition/previous-state bits on the way up. Chromium reads the scan code."""
+    value = 1 | (user32.MapVirtualKeyW(vk, 0) << 16)
+    return value | (1 << 30) | (1 << 31) if up else value
+
+
+def post_chords(hwnd: int, tid: int, chords: list[tuple[list[int], int]]) -> str:
+    """Deliver the chord WITHOUT a foreground window. Returns how it was sent.
+
+    ⚠️ **THE MODIFIERS ARE NOT POSTED, THEY ARE HELD IN THE KEY STATE** -- and that
+    is the whole trick. An app reads `ctrl` with `GetKeyState`, which answers from
+    the calling THREAD's input state, not from the message; posting a WM_KEYDOWN
+    for VK_CONTROL would leave that state untouched and VS Code would see a bare
+    `c`. `AttachThreadInput` makes our thread and VS Code's SHARE one input state,
+    so `SetKeyboardState` here is what VS Code's `GetKeyState` reads there.
+
+    ⚠️ **AND THE STATE IS PUT BACK.** A left-over ALT in the shared state is a
+    keyboard that has gone strange for whoever sits down next, which is a worse
+    failure than not opening the tab -- so the restore is in a `finally`.
+    """
+    attached = bool(user32.AttachThreadInput(kernel32.GetCurrentThreadId(), tid, True))
+    try:
+        # Not required for the post to land, but it is what makes the window the
+        # one its own thread considers focused -- measured as active+focus after
+        # this call on a desktop with no foreground at all.
+        user32.SetActiveWindow(hwnd)
+        user32.SetFocus(hwnd)
+        for mods, main in chords:
+            state = ctypes.create_string_buffer(256)
+            user32.GetKeyboardState(state)
+            for vk in mods:
+                state[vk] = bytes([0x80])
+                if vk in LEFT_OF:
+                    state[LEFT_OF[vk]] = bytes([0x80])
+            user32.SetKeyboardState(state)
+            try:
+                user32.PostMessageW(hwnd, WM_KEYDOWN, main, _lparam(main, False))
+                time.sleep(0.05)
+                user32.PostMessageW(hwnd, WM_KEYUP, main, _lparam(main, True))
+                time.sleep(0.05)
+            finally:
+                clear = ctypes.create_string_buffer(256)
+                user32.GetKeyboardState(clear)
+                for vk in mods:
+                    clear[vk] = bytes([0x00])
+                    if vk in LEFT_OF:
+                        clear[LEFT_OF[vk]] = bytes([0x00])
+                user32.SetKeyboardState(clear)
+    finally:
+        if attached:
+            user32.AttachThreadInput(kernel32.GetCurrentThreadId(), tid, False)
+    return "PostMessage" + ("" if attached else " (NOT attached -- modifiers may not read)")
+
+
 # ---------------------------------------------------------------------------
 # Window
 # ---------------------------------------------------------------------------
@@ -315,6 +436,35 @@ def find_vscode_windows() -> list[tuple[int, str, int]]:
     return found
 
 
+def window_title(hwnd: int) -> str:
+    length = user32.GetWindowTextLengthW(hwnd)
+    buf = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(hwnd, buf, length + 1)
+    return buf.value
+
+
+def render_child(hwnd: int) -> int | None:
+    """VS Code's `Chrome_RenderWidgetHostHWND`, the second place to post to.
+
+    ⚠️ Only ever tried when a post to the TOP-LEVEL window demonstrably did
+    nothing -- and "demonstrably" is the whole condition, see `main`. A blind
+    retry is how one command opens two tabs.
+    """
+    found: list[int] = []
+    prototype = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def callback(child, _lparam):
+        cls = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(child, cls, 256)
+        if "RenderWidgetHost" in cls.value:
+            found.append(child)
+        return True
+
+    user32.EnumChildWindows.argtypes = (wintypes.HWND, prototype, wintypes.LPARAM)
+    user32.EnumChildWindows(hwnd, prototype(callback), 0)
+    return found[0] if found else None
+
+
 def pick_window(
     windows: list[tuple[int, str, int]], hint: str
 ) -> tuple[int, str, int]:
@@ -336,10 +486,17 @@ def focus(hwnd: int) -> tuple[bool, str]:
     ⚠️ MEASURED 2026-09-06: on an UNATTENDED desktop (`quser` idle 5+ days, screen
     NOT locked -- the input desktop was still `Default`) `GetForegroundWindow`
     returns NULL, and `SetForegroundWindow` and `SwitchToThisWindow` both fail
-    returning 0 with `GetLastError() == 0`. There is no foreground to take and no
-    focused window for SendInput to reach, so this route needs an ATTENDED
-    desktop. That is why the caller must not send the key when this returns False:
-    keys with no focus window go nowhere, silently.
+    returning 0 with `GetLastError() == 0`. Re-measured the same day with the
+    whole documented ladder -- ShowWindow + BringWindowToTop, the
+    SPI_SETFOREGROUNDLOCKTIMEOUT=0 + AllowSetForegroundWindow(ASFW_ANY) dance, an
+    AttachThreadInput to the TARGET thread, SwitchToThisWindow -- and all five
+    left it at 0. **There is no foreground to take on such a desktop and no way
+    to make one.**
+
+    ⚠️ THAT IS NO LONGER THE END OF THE COMMAND. SendInput needs a foreground;
+    `post_chords` does not, and `main` switches to it here rather than refusing.
+    What the caller must still not do is send with SendInput when this is False:
+    those keys go nowhere, silently.
     """
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, SW_RESTORE)
@@ -352,9 +509,8 @@ def focus(hwnd: int) -> tuple[bool, str]:
         if user32.GetForegroundWindow() == hwnd:
             return True, "ok"
         return False, (
-            "NO WINDOW HOLDS THE FOREGROUND -- the desktop is unattended. Nothing "
-            "has keyboard focus, so the key would go nowhere. Attend the machine "
-            "(click the VS Code window) and re-run, or press the key by hand"
+            "no window holds the foreground -- the desktop is unattended, and "
+            "SendInput would go nowhere"
         )
     tid_fg = user32.GetWindowThreadProcessId(foreground, None)
     tid_me = kernel32.GetCurrentThreadId()
@@ -416,25 +572,92 @@ def main() -> int:
         print("vscode_window       NONE FOUND -- no visible Code.exe window")
         return 1
     hwnd, title, pid = pick_window(windows, args.window_hint)
-    print(f"vscode_window       {title!r} (pid {pid}, {len(windows)} candidate(s))")
+    tid = user32.GetWindowThreadProcessId(hwnd, None)
+    print(f"vscode_window       {title!r} (pid {pid}, tid {tid}, "
+          f"{len(windows)} candidate(s))")
 
     if args.check:
         print("result              CHECK ONLY -- nothing sent")
         return 0
 
+    # ⚠️ THE TITLE BEFORE, because it is the only post-condition available and it
+    # has to be read before anything is sent. `~/.claude/projects/<slug>/` was the
+    # other candidate and was measured DEAD 2026-09-06: a new tab writes no
+    # session file until somebody types into it.
+    before = window_title(hwnd)
+    # ⚠️ AND IT CANNOT DECIDE WHEN THE ACTIVE EDITOR IS ALREADY A CLAUDE TAB -- the
+    # title of the second one is the title of the first. Recorded as unverifiable
+    # rather than counted as a pass (rule 2), and it is also what stops the retry
+    # below from opening a duplicate.
+    decidable = not before.startswith("Claude Code")
+
     ok, reason = focus(hwnd)
-    if not ok:
-        print(f"result              NOT SENT -- {reason}")
+    if ok:
+        time.sleep(0.15)  # the window has focus; let it settle before the chord
+        try:
+            send_chords(chords)
+        except OSError as exc:
+            print(f"result              SEND FAILED -- {exc}")
+            return 1
+        how = "SendInput"
+    else:
+        # ⚠️ NOT A FALLBACK IN THE SENSE OF "WORSE" -- it is the route that does not
+        # touch the foreground at all, and on an unattended desktop it is the only
+        # one that works. SendInput keeps first refusal because it is the older
+        # measurement and because it is real input; whether the posted route also
+        # works with a foreground present is UNMEASURED, so nothing here assumes it.
+        print(f"foreground          {reason}")
+        how = post_chords(hwnd, tid, chords)
+
+    changed = ""
+    for _ in range(24):                       # up to 3 s for the tab to open
+        time.sleep(0.125)
+        now = window_title(hwnd)
+        if now != before:
+            changed = now
+            break
+
+    if changed:
+        print(f"result              OPENED via {how} -- {before!r} -> {changed!r}")
+        return 0
+    # ⚠️ **THE TWO ROUTES EARN DIFFERENT BENEFIT OF THE DOUBT, AND THE MEASUREMENTS
+    # ARE WHY.** SendInput put real input into a window that verifiably held the
+    # foreground, so an unchanged title is genuinely ambiguous when the active
+    # editor was already a Claude tab. The posted route is 1-for-7 and every one
+    # of the six failures was in exactly that state -- so there, "cannot tell" and
+    # "did not work" are the same answer, and the honest one is the second.
+    if how.startswith("SendInput"):
+        if not decidable:
+            print(f"result              SENT {key} via {how} -- ⚠️ NOT VERIFIED: the active "
+                  f"editor was already a Claude tab, so the title cannot change either way. "
+                  f"Real input reached a focused window, so the tab is probably open")
+            return 0
+        print(f"result              SENT {key} via {how} -- ⚠️ THE TITLE DID NOT CHANGE, so "
+              f"nothing says a tab opened. Press {key} by hand")
+        return 1
+    if not decidable:
+        print(f"result              NOT VERIFIED -- posted {key}, and the active editor was "
+              f"already a Claude tab so the title cannot say. ⚠️ THAT IS THE STATE IN WHICH "
+              f"the posted route was measured NOT to land (1-for-7). Press {key} by hand")
         return 1
 
-    time.sleep(0.15)  # the window has focus; let it settle before the chord
-    try:
-        send_chords(chords)
-    except OSError as exc:
-        print(f"result              SEND FAILED -- {exc}")
+    # The post demonstrably did nothing, so a second one cannot duplicate a tab.
+    child = render_child(hwnd)
+    if child is None:
+        print(f"result              NOT OPENED -- posted to {hwnd} and the title did not "
+              f"change; no Chrome_RenderWidgetHostHWND to try. Press {key} by hand")
         return 1
-    print(f"result              SENT {key}")
-    return 0
+    post_chords(child, tid, chords)
+    for _ in range(24):
+        time.sleep(0.125)
+        now = window_title(hwnd)
+        if now != before:
+            print(f"result              OPENED via PostMessage to the render child "
+                  f"{child} -- {before!r} -> {now!r}")
+            return 0
+    print(f"result              NOT OPENED -- posted to {hwnd} and to {child}, the title "
+          f"never changed. Press {key} by hand")
+    return 1
 
 
 if __name__ == "__main__":
