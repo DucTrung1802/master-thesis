@@ -590,6 +590,57 @@ because a statement failed — so the population is different: eight measured do
 four plus the first four of the re-run) average **10.2 min**, with an annual filing at 31.4 min and
 the oldest at 24.3. Estimate a gap run from gap-run documents.
 
+### ⚠️ GVR, 2026-09-07 — a BOOTSTRAP from zero, and the merge still refuses two-of-three
+
+**HOSE_GVR had no statement CSV at all** — 0 `pdf` cells of 102, and `seed_history` returned an
+empty band for **102 of 102** (quarter, report) pairs, measured per cell before the run. One T4
+kernel, `ONNX_ONLY`, `OVERWRITE=False`, `SPAN_OPERANDS=False`, **`FORCE_EMPTY_BAND=False`**.
+
+| | |
+|---|---|
+| wall clock | **9 h 44 min** (07:02 → 16:46), exit 0, under Kaggle's 12 h kernel ceiling by 2 h 16 |
+| documents | 34 filings, 3,076 pages, 163.0 MB — all `hop_nhat`, one entity |
+| parsed | **88 of 102 cells `pdf`**, 14 `absent` |
+| **written** | **62** — balance_sheet 22, income_statement 18, cash_flow 22 |
+| refused | **40** — 14 `absent`, **26 for want of a magnitude band** |
+| coverage | **62 / 102 = 60.8 %** of cells; 22 quarters on disk of 34 openable |
+| `source` audit (**D6**) | **0 rows** anything but `pdf` or `missing`, on all three CSVs — §5 rule 24 held |
+
+⚠️ **THE 22 QUARTERS WRITTEN ARE EXACTLY THE 22 THAT PRODUCED ALL THREE STATEMENTS.** The
+2026-09-06 change unlocked the all-three branch and **only** that branch: **12 quarters produced one
+or two of three and were refused whole**, taking 22 already-parsed cells down with them. So a
+bootstrap now starts on its own, and `FORCE_EMPTY_BAND` is still the flag that decides the
+two-of-three remainder — `BND-1`'s loop, narrowed rather than closed. The other 4 refused cells are
+a de-cumulation problem, not a band problem (Q4-2025's income statement cannot subtract a Q3-2025
+that is `absent`).
+
+⚠️ **THE RUNTIME ESTIMATE BUILT FROM PAGE COUNT WAS WRONG IN THE USUAL DIRECTION.** 3,076 pages
+× 7 distinct passes gave a ceiling of 21,532 page-reads ≈ 5.1 h, and the run took 9 h 44. **Four
+documents carried 3.4 h of it** — Q4-2025 63.5 min, Q1-2026 59.5, Q2-2025 43.3, Q3-2025 39.2 — and
+`ISOLATE_DOCUMENTS=True` pays the ONNX load 34 times, which the page count does not price. Estimate a
+bootstrap from its largest documents, not from its page total.
+
+#### The arithmetic screens are the whole guard here, and two of the four are unimplemented
+
+**62 of 62 written statements passed no magnitude guard.** `statement_screens.screen_run` over the
+run folder flagged **one** statement, on a quarter that was refused and never reached disk. Run by
+hand, the cross-document identities found what it could not:
+
+| check | result |
+|---|---|
+| cash flow closing == balance sheet cash line | **16 EXACT, 1 DIFF, 5 no closing row read** |
+| cash flow opening == prior period's balance sheet cash | **15 EXACT, 1 DIFF, 6 not on disk** |
+
+Both DIFFs land on the **same boundary**, Q4-2016 → Q2-2017. The first is adjudicated and is
+`GVR-1`; the second is not, and needs the page rendered. ⚠️ **The second identity is the only one
+that reaches the five Q4 filings (2019, 2020, 2021, 2022, 2024) whose closing row the parser never
+read at all** — a parser gap, not a merge gap, and four of the five are confirmed exact through it.
+Neither identity is in `statement_screens`, which is keyed per report; that, and the tolerance that
+hid `GVR-1`, are `SCR-1`.
+
+⚠️ **NOTHING HERE MAY BE QUOTED AS A FUNDAMENTAL** — `corp` template, so `CRP-1` / `TPL-1` apply
+in full whatever the parse quality.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the
