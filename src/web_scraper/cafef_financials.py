@@ -237,6 +237,9 @@ class ParseLayer:
     cash_extra_terms: bool = False
     condensed_income: bool = False
     column_header_blind: bool = False
+    # ⚠️ Recognise the `Mã số` item-code column by its own FIGURES where the filing gives no
+    # readable heading — `MSO` a fifth time, on MSN. See `PdfParser._code_column_by_value`.
+    code_column_by_value: bool = False
     merged_tail: bool = False
     reseat_words: bool = False
     deskew_rows: bool = False
@@ -273,6 +276,12 @@ class ParseLayer:
                     or self.relax_merged_seam or self.annual_tail or self.cash_extra_terms
                     or self.condensed_income or self.join_lost_separator
                     or self.merged_tail or self.column_header_blind
+                    # ⚠️ `code_column_by_value` DROPS A DETECTED COLUMN on an inference about
+                    # its contents rather than on a heading read off the page. That is a
+                    # widening in the strongest sense — it changes which figure every line of
+                    # the statement carries — so no layer reading the columns as detected may
+                    # run after it.
+                    or self.code_column_by_value
                     or self.reseat_words or self.deskew_rows or self.equity_wording
                     # ⚠️ `condensed_form` names a page the classifier refused, which is
                     # `notes_head`'s class exactly — a widening, and no layer reading the page
@@ -488,6 +497,14 @@ def parse_key(layer: ParseLayer) -> tuple:
             # `merged_tail` is a mapping rule and is deliberately absent, like
             # `relax_merged_seam` and `annual_tail` above it.
             layer.column_header_blind,
+            # ⚠️ **`code_column_by_value` DECIDES WHICH COLUMN EVERY FIGURE COMES FROM, so it is
+            # a PARSE key** — the same reason `reseat_words` below it is one, and the same trap:
+            # omitted, a `+codecol` layer would collide with the layer it is otherwise identical
+            # to and be served that layer's CACHED parse, the detector would never run, and the
+            # cascade would report a statement absent after trying every layer but the one
+            # written for it. ⚠️ Deliberately NOT in `ocr_key`: it chooses among columns `scan`
+            # has already returned and cannot change a recognised character.
+            layer.code_column_by_value,
             # ⚠️ **`reseat_words` REBUILDS THE ROWS, SO IT IS A PARSE KEY — and leaving it out
             # cost a run.** It changes which printed line each word belongs to, i.e. exactly
             # what `table_rows` returns. Omitted, `onnx@300+reseat` collided with
@@ -1732,6 +1749,40 @@ class FinancialsBuilder:
         ParseLayer("onnx@300+cashbs+relax", "onnx", 300, cash_close_from_bs=True,
                    red_channel=True, title_over_form=True, join_lost_separator=True,
                    relax_totals=True),
+        # ── THE ITEM-CODE COLUMN WITH NO READABLE HEADING (`code_column_by_value`, `MSO`)
+        # ⚠️ **`MSO` A FIFTH TIME, AND THE FIRST FOUR ALL WIDENED HOW THE HEADING IS READ.**
+        # `MSO-2` joins a heading merged sideways, `MSO-3` one the filing set on two baselines,
+        # `MSO-4` names the shape a damaged tone-mark leaves — and a filing that prints no
+        # readable `Mã số` at all answers none of them. `PdfParser._code_column_by_value` asks
+        # the COLUMN instead: every entry exactly 3 digits and never descending, which is what a
+        # VAS balance sheet's 100→270 / 300→440 numbering looks like and what a period column
+        # (4-9 digits in Triệu VND, 10-13 in đồng) cannot be.
+        # ⚠️ **MEASURED ON MSN 2026-09-07 — FOUR BALANCE SHEETS, AND THE REFUSAL PRINTS THE CODE.**
+        # Q1-2010, Q3-2012, Q1-2013 and Q1-2015 were all refused as
+        # `assets 270,000,000 != liabilities + equity 440,000,000` (Q1-2013: 40,619,911,000,000
+        # on the other side), and **270 IS the code for TỔNG CỘNG TÀI SẢN, 440 the code for TỔNG
+        # CỘNG NGUỒN VỐN**. Confirmed off `absent_rows` at no OCR cost: every row's column 0 is
+        # its own code scaled — `tai_san_ngan_han` 100000000, `tien` 111000000,
+        # `hang_ton_kho` 140000000 — with the real figure in column 1.
+        # ⚠️ **ONLY A BALANCE SHEET CAN EVER NEED THIS**, which is why all four are one: the
+        # income statement and the cash flow number their items 01..70, and `NOTE_MAX_DIGITS = 2`
+        # already drops a 2-digit column as a note reference before any heading is consulted.
+        # ⚠️ **LAST IN THE CASCADE, LIKE EVERY OTHER WIDENING BLOCK, AND HERE THE POSITION IS
+        # THE WHOLE SAFETY ARGUMENT.** Dropping a detected column changes which figure EVERY
+        # line of the statement carries, so it must only judge a statement that every strict read
+        # and all four `MSO` widenings already refused — `is_strict` counts the flag, so nothing
+        # reading the columns as detected can run after these.
+        # ⚠️ **THE TWO `no total assets` REFUSALS ARE NOT CLAIMED HERE.** MSN's Q1-2011 and
+        # Q2-2018 lose the grand-total ROW rather than reading its code, so the `+relax` variant
+        # is the only thing these offer them and it is UNTESTED against them — §5 rule 2, an
+        # untried case is recorded as untried.
+        ParseLayer("onnx@200+codecol", "onnx", 200, code_column_by_value=True),
+        ParseLayer("onnx@300+codecol", "onnx", 300, code_column_by_value=True),
+        ParseLayer("onnx@400+codecol", "onnx", 400, code_column_by_value=True),
+        ParseLayer("onnx@200+codecol+relax", "onnx", 200, code_column_by_value=True,
+                   relax_totals=True),
+        ParseLayer("onnx@300+codecol+relax", "onnx", 300, code_column_by_value=True,
+                   relax_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -1802,6 +1853,7 @@ class FinancialsBuilder:
         parser.set_label_wrap(layer.label_wrap)
         parser.set_unit_from_document(layer.unit_from_document)
         parser.set_column_header_blind(layer.column_header_blind)
+        parser.set_code_column_by_value(layer.code_column_by_value)
         parser.set_reseat_words(layer.reseat_words)
         parser.set_deskew_rows(layer.deskew_rows)
 
@@ -2847,8 +2899,32 @@ class FinancialsBuilder:
     # ⚠️ `None` means EVERY report, which is what the two original entries were and are.
     ACCOUNT_WORDING = {
         (None, "vonchusohuu"): ("vonvacacquy",),
+        # ⚠️ **FOUR SPELLINGS OF ONE LINE, AND MISSING THEM IS NOT A LOST CELL BUT A FALSE
+        # REFUSAL — `JVW-1`, measured on MSN 2026-09-07.** VAS line 24 is a REQUIRED-when-
+        # printed term of `OP_IDENTITY`'s corp entry, carried as OPTIONAL there so a parent-only
+        # filing that never prints it is not failed. But "optional" protects only the filing
+        # that does not print the line; a filing that PRINTS it and a parse that cannot map it
+        # fail the identity **by exactly that figure**, and the statement is refused whole.
+        # Measured on MSN's 15 refused income statements: `lai_tu_cac_cong_ty_lien_ket` (9),
+        # `phan_lai_tu_cac_cong_ty_lien_ket` (5), `loi_nhuan_tu_cac_cong_ty_lien_ket` (1) and
+        # one carrying a note reference, `phan_lai_tu_cac_cong_ty_lien_ket_13_c`. All four score
+        # 0.56-0.70 against the chart's own wording and against the one alias here — under the
+        # 0.80 bar, every one of them.
+        # ⚠️ **TWO ALIASES COVER ALL FOUR AND A THIRD WOULD BE UNMEASURED.**
+        # `phanlaitucaccongtylienket` catches three (0.81 / 0.88 / 0.81) and
+        # `loinhuantucaccongtylienket` the fourth (0.88); the rest of the spellings above are
+        # then reached by one or the other. `NST-1` checked: the best rival account on the corp
+        # income-statement chart scores 0.45 and 0.56, and neither alias IS an account on any of
+        # the twelve charts (`test_every_account_wording_key_names_exactly_one_column`).
+        # ⚠️ **Q1-2024 IS THE PROOF AND IT NEEDED NO OCR.** The refusal read *"components give
+        # 1.22796e+13 (or -6.21906e+11 with the deductions taken as expenses) against a printed
+        # 6.26631e+11"*, and both branches are short of exactly this line: 5,254,838 + 574,011
+        # - 1,899,341 + **1,248,537** - 3,579,977 - 971,437 = 626,631, the printed figure to the
+        # đồng, on a statement whose PBT and after-tax identities also close exactly.
         (None, "phanlailotrongcongtyliendoanhlienket"):
-            ("loinhuantucongtyliendoanhlienket",),
+            ("loinhuantucongtyliendoanhlienket",
+             "phanlaitucaccongtylienket",
+             "loinhuantucaccongtylienket"),
         # Decision 15/2006 wording, printed by the CONDENSED disclosure form (`CDF-2`).
         (INCOME_STATEMENT, "tongloinhuanketoantruocthue"): ("loinhuantruocthue",),
     }

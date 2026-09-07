@@ -422,6 +422,174 @@ any `_page_kind` change), and **17 quarters have only a standalone filing**, rea
 
 ⚠️ **AND THE STANDING REQUEST-SHAPE IS §8's, NOT THE LOG'S**: *"OCR ticker `<SYM>` LOCAL|KAGGLE"*
 is a request for a PREPARED NOTEBOOK that then WAITS — never for a run. `.claude/docs/PDF_OCR.md` §1a.
+#### ⚠️ MSN, 2026-09-07 — the gaps were REFUSALS, not documents, and two of them are now fixed
+
+⚠️ **THE ROW ABOVE READS MSN 21/27 AND IS A MID-BOOTSTRAP MEASUREMENT.** A 60-document run on
+2026-09-07 took the ticker to **165 `pdf` cells of 195** (317.8 min = 5.30 h, **0 engine errors**,
+155 of 180 statements accepted), which is where this section starts. `source` is only `pdf` or
+`missing` throughout — §5 rule 24 holds, 0 violations.
+
+⚠️ **THE 30 CELLS STILL OPEN WERE NOT 30 UNREADABLE FILINGS.** Every one was classified from its
+own recorded refusal, off the run folders, at no OCR cost:
+
+| cause | cells | status |
+|---|---|---|
+| `reconcile: operating profit does not close` | **14** | ✅ `JVW-2`, fixed 2026-09-07 |
+| the VAS `Mã số` code column read as a figure | **4** | ✅ `MSO-5`, fixed 2026-09-07 |
+| de-cumulation with no operand (Q2/Q4-2017, Q2/Q4-2022) | 4 | downstream of the 14 |
+| `sane` compares a 12-month figure to a 3-month band | 2 | ⚠️ `SPN-2`, open |
+| `reconcile: no total assets` (Q1-2011, Q2-2018) | 2 | ⚠️ `BSP-1`, open |
+| no `sane` band at all (Q1-2010 cash flow) | 1 | a judgement, not a defect |
+| genuine (Q4-2008 cf, Q2-2011 is, Q1-2017 cf) | 3 | `missing` is the correct answer |
+
+⚠️ **THE LARGEST CAUSE WAS A LABEL VOCABULARY, AND THE STATEMENTS BEHIND IT ARE CORRECT.**
+`JVW-1` had already recorded the mechanism — VAS line 24 is an OPTIONAL term of `OP_IDENTITY`'s
+corp entry, and "optional" protects only the filing that does NOT print the line; one that PRINTS
+it and cannot map it fails the identity **by exactly that figure**. MSN spells it four ways
+(`lai_tu_cac_cong_ty_lien_ket` ×9, `phan_lai_tu_cac_cong_ty_lien_ket` ×5,
+`loi_nhuan_tu_cac_cong_ty_lien_ket` ×1, one with a note reference glued on), all scoring 0.56-0.70
+against a bar of 0.80. **Q1-2024 is the proof and it needed no OCR**: the refusal read *"components
+give 1.22796e+13 (or -6.21906e+11 …) against a printed 6.26631e+11"*, and both branches are short
+of exactly that line —
+
+```
+5,254,838 + 574,011 - 1,899,341 + 1,248,537 - 3,579,977 - 971,437 = 626,631   (millions)
+```
+
+— the printed operating profit to the đồng, on a statement whose PBT (626,631 + 7,032 = 633,663)
+and after-tax (633,663 - 294,738 + 139,926 = 478,851) identities close exactly too.
+
+⚠️ **AND THE SECOND FIX ASKS THE COLUMN WHERE FOUR EARLIER ONES ASKED THE PAGE.** Every `MSO` fix
+to date widens how the words "Mã số" are READ; a filing that prints no readable heading answers
+none of them. MSN's four refused balance sheets say the code out loud — `assets 270,000,000 !=
+liabilities + equity 440,000,000`, and **270 IS the code for TỔNG CỘNG TÀI SẢN, 440 for TỔNG CỘNG
+NGUỒN VỐN** — with every row's column 0 its own code scaled (`tien` 111000000, `hang_ton_kho`
+140000000). `_code_column_by_value` requires **every entry exactly 3 digits and never descending**,
+which is a VAS balance sheet's 100→270 / 300→440 numbering and is not something a period column
+(4-9 digits in Triệu VND, 10-13 in đồng) can be. Five new layers at positions **102-106 of 107** —
+last, which is the whole safety argument: only a statement every strict read and all four `MSO`
+widenings already refused can reach them.
+
+⚠️ **BOTH WERE MEASURED END TO END BEFORE THE FULL RE-RUN, AND THE LAYER NAMES ARE THE EVIDENCE.**
+A 4-document probe (29.8 min) took 165 `pdf` cells to 168:
+
+| quarter | result |
+|---|---|
+| Q3-2012 | `balance_sheet=43 items` **[onnx@200+codecol]** |
+| Q1-2015 | `balance_sheet=55 items` **[onnx@200+codecol]** |
+| Q1-2024 | `income_statement=15 items` **[onnx@200+equity]** |
+| Q1-2010 | `balance_sheet` ABSENT after all 105 layers |
+
+Fix 2's two land on the layer written for them; fix 1's lands on `+equity`, the layer where
+`equity_wording` turns `ACCOUNT_WORDING` on and therefore the only one its new aliases live in.
+Neither could have been won by an unrelated layer.
+
+⚠️ **AND THE FREE CROSS-CHECK CLEARS THE TWO BALANCE SHEETS THE NEW LAYER WROTE** — the check
+`reconcile` and `sane` cannot do (§6 of the OCR workflow, `SLD-1`'s class). The cash flow's closing
+balance **is** the balance sheet's cash line, and both filings' cash flows were accepted at a
+DIFFERENT layer (`onnx@200+merged`, `onnx@200+tail+relax`):
+
+| quarter | bs cash line | its own `i.1 + i.2` | cf closing |
+|---|---|---|---|
+| Q3-2012 | 7,459,429,000,000 | 7,459,429,000,000 | 7,459,429,000,000 |
+| Q1-2015 | 4,750,081,000,000 | 4,750,081,000,000 | 4,750,081,000,000 |
+
+Three-way agreement to the đồng, from two independent parses. **A wrongly-dropped column cannot
+produce a cash line that matches an independently-parsed cash flow exactly.**
+
+⚠️ **FIX 2 CAME IN AT 2 OF ITS 4 TARGETS, AND THE MISS IS A LESSON ABOUT THE VERIFICATION
+METHOD.** Before the run, a replay over the recorded `absent_rows` — reading column 1 where the
+gate had been shown column 0 — closed the balance-sheet identity on **three** of the four
+(Q1-2010, Q3-2012, Q1-2015) and was reported as three verified. Measured: **Q3-2012 and Q1-2015
+were recovered; Q1-2013 refused as predicted; and Q1-2010 refused as well.** The replay asked
+*would the identity close* and therefore tested the DATA; it never asked *would the detector fire*,
+which is a question about the column's SHAPE. Q1-2010's data was sound — 7,190,076,000,000 on both
+sides — and its ragged code column defeated the detector anyway. **A replay over recorded rows can
+verify a figure and can never verify a detector.** The honest pre-run figure was 2-3, not 3.
+
+⚠️ **Q1-2010 IS A THIRD SHAPE AND NOT A FAILURE OF FIX 2.** The `+codecol` layers ran (101-105 of
+105) and the refusal list gained no new entry, so the reason at each was a duplicate of `assets
+270,000,000 != …` — the assets figure never changed and the column was never dropped: the detector
+ABSTAINED. Its rows say why: that filing merges part of the numbering into the LABELS
+(`tong_cong_tai_san_270_100_200`, `tong_cung_nguon_von_440_300_4004449`), leaving a ragged code
+column whose stray token fails the all-3-digit rule. **That is the fail-safe behaviour working as
+designed** (§5 rule 2), and the cost of it is one cell. Relaxing the rule to tolerate a few
+non-code entries is a different decision and needs its own measurement.
+
+⚠️ **A FIX FOR ONE DEFECT CLOSED HALF OF ANOTHER, MEASURED ON A ROW IT WROTE.** `PBT-1` records
+that 41 of 44 accepted MSN income statements reach disk with the PBT cell EMPTY — `reconcile`
+accepts them on a figure `get`'s TEXT fallback found, which `mapped` never contained — and that
+this starves `seed_history`'s band to **3 probes at every quarter from Q1-2017 to Q1-2026**, while
+the balance sheet's grows 2 → 7 → 8 → 14 → 25 and the cash flow's reaches 23. **But the alias that
+answers MSN's label already exists**; it is simply unreachable from `onnx@200`. Q1-2024, recovered
+by `JVW-2` at `onnx@200+equity`, arrived carrying `15_tong_loi_nhuan_ke_toan_truoc_thue =
+633,663,000,000` **and** `phan_lai_lo_trong_cong_ty_lien_doanh_lien_ket = 1,248,537,000,000`. So
+every cell `JVW-2` recovers carries its PBT and widens the band for the quarters after it.
+
+⚠️ **THIS WAS STATED, WITHDRAWN AND RESTATED IN ONE SESSION, AND THE MIDDLE VERSION WAS WRONG.**
+The withdrawal argued that a recovered cell reaches disk only at §9's end-of-run sweep, so it
+cannot widen the band inside its own run. That was inferred from disk being unchanged after
+Q1-2017 and Q2-2017 — both unwritable for their OWN reasons (2 of 3 statements; and a cumulative
+income statement that `ISOLATE_DOCUMENTS` gives no prior to subtract). **`MERGE_EACH` does write
+during the run**, and each isolated document then re-seeds from the fuller disk. Measured, one
+line per document:
+
+| document | income band | | document | income band |
+|---|---|---|---|---|
+| Q1-2017 … Q1-2022 | **3** (nothing written yet) | | Q4-2023 | 8 |
+| Q2-2022 | **4** — the first writable quarter | | Q4-2024 | 12 |
+| Q4-2022 | 5 | | Q4-2025 | 14 |
+| Q2-2023 | 6 | | Q1-2026 | **14** |
+
+**The band went 3 → 14 inside one run**, and that is why Q4-2023, Q4-2024 and Q4-2025 all cleared
+`sane` where Q4-2021 had not: by Q4-2023 it held 8 probes including Q4-2022's own 12-month figure,
+so the median rose and the 20× window moved with it. ⚠️ **The lesson is about the inference, not
+the mechanism** — "disk did not change after two documents" is not evidence that nothing writes,
+when both documents had their own reason not to. **The 41 rows already on disk are still untouched
+and still need a re-parse or a write-back.**
+
+⚠️ **THE OUTCOME: 165 → 184 `pdf` CELLS OF 195, AND 30 OPEN CELLS BECAME 11.** 29 documents over
+310.7 min = **5.18 h** (probe 4 + re-run 25), mean 10.7 min/doc, **0 engine errors**, `source` still
+only `pdf` or `missing`. Per fix, against what each was predicted to reach:
+
+| | targeted | recovered | |
+|---|---|---|---|
+| `JVW-2` (the JV term) | 14 | **13** | Q1-2026 alone missed — a second defect, below |
+| de-cumulation, downstream of those | 4 | **4** | Q2/Q4-2017, Q2/Q4-2022 |
+| `MSO-5` (the code column) | 4 | **2** | Q3-2012, Q1-2015; Q1-2010 and Q1-2013 abstained |
+| **total** | 22 | **19** | against a stated honest range of **18-22** |
+
+The eleven still open: `BSP-1` 2 (Q1-2011, Q2-2018 balance sheets) · `MSO-5` abstentions 2 (Q1-2010,
+Q1-2013 balance sheets) · `SPN-2` 2 (Q4-2011, Q4-2021 income statements) · genuine 3 (Q4-2008 and
+Q1-2017 cash flows, Q2-2011 income statement) · Q1-2010's cash flow, still bandless · Q1-2026's
+income statement.
+
+⚠️ **AND ALL THREE CUMULATIVE Q4s THAT WERE FLAGGED AS `SPN-2` RISKS CLEARED** — Q4-2023, Q4-2024
+and Q4-2025 — for the reason the band table above gives: by Q4-2023 the band held 8 probes rather
+than 3. The pre-run warning was right about the mechanism and too pessimistic about the outcome.
+
+⚠️ **Q1-2026 IS A SECOND DEFECT ON THE SAME LINE, AND IT IS ORDER-SHAPED WHERE `JVW-2` WAS
+WORDING-SHAPED.** Its income statement parses perfectly and the identity closes to the đồng —
+`7,906,027 + 425,056 - 1,894,801 + 1,341,193 - 4,089,684 - 1,369,051 = 2,318,740` (millions), the
+printed operating profit — and the missing term is `lai_tu_cac_cong_ty_lien_ket = 1,341,193,000,000`,
+**one of the four spellings `JVW-2` added an alias for**. Reversing the refusal's `as_expense`
+branch confirms the term was simply never added: `(7,906,027 + 425,056) - (1,894,801 + 4,089,684 +
+1,369,051) = 977,547`, exactly the 9.77547e+11 reported. ⚠️ **The SCORE is not the blocker** — that
+alias scores **0.808** against this label, above the 0.80 bar, measured. What differs is POSITION:
+the corp chart puts the JV line at order 9, between `trong_do_chi_phi_lai_vay` and
+`9_chi_phi_ban_hang`, and MSN's 2026 layout prints it **after** `chi_phi_quan_ly_doanh_nghiep` —
+two lines later than the ordered walk expects. Only two distinct refusals were recorded across all
+105 layers, so the `+equity` layers produced one of them too, i.e. the alias never got the row.
+**Likely the ordered walk and NOT PROVEN**; a containment fallback or another account claiming the
+row are not excluded, and settling it needs `map_to_schema` traced on that statement.
+
+⚠️ **THE RUNTIME MODEL FROM THE 60-DOCUMENT RUN DOES NOT TRANSFER, AND THE 2.2 h ESTIMATE BUILT ON
+IT WAS WRONG.** That run averaged 5.30 min/document because most documents were accepted early and
+stopped. **Every document of a gap run reaches the end of the cascade by definition** — it is there
+because a statement failed — so the population is different: eight measured documents (the probe's
+four plus the first four of the re-run) average **10.2 min**, with an annual filing at 31.4 min and
+the oldest at 24.3. Estimate a gap run from gap-run documents.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

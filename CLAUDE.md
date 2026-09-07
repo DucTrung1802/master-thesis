@@ -212,12 +212,13 @@ no floor-day exclusion on the SELL side.
 **The data**: ✅ `FRZ-1` closed 2026-08-23 — **771 of 784 tickers fresh to 2026-08-21**, carried up
 through gold and unified, `gold.stocks_ta` rebuilt (`STA-1`, `SKW-1` both closed), and freshness is
 a **DISTRIBUTION** now (`pipeline.freshness`, `health_schema.ticker_freshness('<layer>')`).
-⚠️ **Fundamentals are 10 tickers of 781** — 1,570 of 1,740 filing cells parsed, and the remaining
-wall is **schema** (761 of 781 names are not banks against a bank-only reconcile anchor set,
-`TPL-1`/`CRP-1`), not disk and not time. ⚠️ **`BND-1`'s lock broke 2026-09-06** — a quarter with
-all three statements now writes its own CSVs as the run goes, UNGUARDED (`band: 0`).
+⚠️ **Fundamentals are 11 tickers of 781** — the wall is **schema** (761 of 781 are not banks against
+a bank-only reconcile anchor, `TPL-1`/`CRP-1`), not disk. ⚠️ **MSN reached 184 `pdf` of 195 on
+2026-09-07 and its gaps were REFUSALS, not documents** — 30 open cells became 11; `JVW-2` (13 of 14)
+and `MSO-5` (2 of 4) fixed, `PBT-1`/`SPN-2`/`BSP-1` open. ⚠️ **`BND-1`'s lock broke 2026-09-06** — a
+quarter with all three statements writes its own CSVs as the run goes, UNGUARDED (`band: 0`).
 
-[ISSUES.md](.claude/current_state/ISSUES.md) — **99 open**, 38 resolved, codes permanent. ⚠️ **SEVEN
+[ISSUES.md](.claude/current_state/ISSUES.md) — **104 open**, 38 resolved, codes permanent. ⚠️ **SEVEN
 change how a number may be READ and are the ones to open before quoting anything**: `NUL-1` (no null
 prices in any search) · `NUL-3` (**on a panel quote the daily-IC t-stat, never `ic_clears`**) ·
 `RPR-1` (29 run folders deleted, unrecoverable) · `OUT-1` (one corrupt cell manufactured a +0.266

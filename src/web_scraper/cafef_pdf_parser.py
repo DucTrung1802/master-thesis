@@ -616,6 +616,8 @@ class PdfParser:
         self.unit_from_document = False
         # set per PARSE LAYER; see COLUMN_HEADER_NS / _page_kind
         self.column_header_blind = False
+        # set per PARSE LAYER; see _code_column_by_value / value_columns
+        self.code_column_by_value = False
         # set per PARSE LAYER; see CONDENSED_BS / _classify_condensed
         self.condensed_form = False
         # set per PARSE LAYER; see _classify_income_by_columns
@@ -806,6 +808,16 @@ class PdfParser:
         classification and never destroy a statement title.
         """
         self.column_header_blind = bool(on)
+
+    def set_code_column_by_value(self, on: bool) -> None:
+        """Let the item-code column be recognised by its FIGURES when its heading cannot be read.
+
+        See `_code_column_by_value`. Off by default and reached only from the last layers of the
+        cascade: it drops a whole detected column on an inference about the column's contents
+        rather than on a heading actually read off the page, so it must only ever judge a
+        statement every strict read and every `MSO` widening already refused.
+        """
+        self.code_column_by_value = bool(on)
 
     def set_unit_from_document(self, on: bool) -> None:
         """Let a statement that names no unit take the one the rest of the filing names.
@@ -2294,6 +2306,12 @@ class PdfParser:
         kept = kept or cols          # never leave the caller with nothing to parse
         # ⚠️ AND THE ITEM-CODE COLUMN IS THE ONE MAGNITUDE CANNOT REACH — see _code_column.
         code = self._code_column(kept, words_by_page)
+        # ⚠️ **THE HEADING WINS, AND THIS ONLY ANSWERS WHERE THERE WAS NO HEADING TO READ.**
+        # `_code_column_by_value` infers from the column's contents instead of reading the page,
+        # so it is gated per layer and consulted second — a filing that names `Mã số` is judged
+        # by the name, exactly as it is today, and nothing already parsing can move.
+        if code is None and self.code_column_by_value:
+            code = self._code_column_by_value(kept, words_by_page)
         return [c for c in kept if c != code] if code is not None else kept
 
     # A note reference is 1-2 digits ("Thuyết minh 4", "…21"); a Triệu-VND figure is 4-9. The
@@ -2442,6 +2460,69 @@ class PdfParser:
     deskew_rows = False
     unit_from_document = False
     column_header_blind = False
+    code_column_by_value = False
+
+    # ⚠️ **A VAS BALANCE-SHEET ITEM CODE IS 3 DIGITS, AND 3 IS EXACTLY WHAT `NOTE_MAX_DIGITS`
+    # LETS THROUGH** — which is why every `MSO` failure on record is a BALANCE SHEET and never
+    # an income statement or a cash flow. Those two number their items 01..70, two digits, so
+    # the note-reference filter above already drops their code column by magnitude and the
+    # heading is never asked. The balance sheet numbers 100..440 and sails past it.
+    CODE_COLUMN_DIGITS = 3
+    # Below this many codes the ascending test is not evidence — three ascending 3-digit numbers
+    # are a coincidence a real column can produce.
+    CODE_COLUMN_MIN_ROWS = 8
+
+    def _code_column_by_value(self, cols: List[float],
+                              words_by_page: Dict[int, list]) -> Optional[float]:
+        """The leftmost column when its own FIGURES are the VAS item codes, or None — `MSO`.
+
+        ⚠️ **THE WHOLE `MSO` FAMILY READS THE HEADING, AND MSN'S FILINGS DO NOT GIVE ONE.**
+        `_code_column` beside this asks whether a word box says "Mã số": `MSO-2` joins a heading
+        the recogniser merged sideways, `MSO-3` joins one the FILING set on two baselines, `MSO-4`
+        names the shape a damaged tone-mark leaves. Four widenings of one question — and a filing
+        whose heading is absent, cropped or unreadable answers none of them, so the column
+        survives and `_first_value` reads every line's ITEM CODE as its figure.
+        ⚠️ **MEASURED ON MSN 2026-09-07, AND THE REFUSAL NAMES THE CODE OUT LOUD.** Four balance
+        sheets were refused as `assets 270,000,000 != liabilities + equity 440,000,000` —
+        **270 IS the VAS code for TỔNG CỘNG TÀI SẢN and 440 the code for TỔNG CỘNG NGUỒN VỐN**,
+        each scaled by the statement's own unit. The rows behind it, off `absent_rows` and at no
+        OCR cost: `tien` [111000000, 333978000000, …], `hang_ton_kho` [140000000, …],
+        `tai_san_ngan_han` [100000000, …] — column 0 is the code, column 1 the figure.
+
+        So this asks the column instead of the page, and the test is the one thing a figures
+        column cannot imitate: **every entry exactly 3 digits, and never descending.** A VAS
+        balance sheet numbers 100 → 270 down TÀI SẢN and 300 → 440 down NGUỒN VỐN, so the codes
+        ascend the whole way through; a column of figures descends from its grand total into its
+        details and restarts at the next section. And a period column is 4-9 digits in Triệu VND
+        or 10-13 in đồng — a 3-digit one would be a company with total assets under a thousand.
+
+        ⚠️ **IT FAILS SAFE ON THE FIRST DISAGREEMENT, WHICH IS WHY IT IS STRICT AND NOT A RATIO.**
+        One entry of any other length and it abstains — including the case that matters, an OCR
+        error inside a code (`27O` → `27`), where a tolerant version would drop the column on the
+        strength of the codes it did read. Abstaining leaves the statement refused exactly as it
+        is today; dropping a real figure column would write wrong figures, which is the opposite
+        kind of mistake (§5 rule 2).
+        ⚠️ **AND CONDITION 3 OF `_code_column` IS KEPT VERBATIM: LEFTMOST ONLY.** `Mã số`
+        precedes `Thuyết minh` and both period columns, so a detector that could reach past a
+        figure column would be a different and much more dangerous thing.
+        """
+        if len(cols) < 2:
+            return None                      # dropping the only column helps nobody
+        leftmost = min(cols)
+        seq: List[int] = []
+        for page in sorted(words_by_page):
+            for w in sorted(self._numbers(words_by_page[page]), key=lambda b: b[1]):
+                if abs(w[2] - leftmost) > self.EDGE_TOL:
+                    continue
+                digits = re.sub(r"\D", "", w[4])
+                if len(digits) != self.CODE_COLUMN_DIGITS:
+                    return None
+                seq.append(int(digits))
+        if len(seq) < self.CODE_COLUMN_MIN_ROWS:
+            return None
+        if any(b < a for a, b in zip(seq, seq[1:])):
+            return None
+        return leftmost
 
     def _code_column(self, cols: List[float],
                      words_by_page: Dict[int, list]) -> Optional[float]:

@@ -57,22 +57,26 @@ ROWS = [("A. TÀI SẢN NGẮN HẠN", "100", "36.550.263.468.338", "39.844.677.
         ("TỔNG CỘNG NGUỒN VỐN", "440", "82.791.938.275.549", "75.772.648.425.795")]
 
 
-def _page(header=True, codes=True, header_span=CODE_HEADER, header_text="Mã số"):
+def _page(header=True, codes=True, header_span=CODE_HEADER, header_text="Mã số", rows=None):
     """One B01-DN statement page, rows 16pt apart.
 
     `header=False` is an unreadable heading; `codes=False` is a filing whose codes OCR merged
     into the labels instead — VIC's own income statement reads "02 Các khoản giảm trừ" — so
     there is no code column for a heading to sit over. `header_text` is what the recogniser
     returned for the heading box, which is not always the heading alone.
+
+    `rows` replaces `ROWS` for the value-based detector's tests, which need the CONTENTS of the
+    three columns varied while the geometry stays VIC Q3-2014's own.
     """
     words = []
+    rows = ROWS if rows is None else rows
     if header:
         words += [_box(115.9, 84.0, "TÀI SẢN", 34.5),
                   _box(header_span[1], 84.0, header_text, header_span[1] - header_span[0]),
                   _box(333.4, 84.0, "Ghi chú", 31.0),
                   _box(X_NOW, 84.0, "30/9/2014", 36.0),
                   _box(X_PRIOR, 84.0, "01/01/2014", 40.0)]
-    for i, (label, code, now, prior) in enumerate(ROWS):
+    for i, (label, code, now, prior) in enumerate(rows):
         y = 100.0 + i * 16.0
         words.append(_box(250.0, y, label, 170.0))
         if codes:
@@ -259,3 +263,135 @@ def test_conditions_2_and_3_still_gate_a_shape_match(parser):
     # …and one over the SECOND column rather than the first
     assert len(parser.value_columns(_page(header_span=(X_NOW - 12, X_NOW + 12),
                                           header_text="Mô số"), WIDTH)) == 3
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `MSO` A FIFTH TIME — the heading is not there to read, so the COLUMN is asked
+# ──────────────────────────────────────────────────────────────────────────────
+# ⚠️ **EVERY TEST ABOVE WIDENS HOW THE HEADING IS READ, AND MSN'S FILINGS GIVE NONE.**
+# `test_the_defect_is_real_when_the_heading_is_unreadable` pins exactly that case and asserts
+# the defect SURVIVES — 270 against 440 — because until 2026-09-07 nothing could reach it.
+# `code_column_by_value` is what reaches it: it asks the column instead of the page, on the one
+# property a figures column cannot imitate.
+#
+# ⚠️ **MEASURED ON MSN 2026-09-07: FOUR BALANCE SHEETS, AND THE REFUSAL PRINTS THE CODE.**
+# Q1-2010, Q3-2012, Q1-2013 and Q1-2015 were refused as `assets 270,000,000 != liabilities +
+# equity 440,000,000`, and 270 IS the code for TỔNG CỘNG TÀI SẢN. Off `absent_rows`, at no OCR
+# cost, every row's column 0 was its own code scaled by the statement's unit.
+MSN_Q1_2015_CODES = [100, 111, 112, 120, 123, 130, 131, 132, 135, 136,
+                     137, 139, 140, 141, 149, 150]
+
+
+def _flagged():
+    """A parser with the flag on — never the module fixture, which other tests share."""
+    p = PdfParser()
+    p.set_code_column_by_value(True)
+    return p
+
+
+def test_the_flag_is_off_by_default():
+    """⚠️ A DETECTOR THAT INFERS RATHER THAN READS MUST BE ASKED FOR. It drops a whole column on
+    the strength of that column's contents, so it belongs to the last five layers of the cascade
+    and to no default path — `PdfParser()` must not have it."""
+    assert PdfParser().code_column_by_value is False
+    assert PdfParser.code_column_by_value is False
+
+
+def test_an_unreadable_heading_no_longer_saves_the_code_column():
+    """The defect of `test_the_defect_is_real_when_the_heading_is_unreadable`, now reachable."""
+    page = _page(header=False)
+    cols = _flagged().value_columns(page, WIDTH)
+    assert len(cols) == 2
+    assert min(cols) == pytest.approx(X_NOW, abs=PdfParser.EDGE_TOL)
+    rows = {r.key: r.values for r in _flagged().table_rows(page, cols)}
+    # the figures the filing actually prints, where `reconcile` had been shown 270 and 440
+    assert rows["tong_cong_tai_san"][0] == 82_791_938_275_549
+    assert rows["tong_cong_nguon_von"][0] == 82_791_938_275_549
+
+
+def test_msn_own_code_sequence_is_recognised():
+    """⚠️ THE SEQUENCE THAT COST FOUR QUARTERS, PINNED AS THE SEQUENCE. MSN's Q1-2015 balance
+    sheet put these in column 0 — read back off the run folder, not retyped from a page."""
+    rows = [(label, str(code), now, prior)
+            for (label, _c, now, prior), code in zip(ROWS, MSN_Q1_2015_CODES)]
+    page = _page(header=False, rows=rows)
+    assert len(_flagged().value_columns(page, WIDTH)) == 2
+
+
+def test_it_abstains_on_one_damaged_code_rather_than_dropping_the_column():
+    """⚠️ **FAILS SAFE ON THE FIRST DISAGREEMENT, AND THAT IS WHY IT IS STRICT AND NOT A RATIO.**
+    OCR reading `270` as `27` is the case a tolerant version would get wrong: it would drop the
+    column on the strength of the codes it DID read. Abstaining leaves the statement refused
+    exactly as it is today, which is the recoverable direction (§5 rule 2)."""
+    rows = [(label, ("27" if code == "270" else code), now, prior)
+            for label, code, now, prior in ROWS]
+    assert len(_flagged().value_columns(_page(header=False, rows=rows), WIDTH)) == 3
+
+
+def test_it_abstains_when_the_column_descends():
+    """A VAS balance sheet numbers 100 → 270 then 300 → 440 and never goes back. A column that
+    descends is not a numbering, whatever its digit count."""
+    rows = list(reversed(ROWS))
+    assert len(_flagged().value_columns(_page(header=False, rows=rows), WIDTH)) == 3
+
+
+def test_it_abstains_below_the_row_floor():
+    """Three ascending three-digit numbers are a coincidence a real column can produce; the floor
+    is what makes the ascending test evidence rather than a guess."""
+    rows = ROWS[:PdfParser.CODE_COLUMN_MIN_ROWS - 1]
+    assert len(_flagged().value_columns(_page(header=False, rows=rows), WIDTH)) == 3
+
+
+def test_the_heading_still_wins_where_there_is_one():
+    """⚠️ THE FLAG ADDS A FALLBACK AND CHANGES NO VERDICT THAT COULD ALREADY BE REACHED.
+    With `Mã số` printed, `_code_column` answers and this never runs — so a filing that names its
+    numbering is judged by the name, exactly as before."""
+    page = _page()
+    assert (_flagged().value_columns(page, WIDTH)
+            == PdfParser().value_columns(page, WIDTH))
+
+
+def test_it_only_ever_judges_the_leftmost_column():
+    """⚠️ CONDITION 3 OF `_code_column` IS KEPT VERBATIM, AND THIS IS WHAT IT BUYS. With the
+    figures leftmost and the codes in the second column, the detector abstains rather than
+    reaching past a period column to find the numbering it is looking for — a detector that
+    could take column 1 would be a different and far more dangerous thing."""
+    rows = [(label, now, code, prior) for label, code, now, prior in ROWS]
+    cols = _flagged().value_columns(_page(header=False, rows=rows), WIDTH)
+    assert len(cols) == 3
+
+
+def test_a_codecol_layer_is_a_WIDENING_one_and_runs_after_every_strict_read():
+    """⚠️ THE POSITION IN THE CASCADE IS THIS FIX'S WHOLE SAFETY ARGUMENT, SO IT IS ASSERTED.
+    Dropping a detected column changes which figure EVERY line of the statement carries, so no
+    layer reading the columns as detected may run after one of these — which means they must be
+    counted as widenings by `is_strict` and must sit past the last strict layer. `is_strict` is
+    asked rather than a private copy of the flag list, for the reason its own docstring gives:
+    a flag left out of it is reported strict and moves `max(strict)` past the block it bounds."""
+    from web_scraper.cafef_financials import FinancialsBuilder, ParseLayer
+
+    layers = FinancialsBuilder.LAYERS
+    flagged = [i for i, l in enumerate(layers) if l.code_column_by_value]
+    assert flagged, "no +codecol layer in the cascade - this test measures nothing"
+    assert all(not layers[i].is_strict for i in flagged)
+    strict = [i for i, l in enumerate(layers) if l.is_strict]
+    assert min(flagged) > max(strict), "no layer reading the columns as detected may run after it"
+    # the flag ALONE must be enough to make a layer a widening — not the company it keeps
+    assert not ParseLayer("x", "onnx", 200, code_column_by_value=True).is_strict
+
+
+def test_the_flag_changes_the_parse_key_so_a_codecol_layer_cannot_be_served_a_cached_parse():
+    """⚠️ THE TRAP `reseat_words` FELL INTO, ASSERTED HERE INSTEAD OF DISCOVERED. A flag that
+    changes the parse but is left out of the parse key lets its layer collide with the layer it
+    is otherwise identical to and be served that layer's CACHED parse: the detector never runs
+    and the cascade reports a statement absent after trying every layer but the one written for
+    it. `+codecol` differs from a bare `onnx@200` in this flag and in nothing else."""
+    from web_scraper import cafef_financials as fin
+    from web_scraper.cafef_financials import ParseLayer
+
+    plain = ParseLayer("plain", "onnx", 200)
+    codecol = ParseLayer("codecol", "onnx", 200, code_column_by_value=True)
+    assert fin.parse_key(plain) != fin.parse_key(codecol)
+    # ⚠️ and NOT in `ocr_key`: it chooses among columns `scan` has already returned and cannot
+    # change a recognised character, so the two must share one OCR pass.
+    assert fin.ocr_key(plain) == fin.ocr_key(codecol)
