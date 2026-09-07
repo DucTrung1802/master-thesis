@@ -641,6 +641,27 @@ hid `GVR-1`, are `SCR-1`.
 ⚠️ **NOTHING HERE MAY BE QUOTED AS A FUNDAMENTAL** — `corp` template, so `CRP-1` / `TPL-1` apply
 in full whatever the parse quality.
 
+#### The second pass, same day: `FORCE_EMPTY_BAND = True`, and it cost two rows
+
+The 22 held cells were recovered **at zero GPU cost** — `ENVIRONMENT = LOCAL`, `EXECUTE = False`,
+so §9's sweep re-planned the run folder that was already on disk against the CSVs. **22 written,
+62 already on disk unchanged, 18 refused.**
+
+| | before | after |
+|---|---|---|
+| quarters on disk | 22 | **34** (Q4-2016 … Q1-2026, every openable filing) |
+| cells `pdf` | 62 / 102 | **84 / 102 = 82.4 %** (bs 32, is 24, cf 28) |
+| still refused | 40 | **18** — 14 `absent`, 4 de-cumulation. **No band refusal is left** |
+
+⚠️ **AND THE ARITHMETIC SCREEN IMMEDIATELY FOUND TWO WRONG ROWS AMONG THE 22.** `GVR-2`:
+Q4-2023's balance sheet reads the literal **`5` in 32 of 95 cells**. `GVR-3`: Q1-2026's income
+statement carries **`unit = 1000000`**, the only row of 24 that does, so every figure in it is 1e6
+too large. Both were written `band: 0`. **That is the price of the flag, measured rather than
+argued** — and it is the case for lifting it anyway on a bootstrap: **the band is no longer empty**,
+so a re-parse of those two filings is now guarded by 84 `pdf` rows that did not exist this morning.
+⚠️ **`GVR-3` is the one to remember**: a unit error passes every identity a statement can check
+on itself, so `unit` must be screened as its own column.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

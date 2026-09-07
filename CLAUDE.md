@@ -218,7 +218,7 @@ a bank-only reconcile anchor, `TPL-1`/`CRP-1`), not disk. ⚠️ **MSN reached 1
 and `MSO-5` (2 of 4) fixed, `PBT-1`/`SPN-2`/`BSP-1` open. ⚠️ **`BND-1`'s lock broke 2026-09-06** — a
 quarter with all three statements writes its own CSVs as the run goes, UNGUARDED (`band: 0`).
 
-[ISSUES.md](.claude/current_state/ISSUES.md) — **106 open**, 38 resolved, codes permanent. ⚠️ **SEVEN
+[ISSUES.md](.claude/current_state/ISSUES.md) — **108 open**, 38 resolved, codes permanent. ⚠️ **SEVEN
 change how a number may be READ and are the ones to open before quoting anything**: `NUL-1` (no null
 prices in any search) · `NUL-3` (**on a panel quote the daily-IC t-stat, never `ic_clears`**) ·
 `RPR-1` (29 run folders deleted, unrecoverable) · `OUT-1` (one corrupt cell manufactured a +0.266
