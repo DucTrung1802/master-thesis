@@ -47,11 +47,20 @@ COMMANDS = {
     "merge": "upsert the newest pulled run folder's statements into raw_data/ "
              "(--dry-run to look first)",
     "jobs": "list the configured jobs",
-    "quota": "show remaining weekly GPU/TPU hours",
+    "quota": "show remaining weekly GPU/TPU hours for the ACTIVE account",
+    "accounts": "list every Kaggle account this machine holds, with hours left",
 }
 
 # Commands that do not need a job resolved.
-GLOBAL = {"quota", "jobs"}
+GLOBAL = {"quota", "jobs", "accounts"}
+
+#: ⚠️ **WHICH COMMANDS ARE ALLOWED TO COST A SURVEY.** Picking an account means asking Kaggle
+#: for each token's quota — 2-3 s apiece, measured 2026-09-08 — so it happens only where the
+#: answer changes what the command does: anything that talks to a kernel or a dataset. `plan`,
+#: `build`, `export`, `rehearse`, `jobs` and `merge` touch no account and pay nothing.
+#: ⚠️ `--account` overrides this and forces a selection for every command, which is how you
+#: point a `pull` at the account that actually ran the thing.
+NEEDS_ACCOUNT = {"run", "push", "wait", "status", "logs", "pull", "data"}
 
 
 def _jobs() -> int:
@@ -107,6 +116,15 @@ def main(argv: list[str] | None = None) -> int:
              "second command.",
     )
     parser.add_argument(
+        "--account",
+        default=None,
+        metavar="LABEL",
+        help="force a Kaggle account by label — the lower-cased suffix of its "
+             "KAGGLE_API_TOKEN_<USERNAME> variable, i.e. the username. `accounts` lists "
+             "them. Without it, a job whose id names an owner selects that owner's "
+             "credentials, and nothing else is touched.",
+    )
+    parser.add_argument(
         "--force-empty-band",
         action="store_true",
         help="merge: write a statement whose `sane` band was EMPTY. That is the only way a "
@@ -115,12 +133,29 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    from . import accounts
+
     if args.command == "quota":
+        # ⚠️ `quota` reports the ACTIVE account, and with tokens named after their accounts
+        # there is no default one — so it has to CHOOSE, and say so. Most-remaining, because
+        # no job was named and tightest fit needs a demand to fit against.
+        print("\n".join(accounts.select(force_label=args.account).lines()))
         return runner.quota()
     if args.command == "jobs":
         return _jobs()
+    if args.command == "accounts":
+        return runner.survey_accounts()
 
     cfg: JobConfig = load_job(args.job)
+
+    # ⚠️ **THE OWNER IN THE JOB'S `id` DECIDES, AND QUOTA GETS NO VOTE HERE.** Every id in
+    # `kaggle_config.json` reads `lyductrung/...`; only those credentials can push that slug,
+    # and Kaggle answers anything else with a 403 once the payload is already uploaded. A
+    # PDF-OCR job is the other shape — its owner is derived from whoever is authenticated —
+    # and it does not come through this path: the control notebook selects FIRST, with
+    # `accounts.select_for_name`, and builds its config SECOND.
+    if args.account or args.command in NEEDS_ACCOUNT:
+        print("\n".join(accounts.select_for_job(cfg, force_label=args.account).lines()))
 
     # ⚠️ **`show_gpu=False` — THE GPU THAT MATTERS IS NOT IN THIS BOX.** `runtime.
     # gpu_report()` would answer from the local `nvidia-smi` and print an RTX 3050

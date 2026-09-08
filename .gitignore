@@ -35,6 +35,11 @@ gold_data/
 
 .env
 
+# Which Kaggle account last pushed which kgpu job, from THIS machine. Machine-local state,
+# like .env beside it: a checkout on another box owns different accounts, and a ledger that
+# travelled would point a resume at a kernel that is not there.
+src/kaggle_gpu/.accounts.json
+
 logs/
 
 mt_env/

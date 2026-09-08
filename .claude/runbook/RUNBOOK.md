@@ -95,6 +95,7 @@ runtime that was MEASURED, never an estimate — an unmeasured cell reads `—`.
 
 | ID | you want to… | command template | measured | before → after |
 |---|---|---|---|---|
+| **K0** | which Kaggle account, and how many hours left | `cd src\kaggle_gpu` then `python -m kgpu accounts` | 2-3 s per account | — → read-only, spends NO quota. ⚠️ **A job whose `id` names an owner takes that owner's credentials and quota gets no vote**; a PDF-OCR job's owner is DERIVED, and the control notebook picks it on the TIGHTEST remaining balance that covers the run. `--account <label>` forces one |
 | **K1** | see what would run | `cd src\kaggle_gpu` then `python -m kgpu plan <JOB>` | seconds | — → touches nothing |
 | **K2** | build the payload | `python -m kgpu export <JOB>` | 2m 04s / 477 MB (panel) · 5.3 s / 92.4 MB (pdf-ocr) | K1 → K3 |
 | **K3** | run the WORKER side locally | `python -m kgpu rehearse <JOB>` | 16.0 s (panel) · 9.7 s (pdf-ocr) | K2 → ⚠️ **every time a shipped module changed.** It is the only thing that catches an import the worker cannot satisfy |

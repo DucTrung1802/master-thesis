@@ -70,18 +70,75 @@ Token from <https://www.kaggle.com/settings/api> → *Generate New Token*, into
 `src/kaggle_gpu/.env` (gitignored):
 
 ```
-KAGGLE_API_TOKEN=KGAT_xxxxxxxxxxxx
+KAGGLE_API_TOKEN_<YOURUSERNAME>=KGAT_xxxxxxxxxxxx
 ```
+
+⚠️ **ONE VARIABLE PER ACCOUNT, NAMED AFTER THAT ACCOUNT IN UPPER CASE.** A bare
+`KAGGLE_API_TOKEN` still works — it takes the label `default` — but naming it is what
+stops the wrong account being picked by a name (`ACC-1`, §2a).
 
 The repo root `.env` is read too, so `POSTGRES_*` and the Kaggle token may live in
 either file. Verify:
 
 ```powershell
 cd src\kaggle_gpu
-python -m kgpu quota
+python -m kgpu quota       # the ACTIVE account
+python -m kgpu accounts    # EVERY account, with hours left — read-only, spends nothing
 ```
 
 Then set your Kaggle username in the two `id` fields of `kaggle_config.json`.
+
+### 2a. ⚠️ MORE THAN ONE ACCOUNT — `kgpu.accounts`
+
+**Each token is named after its account**, and the suffix, lower-cased, is its label —
+so a label IS a username:
+
+```
+KAGGLE_API_TOKEN_LYDUCTRUNG=KGAT_xxxx           # label `lyductrung`
+KAGGLE_API_TOKEN_DUCTRUNG180200=KGAT_yyyy       # label `ductrung180200`
+```
+
+⚠️ **NONE OF THOSE IS READ BY THE KAGGLE SDK.** `kagglesdk` looks at the bare
+`KAGGLE_API_TOKEN` and nothing else, so `accounts.activate` copies the chosen token into
+it before the client authenticates — **which is the point of the naming**: the choice
+becomes this repo's, made on the three tiers below, instead of belonging to whichever
+variable happened to be called `KAGGLE_API_TOKEN`. `kgpu accounts` flags a variable whose
+credentials authenticate as a different account, because a name that lies is how the
+wrong one gets picked by hand. That is also why a token exported in your shell wins
+nothing here: `discover()` reads the two `.env` files first, package before repo root,
+which is `load_credentials`' own precedence.
+
+⚠️ **AND WITH NO BARE VARIABLE THERE IS NO DEFAULT, BY DESIGN.** `load_credentials` takes
+a lone suffixed account (nothing to choose between) and **raises on several**, naming the
+labels: which account pays for a run is not a question a credential loader can answer.
+`python -m kgpu quota` therefore chooses — most-remaining — and prints why.
+
+**Which account a job runs under is decided in three tiers, most binding first:**
+
+| tier | when | what decides |
+|---|---|---|
+| **owner** | the job's `id` names one (**every** job in `kaggle_config.json`) | that account, and **quota gets no vote** — only its credentials can push that slug |
+| **ledger** | the owner is DERIVED (every `pdf_ocr` job) and this machine has pushed it before | the account that owns the live kernel, if it still covers the estimate |
+| **quota** | otherwise | `accounts.by_quota` — see below |
+
+⚠️ **THE QUOTA TIER IS TIGHTEST FIT, NOT MOST-REMAINING** — the smallest balance that
+still covers `need_hours * 1.25 + 0.5 h`. **The weekly quota does not POOL**: two accounts
+holding 15 h each cannot run the ~70-filing ticker that one account holding 30 h can, so
+packing one and leaving the other whole is the only state in which the longest run is
+still startable. Most-remaining alternates and ends the week with two half-quotas and
+nothing that fits. ⚠️ **With NO estimate it is most-remaining instead** — tightest fit
+answers *"which balance covers this?"* and there is no question without a demand.
+
+⚠️ **AND THE OWNER TIER IS NOT A TIDINESS RULE — measured 2026-09-08.** Every `id` in
+`kaggle_config.json` reads `lyductrung/...` while the account every code path then took was
+`ductrung180200`: `python -m kgpu status cross-sectional --account ductrung180200` answers *"Kaggle has no kernel … you can read"*, and a `push` would
+have taken the **403 after the payload was uploaded**. `runner.push` now refuses that
+before the upload, and `--account <label>` forces any account by hand.
+
+The ledger is `src/kaggle_gpu/.accounts.json` (gitignored, machine-local), written at
+**push** and keyed by `cfg.name`. ⚠️ Written at push and not at selection: a job that was
+only planned owns no kernel, and pinning runs that never happened is how the ledger would
+start lying.
 
 ---
 
@@ -194,7 +251,9 @@ permutation step.
 | `status` / `logs` | One-shot state; the traceback when it fails. |
 | `pull` | Re-download and re-merge without re-running. `--force` overwrites a merged run folder. |
 | `build` | Stage `.build/` and see the patched notebook. Pushes nothing. |
-| `jobs` / `quota` | What is configured; hours left this week. |
+| `jobs` / `quota` | What is configured; hours left this week for the ACTIVE account. |
+| `accounts` | Every account in `.env` with its remaining GPU hours. Read-only, spends nothing (~2-3 s each). |
+| `--account <label>` | Force one account for any command. The label is the lower-cased suffix of `KAGGLE_API_TOKEN_<USERNAME>`, i.e. the username. |
 
 Ctrl-C during `wait` **does not stop the Kaggle run**. Reattach, or cancel it in the
 web UI.

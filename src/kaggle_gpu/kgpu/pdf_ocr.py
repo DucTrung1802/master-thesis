@@ -106,6 +106,25 @@ def scope_of(periods: Optional[Sequence[str]],
     return "all"
 
 
+def job_name(symbol: str, *,
+             periods: Optional[Sequence[str]] = None,
+             quarters: Optional[Sequence[str]] = None,
+             scope: Optional[str] = None) -> str:
+    """The job's name — what `cfg.name` will hold — WITHOUT authenticating anything.
+
+    ⚠️ **THIS EXISTS SO THE ACCOUNT CAN BE CHOSEN BEFORE THE CONFIG IS BUILT.** `job()` needs
+    credentials (the kernel slug carries the username), and `kgpu.accounts` needs the job's
+    name to look up which account last pushed it — a circle, broken here. The name is derived
+    from the FILTER only, which is the same thing `job()` derives it from, and both call this
+    so the two cannot drift.
+    """
+    from web_scraper.pdf_ocr_job import canonical_quarters
+
+    quarters = canonical_quarters(quarters)
+    scope = scope or scope_of(list(periods) if periods else None, quarters)
+    return f"pdf-ocr-{_slug(symbol.upper())}-{scope}"
+
+
 def job(
     symbol: str,
     *,
@@ -149,7 +168,10 @@ def job(
     scope = scope or scope_of(periods, quarters)
     user = user or kaggle_user()
 
-    name = name or f"pdf-ocr-{_slug(symbol)}-{scope}"
+    # ⚠️ Through `job_name` and never by re-spelling the pattern: `kgpu.accounts` looks the
+    # ledger up by this exact string BEFORE any of this runs, and two spellings of one name
+    # would mean a resumed ticker silently starting a second kernel on the other account.
+    name = name or job_name(symbol, scope=scope)
     kernel_title = f"MT pdf ocr {symbol} {scope}"
     dataset_title = f"MT CafeF filings {symbol} {scope}"
     for what, title in (("kernel", kernel_title), ("dataset", dataset_title)):

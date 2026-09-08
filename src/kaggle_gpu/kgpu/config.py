@@ -499,6 +499,20 @@ def load_credentials() -> None:
     token beside it is the one-file option; keeping it here is the isolated
     option. Both work, and neither silently wins: the package `.env` is loaded
     first and `override=False` keeps it authoritative.
+
+    ⚠️ **A TOKEN NAMED AFTER ITS ACCOUNT IS NOT READ BY THE KAGGLE SDK.** Since
+    2026-09-08 this machine carries `KAGGLE_API_TOKEN_<USERNAME>` and no bare
+    `KAGGLE_API_TOKEN` at all — the rename was the point, because "whichever
+    variable happens to be called `KAGGLE_API_TOKEN`" is not a way to decide which
+    account pays for a run (`ACC-1`). `kagglesdk` reads only the bare name, so one
+    of the suffixed tokens has to be copied into it, and that copy is a CHOICE:
+
+      * one suffixed account   -> taken, because there is nothing to choose
+                                  between and no decision is being hidden.
+      * several                -> RAISED, naming the labels. `kgpu.accounts`
+                                  chooses on the job's owner, the ledger and the
+                                  remaining quota, and none of those three are
+                                  things this function can see.
     """
     load_dotenv(PKG_ROOT / ".env")
     load_dotenv(REPO_ROOT / ".env")
@@ -510,10 +524,27 @@ def load_credentials() -> None:
     home = Path.home() / ".kaggle"
     has_file = (home / "access_token").exists() or (home / "kaggle.json").exists()
 
+    if not has_token and not has_legacy:
+        from . import accounts                     # late: accounts imports this module
+
+        found = accounts.discover()
+        if len(found) == 1:
+            accounts.activate(found[0])
+            has_token = True
+        elif len(found) > 1:
+            raise RuntimeError(
+                f"{len(found)} Kaggle accounts are configured and none is selected: "
+                f"{', '.join(a.label for a in found)}.\n"
+                f"  Which one pays for a run is not a question a credential loader can "
+                f"answer — see `kgpu.accounts`.\n"
+                f"  `python -m kgpu accounts` lists them with their remaining hours; "
+                f"`--account <label>` forces one."
+            )
+
     if not (has_token or has_legacy or has_file):
         raise RuntimeError(
             "No Kaggle credentials found.\n"
             "  Create a token at https://www.kaggle.com/settings/api, then either\n"
-            f"  put KAGGLE_API_TOKEN=... in {PKG_ROOT / '.env'}, or run: "
+            f"  put KAGGLE_API_TOKEN_<YOUR_USERNAME>=... in {PKG_ROOT / '.env'}, or run: "
             "kaggle auth login"
         )

@@ -1,5 +1,6 @@
 """Repo notebook -> Kaggle GPU (with its data) -> run folder back in the repo.
 
+    accounts.py  WHICH Kaggle account a job runs under - discovered, quota-ranked
     config.py    kaggle_config.json -> JobConfig / DataConfig, validated hard
     export.py    PostgreSQL -> parquet + source.zip, staged flat in .payload/
     dataset.py   the payload as a private Kaggle dataset, waited until READY

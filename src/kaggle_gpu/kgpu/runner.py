@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import contextlib
+import os
 import shutil
 import sys
 import time
@@ -142,12 +143,31 @@ def push(cfg: JobConfig) -> None:
     """Upload a new version of the kernel and start it."""
     from .dataset import check_uploaded
 
+    from . import accounts
+
     check_uploaded(cfg)  # refuse to run a kernel against a payload that is not up
     folder = build(cfg)
     api = _api()
 
+    # ⚠️ **THE ACCOUNT THAT OWNS THE SLUG MUST BE THE ACCOUNT PUSHING IT, AND KAGGLE SAYS SO
+    # ONLY AFTERWARDS.** A push to `<someone else>/<slug>` comes back a 403 — with the whole
+    # payload already uploaded, which for a filings job is the expensive half of the round
+    # trip. Measured 2026-09-08: every id in `kaggle_config.json` reads `lyductrung/...`
+    # while the account every code path then took was `ductrung180200`, so this was a live
+    # mismatch and not a hypothetical. `kgpu.accounts.select_for_job` is the fix; this is the
+    # check that the fix was applied.
+    user = (getattr(api, "config_values", {}) or {}).get("username")
+    owner = accounts.owner_in(cfg.id)
+    if user and owner and user != owner:
+        raise RuntimeError(
+            f"job {cfg.name!r} pushes to {cfg.id} but these credentials authenticate as "
+            f"{user!r}. Kaggle rejects that with a 403 AFTER the payload is uploaded.\n"
+            f"  `python -m kgpu accounts` lists what this machine holds; "
+            f"`--account <label>` picks one.")
+
     accel = cfg.accelerator or ("(default GPU)" if cfg.enable_gpu else "CPU")
-    print(f"pushing {cfg.id} | accelerator: {accel}")
+    print(f"pushing {cfg.id} | accelerator: {accel}"
+          + (f" | as {user}" if user else ""))
     if cfg.data is not None:
         print(f"        data: {cfg.data.id}")
 
@@ -180,6 +200,14 @@ def push(cfg: JobConfig) -> None:
 
     print(f"pushed version {result.versionNumber}")
     print(f"watch: {cfg.url}")
+
+    # ⚠️ **RECORDED AT THE PUSH AND NOWHERE EARLIER.** This is the only thing that survives
+    # the session, and it is what stops next week's resume of the same ticker from starting a
+    # SECOND kernel on the other account — leaving the first one's results unpulled and
+    # re-uploading the filings payload. A job that was only planned owns no kernel, so
+    # recording an intention would pin runs that never happened.
+    if user:
+        accounts.record(cfg.name, user)
 
 
 def status(cfg: JobConfig) -> str:
@@ -829,8 +857,18 @@ def _stage_layout(cfg: JobConfig, mount: Path, extract: bool) -> Path:
 
 
 def quota() -> int:
+    """The ACTIVE account's weekly accelerator quota.
+
+    ⚠️ **IT NAMES THE ACCOUNT NOW, AND THAT IS THE POINT.** This machine holds more than one
+    Kaggle token; a bare "GPU: 3.59h remaining" over an unnamed identity is a number nobody
+    can act on. `python -m kgpu accounts` prints every account at once.
+    """
     api = _api()
+    user = (getattr(api, "config_values", {}) or {}).get("username")
     response = api.quota_view()
+    print(f"account: {user or '?'}"
+          + (f"   (label {os.environ['KGPU_ACCOUNT']})" if os.environ.get("KGPU_ACCOUNT")
+             else ""))
     if response.quota_refresh_time:
         print(f"resets: {response.quota_refresh_time.isoformat()}")
     for name, limit in (("GPU", response.gpu_quota), ("TPU", response.tpu_quota)):
@@ -839,4 +877,29 @@ def quota() -> int:
         used = limit.time_used.total_seconds() / 3600
         total = limit.total_time_allowed.total_seconds() / 3600
         print(f"{name}: {max(0.0, total - used):.2f}h remaining of {total:.2f}h")
+    return 0
+
+
+def survey_accounts() -> int:
+    """Every Kaggle account this machine can authenticate as, with its remaining hours.
+
+    Read-only and spends nothing — `quota_view` took 2-3 s per account when measured
+    2026-09-08. The criterion that turns this table into a choice is `accounts.by_quota`.
+    """
+    from . import accounts
+
+    statuses = accounts.survey()
+    print("\n".join(accounts.report(statuses)))
+    if not statuses:
+        return 1
+    print()
+    try:
+        pick = accounts.by_quota(statuses)
+    except RuntimeError as exc:
+        print(f"⚠️ {exc}")
+        return 1
+    print(f"an UNSIZED run would take {pick.user} ({pick.account}) — most hours left.")
+    print("⚠️ A sized one may not: `accounts.select_for_name(job, need_hours=...)` fits the "
+          "SMALLEST balance that still covers the estimate, so one account keeps a whole "
+          "week free. And a job whose id names an owner is not a quota question at all.")
     return 0
