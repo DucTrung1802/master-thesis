@@ -458,7 +458,8 @@ def merge_results(cfg: JobConfig,
 
 
 def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True,
-                     already_present: Optional[List[Path]] = None) -> int:
+                     already_present: Optional[List[Path]] = None,
+                     force_differs: bool = False) -> int:
     """Upsert the pulled run folders' accepted statements into `raw_data/`.
 
     ⚠️ **THE WORKER CANNOT DO THIS AND NEVER COULD.** A Kaggle kernel writes
@@ -472,6 +473,11 @@ def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True,
     for had a worker ACCEPT an income statement the full local run REFUSED, because
     `seed_history` reconstructs the magnitude band from disk while a full run accumulates it
     in the run. Same machine result, different populations, different verdict.
+
+    ⚠️ **AND SINCE 2026-09-08 IT IS `pdf_ocr_batch.merge_batch`, NOT A `merge_run` PER
+    FOLDER** — one period at a time, oldest first, `force_differs` off unless a caller asks
+    for it. The body carries why; the short version is that a whole-ticker run is 62 filings
+    in ONE folder and planning them as one breaks `SPN-1`'s order.
 
     Returns the number of statements actually written, so a caller can tell a merge that
     refused everything from a merge that never ran.
@@ -504,36 +510,36 @@ def merge_statements(cfg: JobConfig, folders: List[Path], apply: bool = True,
     src = str(REPO_ROOT / "src")
     if src not in sys.path:
         sys.path.insert(0, src)
-    from web_scraper import pdf_ocr_job, pdf_ocr_merge
+    from web_scraper import pdf_ocr_batch, pdf_ocr_job
 
     pdf_ocr_job.use_data_root()
-    # ⚠️ **`OVERWRITE` REACHES THE MERGE, NOT ONLY THE PARSE.** Without it a re-parse asked for
-    # explicitly would come home and be refused by `force_differs` — the run would do the work
-    # and the disk would keep the old figure, which is the worst of both answers.
-    overwrite = bool((cfg.parameters or {}).get("OVERWRITE", False))
-    print("\nmerging into raw_data/.../statements/"
-          + ("   (overwrite=True — a `pdf` row that DIFFERS is replaced)" if overwrite else "")
+    print("\nmerging into raw_data/.../statements/   one period at a time, oldest first"
           + ("\n  force_empty_band=True: a ticker with no history on disk is bootstrapped;"
              "\n  those figures passed NO magnitude guard (`BND-1`), so screen them"
              " before quoting any." if cfg.merge_force_empty_band else ""))
-    written = 0
-    for folder in folders:
-        if not (folder / "documents").is_dir():
-            continue                     # not a pdf_ocr run folder
-        report = pdf_ocr_merge.merge_run(folder, apply=apply, force_differs=overwrite,
-                                         force_empty_band=cfg.merge_force_empty_band)
-        # ⚠️ The worker wrote `metadata.json` and could not have known this; without writing
-        # the outcome back, the artefact says `merged_into_csv: false` on every Kaggle run
-        # forever, whatever the pull did with it.
-        if apply:
-            pdf_ocr_merge.record_merge(folder, report)
-        # ⚠️ **`report.written` IS THE FILE'S TOTAL, NOT THIS MERGE'S.**
-        # `_write` returns `{report: rows whose source is pdf}` over the WHOLE csv
-        # after the upsert, so summing it reports a ticker's entire history as
-        # though this run had produced it. What this run did is its own decisions.
-        written += len(report.to_write) if report.applied else 0
-    _say_what_landed(written, apply)
-    return written
+    runs = [f for f in folders if (f / "documents").is_dir()]
+    if not runs:
+        _say_what_landed(0, apply)
+        return 0
+    # ⚠️ **THE SAME CALL §9 OF THE CONTROL NOTEBOOK MAKES, AND IT HAS TO BE** (2026-09-08).
+    # This loop used to be one `merge_run` per FOLDER, which plans the whole folder against
+    # disk and writes afterwards — so a Q4 was decided while the Q3 span it depends on was
+    # still whatever disk held when the call started (`SPN-1`). A whole-ticker Kaggle run is
+    # exactly the case that breaks on: 62 filings in one folder, planned as one. `merge_batch`
+    # is per period, oldest first, and it lifts the empty `sane` band for any quarter whose
+    # filing produced all three statements — the same gate the LOCAL writer applies, so the
+    # two machines cannot disagree about one quarter.
+    # ⚠️ **AND `OVERWRITE` NO LONGER REACHES THE MERGE.** It did until today, on the argument
+    # that "a re-parse asked for explicitly would come home and be refused". That argument was
+    # about the wrong flag: `OVERWRITE` says which quarters to PARSE, and replacing a good
+    # `pdf` row on disk is a separate judgement the control notebook already routes to
+    # `REPAIR` ("`OVERWRITE = True` IS THE WRONG TOOL FOR THIS", with the ACB measurement
+    # beside it). `kgpu merge --overwrite` is the deliberate way past DIFFERS.
+    tally = pdf_ocr_batch.merge_batch(
+        runs, apply=apply, force_empty_band=cfg.merge_force_empty_band,
+        force_differs=force_differs)
+    _say_what_landed(tally["written"], apply)
+    return tally["written"]
 
 
 def _say_what_landed(written: int, apply: bool) -> None:
@@ -560,12 +566,19 @@ def _say_what_landed(written: int, apply: bool) -> None:
               "(`BND-1`).")
 
 
-def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
+def merge_latest(cfg: JobConfig, apply: bool = True,
+                 force_differs: bool = False) -> int:
     """`kgpu merge <job>` — merge the newest run folder already in the repo.
 
     ⚠️ **THE NEWEST, NOT THE ONE THIS JOB LAST PUSHED**, and the two can differ: a run folder
     is named by the WORKER's clock, and a ticker may have folders from several jobs. It prints
     which one it chose before deciding anything.
+
+    ⚠️ **`force_differs` COMES FROM THE FLAG AND NO LONGER FROM THE JOB'S `OVERWRITE`**
+    (2026-09-08). `OVERWRITE` says which quarters to PARSE; replacing a good `pdf` row on disk
+    is a separate judgement, taken against the FILING, and the control notebook already routes
+    it to `REPAIR`. `kgpu merge <job> --overwrite` is how an operator who has read the DIFFERS
+    report asks for it out loud.
     """
     import sys
 
@@ -575,7 +588,7 @@ def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
     src = str(REPO_ROOT / "src")
     if src not in sys.path:
         sys.path.insert(0, src)
-    from web_scraper import pdf_ocr_job, pdf_ocr_merge
+    from web_scraper import pdf_ocr_batch, pdf_ocr_job, pdf_ocr_merge
 
     pdf_ocr_job.use_data_root()
     spec = cfg.data.documents or {}
@@ -585,14 +598,11 @@ def merge_latest(cfg: JobConfig, apply: bool = True) -> int:
     if folder is None:
         print(f"no run folder for {spec.get('exchange')}_{spec['symbol']} — pull one first")
         return 1
-    print(f"merging {folder.name}")
-    report = pdf_ocr_merge.merge_run(
-        folder, apply=apply,
-        force_differs=bool((cfg.parameters or {}).get("OVERWRITE", False)),
-        force_empty_band=cfg.merge_force_empty_band)
-    if apply:
-        pdf_ocr_merge.record_merge(folder, report)
-    _say_what_landed(len(report.to_write) if report.applied else 0, apply)
+    print(f"merging {folder.name}   one period at a time, oldest first")
+    tally = pdf_ocr_batch.merge_batch(
+        [folder], apply=apply, force_empty_band=cfg.merge_force_empty_band,
+        force_differs=force_differs)
+    _say_what_landed(tally["written"], apply)
     return 0
 
 

@@ -138,7 +138,6 @@ def job(
     compare: bool = True,
     align_torch: bool = False,
     notes: str = "",
-    merge_statements: bool = True,
     force_empty_band: bool = False,
     scope: Optional[str] = None,
     user: Optional[str] = None,
@@ -215,11 +214,18 @@ def job(
 
     return _validate(JobConfig(
         name=name,
-        # ⚠️ ON by default since 2026-08-29, by request: `kgpu run`/`pull` upserts the accepted
-        # statements into raw_data/ as soon as the folder lands — backup first, every changed
-        # cell printed, and the three refusals `pdf_ocr_merge` documents still in force. The
-        # merge runs on THIS machine; a Kaggle worker has no path to this disk.
-        merge_statements=merge_statements,
+        # ⚠️ **NOT A PARAMETER ANY MORE — A PDF-OCR RUN FOLDER THAT REACHES THIS MACHINE IS
+        # UPSERTED, ALWAYS** (2026-09-08, by request). It was an argument, defaulting True, and
+        # the control notebook passed `MERGE_INTO_CSV` into it — which the notebook itself
+        # recommends leaving OFF, for two reasons that were both about the OLD merge and are
+        # both gone: it forced DIFFERS from `OVERWRITE`, and it planned a whole folder against
+        # one disk state. `runner.merge_statements` is `merge_batch` now — per period, oldest
+        # first, unforced — so there is nothing left for a flag to choose between, and what it
+        # was actually choosing was whether hours of GPU reached the CSVs at all. HOSE_MBB,
+        # 2026-09-08: 176 of 186 cells accepted, 0 written, because this was False.
+        # ⚠️ The merge runs on THIS machine; a Kaggle worker has no path to this disk. A
+        # deliberate dry run is `python -m kgpu merge <job> --dry-run`.
+        merge_statements=True,
         # ⚠️ NOT in `parameters`: the worker does not merge, so this is the PULL's knob. It
         # writes statements whose `sane` band was empty, which is the only route by which a
         # ticker with no CSV on disk is bootstrapped at all (`BND-1`).

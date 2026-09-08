@@ -128,3 +128,62 @@ def test_a_dry_run_never_claims_a_write(capsys):
     out = capsys.readouterr().out
     assert "DRY RUN" in out
     assert "were written" not in out
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# and it is `merge_batch` — per period, oldest first, unforced
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _batch_spy(monkeypatch, tmp_path):
+    """Stand in for `pdf_ocr_batch.merge_batch` and record how the pull called it."""
+    import sys as _sys
+
+    src = str(Path(__file__).resolve().parents[2])
+    if src not in _sys.path:
+        _sys.path.insert(0, src)
+    from web_scraper import pdf_ocr_batch, pdf_ocr_job
+
+    seen = {}
+
+    def fake(folders, **kw):
+        seen["folders"] = [Path(f).name for f in folders]
+        seen.update(kw)
+        return {"written": 7, "skipped": 0, "already": 0, "passes": 1}
+
+    monkeypatch.setattr(pdf_ocr_batch, "merge_batch", fake)
+    monkeypatch.setattr(pdf_ocr_job, "use_data_root", lambda *_a, **_kw: tmp_path)
+    return seen
+
+
+def test_the_pull_merges_through_merge_batch_not_one_call_per_folder(tmp_path, monkeypatch,
+                                                                     capsys):
+    """⚠️ **A WHOLE-TICKER RUN IS 62 FILINGS IN ONE FOLDER, AND `merge_run` PLANS A FOLDER AS
+    ONE.** It reads disk first and writes afterwards, so a Q4 was decided against a disk state
+    the Q3 span it depends on had not reached yet (`SPN-1`). `merge_batch` is one period per
+    call, oldest first — the same thing §9 of the control notebook does.
+    """
+    seen = _batch_spy(monkeypatch, tmp_path)
+    folder = _run_folder(tmp_path, "20260908-113507__hose_mbb__pdf_ocr")
+
+    assert runner.merge_statements(_cfg(), [folder]) == 7
+    assert seen["folders"] == ["20260908-113507__hose_mbb__pdf_ocr"]
+    assert seen["apply"] is True
+    assert "one period at a time, oldest first" in capsys.readouterr().out
+
+
+def test_the_job_s_overwrite_no_longer_lifts_the_differs_refusal(tmp_path, monkeypatch):
+    """⚠️ **TWO QUESTIONS, ONE FLAG — UNTIL 2026-09-08.** `OVERWRITE` says which quarters to
+    PARSE. Replacing a `pdf` row already on disk that DISAGREES with this run is a judgement
+    about the FILING, and the control notebook routes it to `REPAIR` in as many words
+    ("`OVERWRITE = True` IS THE WRONG TOOL FOR THIS", with the ACB measurement beside it) —
+    while the pull was quietly doing the opposite. `kgpu merge --overwrite` is the way to ask.
+    """
+    seen = _batch_spy(monkeypatch, tmp_path)
+    folder = _run_folder(tmp_path, "20260908-113507__hose_mbb__pdf_ocr")
+
+    runner.merge_statements(_cfg(parameters={"OVERWRITE": True}), [folder])
+    assert seen["force_differs"] is False
+
+    runner.merge_statements(_cfg(), [folder], force_differs=True)
+    assert seen["force_differs"] is True

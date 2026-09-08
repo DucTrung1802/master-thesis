@@ -386,6 +386,125 @@ def test_merge_each_is_off_by_default(tmp_path, monkeypatch):
     assert batch.run_batch([plan], out_root=tmp_path, log=lambda _s: None) == [tmp_path]
 
 
+def test_the_run_ends_with_the_sweep_so_a_held_quarter_is_not_left_for_a_human(
+        tmp_path, monkeypatch):
+    """⚠️ **`merge_each` HOLDS A FILING THAT PRODUCED TWO STATEMENTS OF THREE, AND THE SWEEP
+    THAT PICKS IT UP USED TO BE A NOTEBOOK CELL SOMEBODY HAD TO RUN.**
+
+    Measured on HOSE_MBB, 2026-09-08: a 158-minute T4 round trip accepted 176 of 186 cells
+    and wrote 0, because the process holding the notebook died after the pull and §9 never
+    ran. `BND-1`'s third face — the parse is durable in the run folder, the CSV was never
+    opened, and a green run says nothing about which. So the driver runs the sweep itself
+    before it returns.
+    """
+    calls = []
+
+    class _Report:
+        decisions: list = []
+        to_write: list = []
+        backup = None
+
+        def lines(self):
+            return ["header"]
+
+    def fake_merge_run(folder, **kw):
+        calls.append(kw["periods"][0])
+        return _Report()
+
+    from web_scraper import pdf_ocr_merge as real
+    monkeypatch.setattr(real, "merge_run", fake_merge_run)
+    monkeypatch.setattr(real, "record_merge", lambda *_a, **_kw: None)
+    monkeypatch.setattr(batch, "wait_for_vram", lambda *_a, **_kw: None)
+    monkeypatch.setattr(batch, "_engine_errors", lambda _f: 0)
+
+    # ⚠️ TWO STATEMENTS OF THREE — the shape `merge_each` refuses to write, so nothing is
+    # merged between documents and the only write that can happen is the closing sweep.
+    two = {r: {"layer": "onnx@200", "items": 30}
+           for r in ("balance_sheet", "income_statement")}
+    made = {}
+
+    def fake_call(cmd, **_kw):
+        quarter = cmd[cmd.index("--quarters") + 1]
+        folder = _run_folder(tmp_path, f"2026010{len(made) + 1}-000000__hose_ctg__pdf_ocr",
+                             "CTG", [f"Q{quarter[-1]}-{quarter[:4]}"])
+        _document(folder, "CTG", f"Q{quarter[-1]}-{quarter[:4]}", two)
+        made[quarter] = folder
+        return 0
+
+    monkeypatch.setattr(subprocess, "call", fake_call)
+    monkeypatch.setattr(batch, "_newest_folder", lambda *_a, **_kw: list(made.values())[-1])
+
+    plan = batch.TickerPlan(exchange="HOSE", symbol="CTG", template="bank",
+                            template_how="given", quarters=["2019-Q3", "2019-Q4"],
+                            filed=2, complete=0)
+    batch.run_batch([plan], out_root=tmp_path, merge_each=True, log=lambda _s: None)
+
+    # ⚠️ ONE PASS PER PERIOD, OLDEST FIRST — the sweep is `merge_batch` and keeps its order.
+    assert calls == ["Q3-2019", "Q4-2019"]
+
+
+def test_the_closing_sweep_respects_the_write_nothing_defaults(tmp_path, monkeypatch):
+    """⚠️ The sweep must not become a back door around `merge_apply=False` or around the
+    driver's own default of writing nothing — both of which exist so a caller who has not
+    asked for a write does not get one."""
+    monkeypatch.setattr(batch, "wait_for_vram", lambda *_a, **_kw: None)
+    monkeypatch.setattr(batch, "_engine_errors", lambda _f: 0)
+
+    def boom(*_a, **_kw):
+        raise AssertionError("the sweep wrote with merge_apply=False")
+
+    from web_scraper import pdf_ocr_merge as real
+    monkeypatch.setattr(real, "merge_run", boom)
+
+    made = {}
+
+    def fake_call(cmd, **_kw):
+        quarter = cmd[cmd.index("--quarters") + 1]
+        made[quarter] = _run_folder(tmp_path, "20260101-000000__hose_ctg__pdf_ocr", "CTG",
+                                    [f"Q{quarter[-1]}-{quarter[:4]}"])
+        return 0
+
+    monkeypatch.setattr(subprocess, "call", fake_call)
+    monkeypatch.setattr(batch, "_newest_folder", lambda *_a, **_kw: list(made.values())[-1])
+
+    plan = batch.TickerPlan(exchange="HOSE", symbol="CTG", template="bank",
+                            template_how="given", quarters=["2019-Q3"], filed=1, complete=0)
+    batch.run_batch([plan], out_root=tmp_path, merge_each=True, merge_apply=False,
+                    log=lambda _s: None)
+
+
+def test_force_differs_reaches_the_merge_only_when_a_caller_asks(tmp_path, monkeypatch):
+    """⚠️ **IT IS NOT WIRED TO A RUN'S `OVERWRITE`, AND IT WAS UNTIL 2026-09-08.**
+
+    `kgpu.runner.merge_statements` read the job's `OVERWRITE` and passed it as
+    `force_differs`, so a re-parse asked for by quarter also lifted the refusal that protects
+    a good `pdf` row already on disk. Those are two questions: which quarters to PARSE, and
+    whether to replace a row. The second is `REPAIR` / `kgpu merge --overwrite`.
+    """
+    folder = _run_folder(tmp_path, "20260101-000000__hose_ctg__pdf_ocr", "CTG", ["Q1-2019"])
+    seen = []
+
+    class _Report:
+        decisions: list = []
+        to_write: list = []
+        backup = None
+
+        def lines(self):
+            return ["header"]
+
+    def fake_merge_run(_folder, **kw):
+        seen.append(kw.get("force_differs"))
+        return _Report()
+
+    from web_scraper import pdf_ocr_merge as real
+    monkeypatch.setattr(real, "merge_run", fake_merge_run)
+    monkeypatch.setattr(real, "record_merge", lambda *_a, **_kw: None)
+
+    batch.merge_batch([folder], apply=False, log=lambda _s: None)
+    batch.merge_batch([folder], apply=False, force_differs=True, log=lambda _s: None)
+    assert seen == [False, True]
+
+
 # ── the plan ──────────────────────────────────────────────────────────────────
 def test_the_ticker_key_is_exchange_and_symbol():
     plan = batch.TickerPlan(exchange="HOSE", symbol="CTG", template="bank",

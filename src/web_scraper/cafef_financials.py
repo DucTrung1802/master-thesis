@@ -244,11 +244,20 @@ class ParseLayer:
     reseat_words: bool = False
     deskew_rows: bool = False
     equity_wording: bool = False
+    # ⚠️ The cash flow's OPENING and CLOSING balances under the "Tiền tồn đầu/cuối năm"
+    # wording — `GCW-1`. See `FinancialsBuilder.CASH_WORDING`.
+    cash_wording: bool = False
     condensed_form: bool = False
     income_by_columns: bool = False
     cash_close_from_bs: bool = False
     duplicate_period: bool = False
     total_from_section: bool = False
+    # ⚠️ A GRAND TOTAL A LOST BOX TRUNCATED, REBUILT FROM THE SECTION SUM AND CONFIRMED BY
+    # THE COUNTERPART TOTAL ON ANOTHER PAGE — `GTR-1`. Wider than `total_from_section`, which
+    # requires the damaged reading to still be the RIGHT MAGNITUDE (a seal covers digits, it
+    # does not remove them). A truncation removes them: GAS Q2-2021 reads `TỔNG NGUỒN VỐN` as
+    # 216,601 against a printed 74,826,437,216,601. See `FinancialsBuilder._total_from_counterpart`.
+    truncated_total: bool = False
     crop_pad: Optional[float] = None
     red_channel: bool = False
 
@@ -283,6 +292,10 @@ class ParseLayer:
                     # run after it.
                     or self.code_column_by_value
                     or self.reseat_words or self.deskew_rows or self.equity_wording
+                    # ⚠️ `cash_wording` OFFERS AN ACCOUNT A SECOND NAME, which is
+                    # `equity_wording`'s class exactly — it changes what the matcher will
+                    # believe, so no layer reading the labels as printed may run after it.
+                    or self.cash_wording
                     # ⚠️ `condensed_form` names a page the classifier refused, which is
                     # `notes_head`'s class exactly — a widening, and no layer reading the page
                     # as printed may run after it.
@@ -309,7 +322,11 @@ class ParseLayer:
                     # ⚠️ `total_from_section` REPLACES a figure the page
                     # yielded with the sum the form says it is, so it is a
                     # widening in the strongest sense — see `SEAL-2`.
-                    or self.total_from_section)
+                    or self.total_from_section
+                    # ⚠️ `truncated_total` REPLACES a grand total outright, on
+                    # evidence from two other rows and another page, so it is
+                    # `total_from_section`'s class exactly — see `GTR-1`.
+                    or self.truncated_total)
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
 # Filings before Q1-2008 are blocked at the INPUT, so no pre-2008 document is ever opened and
@@ -1783,6 +1800,67 @@ class FinancialsBuilder:
                    relax_totals=True),
         ParseLayer("onnx@300+codecol+relax", "onnx", 300, code_column_by_value=True,
                    relax_totals=True),
+        # ── THE CASH BALANCES UNDER THE "TIỀN TỒN" WORDING (`cash_wording`, `GCW-1`)
+        # ⚠️ **A FALSE REFUSAL THAT COST A WHOLE TICKER'S CASH FLOWS, measured on HOSE_GAS
+        # 2026-09-07.** The corp chart names the two dated balances "Tiền và tương đương tiền
+        # đầu/cuối kỳ"; GAS prints "Tiền tồn đầu năm" / "Tiền tồn cuối năm", an older B03
+        # phrasing for the same VAS codes 60 and 70. `tientoncuoinam` scores **0.550** against
+        # the chart's wording — nowhere near `SCHEMA_MATCH` — so the closing line does not map,
+        # and `reconcile` REQUIRES it, so the whole statement is refused `no closing cash
+        # balance`. **33 of GAS's 35 refused cash flows carry that reason**, 9 of them at every
+        # one of the 100 layers tried, off the run folder at no OCR cost. `CASH_WORDING` has the
+        # figures and the discriminator that makes the alias safe.
+        # ⚠️ **LAST IN THE CASCADE, LIKE EVERY OTHER WIDENING BLOCK, AND HERE THE POSITION IS
+        # THE WHOLE SAFETY ARGUMENT.** Offering an account a second name changes which row wins
+        # a slot, so it must only judge a statement every one of the 107 layers before it
+        # refused — `is_strict` counts the flag, so nothing reading the labels as printed can
+        # run after these. No `pdf` row on disk can move: the cascade stops at the first
+        # acceptance, and reaching position 108 means nothing before it accepted.
+        # ⚠️ **`relax_totals` RIDES WITH THE LAST TWO AND NOT THE FIRST THREE.** The relaxed
+        # layers are where `_cash_flow_identity` runs (`opening + movement + fx == closing`),
+        # which is the arithmetic that has to VERIFY a recovered closing balance — but running
+        # only relaxed would give a sound statement no strict reading to be accepted on. Both,
+        # in that order, is what the `+cashbs` and `+codecol` blocks already do.
+        # ⚠️ **NO EXTRA OCR PASS.** The flag is a per-layer post-step on cached words, so
+        # `ocr_key` is unchanged and the run log reads `cached parse, re-map only` for all five.
+        ParseLayer("onnx@200+cashword", "onnx", 200, cash_wording=True),
+        ParseLayer("onnx@300+cashword", "onnx", 300, cash_wording=True),
+        ParseLayer("onnx@400+cashword", "onnx", 400, cash_wording=True),
+        ParseLayer("onnx@200+cashword+relax", "onnx", 200, cash_wording=True,
+                   relax_totals=True),
+        ParseLayer("onnx@300+cashword+relax", "onnx", 300, cash_wording=True,
+                   relax_totals=True),
+        # ── A LOST BOX TRUNCATED A GRAND TOTAL (`truncated_total`, `GTR-1`) ───────────────
+        # ⚠️ **THE DAMAGE IS NOT WHAT `total_from_section` WAS BUILT FOR.** A seal covers
+        # digits and the magnitude survives, so `SEAL-2`'s repair may demand the rebuilt sum
+        # be `_equal` to the damaged reading. A lost box REMOVES digits: GAS Q2-2021 reads
+        # `TỔNG CỘNG NGUỒN VỐN` as **216,601 against a printed 74,826,437,216,601** and every
+        # one of the 112 layers before this one refuses it — 200 dpi as fragmented, 300 and
+        # 400 dpi as `assets != liabilities + equity`. Escalation cannot reach it because
+        # nothing about the reading improves: the digits are not covered, they are gone.
+        #
+        # ⚠️ **`merged_tail` RIDES WITH THEM BECAUSE THAT IS HOW THE PARTS ARE FOUND AT ALL.**
+        # `c_no_phai_tra` maps on no `corp` balance sheet (`CRP-1`), so lock 2 resolves it
+        # through `SECTION_PART_TEXT` — measured on GAS Q2-2021 at `onnx@300`, where the
+        # parts give 26,981,135,438,346 + 47,845,301,778,255 = 74,826,437,216,601, equal to
+        # the assets total on the facing page to the đồng.
+        # ⚠️ **`join_lost_separator` RIDES WITH THEM** for the same reason it rides with
+        # `+total`: the box that lost its separator and the box that lost its neighbour are
+        # the same recogniser doing the same thing to the same page (measured on GAS: 19 of
+        # 20 counted fragments on this ticker are ONE box with a lost separator).
+        # ⚠️ LAST, like every widening, and `is_strict` counts the flag — only a balance sheet
+        # that has already been refused for a grand total the page could not give can reach
+        # these.
+        ParseLayer("onnx@200+trunctotal", "onnx", 200, truncated_total=True,
+                   merged_tail=True, join_lost_separator=True),
+        ParseLayer("onnx@300+trunctotal", "onnx", 300, truncated_total=True,
+                   merged_tail=True, join_lost_separator=True),
+        ParseLayer("onnx@400+trunctotal", "onnx", 400, truncated_total=True,
+                   merged_tail=True, join_lost_separator=True),
+        ParseLayer("onnx@200+trunctotal+relax", "onnx", 200, truncated_total=True,
+                   merged_tail=True, join_lost_separator=True, relax_totals=True),
+        ParseLayer("onnx@300+trunctotal+relax", "onnx", 300, truncated_total=True,
+                   merged_tail=True, join_lost_separator=True, relax_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -1974,7 +2052,8 @@ class FinancialsBuilder:
                                          relax_merged_seam=layer.relax_merged_seam,
                                          annual_tail=layer.annual_tail,
                                          merged_tail=layer.merged_tail,
-                                         equity_wording=layer.equity_wording)
+                                         equity_wording=layer.equity_wording,
+                                         cash_wording=layer.cash_wording)
                 # ⚠️ **THE BALANCE SHEET OF THIS FILING, IF IT HAS BEEN ACCEPTED — `CBS-1`.**
                 # `REPORTS` puts the balance sheet FIRST, so on any layer at which both are
                 # judged the balance sheet is decided before the cash flow reaches the gate;
@@ -1985,6 +2064,13 @@ class FinancialsBuilder:
                     self._resolve_duplicate_identity(st, row, template)
                 if layer.total_from_section and report == BALANCE_SHEET:
                     self._total_from_section(st, row)
+                # ⚠️ AFTER `total_from_section`, never before: that repair answers the reading
+                # it was measured on (a SEAL, magnitude intact) and this one answers what is
+                # left when neither it nor any DPI could. A layer may carry both; whichever
+                # writes first leaves `damaged is None`-safe state for the other, and lock 1
+                # of each refuses an already-repaired column because `mirror == damaged`.
+                if layer.truncated_total and report == BALANCE_SHEET:
+                    self._total_from_counterpart(st, row)
                 bs_cash, bs_firm = (None, False)
                 if report == CASH_FLOW and BALANCE_SHEET in accepted:
                     bs_cash, bs_firm = self.balance_sheet_cash(
@@ -2888,6 +2974,26 @@ class FinancialsBuilder:
                                                  "loi ich co dong khong kiem soat"),
     }
 
+    # ⚠️ **THE OTHER GRAND TOTAL OF THE SAME BALANCE SHEET — `GTR-1`, 2026-09-07.** `TỔNG CỘNG
+    # TÀI SẢN` and `TỔNG CỘNG NGUỒN VỐN` are ONE accounting number the filing prints twice, on
+    # two pages, in two OCR passes — the measurement behind `GTL-1` is that **819 of the 837
+    # accepted balance sheets carry them EXACTLY equal**. `_total_from_counterpart` uses that
+    # to confirm a rebuilt total, which is why the tuples here are `reconcile`'s own anchors
+    # rather than a second list: the canonical columns first, the OCR-text needles as the
+    # fallback, exactly as `get` inside `reconcile` resolves them.
+    # ⚠️ Keyed by the `SECTION_SUMS` column, so a chart that prints neither is simply skipped.
+    COUNTERPART_TOTAL = {
+        "tong_cong_tai_san": (C_RESOURCES, TOTAL_RESOURCES),
+        "tong_cong_nguon_von": (C_ASSETS, TOTAL_ASSETS),
+    }
+    # ⚠️ **THREE DIGITS, BECAUSE THAT IS THE SMALLEST PIECE THE SPLITTER CAN LEAVE BEHIND.**
+    # `_split_number_runs` apportions a box by character offset along its THOUSANDS GROUPS, so
+    # a surviving fragment is one or more whole groups — GAS Q2-2021's `216,601` is two. Below
+    # three digits the containment test carries no information at all: "2" is inside almost
+    # every figure on the page, and admitting it would let the `Mã số` column (`270`, `440`)
+    # look like a truncation of the number it sits beside.
+    TRUNCATION_MIN_DIGITS = 3
+
     # ⚠️ **KEYED BY (report, account text), BECAUSE THE COMPETITION `NST-1` WARNS ABOUT IS
     # WITHIN ONE CHART AND NOT ACROSS TWELVE** (2026-09-04). `map_to_schema` scores a row
     # against the accounts of ONE (template, report) chart, so an alias can only put two real
@@ -2929,6 +3035,48 @@ class FinancialsBuilder:
         (INCOME_STATEMENT, "tongloinhuanketoantruocthue"): ("loinhuantruocthue",),
     }
 
+    # ⚠️ **THE CASH FLOW'S TWO DATED BALANCES UNDER THE "TIỀN TỒN" WORDING — `GCW-1`,
+    # measured on HOSE_GAS 2026-09-07.** The corp chart of accounts calls these lines "Tiền và
+    # tương đương tiền đầu kỳ (60)" and "… cuối kỳ (70 = 50+60+61)". GAS's filings print
+    # **"Tiền tồn đầu năm"** and **"Tiền tồn cuối năm"** — an older B03 phrasing that names the
+    # same two VAS codes with a different noun. They share almost no characters:
+    # `tientoncuoinam` against `tienvatuongduongtiencuoiky` scores **0.550**, nowhere near
+    # `SCHEMA_MATCH`, so the closing line simply does not map — and `reconcile` REQUIRES the
+    # closing balance, so the statement is refused whole with `no closing cash balance`.
+    #
+    # ⚠️ **IT IS A FALSE REFUSAL AND IT COST AN ENTIRE TICKER'S CASH FLOWS.** Measured off the
+    # 2026-09-07 T4 run folder at no OCR cost: **33 of GAS's 35 refused cash flows** carry that
+    # reason, on 9 of them at every one of the 100 layers tried, and `tien_ton_cuoi_nam` is the
+    # printed label on **28 of 35**. This is `JVW-1`'s shape — a wording the chart does not
+    # carry, refusing a statement that parsed correctly — one level down, at the cash flow.
+    #
+    # ⚠️ **AND THE OPENING BALANCE IS THE ONE THING THE CLOSING ALIAS MUST NEVER ANSWER.** The
+    # two lines are the same three words with one different, so the alias is very nearly
+    # ambiguous by construction: `tientoncuoinam` scores **0.815** against the OPENING row's
+    # `tien_ton_dau_nam`, OVER the 0.80 bar. That is `ANNUAL_WORDING`'s BID Q4-2016 failure
+    # arriving by a second route (it measured 0.804 and handed the closing slot the opening
+    # figure, caught only by `sane`). So the period word is a HARD DISCRIMINATOR here and not a
+    # score — see `_cash_wording_accounts`: a row saying "đầu" cannot be the closing balance
+    # whatever it scores, and a row saying "cuối" cannot be the opening.
+    #
+    # ⚠️ **KEYED ON THE WHOLE ACCOUNT, NOT A SUBSTRING** — `ACCOUNT_WORDING`'s safety argument,
+    # for the same reason. `tienvatuongduongtiencuoiky` is a substring of nothing else on the
+    # corp cash-flow chart, and an equality test cannot invent a name for a line that does not
+    # have one (`NST-1`). Both spellings of the period word are carried because a QUARTERLY
+    # filing under the same older form says "cuối kỳ" where an annual one says "cuối năm".
+    CASH_WORDING = {
+        "tienvatuongduongtiencuoiky": ("tientoncuoinam", "tientoncuoiky"),
+        "tienvatuongduongtiendauky": ("tientondaunam", "tientondauky"),
+    }
+    # The period word each side of the pair must carry, and the one it may not. Read as a
+    # HARD gate, never as a score — the measurement above is why.
+    CASH_WORDING_PERIOD = {"tienvatuongduongtiencuoiky": ("cuoi", "dau"),
+                           "tienvatuongduongtiendauky": ("dau", "cuoi")}
+
+    def cash_wording_aliases(self, account: str):
+        """The older spellings this cash-balance line answers to — see `CASH_WORDING`."""
+        return self.CASH_WORDING.get(account.replace("_", ""), ())
+
     def account_aliases(self, report: str, account: str):
         """The other spellings this account answers to on THIS report — see `ACCOUNT_WORDING`."""
         bare = account.replace("_", "")
@@ -2969,6 +3117,7 @@ class FinancialsBuilder:
                      edge_containment: bool = False,
                      cut_fragment: bool = False,
                      equity_wording: bool = False,
+                     cash_wording: bool = False,
                      report: Optional[str] = None) -> float:
         """How alike a schema account and a parsed row label are, both separator-stripped.
 
@@ -2990,6 +3139,29 @@ class FinancialsBuilder:
         read at all, so no quarter that already parses is touched.
         """
         from difflib import SequenceMatcher
+
+        if cash_wording:
+            # ⚠️ **THE PERIOD WORD IS A GATE, NOT A SCORE, AND THAT ORDER IS THE MEASUREMENT.**
+            # `tientoncuoinam` scores 0.815 against the OPENING row `tien_ton_dau_nam` — over
+            # the bar — so offering the alias without this test hands the closing slot a figure
+            # of exactly the right kind, which nothing downstream can tell from a correct one
+            # (`ANNUAL_WORDING`'s BID Q4-2016, measured at 0.804). Refused outright rather than
+            # out-ranked, exactly as that block does it.
+            bare = account.replace("_", "")
+            want_other = self.CASH_WORDING_PERIOD.get(bare)
+            if want_other:
+                want, other = want_other
+                bare_key = key.replace("_", "")
+                if other in bare_key and want not in bare_key:
+                    return 0.0
+            # ⚠️ Scored as an ALTERNATIVE and returned as a `max`, so this can only ever RAISE
+            # a score: a cash flow whose two balances already map is untouched.
+            alts = self.cash_wording_aliases(account)
+            if alts:
+                return max(self._label_score(a, key, relax, annual_tail,
+                                             edge_containment, cut_fragment,
+                                             report=report)
+                           for a in (account,) + tuple(alts))
 
         if equity_wording:
             # ⚠️ **EQUALITY, NEVER CONTAINMENT — see `ACCOUNT_WORDING`.** Only an account that
@@ -3103,7 +3275,8 @@ class FinancialsBuilder:
                      relax_merged_seam: bool = False,
                      annual_tail: bool = False,
                      merged_tail: bool = False,
-                     equity_wording: bool = False) -> Dict[str, int]:
+                     equity_wording: bool = False,
+                     cash_wording: bool = False) -> Dict[str, int]:
         """Parsed rows -> canonical columns.
 
         This is what makes the output a PANEL rather than a pile. Keyed on the OCR text, the
@@ -3153,11 +3326,12 @@ class FinancialsBuilder:
         out: Dict[str, int] = {}
         src: Dict[str, int] = {}                # column -> the parsed row that filled it
         for j, ri in self._align([k for _, _, k in rows], accounts, relax_totals,
-                                 annual_tail, equity_wording, st.report).items():
+                                 annual_tail, equity_wording, cash_wording,
+                                 st.report).items():
             self._claim(out, src, schema[j][0], rows[ri][0], rows[ri][1])
 
         self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail,
-                     merged_tail, equity_wording)
+                     merged_tail, equity_wording, cash_wording)
         self._split_fx_from_balance(out, src, st, schema)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
@@ -3410,6 +3584,7 @@ class FinancialsBuilder:
     def _align(self, keys: List[str], accounts: List[str],
                relax: bool, annual_tail: bool = False,
                equity_wording: bool = False,
+               cash_wording: bool = False,
                report: Optional[str] = None) -> Dict[int, int]:
         """Best monotonic alignment of parsed rows onto schema lines -> {schema index: row index}.
 
@@ -3445,7 +3620,8 @@ class FinancialsBuilder:
                 if cand > best:
                     best, b = cand, 1
                 s = self._label_score(accounts[j - 1], key, relax, annual_tail,
-                                      equity_wording=equity_wording, report=report)
+                                      equity_wording=equity_wording,
+                                      cash_wording=cash_wording, report=report)
                 if s >= self.SCHEMA_MATCH:
                     cand = fp[j - 1] + s
                     if cand > best:
@@ -3754,7 +3930,8 @@ class FinancialsBuilder:
                 relax_merged_seam: bool = False,
                 annual_tail: bool = False,
                 merged_tail: bool = False,
-                equity_wording: bool = False) -> None:
+                equity_wording: bool = False,
+                cash_wording: bool = False) -> None:
         """Re-match the subtotals without regard to position.
 
         The ordered walk drifts. Once it has advanced past a column, a row that belongs there
@@ -3803,10 +3980,12 @@ class FinancialsBuilder:
                 r = max(self._label_score(a, cand, relax, annual_tail,
                                           edge_containment=True,
                                           equity_wording=equity_wording,
+                                          cash_wording=cash_wording,
                                           report=st.report) for cand in keys)
                 r_cut = max([self._label_score(a, cand, relax, annual_tail,
                                                edge_containment=True, cut_fragment=True,
                                                equity_wording=equity_wording,
+                                               cash_wording=cash_wording,
                                                report=st.report)
                              for cand in tails], default=0.0)
                 from_cut = r_cut > r
@@ -3933,7 +4112,8 @@ class FinancialsBuilder:
                                                   merged_tail)
                     held = max(self._label_score(held_account[other], c, relax, annual_tail,
                                                  edge_containment=True,
-                                                 equity_wording=equity_wording)
+                                                 equity_wording=equity_wording,
+                                                 cash_wording=cash_wording)
                                for c in o_keys)
                     if held > r:
                         continue
@@ -4362,6 +4542,88 @@ class FinancialsBuilder:
             hits = [c for c in cands if c != total and self._equal(total, c)]
             # ⚠️ EXACTLY ONE, never the nearest: two candidates inside the tolerance means the
             # subsets cannot be told apart and the reading stays as it was.
+            if len(hits) == 1:
+                row[col] = hits[0]
+                return
+
+    @staticmethod
+    def _is_truncation(damaged: int, whole: int) -> bool:
+        """Is `damaged` what survives of `whole` when a box of its digits went missing?
+
+        `GTR-1`. The failure this tests for is mechanical and leaves a signature: the recogniser
+        emits one printed figure as several boxes, `_split_number_runs` apportions the run by
+        character offset, and the piece that lands on the value column becomes the row. That
+        piece is a CONTIGUOUS RUN OF THE PRINTED DIGITS — GAS Q2-2021's `TỔNG NGUỒN VỐN` reads
+        216,601 out of 74,826,437,216,601 (the tail) and its Q2-2020 reads 47,956,383 out of
+        67,147,956,383,291 (the middle). A digit the recogniser read WRONG does not do this,
+        which is what separates a truncation from every other damaged reading and is why this
+        is a containment test rather than a magnitude one.
+
+        ⚠️ **IT IS A SECONDARY GUARD AND NOT THE EVIDENCE** — see `_total_from_counterpart`,
+        whose lock is the counterpart total. Containment on its own would be far too weak.
+        """
+        d, w = str(abs(damaged)), str(abs(whole))
+        return (len(d) >= FinancialsBuilder.TRUNCATION_MIN_DIGITS
+                and len(d) < len(w) and d in w)
+
+    def _total_from_counterpart(self, st: Statement, row: Dict[str, int]) -> None:
+        """Repair a grand total a lost box TRUNCATED, from the section sum the form prints.
+
+        `GTR-1`, 2026-09-07. ⚠️ **`total_from_section` CANNOT REACH THIS AND THE REASON IS ITS
+        THIRD LOCK**: that repair requires the rebuilt sum to be within `_equal` of the damaged
+        reading, because a company SEAL covers digits without removing them and the magnitude
+        survives. A LOST BOX removes them. GAS Q2-2021 reads `TỔNG CỘNG NGUỒN VỐN` as **216,601
+        against a printed 74,826,437,216,601** — eight orders out — so the lock that makes
+        `SEAL-2` safe is exactly what refuses this, at every one of the 112 layers.
+
+        ⚠️ **THE EVIDENCE IS THE COUNTERPART TOTAL, AND IT IS NOT THIS FUNCTION'S ARITHMETIC.**
+        The rebuilt figure must equal, TO THE ĐỒNG, the OTHER grand total of the same balance
+        sheet — a figure read off a DIFFERENT PAGE in a different OCR pass. Measured on GAS
+        Q2-2021 at `onnx@300`: `c_no_phai_tra` 26,981,135,438,346 (via `merged_tail`'s text
+        fallback, `CRP-1`) + `d_von_chu_so_huu` 47,845,301,778,255 = **74,826,437,216,601**,
+        which is `tong_cong_tai_san` to the last digit. Three readings of two printed numbers
+        agreeing is the claim; the containment test then says the damaged reading is a PIECE of
+        that answer rather than a different number.
+
+        ⚠️ **AND WHAT `reconcile` DOES AFTERWARDS IS TRIVIAL — SAY SO RATHER THAN COUNT IT**
+        (§5 rule 21). Writing this column makes `assets == resources` true by construction, and
+        makes the NGUỒN VỐN section sum true by construction as well. Neither is a check any
+        more. The whole of the evidence is above, taken BEFORE the write; a reader auditing one
+        of these cells reads the layer name, not the reconcile verdict.
+
+        Four locks:
+
+          1. the total must be PRESENT and DAMAGED — an absent grand total is a statement that
+             was not read, exactly as in `_total_from_section`;
+          2. every part must resolve, through the same text fallback `reconcile`'s own anchors
+             use — `c_no_phai_tra` maps on no `corp` chart (`CRP-1`);
+          3. the counterpart total must resolve, and the rebuilt sum must equal it EXACTLY.
+             ⚠️ Not `_equal`: that tolerance is ±1e-5, which at 74 tn is ±748 million, and this
+             repair is claiming an identity rather than measuring an agreement;
+          4. exactly ONE subset of the optional terms may satisfy 3 — never the nearest, the
+             same rule `_total_from_section` follows for the same reason.
+        """
+        # ⚠️ Gated by the caller on `report == BALANCE_SHEET`, like `_total_from_section`, and
+        # for the same reason: `SECTION_SUMS`' columns exist on no other chart, so a stray call
+        # is a no-op rather than a wrong answer.
+        for parts, optional, col in self.SECTION_SUMS:
+            damaged = row.get(col)
+            counterpart = self.COUNTERPART_TOTAL.get(col)
+            if damaged is None or counterpart is None:
+                continue
+            canonical, text = counterpart
+            mirror = next((row[c] for c in canonical if row.get(c) is not None), None)
+            if mirror is None:
+                mirror = st.find(*text)
+            if mirror is None or mirror == damaged:
+                continue
+            got = [row.get(c) if row.get(c) is not None
+                   else st.find(*self.SECTION_PART_TEXT.get(c, ())) for c in parts]
+            if any(v is None for v in got):
+                continue
+            cands = self._section_candidates(sum(got), [row.get(c) for c in optional])
+            hits = [c for c in cands
+                    if c != damaged and c == mirror and self._is_truncation(damaged, c)]
             if len(hits) == 1:
                 row[col] = hits[0]
                 return

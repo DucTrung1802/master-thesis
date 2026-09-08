@@ -1869,12 +1869,19 @@ edit a copy and report success; `run()` compares the resolved data root against 
 and turns the flag off with a line in the log. The write belongs to whoever holds the real
 `raw_data/` — `kgpu pull`, which merges after the folder comes home.
 
-⚠️ **`OVERWRITE` REACHES THE MERGE, NOT ONLY THE PARSE.** Without that, a re-parse asked for
-explicitly would come home and be refused by `force_differs` — the run would do the work and
-disk would keep the old figure, which is the worst of both answers. `kgpu`'s `merge_statements`
-and `merge_latest` both read it off `cfg.parameters["OVERWRITE"]`, and `config._validate`
-refuses a job whose `data.documents.overwrite` disagrees with it, the same way it already
-refuses a quarters mismatch: one decides what is UPLOADED, the other what is OPENED.
+⚠️ **`OVERWRITE` REACHED THE MERGE AND NO LONGER DOES — REVERSED 2026-09-08.** The old
+argument was that *"a re-parse asked for explicitly would come home and be refused by
+`force_differs` — the run would do the work and disk would keep the old figure"*, and
+`merge_statements` / `merge_latest` both read it off `cfg.parameters["OVERWRITE"]`. **It was
+about the wrong flag.** `OVERWRITE` says which quarters to PARSE; replacing a good `pdf` row on
+disk that DISAGREES with this run is a judgement about the FILING, and the control notebook
+already routes it to `REPAIR` in as many words — *"`OVERWRITE = True` IS THE WRONG TOOL FOR
+THIS"*, with the ACB measurement beside it, where it would have replaced a 33-item balance
+sheet with a 19-item one. So the two disagreed and the pull was quietly winning.
+**`kgpu merge <job> --overwrite` is the deliberate way past DIFFERS now**, and
+`pdf_ocr_batch.merge_batch(force_differs=...)` is the only place it is spelled. `_validate`
+still refuses a job whose `data.documents.overwrite` disagrees with the parameter: one decides
+what is UPLOADED, the other what is OPENED.
 
 ### ⚠️ WHICH TOOL STARTS A TICKER — `pdf_ocr_job` did NOT until 2026-09-06 (`BND-1`)
 
@@ -1944,6 +1951,15 @@ python -m kgpu merge <job> --dry-run    # every decision printed, nothing touche
 ⚠️ **WRITING IS THE DEFAULT since 2026-08-29, by request** — in the library (`merge_run`), on
 the job (`merge_statements`), in the notebook (`MERGE_INTO_CSV`) and in the CLI. What keeps it
 honest is the three refusals and the pre-merge backup, not a second command.
+
+⚠️ **AND SINCE 2026-09-08 IT IS NOT A DEFAULT BUT THE ONLY BEHAVIOUR** (`MRG-2`). `pdf_ocr.job`
+sets `merge_statements=True` unconditionally — the notebook's `MERGE_INTO_CSV` no longer reaches
+it and is read only by the LOCAL one-process path — and `run_batch` runs the §9 sweep itself
+before returning, so a quarter it HELD does not wait for a human. Both writers are
+`pdf_ocr_batch.merge_batch`: one period per call, oldest first, unforced. **What made the flag
+indefensible was measured on HOSE_MBB**: 158 minutes of T4, 176 of 186 cells accepted, **0
+written**, because the flag was off (as the notebook advised) and the process holding the
+notebook died after the pull.
 
 ⚠️ **THE MERGE RUNS HERE AND COULD NOT RUN ANYWHERE ELSE.** A Kaggle kernel writes
 `/kaggle/working` and exits; the statement CSVs are on this disk. "The Kaggle run upserts the
@@ -3298,6 +3314,138 @@ cash flows, and they are settled for the right reason.
 `test_cafef_condensed_disclosure.py`, `test_cafef_income_by_columns.py`, and four added to
 `test_cafef_code_column.py`), none needing a PDF, a network or an OCR engine.
 CLAUDE.md §6-2-sexsexagies.
+
+### ⚠️ 3n. A WORDING THE CHART DOES NOT CARRY REFUSED A WHOLE TICKER'S CASH FLOWS — `GCW-1` (GAS, 2026-09-07)
+
+`reconcile` REQUIRES a cash flow's closing balance (the fix that closed the 27 hollow cash flows
+above). The corp chart names VAS codes 60 and 70 *"Tiền và tương đương tiền đầu kỳ (60)"* and
+*"… cuối kỳ (70 = 50+60+61)"*. **HOSE_GAS prints "Tiền tồn đầu năm" and "Tiền tồn cuối năm"** — an
+older B03 phrasing for the same two lines, sharing almost no characters with the chart's:
+
+```
+tientoncuoinam  vs  tienvatuongduongtiencuoiky   ->  0.550     (SCHEMA_MATCH = 0.80)
+```
+
+So the closing line never maps and the WHOLE statement is refused. This is `JVW-1`'s shape one
+level down, at the cash flow: **a wording the chart does not carry, throwing away a statement that
+parsed correctly.**
+
+⚠️ **MEASURED OFF THE RUN FOLDERS AT NO OCR COST — 33 of GAS's 35 refused cash flows carry that
+reason**, 9 of them at every one of the 100 layers tried, and `tien_ton_cuoi_nam` is the printed
+label on **28 of 35** (variants seen: `tien_va_tuong_duong_tien_cuoi_nam`, `tieu_ton_cuoi_nim`,
+`rot_duong_tien_cuoi_nam`, and one merged with a prior line's words). It is the single largest
+cause of that ticker's 59 open cells — more than the other four causes combined.
+
+#### ⚠️ The opening balance is the one thing the closing alias must never answer
+
+The two lines are the same three words with one different, so the alias is very nearly ambiguous
+by construction: **`tientoncuoinam` scores 0.815 against the OPENING row `tien_ton_dau_nam`, over
+the 0.80 bar.** That is `ANNUAL_WORDING`'s BID Q4-2016 failure arriving by a second route — it
+measured 0.804, handed the closing slot the opening figure, and was caught only by `sane`'s
+equality gate. So the period word is a **HARD GATE** in the new branch and never a score: a row
+saying "đầu" cannot be the closing balance whatever it scores, refused outright rather than
+out-ranked, exactly as that block does it.
+
+#### ✅ The shape of the fix, and why it is additive
+
+`CASH_WORDING` (keyed on the WHOLE account, never a substring — `NST-1`'s argument, and
+`tienvatuongduongtiencuoiky` is a substring of nothing else on the chart), a `cash_wording`
+`ParseLayer` flag threaded through `_label_score` → `_align` / `_anchor` → `map_to_schema`
+defaulting **False** at every hop, and **five new layers at 108-112 of 112**.
+
+⚠️ **LAST IN THE CASCADE, AND THE POSITION IS THE WHOLE SAFETY ARGUMENT.** Offering an account a
+second name changes which row wins a slot, so it may only judge a statement every one of the 107
+layers before it refused. `is_strict` counts the flag; **the last strict layer is still position
+49**. No `pdf` row on disk can move — the cascade stops at the first acceptance, so reaching
+position 108 means nothing before it accepted. No extra OCR pass either: the flag is a per-layer
+post-step on cached words, so `ocr_key` is unchanged.
+
+#### The measurement, replayed over all 35 real row dumps with no OCR
+
+| | before | after |
+|---|---|---|
+| closing balance MAPPED | 2 / 35 | **32 / 35** |
+| `reconcile` passes it did not before | — | **30** |
+| OPENING figure landing in the CLOSING slot | — | **0** |
+
+⚠️ **30 RECONCILE PASSES IS NOT 30 CELLS — it is one gate opening, not a statement accepted**
+(§5 rule 21). Each still faces `sane`'s band, `_closing_breakdown` and `CBS-1`, and several of the
+layer-1 figures behind them are visibly damaged (Q1-2016's closing reads `190`). **What the fix
+removes is a false refusal that stopped the cascade from ever reaching those questions.** The
+end-to-end yield is **UNMEASURED** and recorded as such (§5 rule 2).
+
+⚠️ **The 3 it does not reach are OCR damage, not vocabulary**, and are untried rather than failed:
+Q2-2020's closing row is correctly labelled with its current-period figure read as `None`;
+Q3-2012's page dump ends at the FX line with no closing row at all; Q4-2010's reads
+`rot_duong_tien_cuoi_nam`. All three are a layer-1 read and 111 other layers get their own go.
+
+⚠️ **AND THE RUN THAT PRODUCED THIS EVIDENCE WAS NOT RUNNING TODAY'S PARSER.** `metadata.json`
+records it at `38bc1873+dirty`, finishing 09:22; `a812fe2b` (the MSN fixes) landed at 18:32 the
+same day. **The cascade was 100 layers then and is 112 now**, and twelve have never been tried on
+GAS: `tesseract@200` / `tesseract@400+relax`, `+codecol` (`MSO-5` — which answers two of its
+balance sheets by name) and `+cashword`. ⚠️ **A `git diff` from the wrong baseline said "no parser
+change since the run" and that reading was wrong** — take the commit from the run folder, never
+from the commit that reported the run.
+
+**1,199 tests pass**, 8 of them new (`test_cafef_cash_wording.py`), built from those row dumps and
+needing no PDF, no network and no OCR engine.
+
+### ⚠️ 3o. A LOST BOX TRUNCATES A GRAND TOTAL — `GTR-1` (GAS, 2026-09-07)
+
+**`_total_from_counterpart` is the repair; `_total_from_section` is the one that cannot reach
+it, and the reason is a lock rather than an oversight.**
+
+`SEAL-2`'s repair rebuilds a grand total from `440 = 300 + 400` and requires the sum to be
+within `_equal` of the DAMAGED reading. That lock is correct for the damage it was built on: a
+company seal covers digits without removing them, so the magnitude survives. **A lost box
+removes them.**
+
+```
+GAS Q2-2021  TỔNG CỘNG NGUỒN VỐN      216,601   printed 74,826,437,216,601   (the TAIL)
+GAS Q2-2020  TỔNG CỘNG NGUỒN VỐN   47,956,383   printed 67,147,956,383,291   (the MIDDLE)
+```
+
+Eight orders out, so `_equal` refuses, at every one of the 112 layers. ⚠️ **AND ESCALATION IS
+NOT A ROUTE**: 200 dpi refuses the statement as fragmented, 300 and 400 dpi as `assets !=
+liabilities + equity`, and no DPI converges — the digits are not covered, they are gone.
+
+⚠️ **THE EVIDENCE IS THE COUNTERPART TOTAL, AND IT IS TAKEN BEFORE THE WRITE.** The rebuilt
+figure must equal the OTHER grand total of the same balance sheet — a different page, a
+different OCR pass — **to the đồng**, not to `_equal` (1e-5 of 74 tn is ±748 million). Measured
+on Q2-2021 at `onnx@300`:
+
+```
+c_no_phai_tra    26,981,135,438,346   <- via merged_tail's text fallback (CRP-1)
+d_von_chu_so_huu 47,845,301,778,255
+                 ------------------
+                 74,826,437,216,601   == tong_cong_tai_san, read off the facing page
+```
+
+`_is_truncation` then requires the damaged reading to be a **contiguous run of the answer's
+digits** — the signature a lost box leaves and a misread digit does not (`30,377,343,376` is not
+a run of `60,377,343,375,858`, which is why GAS Q2-2017 stays refused). ⚠️ **The 3-digit floor
+is what keeps the `Mã số` column out**: `270` and `440` are inside almost every figure on the
+page, and admitting them would let the code column look like a truncation of the number beside it.
+
+⚠️ **WHAT `reconcile` SAYS AFTERWARDS IS TRIVIAL AND IS NOT COUNTED** (§5 rule 21). Writing the
+column makes `assets == resources` AND the NGUỒN VỐN section sum true by construction. Neither
+is a check any more; the whole of the evidence is the three-way agreement above. A reader
+auditing one of these cells reads the LAYER NAME, not the verdict.
+
+**Measured end to end on the real PDFs**: Q2-2021 → OK at 300/400 dpi, Q2-2020 → OK at all five,
+**Q2-2016 correctly still refused**. Five layers at 113-117 of 117, `is_strict` counts the flag,
+`max(strict)` is still 48 — and the latest layer any GAS statement was ever accepted at is **91**,
+so nothing on disk can move.
+
+⚠️ **THE FRAGMENTATION MESSAGE NAMES THE WRONG REPAIR, AND THAT IS THE WIDER LESSON HERE.**
+`split_figures` counts adjacent numeric boxes under `SPLIT_MAX_GAP = 4.5pt` that join
+well-formed. On GAS, **19 of 20 counted pairs are ONE box that lost a thousands separator** —
+`'304 809.430 862'`, `'3.170.949.624 222'` — which `_split_number_runs` had already apportioned
+by character offset, leaving the pieces `box_width / len(text)` apart: **3.58 to 4.47pt,
+measured**. The gate is reading the splitter's own output. It is still refusing a damaged
+reading, so it is not a false positive — but the escalation it implies (raise the DPI) cannot
+rejoin a separator that was never recognised, and `join_lost_separator` at positions 54-62 is
+what actually answers it. See `data-state.md` for the per-cell dump.
 
 ## 4. Source specialization (why 3 price sources)
 

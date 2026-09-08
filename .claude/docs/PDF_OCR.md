@@ -28,11 +28,20 @@
 writes `/kaggle/working` and exits; your `raw_data/` is on this machine. Its output is a run
 folder under `reports/pdf_ocr/` that **scores itself** against the CSVs already on disk.
 
-Since 2026-08-29 the *pull* **upserts that result into the statement CSVs automatically** —
-`MERGE_INTO_CSV = True` in the control notebook, `merge_statements=True` on the job, and
-`kgpu merge <job>` writes unless you pass `--dry-run`. Every merge takes a backup first, prints
-every changed cell, and refuses four things it cannot judge
+Since 2026-08-29 the *pull* **upserts that result into the statement CSVs automatically**, and
+⚠️ **since 2026-09-08 there is no flag that switches that off.** `pdf_ocr.job` sets
+`merge_statements=True` unconditionally and the control notebook no longer passes
+`MERGE_INTO_CSV` into it; `kgpu merge <job>` writes unless you pass `--dry-run`. Every merge
+takes a backup first, prints every changed cell, and refuses four things it cannot judge
 ([§6](#6-merging-a-recovered-quarter-into-raw_data)).
+
+⚠️ **THE MEASUREMENT THAT REMOVED THE FLAG: HOSE_MBB, 2026-09-08.** A 158-minute T4 round trip
+accepted **176 of 186 cells** and wrote **0**, because `MERGE_INTO_CSV` was off — the notebook
+recommended off — and the process holding the notebook died after the pull, so §9 never ran.
+`BND-1`'s third face: the parse is durable in the run folder, the CSV was never opened, and a
+green run says nothing about which. **The pull's merge is `pdf_ocr_batch.merge_batch` now** —
+one period at a time, oldest first, `force_differs` never passed — i.e. it IS §9, which is what
+left the flag with nothing to choose between.
 
 ⚠️ **A `LOCAL` RUN UPSERTS EACH QUARTER AS IT FINISHES, AND THAT IS THE INTERRUPTION
 GUARANTEE.** `FinancialsBuilder._write` renders to a `.tmp` and `os.replace`s it, and only the

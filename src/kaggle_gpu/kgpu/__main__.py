@@ -116,6 +116,16 @@ def main(argv: list[str] | None = None) -> int:
              "second command.",
     )
     parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="merge: replace a `pdf` row already on disk that DIFFERS from this run's "
+             "reading. ⚠️ IT LIFTS A REAL REFUSAL, and it used to be taken from the job's "
+             "own OVERWRITE — which says which quarters to PARSE and is a different "
+             "question. Read the DIFFERS report and decide against the FILING (a printed "
+             "subtotal, the next quarter's comparative column), never by preferring the "
+             "newer run.",
+    )
+    parser.add_argument(
         "--account",
         default=None,
         metavar="LABEL",
@@ -183,7 +193,8 @@ def _dispatch(args, cfg: JobConfig) -> int:
         # would refuse the very statements the run was launched to obtain.
         if args.force_empty_band:
             cfg = replace(cfg, merge_force_empty_band=True)
-        return runner.merge_latest(cfg, apply=not args.dry_run)
+        return runner.merge_latest(cfg, apply=not args.dry_run,
+                                   force_differs=args.overwrite)
     if args.command == "wait":
         return 0 if runner.wait(cfg) == "COMPLETE" else 1
     if args.command == "push":

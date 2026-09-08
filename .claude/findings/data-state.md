@@ -422,6 +422,90 @@ any `_page_kind` change), and **17 quarters have only a standalone filing**, rea
 
 ⚠️ **AND THE STANDING REQUEST-SHAPE IS §8's, NOT THE LOG'S**: *"OCR ticker `<SYM>` LOCAL|KAGGLE"*
 is a request for a PREPARED NOTEBOOK that then WAITS — never for a run. `.claude/docs/PDF_OCR.md` §1a.
+### ⚠️ MBB, 2026-09-08 — a BOOTSTRAP that finished, and the CSV that did not open: `MRG-2`
+
+**HOSE_MBB, template `bank`, no statement CSV on disk, 0 `pdf` cells of 186.** Kaggle T4,
+`ONNX_ONLY = True`, `ISOLATE_DOCUMENTS = True`, `OVERWRITE = False`, `FORCE_EMPTY_BAND = False`
+(the bootstrap no longer needs it — a filing that produced all three statements is written band
+or no band since 2026-09-06). Account chosen by `auto` on remaining hours: `lyductrung` (30.00 h)
+over `ductrung180200` (3.59 h), which is `ACC-1`'s guard doing its job against a ~4.0 h estimate.
+
+| the run | |
+|---|---|
+| status · wall clock | **COMPLETE** · **158.3 min**, 66 files pulled |
+| documents | **62** parsed of 66 quarters in the span Q4-2009..Q1-2026 |
+| engine errors / `VCR-1` | **0** — no document refused for a raised layer |
+| accepted | balance_sheet **57**, income_statement **61**, cash_flow **58** → **176 of 186 cells** |
+| filings with all three | **53** · two of three **8** · one of three **1** |
+| **statements that reached `raw_data/`** | **0**, until the sweep was run by hand the next command |
+
+⚠️ **THAT LAST ROW IS THE FINDING, AND IT IS `MRG-2`.** The parse was excellent and the three
+CSVs were never opened: `MERGE_INTO_CSV = False` (as the notebook itself advised), so the pull
+merged nothing, and the process holding the notebook died after the pull, so §9 never ran. The
+`K5` recovery — rebuild the `JobConfig`, assert its id against the running kernel, `runner.wait`
+then `runner.pull` — brought the folder home and merged nothing either. **`BND-1`'s third face:
+the parse is durable in the run folder, the CSV was never opened, and a green run says nothing
+about which.** The fix is in `MRG-2`; the measurement is this row.
+
+**Run by hand afterwards** (`merge_batch`, apply, one period at a time, oldest first):
+
+| the merge | |
+|---|---|
+| written | **152** — bs **53/53**, cf **53/53**, is **46/53** |
+| refused | **34** = 15 empty band (a filing that produced two of three) + 10 absent + 9 de-cumulation |
+| already on disk | 0 — nothing had ever been written for this ticker |
+
+⚠️ **EVERY ONE OF THE 152 PASSED NO MAGNITUDE GUARD** (`BND-1`): this ticker had no `pdf` history
+for `seed_history` to rebuild a band from, so `sane` failed open on all 62 documents. Screen by
+arithmetic — `statement_screens.py`, and PDF_OCR.md §6 — before quoting any MBB figure.
+
+#### What MBB is still missing, and the two kinds are not the same work
+
+**4 quarters have no filing on disk at all** — `Q1-2010`, `Q2-2010`, `Q3-2010`, `Q1-2011`, i.e.
+**12 cells** no OCR can reach. They are the two holes at the start of the chain, and they are why
+`complete` will read **False** for MBB for ever. ⚠️ Read the cell count, not `complete`.
+
+**10 cells had a filing and were refused**, with the reason each recorded:
+
+| quarter | statement | recorded refusal (last layer) |
+|---|---|---|
+| Q2-2014 | balance_sheet | assets 188,570,294,373,690 ≠ L+E **7,387,243,988,483** |
+| Q4-2014 | balance_sheet | assets 200,489,173,221,701 ≠ L+E **4,604,174,657,397** |
+| Q2-2015 | balance_sheet | assets 204,409,466,000,000 ≠ L+E **7,695,968,000,000**; then `1 figure split across two boxes` at onnx@400 |
+| Q1-2020 | balance_sheet | assets 406,802,682,000,000 ≠ L+E **17,651,000,000** |
+| Q4-2018 | balance_sheet | `no total assets` |
+| Q2-2017 | income_statement | `only 2 rows parsed` (onnx@200), `only 1 rows parsed` (onnx@300) |
+| Q3-2017 · Q1-2018 · Q1-2024 | cash_flow | `no closing cash balance` |
+| Q4-2018 | cash_flow | `1 figure(s) split across two boxes` |
+
+⚠️ **THE FOUR UNBALANCED BALANCE SHEETS LOOK LIKE ONE DEFECT, NOT FOUR.** In three of them the
+`liabilities + equity` side is the size of **equity alone** (7.4 / 4.6 / 7.7 e12 against total
+assets of 1.9-2.0 e14), i.e. the **total-liabilities line was not captured** and the gate summed
+one vee. That is `GCW-1`'s shape exactly — *33 of GAS's 56 open cells were ONE wording* — so the
+next move is to render Q2-2014's balance-sheet page and read the label, not to spend another
+cascade. Q1-2020 is a different animal: its L+E reads **17.6 e9**, four orders of magnitude out.
+
+⚠️ **AND THE 9 REFUSED INCOME STATEMENTS ARE A KNOCK-ON, NOT A PARSE FAILURE.** Each parsed
+fine and is cumulative, and the prior it must subtract is one of the 10 cells above — so the
+refusal names that prior, every time:
+
+| refused | waiting on | | refused | waiting on |
+|---|---|---|---|---|
+| Q4-2014 | Q2-2014 | | Q4-2020 | Q1-2020 |
+| Q4-2015 | Q2-2015 | | Q2-2024 | Q1-2024 |
+| Q4-2017 | Q2-2017 | | Q4-2024 | Q1-2024 |
+| Q2-2018 · Q4-2018 | Q1-2018 | | Q2-2020 | Q1-2020 |
+
+⚠️ **AND THE PRIOR IS NOT MISSING FROM THE RUN — IT IS ONE OF THE 15 THE MERGE HELD.** Q1-2018's
+income statement was ACCEPTED; its filing produced two statements of three, so the
+all-three-statements gate did not lift the empty band for that quarter and none of its three
+cells was written, which is what makes it `absent` on disk. The same is true of Q2-2014, Q2-2015,
+Q2-2017, Q1-2020 and Q1-2024. **So a second §9 pass with `FORCE_EMPTY_BAND = True` would write
+those 15 held cells and unblock most of these nine at the same time — and it lifts a real guard
+on a ticker that has no band at all**, so it is a judgement about those eight filings and stays
+the operator's (`BND-1`, PDF_OCR.md §6). Not done: the arithmetic screens have not been run over
+the 152 rows already written.
+
 #### ⚠️ MSN, 2026-09-07 — the gaps were REFUSALS, not documents, and two of them are now fixed
 
 ⚠️ **THE ROW ABOVE READS MSN 21/27 AND IS A MID-BOOTSTRAP MEASUREMENT.** A 60-document run on
@@ -661,6 +745,167 @@ argued** — and it is the case for lifting it anyway on a bootstrap: **the band
 so a re-parse of those two filings is now guarded by 84 `pdf` rows that did not exist this morning.
 ⚠️ **`GVR-3` is the one to remember**: a unit error passes every identity a statement can check
 on itself, so `unit` must be screened as its own column.
+
+### ⚠️ GAS, 2026-09-07 — 33 of 59 open cells were ONE WORDING, and it is now fixed: `GCW-1`
+
+⚠️ **NO OCR AND NO NETWORK WERE SPENT ON THIS.** Every figure below was read off the two run
+folders already on disk — `20260905-204946__hose_gas__pdf_ocr` (61 quarters) and
+`20260907-064620__hose_gas__pdf_ocr` (45 quarters, 2 h 36 m on a T4, 0 engine errors).
+
+**Where GAS stands:** template `corp`, **61 quarters filed, 16 complete, 124 `pdf` cells of 183**,
+**59 open**, 0 settled — 17 balance_sheet, 6 income_statement, 33 cash_flow, plus the 3 cells of
+`2022-Q2`, which is filed and carries no row in any of the three CSVs. The filing chain runs
+2008-Q4 → 2026-Q1 with 9 slots absent (2009-Q1..Q3, 2010-Q1..Q3, 2011-Q1..Q3); GAS listed in 2012
+and filed annually before that, so `missing` is the correct answer for those nine.
+
+⚠️ **THE TWO T4 RUNS RETURNED THE IDENTICAL VERDICT ON ALL 59 OPEN CELLS** — 56 `absent in this
+run`, 3 parsed with no `pdf` row to compare. Not one cell differs between them.
+
+#### The 59 open cells, classified from their own recorded refusals
+
+| cause | cells | what answers it |
+|---|---|---|
+| `reconcile: no closing cash balance` | **33** | ✅ **`GCW-1`, fixed 2026-09-07** — below |
+| `reconcile: N figures split across two boxes` | 21 | ⚠️ open — OCR damage, 15 bs · 4 is · 2 cf |
+| `reconcile: totals do not close` | 2 | ✅ `MSO-5` — **never tried on this ticker** |
+| `reconcile: operating profit does not close` | 1 | ◐ `JVW-2` aliases — never tried; 1 of 5 confirmed |
+| `no such statement on any page` | 2 | ⚠️ open — 2022-Q2 bs + is |
+
+⚠️ **AND THE PARSER THE RUN USED IS NOT THE PARSER ON DISK. A FIRST READING OF THIS GOT IT
+WRONG, MEASURED FROM THE WRONG BASELINE.** `git diff 69ea448a..HEAD -- src/web_scraper/` is empty
+and was quoted as *"no parser change since the run"* — but `metadata.json` records the run at
+**`38bc1873+dirty`** and it finished at 09:22, while `a812fe2b` (the MSN fixes) landed at 18:32
+the same day. **The cascade was 100 layers then and is 112 now**, and twelve have never been tried
+on GAS: `tesseract@200` / `tesseract@400+relax` (4, 7), `+codecol` (103-107, `MSO-5`) and
+`+cashword` (108-112, `GCW-1`). Two of GAS's five refusal classes are what those answer.
+
+#### `GCW-1` — the wording, and why it cost 33 cells
+
+The corp chart of accounts names VAS codes 60 and 70 *"Tiền và tương đương tiền đầu kỳ (60)"* and
+*"… cuối kỳ (70 = 50+60+61)"*. **GAS prints "Tiền tồn đầu năm" and "Tiền tồn cuối năm"** — an
+older B03 phrasing for the same two lines. They share almost no characters:
+
+```
+tientoncuoinam  vs  tienvatuongduongtiencuoiky   ->  0.550     (SCHEMA_MATCH = 0.80)
+```
+
+So the closing line never maps; `reconcile` **requires** a closing balance — the fix that closed
+the 27 hollow cash flows — so the entire statement is refused. `tien_ton_cuoi_nam` is the printed
+label on **28 of 35** documents and 33 of 35 carry the refusal, **9 of them at every one of the
+100 layers tried.** This is `JVW-1`'s shape one level down, at the cash flow.
+
+✅ **FIXED ADDITIVELY, AND NOTHING EXISTING CHANGED**: `CASH_WORDING` (keyed on the WHOLE account,
+never a substring — `NST-1`), a `cash_wording` ParseLayer flag, and **five new layers at 108-112
+of 112, LAST**, so only a statement every one of the 107 layers before them refused can reach
+them. `is_strict` counts the flag and the last strict layer is still position **49**. The flag
+defaults False on every path; the full suite is **1,199 passed**.
+
+⚠️ **THE OPENING BALANCE IS THE ONE THING THE CLOSING ALIAS MUST NEVER ANSWER, AND IT VERY NEARLY
+DOES.** `tientoncuoinam` scores **0.815** against the OPENING row's `tien_ton_dau_nam` — over the
+bar. That is `ANNUAL_WORDING`'s BID Q4-2016 failure (0.804, which handed the closing slot the
+opening figure and was caught only by `sane`) arriving by a second route, so **the period word is
+a HARD GATE in the new branch and never a score.**
+
+✅ **REPLAYED OVER ALL 35 REAL ROW DUMPS, NO OCR:**
+
+| | before | after |
+|---|---|---|
+| closing balance MAPPED | 2 / 35 | **32 / 35** |
+| `reconcile` passes it did not before | — | **30** |
+| OPENING figure landing in the CLOSING slot | — | **0** |
+
+⚠️ **30 RECONCILE PASSES IS NOT 30 CELLS — it is one gate opening, not a statement accepted**
+(§5 rule 21). Each still faces `sane`'s band, `_closing_breakdown` and `CBS-1`, and several
+layer-1 figures behind them are visibly damaged (Q1-2016's closing reads `190`). **What the fix
+removes is a false refusal that stopped the cascade ever reaching those questions.** How many
+cells actually land is **UNMEASURED**, and is what the run measures (§5 rule 2).
+
+⚠️ **The 3 it does not reach are OCR damage, not vocabulary**, and are recorded as untried rather
+than failed: Q2-2020's closing row is correctly labelled with its current-period figure read as
+`None`; Q3-2012's page dump ends at the FX line with no closing row at all; Q4-2010's reads
+`rot_duong_tien_cuoi_nam`. All three are a layer-1 read, and 111 other layers get their own go.
+
+⚠️ **NOTHING FROM THIS TICKER MAY BE QUOTED AS A FUNDAMENTAL** — `corp` template, so `CRP-1` /
+`TPL-1` apply in full whatever the parse quality. ⚠️ **And bronze holds NO GAS ROW AT ALL**: the
+124 cells on disk have never been ingested (§5 rule 11).
+
+### ⚠️ GAS, 2026-09-07 (second pass) — the "59 open cells" was 56, and 19 of 20 "split boxes" were ONE box
+
+⚠️ **TWO OF THE NUMBERS THE SECTION ABOVE USES ARE WRONG, AND BOTH WERE WRONG IN THE SAME
+DIRECTION — they overstate the gap.** Measured off the same run folder plus the CSVs on disk,
+still at no OCR cost:
+
+| the claim | measured |
+|---|---|
+| "59 open cells" | **56.** Three of the 59 refusals land on a cell whose row on disk already reads `source='pdf'` — a refusal on a re-parse is not a gap. ⚠️ **A REFUSAL IS A VERDICT ON ONE READING, NOT ON THE CELL** |
+| the gaps by statement | **34 cash flow · 18 balance sheet · 4 income statement.** Only **Q2-2022** has no row at all; the other 55 carry `source='missing'`, which is the correct answer until a filing produces one (§5 rule 24) |
+
+**And the fragmentation class is not what its message says.** `reconcile` refuses with `N
+figure(s) split across two boxes` on 45 of the 56, **24 of them at exactly ONE figure**. The
+pairs were dumped for 14 cells at their minimum-fragment layer — one page of OCR each, no
+cascade — and the raw pre-splitter boxes read:
+
+| what the gate counts | what the recogniser actually emitted |
+|---|---|
+| `'304'` + `'809.430'` | `'304 809.430 862'` — ONE box, a printed 304.809.430.862 |
+| `'3.170.949.624'` + `'222'` | `'3.170.949.624 222'` |
+| `'334.970'` + `'244'` | `'334.970 244'` — and `'334.970.244'` reads WHOLE in the next column of the same row |
+| `'74.826'` + `'437'` | `'74.826'` + `'437 216,601'` — the one genuine two-box split of the twenty |
+
+⚠️ **19 OF 20 COUNTED PAIRS ARE ONE BOX THAT LOST A THOUSANDS SEPARATOR**, split into pieces by
+`_split_number_runs`, which apportions by character offset and leaves the pieces
+`box_width / len(text)` apart — **measured at 3.58 to 4.47pt against a `SPLIT_MAX_GAP` of 4.5**.
+The gate is reading the splitter's own output. It is still refusing a genuinely damaged reading,
+so this is not a false positive to be deleted — but **the escalation it asks for is the wrong
+one**: raising DPI cannot rejoin a separator the recogniser never saw (GAS Q4-2010's balance
+sheet counts 2 → 21 → 1 fragments at 200/300/400, which is noise, not convergence). The repair
+that answers it is `join_lost_separator`, and it is already in the cascade at positions 54-62.
+
+⚠️ **`GTR-1` — A LOST BOX TRUNCATES A GRAND TOTAL, AND `SEAL-2`'s REPAIR IS LOCKED OUT BY
+DESIGN.** GAS Q2-2021 reads `TỔNG CỘNG NGUỒN VỐN` as **216,601 against a printed
+74,826,437,216,601**; Q2-2020 as **47,956,383 against 67,147,956,383,291** — the tail in the
+first, the MIDDLE in the second. `total_from_section` requires the rebuilt sum to be within
+`_equal` of the damaged reading, because a SEAL covers digits and the magnitude survives; a lost
+box removes them, eight orders out, so the lock that makes `SEAL-2` safe is exactly what refuses
+this at all 112 layers. Fixed additively (`_total_from_counterpart`, five layers at 113-117 of
+117, `max(strict)` still 48). **The evidence is taken BEFORE the write**: at `onnx@300`
+`c_no_phai_tra` 26,981,135,438,346 + `d_von_chu_so_huu` 47,845,301,778,255 = **74,826,437,216,601**,
+equal to `tong_cong_tai_san` on the facing page **to the đồng**.
+
+| measured end to end on the real PDFs | verdict |
+|---|---|
+| Q2-2021 balance sheet | refused at every layer → **OK** at 300 and 400 dpi, 216,601 → 74,826,437,216,601 |
+| Q2-2020 balance sheet | refused at every layer → **OK** at all five, 47,956,383 → 67,147,956,383,291 |
+| Q2-2016 balance sheet | **still refused, correctly** — `77,021,885` is not a run of `59,526,287,021,889`'s digits |
+
+⚠️ **TWO CELLS, NOT EIGHTEEN**, and what `reconcile` says afterwards is trivially true by
+construction (§5 rule 21) — the claim is the three-way agreement above, not the verdict.
+
+⚠️ **AND THE OBVIOUS SECOND HALF OF THE IDEA WAS MEASURED AND REFUSED.** Eight balance sheets
+fail on `section sum does not close`, which looks like the same defect one level down — a
+truncated COMPONENT, rebuildable as `total − other part`. **It is not.** All eight were dumped
+at 200/300/400 dpi and every component came back a FULL 14-digit figure with the containment
+signature absent:
+
+| | A + B | printed total | gap |
+|---|---|---|---|
+| Q2-2013 | 48,541,572,943,966 | 49,122,286,048,449 | 580,713,104,483 |
+| Q2-2014 | 48,857,592,309,313 | 49,376,259,275,628 | 518,666,966,315 |
+| Q3-2013 | 47,795,326,318,852 | 48,356,717,253,633 | 561,390,934,781 |
+| Q4-2014 | 53,311,895,757,929 | 53,791,407,348,105 | 479,511,590,176 |
+
+The gaps are all ~1.1 % of the total, which is a shape, not a truncation. ⚠️ **The identity is
+not in doubt** — all **60** GAS balance sheets on disk close `A + B = T` exactly — so one of the
+three figures is misread in a way this pass did not identify. **Recorded as UNIDENTIFIED, not as
+absent and not as unfixable** (§5 rule 2). ⚠️ Q4-2008 is the lead: its two grand totals AGREE
+with each other and both move across DPI (…262… at 200, …362… at 300) while `A + B` stays fixed
+at 16,507,862,292,018 — so there the TOTAL is damaged and `_total_from_counterpart` cannot see
+it, because the counterpart is damaged identically.
+
+⚠️ **THE CODE COLUMN IS A THIRD CLASS AND IS UNTOUCHED**: Q3-2020 refuses with `assets 270 !=
+liabilities + equity 440` and Q1-2026 with `280 != 440` — the `Mã số` column read as the value
+(`MSO-4`). `_is_truncation`'s 3-digit floor is what keeps `GTR-1` from silently "repairing" one
+of these.
 
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 

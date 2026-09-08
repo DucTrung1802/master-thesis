@@ -395,10 +395,16 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
     no `force_empty_band` argument: on this path it would have nothing left to decide.
 
     ⚠️ **`merge_each` DOES NOT REPLACE THE SWEEP.** Quarters it holds back — two statements of
-    three, a document whose layers raised — are still on disk in the run folder and still
-    outside the CSVs, and `merge_batch` over the returned folders is what picks them up. Each
-    held quarter is named in the log as it happens (`held_periods`), because a quarter parsed
-    and not written is `BND-1`'s exact shape and silence is how it survives.
+    three, a document whose layers raised — are on disk in the run folder and outside the
+    CSVs until a `merge_batch` picks them up. Each held quarter is named in the log as it
+    happens (`held_periods`), because a quarter parsed and not written is `BND-1`'s exact
+    shape and silence is how it survives.
+
+    ⚠️ **SO THIS FUNCTION NOW RUNS THAT SWEEP ITSELF, BEFORE IT RETURNS** (2026-09-08, by
+    request) — `merge_each and merge_apply` only, so the write-nothing default is untouched.
+    It was the operator's job and it was being forgotten; the code at the end of the loop
+    carries the measurement. A caller may still call `merge_batch` afterwards: everything
+    comes back `identical to the row already on disk`, which is a check that costs nothing.
 
     `progress` is an optional `utils.progress.Stages`, positioned on the stage this batch IS.
     Given one, every line here comes out as `xx.x% - <task> - <sub> - <detail>` and the overall
@@ -520,11 +526,34 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
                 f"(`BND-1`).")
             say("   Screen those figures by arithmetic — two statements agreeing on one "
                 "figure, a printed subtotal closing — before quoting any of them.")
+    if merge_each and merge_apply and folders:
+        # ⚠️ **THE SWEEP RUNS HERE, AT THE END OF THE RUN, AND IT IS NOT AN EXTRA STEP THE
+        # OPERATOR MAY FORGET** (added 2026-09-08, by request). `merge_each` writes a quarter
+        # the moment its filing has produced all three statements and HOLDS every other one —
+        # a filing that produced two of three, a quarter whose span operand landed later —
+        # and those held quarters were reaching the CSVs only if somebody afterwards ran §9
+        # of the control notebook by hand. That is `BND-1` wearing its third face: the parse
+        # is durable in the run folder, the CSV was never opened, and a green run says nothing
+        # about which. HOSE_MBB, 2026-09-08: a 158-minute T4 round trip accepted 176 of 186
+        # cells and wrote 0, because the process holding the notebook died after the pull.
+        # ⚠️ It is the SAME call §9 makes and it changes no verdict: `force_differs` is not
+        # passed, so what `merge_each` already wrote comes back `identical to the row already
+        # on disk` — a re-plan against disk, which is a CHECK — and what it held is what this
+        # writes. `force_empty_band` is not passed either: `merge_batch` lifts the band only
+        # for a quarter whose filing produced all three statements, which is the gate
+        # `merge_each` itself applied, so the two writers cannot disagree about one quarter.
+        say("")
+        say("sweep — the quarters `merge_each` HELD, one period at a time, oldest first")
+        _tally = merge_batch(folders, apply=True, log=say)
+        if _tally["skipped"]:
+            say(f"⚠️ {_tally['skipped']} statement(s) are still REFUSED and stay outside the "
+                f"CSVs — the reasons are the `skip` lines above, and each is a judgement "
+                f"about THAT filing.")
     return folders
 
 
 def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
-                force_empty_band: bool = False,
+                force_empty_band: bool = False, force_differs: bool = False,
                 reports: Optional[Sequence[str]] = None,
                 log: Optional[Callable[[str], None]] = None) -> Dict[str, int]:
     """Upsert the batch's run folders — ONE PERIOD PER CALL, OLDEST FIRST, UNFORCED.
@@ -542,6 +571,14 @@ def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
 
     ⚠️ **ONE BACKUP PER TICKER**, taken by the first call that actually writes — seventy
     timestamped copies of three CSVs answer "what did this change?" worse than one.
+
+    ⚠️ **`force_differs` DEFAULTS OFF AND EVERY AUTOMATIC CALLER LEAVES IT OFF** (added
+    2026-09-08, when `kgpu.runner.merge_statements` was rewritten onto this function). It
+    exists so the one deliberate caller — `kgpu merge --overwrite`, an operator who has read
+    the DIFFERS report and decided against the FILING — has a way past it. ⚠️ **It is NOT
+    wired to a run's `OVERWRITE`**: that flag says which quarters to PARSE, and replacing a
+    good `pdf` row already on disk is a different judgement with its own scoped tool
+    (`REPAIR`). The control notebook says so in as many words, and the pull used to disagree.
     """
     from web_scraper import pdf_ocr_merge
 
@@ -579,6 +616,7 @@ def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
         report = pdf_ocr_merge.merge_run(
             folder, apply=apply, periods=[period], reports=reports,
             force_empty_band=force_empty_band or period in complete[folder],
+            force_differs=force_differs,
             backup=ticker not in backed, quiet=True)
         for line in report.lines()[1:]:
             say("  " + line.strip())
