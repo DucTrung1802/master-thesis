@@ -907,6 +907,61 @@ liabilities + equity 440` and Q1-2026 with `280 != 440` — the `Mã số` colum
 (`MSO-4`). `_is_truncation`'s 3-digit floor is what keeps `GTR-1` from silently "repairing" one
 of these.
 
+### ⚠️ HPG, 2026-09-09 — six parser defects, 170 → 192 of 195 cells, and one new cell that is WRONG
+
+**What was run.** Every quarter HPG had a gap in, 19 of them, through the full 129-layer cascade
+(`pdf_ocr_batch.run_batch`, `merge_each=True`), after six fixes measured one at a time. Then the
+held quarters through the end-of-run merge sweep.
+
+| | before | after |
+|---|---|---|
+| `pdf` cells | 170 / 195 | **192 / 195** |
+| balance_sheet | 65 / 65 | 65 / 65 |
+| income_statement | 50 / 65 | **65 / 65** |
+| cash_flow | 55 / 65 | **62 / 65** |
+| quarters with a gap | 19 | **3** |
+
+**The six defects, each measured before it shipped** — `ISSUES.md` carries the evidence per code:
+
+| code | what it was | what it cost |
+|---|---|---|
+| `VAS-4` | the pre-2015 income-statement title also printed **abbreviated** ("SXKD") | the statement page scored 0.762 and classified as nothing, so the P&L was read **off the NOTES**, which quote the title verbatim (1.000) |
+| `SGB-1` | the **minus sign** returned as a box of its own | blocked `join_digits`; 24 of Q1-2014's 26 cash-flow fragments were the eight lines whose sign is its own box |
+| `SGB-2` | the lost thousands separator can be the **head's own** (`'1954 683 502'`) | 21 of the 39 fragments surviving `join_digits` across six 2011-2015 filings |
+| `EQU-1` | VAS form **B04-DN** (changes in equity) swept into the P&L | FY-2011 pages 10-11, 312 and 314 numbers, a five-column equity grid — Q4-2011 `missing` since the ticker was first parsed |
+| `NSB-1` | a **sub-numbered note** (`28.1`) measured as a three-digit figure | kept the whole Thuyết minh column; FY-2009's P&L read `doanh_thu_hoat_dong_tai_chinh = 28` |
+| `TSM-1` | `_merge_split_figures` never ran on the **Tesseract** path | the split GATE runs on every engine; Q1-2022's P&L is only visible to Tesseract and was refused for boxes nothing would join |
+
+**Cash-flow fragments at `onnx@200`, before → after** (the gate refuses at any count above zero):
+
+| Q1-11 | Q3-11 | Q1-12 | Q3-12 | FY-12 | Q1-13 | Q3-13 | Q1-14 | Q3-14 | Q1-15 |
+|---|---|---|---|---|---|---|---|---|---|
+| 3 → **0** | 15 → 7 | 10 → 2 | 8 → **0** | 0 → **0** | 2 → **0** | 11 → 7 | 3 → 3 | 28 → 12 | 9 → **0** |
+
+Every one of those filings was at **100-200+** before `SGB-1`. The three still `missing` — Q3-2011,
+Q1-2012, Q3-2014 — carry OCR damage no grouping repairs: a two-digit group where a thousands group
+belongs, a nine-digit head, a bracket mid-run. **`missing` is the correct answer for those.**
+
+⚠️ **AND ONE OF THE 22 NEW CELLS IS WRONG — `DPC-2`, found by the hand screen and not by a gate.**
+HPG's Q1-2013 prints "Quý I" beside "Lũy kế từ đầu năm" — the same three months — and column 0
+carries a spurious leading `3` on two rows. On disk now: net revenue **33.934.269.351.599** and cost
+of sales **33.222.647.918.547**, where the clean column reads 3.934.269.351.599 and
+3.242.647.918.547. **The page settles it**: the printed gross profit is 691.621.433.053 and the
+clean pair differs by **one đồng**, while column 0's pair gives 711.6 bn. `_first_value` drops a
+cell the duplicate column contradicts — but only under a `+dup` LAYER, and `onnx@200+dup` was run
+on this filing and **accepted it with the wrong figure**, so `_duplicate_period` does not fire here.
+⚠️ Every other Q1 in the ticker (2011, 2014, 2015) reads its duplicate columns in **agreement**.
+
+⚠️ **WHAT THE RUN DID NOT DAMAGE, CHECKED RATHER THAN ASSUMED.** Diffed against `HEAD`: the balance
+sheet changed **one string** (Q1-2013's `method`) and no figure; the cash flow gained seven rows and
+changed none. No row already reading `pdf` was overwritten with a different number.
+
+⚠️ **`NCP-1` came out of this and is bigger than HPG**: **211 of 2,718 accepted statements across
+every parsed ticker have NON-CONTIGUOUS pages** — the statement, then a notes page that quotes its
+title. All 12 affected HPG documents were re-read with `notes_boundary` first: **nine give identical
+values and three differ only by a value the notes ADDED**, never one they changed. The other seven
+tickers are unmeasured, so the default is left alone.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

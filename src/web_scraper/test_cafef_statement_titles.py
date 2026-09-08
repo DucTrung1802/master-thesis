@@ -51,6 +51,34 @@ SPLIT_COLUMN_HEADINGS = ("CONG TY CP PHAT TRIEN DAU TU CONG NGHE FPT\n"
                          "STT\nTAI SAN\nMa \nso \nThuyet \nminh\nSo cuoi quy\n")
 
 
+# HPG Q1-2014 page 4, header block, exactly as `onnx@200` reads it — OCR damage included
+# ("BÁO CẢO" for "BÁO CÁO"). This is the real income statement, and the page the spelt-out
+# needles score 0.762 against.
+HPG_SXKD_INCOME = ("E\n"
+                   "BÁO CẢO KẾT QUẢ HOẠT ĐỘNG SXKD HỢP NHẤT\n"
+                   "QUÝ 1 NĂM 2014\n"
+                   "Đơn vị tính: Đồng\n"
+                   "Mã Thuyết Luỹ kế từ đầu năm đến Luỹ kế từ đầu năm đến\n")
+
+# …and page 22, note VI, which quotes the statement's title verbatim. This is the page the
+# income statement was read off while page 4 was invisible.
+HPG_NOTE_VI = ("CÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT\n"
+               "VI- THÔNG TIN BỔ SUNG CHO CÁC KHOẢN MỤC TRÌNH BÀY TRONG BÁO CÁO KẾT\n"
+               "QUẢ HOẠT ĐỘNG KINH DOANH\n"
+               "Từ 1/1/2014 đến Từ 1/1/2013 đến\n"
+               "25- Tổng doanh thu bán hàng và cung cấp dịch vụ\n")
+
+# The same filing's other two statements — pages 2 and 5.
+HPG_BALANCE = ("CÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT\n"
+               "BẢNG CÂN ĐỐI KẾ TOÁN HỢP NHẤT\n"
+               "TẠI NGÀY 31 THÁNG 3 NĂM 2014\n"
+               "Đơn vị tính: Đồng\n")
+HPG_CASH = ("CÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT\n"
+            "BÁO CÁO LƯU CHUYỂN TIỀN TỆ\n"
+            "(Theo phương pháp gián tiếp) (?)\n"
+            "QUÝ 1 NĂM 2014\n")
+
+
 def _parser(**flags):
     p = PdfParser.__new__(PdfParser)          # no OCR engine, no models, no PDF
     p.loose_form_code = False
@@ -94,6 +122,45 @@ def test_a_cash_flow_page_is_not_stolen_by_the_longer_needle():
             "BAO CAO LUU CHUYEN TIEN TE\n"
             "Theo Phuong phap gian tiep\n")
     assert _parser()._page_kind(text)[0] == CASH_FLOW
+
+
+# ── VAS-4 ─────────────────────────────────────────────────────────────────────
+
+def test_the_abbreviated_pre_2015_title_is_recognised():
+    """⚠️ HPG heads every consolidated filing 2009-2015 with `SXKD`, the Decision 15/2006
+    wording CONTRACTED. `VAS-3`'s needle is the spelt-out form and does not reach it."""
+    assert _parser()._page_kind(HPG_SXKD_INCOME)[0] == INCOME_STATEMENT
+
+
+def test_and_the_spelt_out_needles_really_did_miss_it():
+    """0.762 against a bar of 0.80 — the measurement the needle exists for, not a guess."""
+    p = _parser()
+    ns = p.norm("\n".join([l for l in HPG_SXKD_INCOME.splitlines() if l.strip()]
+                          [:p.HEADER_LINES])).replace(" ", "")
+    assert p._title_score(ns, ["ketquahoatdongkinhdoanh"]) < p.TITLE_MATCH
+    assert p._title_score(ns, ["ketquahoatdongsanxuatkinhdoanh"]) < p.TITLE_MATCH
+    assert p._title_score(ns, ["ketquahoatdongsxkd"]) == 1.0
+
+
+def test_the_notes_page_that_read_as_the_income_statement_instead():
+    """⚠️ WHAT THE MISS ACTUALLY COST. HPG's note VI quotes the statement title VERBATIM, so
+    with the real page invisible the income statement was read off pages 22-24 — 39 rows of
+    note tables, `no profit before tax` on all 117 layers. The note still scores 1.000 here:
+    it is `_drop_after_notes` that removes it, and that needs the real page to be classified
+    FIRST, which is what this needle does."""
+    p = _parser()
+    ns = p.norm(HPG_NOTE_VI).replace(" ", "")
+    assert p._title_score(ns, p.HEADING[INCOME_STATEMENT]) == 1.0
+
+
+def test_the_shorter_needle_does_not_steal_a_balance_sheet_or_a_cash_flow():
+    """⚠️ A SHORTER NEEDLE *CAN* STEAL A PAGE, unlike `VAS-3`'s longer one — so the two
+    statements it sits closest to are asserted, not assumed."""
+    p = _parser()
+    for text, want in ((HPG_BALANCE, BALANCE_SHEET), (HPG_CASH, CASH_FLOW)):
+        ns = p.norm(text).replace(" ", "")
+        assert p._title_score(ns, ["ketquahoatdongsxkd"]) < p.TITLE_MATCH
+        assert p._page_kind(text)[0] == want
 
 
 # ── NOT-2 ─────────────────────────────────────────────────────────────────────

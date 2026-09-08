@@ -49,6 +49,19 @@ FPT_GIAI_TRINH = (
     "Tong loi nhuan ke toan truoc thue 2.908.621 2.429.150 479.470 19,7%\n"
 )
 
+# `EQU-1` — the header block of page 10 of HPG's FY-2011 audited consolidated filing, as
+# `onnx@200` reads it. VAS form B04-DN, the FOURTH statement, printed between the income
+# statement (page 9) and the cash flow (page 12) and carrying 312 numbers of its own.
+HPG_EQUITY = (
+    "Công ty Cổ phần Tập đoàn Hòa Phát và các công ty con\n"
+    "Báo cáo thay đổi vốn chủ sở hữu hợp nhất cho năm kết thúc ngày 31 tháng 12 năm 2011\n"
+    "Các thuyết minh đính kèm là bộ phận hợp thành của báo cáo tài chính hợp nhất này\n"
+    "9\n"
+    "Vốn cổ phần\n"
+    "VND\n"
+    "Thặng dư\n"
+)
+
 # The income statement's own continuation page — no such heading, and it must still be absorbed.
 IS_CONTINUATION = (
     "CONG TY CO PHAN FPT\n"
@@ -164,3 +177,48 @@ def test_the_predicate_itself():
     p = _parser()
     assert p._is_supplement({"text": FPT_GIAI_TRINH})
     assert not p._is_supplement({"text": IS_CONTINUATION})
+
+
+# ── EQU-1: the statement of changes in equity ─────────────────────────────────
+
+def test_the_equity_statement_is_not_absorbed_into_the_income_statement():
+    """⚠️ VAS form B04-DN is the FOURTH statement and this parser extracts three, so it carries
+    no needle and reads as an unidentified TABLE — 312 numbers of one. HPG's FY-2011 income
+    statement came out as pages 9-11, its two columns mis-clustered against a five-column
+    equity grid, and was refused `no profit before tax` on every layer."""
+    pages = _pages([(INCOME_STATEMENT, "BAO CAO KET QUA HOAT DONG KINH DOANH HOP NHAT"),
+                    (None, HPG_EQUITY)])
+    _parser()._fill_continuations(pages)
+
+    assert _kinds(pages) == [INCOME_STATEMENT, None]
+
+
+def test_its_own_continuation_page_is_not_absorbed_either():
+    """HPG prints it over two pages, the second headed `(tiếp theo)`. The run ended at the
+    first, so the second is never offered to the income statement."""
+    pages = _pages([(INCOME_STATEMENT, "BAO CAO KET QUA HOAT DONG KINH DOANH HOP NHAT"),
+                    (None, HPG_EQUITY),
+                    (None, HPG_EQUITY.replace("năm 2011", "năm 2011 (tiếp theo)"))])
+    _parser()._fill_continuations(pages)
+
+    assert _kinds(pages) == [INCOME_STATEMENT, None, None]
+
+
+def test_the_cash_flow_printed_after_it_still_reads_normally():
+    """⚠️ THE PAGE AFTER THE EQUITY STATEMENT IS THE CASH FLOW, and it identifies itself — so
+    ending the run costs nothing. FY-2011's cash flow is pages 12-14 and parses today."""
+    pages = _pages([(INCOME_STATEMENT, "BAO CAO KET QUA HOAT DONG KINH DOANH HOP NHAT"),
+                    (None, HPG_EQUITY),
+                    (CASH_FLOW, "BAO CAO LUU CHUYEN TIEN TE HOP NHAT"),
+                    (None, "Mot bang so lieu nao do")])
+    _parser()._fill_continuations(pages)
+
+    assert _kinds(pages) == [INCOME_STATEMENT, None, CASH_FLOW, CASH_FLOW]
+
+
+def test_the_equity_predicate_reads_the_header_block_only():
+    """A balance sheet naming `vốn chủ sở hữu` in its own line items is not an equity
+    statement — the needle is `thay đổi vốn chủ sở hữu` and it is read from the header."""
+    p = _parser()
+    assert p._is_supplement({"text": HPG_EQUITY})
+    assert not p._is_supplement({"text": "BANG CAN DOI KE TOAN\nD - VON CHU SO HUU 99.915\n"})

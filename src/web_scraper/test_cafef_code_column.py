@@ -395,3 +395,67 @@ def test_the_flag_changes_the_parse_key_so_a_codecol_layer_cannot_be_served_a_ca
     # ⚠️ and NOT in `ocr_key`: it chooses among columns `scan` has already returned and cannot
     # change a recognised character, so the two must share one OCR pass.
     assert fin.ocr_key(plain) == fin.ocr_key(codecol)
+
+
+# ── NSB-1: the SUB-NUMBERED note reference ────────────────────────────────────
+# HPG's FY-2009 income statement splits its notes and prints `28.1`, `28.2` in the Thuyết minh
+# column. Deleting the separators reads that as `281` — three digits, over `NOTE_MAX_DIGITS` —
+# so the column was kept as a period column and `_first_value` returned every line's NOTE
+# NUMBER: `7_doanh_thu_hoat_dong_tai_chinh = 28` against a printed 131.7 bn,
+# `8_chi_phi_tai_chinh = 30` against 281.1 bn. `_operating_profit_identity` refused it and
+# Q4-2009 had been `missing` since the ticker was first parsed.
+X_NOTE = 307.3                  # the Thuyết minh column's right edge, off page 10 at onnx@200
+
+NOTE_ROWS = [("Doanh thu bán hàng và cung cấp dịch vụ", "28.1", "8.244.251.646.520",
+              "8.502.113.474.005"),
+             ("Các khoản giảm trừ doanh thu", "28.1", "120.857.031.774", "137.308.587.515"),
+             ("Doanh thu thuần", "28.1", "8.123.394.614.746", "8.364.804.886.490"),
+             ("Giá vốn hàng bán", "29", "6.147.351.692.197", "7.106.495.501.517"),
+             ("Doanh thu hoạt động tài chính", "28.2", "131.695.300.222", "149.814.918.227"),
+             ("Chi phí tài chính", "30", "281.066.057.342", "170.814.160.131"),
+             ("Thu nhập khác", "31", "30.136.197.668", "26.286.316.582"),
+             ("Chi phí khác", "31", "15.538.643.438", "9.650.307.370"),
+             ("Chi phí thuế TNDN hiện hành", "33", "251.195.791.158", "164.134.114.654"),
+             ("Lãi cơ bản trên cổ phiếu", "35", "6.477", "4.439")]
+
+
+def _note_page():
+    """The same geometry as `_page`, with a Thuyết minh column where the code column sat."""
+    words = []
+    for i, (label, note, now, prior) in enumerate(NOTE_ROWS):
+        y = 100.0 + i * 16.0
+        words.append(_box(250.0, y, label, 170.0))
+        words.append(_box(X_NOTE, y, note, 18.0))
+        words.append(_box(X_NOW, y, now, 69.0))
+        words.append(_box(X_PRIOR, y, prior, 69.0))
+    return {0: words}
+
+
+def test_a_sub_numbered_note_column_is_dropped(parser):
+    assert parser.value_columns(_note_page(), WIDTH) == pytest.approx([X_NOW, X_PRIOR], abs=1.0)
+
+
+def test_the_raw_strip_is_what_kept_it(parser):
+    """⚠️ THE MEASUREMENT THE FIX EXISTS FOR, asserted rather than described: deleting the
+    separators makes `28.1` a THREE-digit token, and the median of that column then clears the
+    bar. `parse_num` reads the 1-2 digit tail as a decimal — `DECIMAL_TAIL_RE` — and returns
+    28, which is what a note reference is."""
+    import re
+
+    assert len(re.sub(r"\D", "", "28.1")) == 3 > parser.NOTE_MAX_DIGITS
+    assert len(str(PdfParser.parse_num("28.1"))) == 2 <= parser.NOTE_MAX_DIGITS
+
+
+def test_a_period_column_cannot_be_lost_to_it(parser):
+    """⚠️ THE SAFETY PROPERTY. `parse_num` only ever returns FEWER digits than the strip, so a
+    column can move from period to note and never the other way — and a period column has 10-13
+    of them in đồng, so shaving a decimal tail leaves it far above the bar."""
+    for _, _, now, prior in NOTE_ROWS[:-1]:
+        for cell in (now, prior):
+            assert len(str(PdfParser.parse_num(cell))) > parser.NOTE_MAX_DIGITS
+
+
+def test_the_plain_code_column_still_behaves_exactly_as_before(parser):
+    """VIC's three-digit codes carry no decimal tail, so the parsed magnitude and the strip
+    agree and `NOTE_MAX_DIGITS` still cannot reach them — which is why `_code_column` exists."""
+    assert X_CODE in parser.value_columns(_page(header=False), WIDTH)

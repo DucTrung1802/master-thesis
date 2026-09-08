@@ -91,3 +91,40 @@ def test_the_gate_and_the_repair_now_agree_about_what_a_continuation_is():
     merged = p._merge_split_figures([left, right], p.Y_TOL, WIDTH * p.VALUE_ZONE)
     assert len(merged) == 2, "the repair leaves the two figures alone…"
     assert _count(left, right) == 0, "…and the gate must not count them either"
+
+
+# ── TSM-1: the same disagreement, one engine over ─────────────────────────────
+
+def test_the_repair_reaches_the_tesseract_path_too():
+    """⚠️ `SPB-1`'s RULE, VIOLATED BY THE ENGINE SPLIT RATHER THAN BY THE BRACKETS. The gate
+    counts fragments on every engine; `_merge_split_figures` sat inside `_read_page`'s onnx
+    branch, so a Tesseract reading was refused for boxes nothing was ever going to join.
+
+    HPG's Q1-2022 income statement is the case: onnx loses that page's title AND its form code,
+    so `tesseract@200` is the only layer that finds the statement at all, and it was refused
+    `2 figure(s) split across two boxes` on these two pairs.
+    """
+    p = _parser()
+    for whole, tail, gap in (("7.005.559", "045", 4.1), ("6", "977.554.343", 1.5)):
+        left = _num(whole, 300.0, w=len(whole) * 6.0)
+        right = _num(tail, 300.0 + len(whole) * 6.0 + gap, w=len(tail) * 6.0)
+        assert _count(left, right) == 1, f"the gate counts {whole}+{tail}"
+        merged = p._merge_split_figures([left, right], p.Y_TOL, WIDTH * p.VALUE_ZONE)
+        assert len(merged) == 1, f"so the repair must join {whole}+{tail}"
+        assert merged[0][4] == f"{whole}.{tail}"
+
+
+def test_the_tesseract_path_still_does_not_run_the_number_run_splitter():
+    """⚠️ ONLY THE MERGE CROSSED OVER. `_split_number_runs` repairs a box holding SEVERAL
+    figures, which is a LINE detector's artefact — Tesseract boxes words — so `splittable`
+    stays False for that path and says so in the tuple `_read_page` returns."""
+    import inspect
+
+    from web_scraper.cafef_pdf_parser import PdfParser as P
+
+    src = inspect.getsource(P._read_page)
+    code = "\n".join(l for l in src[src.index("get_textpage_ocr"):].splitlines()
+                     if not l.lstrip().startswith("#"))       # the CODE, not the reasoning
+    assert "_merge_split_figures" in code
+    assert "_split_number_runs" not in code
+    assert code.rstrip().endswith("return text, words, False")

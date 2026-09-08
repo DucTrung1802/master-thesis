@@ -312,10 +312,29 @@ class PdfParser:
     # **11 pages** change verdict and **every one is `None` -> income_statement**: FPT
     # Q1-2007, Q3-2008, Q2-2009, Q3-2009, Q4-2009, Q1-2010, Q2-2010, Q2-2011, Q2-2007 and ACB
     # Q1-2007, Q2-2007. Not one page moves between statements and not one is lost.
+    #
+    # ⚠️ **AND THE SAME FORM IS PRINTED WITH "SẢN XUẤT KINH DOANH" ABBREVIATED TO "SXKD"**
+    # (`VAS-4`, 2026-09-08). HPG heads every consolidated filing from 2009 to 2015 "BÁO CÁO
+    # KẾT QUẢ HOẠT ĐỘNG **SXKD** HỢP NHẤT" — the Decision 15/2006 wording above, contracted.
+    # `ketquahoatdongkinhdoanh` scores **0.762** against that header, under `TITLE_MATCH`, so
+    # the page classified as NOTHING and `_fill_continuations` handed it to the balance sheet
+    # running above it. The cost is not the page: a filing's NOTES quote the statement titles
+    # verbatim ("VI- THÔNG TIN BỔ SUNG CHO CÁC KHOẢN MỤC TRÌNH BÀY TRONG BÁO CÁO KẾT QUẢ HOẠT
+    # ĐỘNG KINH DOANH" scores a literal **1.000**), so with the real page invisible the income
+    # statement was read OFF THE NOTES — HPG Q1-2014 came out as pages 22-24, 39 rows of note
+    # tables, `no profit before tax` on every one of the 117 layers. It also switches off the
+    # one rescue built for exactly this shape: `_classify_income_by_columns` is gated on
+    # `INCOME_STATEMENT not in seen`, and the notes had already put it there.
+    #
+    # ⚠️ **A SHORTER NEEDLE *CAN* STEAL A PAGE — unlike the longer one above — SO THIS ONE WAS
+    # SCORED AGAINST EVERY PAGE BEFORE IT WAS ADDED.** Measured over 12 HPG consolidated
+    # filings (2009-2022, 332 pages, `onnx@200`): **exactly one page per filing crosses the
+    # bar**, always the real income statement, always 0.762 -> 1.000. No page moves between
+    # statements, none is lost, and the highest any other page reaches is **0.667**.
     HEADING = {
         BALANCE_SHEET: ["bangcandoiketoan", "baocaotinhhinhtaichinh"],
         INCOME_STATEMENT: ["ketquahoatdongkinhdoanh", "ketquahoatdongsanxuatkinhdoanh",
-                           "baocaoketquakinhdoanh"],
+                           "ketquahoatdongsxkd", "baocaoketquakinhdoanh"],
         CASH_FLOW: ["luuchuyentiente"],
     }
     NOTES_NS = "thuyetminhbaocao"
@@ -380,7 +399,24 @@ class PdfParser:
     # the run above it — a page carrying its own form code or its own statement title is
     # `kind in REPORTS` and never reaches it. So the worst it can do is end a run one page
     # early, and only on a page whose header says "giải trình".
-    SUPPLEMENT_NS = ("giaitrinh",)
+    # ⚠️ **THE FOURTH STATEMENT IS PRINTED BETWEEN THE THIRD AND THE SECOND, AND IT IS A
+    # TABLE TOO — `EQU-1`, 2026-09-08.** VAS form B04-DN, "Báo cáo thay đổi vốn chủ sở hữu",
+    # is not one of the three this parser extracts, so it carries no needle and `_page_kind`
+    # returns None for it. HPG's FY-2011 audited filing prints it on pages 10-11, immediately
+    # after the income statement on page 9 — 312 and 314 numbers each — and
+    # `_fill_continuations` absorbed both as the income statement's continuation. `Vốn cổ
+    # phần | Thặng dư | …` is a five-column equity grid, so the statement's own two columns
+    # were mis-clustered and the whole thing was refused `no profit before tax` at every
+    # layer: **Q4-2011 has been `missing` since the ticker was first parsed**, and with it the
+    # de-cumulated quarter it is the only operand for.
+    #
+    # The same rule as `giaitrinh` and `AUDIT_NS` — *a page that announces itself as something
+    # other than one of the three statements is never one of them* — and the same guard makes
+    # it safe: it is applied in `_fill_continuations` on the branch that absorbs an
+    # UNIDENTIFIED page, so a page carrying its own form code or its own statement title never
+    # reaches it. The worst it can do is end a run one page early, on a page whose header says
+    # "thay đổi vốn chủ sở hữu".
+    SUPPLEMENT_NS = ("giaitrinh", "thaydoivonchusohuu")
 
     HEADER_LINES = 12       # the page header: company, form code, statement title, period
     TITLE_MATCH = 0.80      # how close an OCR'd title must be to count as that statement
@@ -1468,15 +1504,54 @@ class PdfParser:
     JOIN_HEAD_RE = re.compile(r"^\(?-?\d{1,3}$")
     JOIN_TAIL_RE = re.compile(r"^\d{3}(\.\d{3})*\)?$")
 
+    # ⚠️ **THE MINUS SIGN CAN BE A PART OF ITS OWN, AND IT THEN BLOCKS THE JOIN THAT WOULD
+    # HAVE RECOVERED THE FIGURE** (`SGB-1`, 2026-09-08). HPG's self-filed Q1/Q3 scans lose
+    # every thousands separator on the cash-flow page — the detector returns one box reading
+    # `'- 102 574 263 389'` for a printed (102.574.263.389) — and `JOIN_HEAD_RE` needs a
+    # DIGIT, so `parts[0] == '-'` fails and `_split_number_runs` cuts the box into five pieces
+    # that land on no column. Measured on HOSE_HPG Q1-2014 at `onnx@200+join+components`:
+    # **26 fragments, 24 of them on the eight lines whose sign is its own box**, and the same
+    # eight at 300 and 400 dpi. Every one is a genuinely negative line — interest paid, tax
+    # paid, cash out for investments — so the sign is not decoration.
+    #
+    # ⚠️ **A BARE `-` MEANS NIL IN A VAS STATEMENT, AND THAT CASE CANNOT REACH HERE.** The
+    # nil marker and a figure are in DIFFERENT period columns, tens of points apart, and this
+    # only ever re-reads what the DETECTOR put inside ONE box. `NUM_RUN_RE` already requires
+    # a digit somewhere, so a row of "-" placeholders is left alone as it always was.
+    JOIN_SIGNS = ("-", "–", "—", "(", "(-")
+
+    # ⚠️ A HEAD OF 4-6 DIGITS IS A HEAD WHOSE OWN SEPARATOR WAS LOST — see `SGB-2` at the
+    # `join_lost` branch of `_split_number_runs`. Bounded at 6 (one lost separator, two
+    # groups): past that the run is OCR damage rather than a separator, and HPG's worst line
+    # is a nine-digit head that no regrouping makes plausible.
+    JOIN_WIDE_HEAD_RE = re.compile(r"^\d{4,6}$")
+
+    @staticmethod
+    def _regroup_head(digits: str) -> str:
+        """'1954' -> '1.954' — the thousands separators a head lost, restored right-to-left."""
+        groups: List[str] = []
+        while len(digits) > 3:
+            groups.insert(0, digits[-3:])
+            digits = digits[:-3]
+        groups.insert(0, digits)
+        return ".".join(groups)
+
     @classmethod
     def _join_split_number(cls, txt: str) -> Optional[str]:
-        """'3 396.864' -> '3.396.864', or None when the run is genuinely several figures."""
+        """'3 396.864' -> '3.396.864', or None when the run is genuinely several figures.
+
+        A leading SIGN standing as its own part is carried across and does not count as the
+        head — see `JOIN_SIGNS`.
+        """
         parts = txt.split()
+        sign = ""
+        if parts and parts[0] in cls.JOIN_SIGNS:
+            sign, parts = parts[0], parts[1:]
         if len(parts) < 2 or not cls.JOIN_HEAD_RE.match(parts[0]):
             return None
         if not all(cls.JOIN_TAIL_RE.match(p) for p in parts[1:]):
             return None
-        return ".".join(parts)
+        return sign + ".".join(parts)
 
     @classmethod
     def _split_number_runs(cls, words: list, join_split: bool = False,
@@ -1543,10 +1618,30 @@ class PdfParser:
             # them, so this is confined to the LAST layers of the cascade, where only a
             # statement every other reading has already refused can reach it — ACB Q1-2025 is
             # accepted at layer 6. `reconcile` and `sane` still judge whatever it recovers.
+            # ⚠️ **AND THE LOST SEPARATOR CAN BE THE HEAD'S OWN, WHICH LEAVES A RUN NOTHING
+            # ABOVE CAN JOIN** (`SGB-2`, 2026-09-08). This rule's scope is a separator lost
+            # ANYWHERE, but the test it applies is `MERGE_JOIN_RE`, whose head is 1-3 digits —
+            # so `'1954 683 502'` joins to `'1954.683.502'` and is refused for the very defect
+            # the rule exists to repair, one group further left. HOSE_HPG's Q1/Q3 self-filed
+            # scans lose the head's separator on the cash-flow page as readily as any other:
+            # measured 2026-09-08 at `onnx@200+join+components` over the six 2011-2015 filings,
+            # **21 of the 39 surviving fragments are a 4-6 digit head** and the rest are OCR
+            # damage — a two-digit group, a bracket mid-run — which no grouping can repair.
+            # A head is regrouped right-to-left in threes and the joined figure still has to
+            # clear `MERGE_JOIN_RE`, so nothing is believed that was not well formed.
+            #
+            # ⚠️ **A SIGN STANDING AS ITS OWN PART IS DROPPED AND READ FROM THE BOX** — the
+            # same shape `SGB-1` repairs one flag over, reached here because `'-'` strips to
+            # the empty string and would otherwise put a leading `'.'` in the join.
             if join_lost:
-                joined = ".".join(q.strip("()") for q in parts)
-                if cls.MERGE_JOIN_RE.match(joined):
-                    if txt.strip().endswith(")") or txt.strip().startswith("("):
+                bare = [q for q in (p.strip("()-–—") for p in parts) if q]
+                if len(bare) > 1 and cls.JOIN_WIDE_HEAD_RE.match(bare[0]):
+                    bare = [cls._regroup_head(bare[0])] + bare[1:]
+                joined = ".".join(bare)
+                if bare and cls.MERGE_JOIN_RE.match(joined):
+                    stripped = txt.strip()
+                    if (stripped.endswith(")") or stripped.startswith("(")
+                            or stripped.startswith(("-", "–", "—"))):
                         joined = f"({joined})"
                     out.append((w[0], w[1], w[2], w[3], joined) + tuple(w[5:]))
                     continue
@@ -1737,6 +1832,28 @@ class PdfParser:
                                    tessdata=TESSDATA_DIR)
         text = page.get_text(textpage=tp)
         words = self._to_visual(page, page.get_text("words", textpage=tp))
+        # ⚠️ **THE GATE JUDGED THE TESSERACT PATH BY A REPAIR IT NEVER RECEIVED** (`TSM-1`,
+        # 2026-09-08). `split_figures` counts fragments on EVERY engine, and `SPB-1` states the
+        # rule this violates in as many words — *the two must agree about what a continuation
+        # is*. They did not: `_merge_split_figures` sat inside the onnx branch, so a Tesseract
+        # reading was refused for boxes nothing was ever going to join. HPG's Q1-2022 income
+        # statement is the case — onnx loses that page's title AND its form code, so
+        # `tesseract@200` is the only layer that finds it at all, and it was refused
+        # `2 figure(s) split across two boxes` for `'7.005.559' + '045'` (4.1pt apart) and
+        # `'6' + '977.554.343'` (1.5pt). Both are one printed figure and both satisfy every one
+        # of the merge's five conditions.
+        #
+        # ⚠️ **THE MERGE IS GEOMETRY AND TEXT, SO IT IS ENGINE-INDEPENDENT — but
+        # `_split_number_runs` is NOT and still does not run here.** That one repairs a box
+        # holding SEVERAL figures, which is a LINE detector's artefact; Tesseract boxes words.
+        # `splittable` stays False and says so.
+        #
+        # ⚠️ **25 of the 2,636 `pdf` rows on disk were parsed by a tesseract layer**, so that is
+        # the whole population this can move, and it cannot move any of them silently: the
+        # upsert refuses to replace a `pdf` row that disagrees unless `overwrite` is set, and
+        # `compare` reports the disagreement either way.
+        words = self._merge_split_figures(words, self.Y_TOL,
+                                          page.rect.width * self.VALUE_ZONE)
         return text, words, False
 
     def _ocr_page_easyocr(self, page):
@@ -2332,11 +2449,31 @@ class PdfParser:
         # reads every line's NOTE NUMBER as its figure, so nothing maps or reconciles. Separate it
         # by magnitude, which needs no threshold: a period column's figures are 4-9 digits (Triệu
         # VND), a note reference 1-2. (experiment_8.)
+        # ⚠️ **THE MAGNITUDE IS THE PARSED VALUE'S, NOT THE RAW TEXT'S WITH ITS SEPARATORS
+        # DELETED — AND A SUB-NUMBERED NOTE IS WHERE THE DIFFERENCE SHOWS** (`NSB-1`,
+        # 2026-09-08). A filing that splits a note prints `28.1`, `28.2` in the Thuyết minh
+        # column; `re.sub(r"\D", "", …)` reads that as `281` — THREE digits, over the bar — so
+        # the whole column was kept as a period column and `_first_value` returned every line's
+        # note reference. HPG's FY-2009 income statement came out with `7_doanh_thu_hoat_dong_
+        # tai_chinh = 28` and `8_chi_phi_tai_chinh = 30` against real figures of 131.7 bn and
+        # 281.1 bn, and `_operating_profit_identity` refused it: *components give 2.29703e+12
+        # against a printed 1.50568e+12* — the residual is those two note numbers, exactly.
+        # Q4-2009 had been `missing` since the ticker was first parsed.
+        #
+        # `parse_num` already knows what the raw strip cannot: `DECIMAL_TAIL_RE` reads a 1-2
+        # digit tail as a DECIMAL in either convention, because a thousands group is always
+        # three digits — so `28.1` is 28 and `8.244.251.646.520` is unchanged at 13 digits.
+        #
+        # ⚠️ **THE CHANGE IS ONE-DIRECTIONAL AND THAT IS WHY IT IS SAFE ON THE DEFAULT PATH.**
+        # `parse_num` can only ever return FEWER digits than the strip (it drops a decimal tail
+        # and leading zeros, and adds nothing), so a column can move from period to note and
+        # never the other way. A real period column is 10-13 digits in đồng or 4-9 in Triệu
+        # VND; shaving two off either leaves it far above `NOTE_MAX_DIGITS`.
         if len(cols) <= 1:
             return cols
         kept = []
         for c in cols:
-            digits = sorted(len(re.sub(r"\D", "", w[4])) for w in nums
+            digits = sorted(len(str(abs(self.parse_num(w[4]) or 0))) for w in nums
                             if abs(w[2] - c) <= self.EDGE_TOL)
             if digits and digits[len(digits) // 2] > self.NOTE_MAX_DIGITS:
                 kept.append(c)
