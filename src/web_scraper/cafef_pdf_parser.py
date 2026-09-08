@@ -424,6 +424,37 @@ class PdfParser:
     # the other 11 stay upright because a rotation must first read MORE than the base does. It
     # bounds the CANDIDATE set and decides nothing — every candidate is settled by reading it.
     MIN_UPRIGHT_CHARS = 200
+    # ⚠️ **A ROTATED TABLE UNDER AN UPRIGHT LETTERHEAD DEFEATS BOTH SIGNALS ABOVE** — `ROT-4`,
+    # measured 2026-09-08 over 262 pages of 8 HOSE_HPG filings. HPG prints its income statement
+    # in LANDSCAPE on a portrait page the PDF calls upright, and that same page carries a
+    # horizontal letterhead and footer. Those few wide boxes are enough to defeat both entries
+    # at once: they supply **252-376 characters**, over `MIN_UPRIGHT_CHARS`, while diluting the
+    # tall-box share to **0.29-0.69**, under `VERTICAL_LINES_SHARE` — one page missed the share
+    # bar by 0.01. The page is not upright and it is not unreadable; it is MIXED, and neither
+    # signal was measured on a page that is part one and part the other.
+    #
+    # ⚠️ **THE COST WAS 12 QUARTERS AND IT CASCADED.** Every layer of the cascade reported
+    # `no such statement on any page of this filing` for the income statement of Q3-2015, -2016,
+    # -2017, -2019, -2020, -2021, -2022, -2023, -2024, -2025 and Q1/Q2-2022 — and because a
+    # cumulative Q2/Q4 cannot be de-cumulated while its own Q1/Q3 is missing, 15 further
+    # quarters were blocked behind them.
+    # ⚠️ **AND HPG's Q3-2018 IS WHY THIS LOOKED LIKE A SCAN PROBLEM RATHER THAN A THRESHOLD.**
+    # It is the one Q3 that parses, its page 6 is turned exactly like the others, and its share
+    # clears the bar at 0.82. One filing on the far side of a cut is not an era.
+    #
+    # **THE AND IS WHAT SEPARATES, AND EACH HALF IS MEASURED.** Over those 262 pages, 59 read
+    # better turned and 203 do not:
+    #
+    #     tall boxes        turned 14..55        upright 0..13
+    #     upright chars, among pages with a tall block of 12+:
+    #                       turned 15..376       upright 2,387   (one page, 6.3x clear)
+    #
+    # The character count is the discriminator; the tall-box count bounds the COST, keeping
+    # every sparse cover and signature page out of a probe it would only fail. ⚠️ **Neither
+    # decides anything** — a candidate is still settled by READING it, and a rotation must
+    # still return more characters than the base before it is ranked at all.
+    MIXED_TALL_LINES = 12
+    MIXED_UPRIGHT_CHARS = 500
 
     # ⚠️ A STATEMENT'S FINAL PAGE IS LEGITIMATELY SPARSE, AND `MIN_TABLE_WORDS` REFUSES IT.
     # The last page holds the closing rows and then the signature block, so it carries a
@@ -1790,7 +1821,10 @@ class PdfParser:
         upright_chars = sum(len(w[4]) for w in words)
         vertical = tall / len(words) >= self.VERTICAL_LINES_SHARE
         unreadable = upright_chars < self.MIN_UPRIGHT_CHARS
-        if not (vertical or unreadable):
+        # ⚠️ `ROT-4` — a turned TABLE under an upright letterhead is neither of the above.
+        mixed = (tall >= self.MIXED_TALL_LINES
+                 and upright_chars < self.MIXED_UPRIGHT_CHARS)
+        if not (vertical or unreadable or mixed):
             return base
 
         def probe(extra: int):
@@ -1821,7 +1855,10 @@ class PdfParser:
         if best != base:
             self._log(f"page {page.number + 1}: "
                       + (f"text lines are vertical ({tall}/{len(words)} boxes)" if vertical
-                         else f"upright read is nearly empty ({upright_chars} chars)")
+                         else f"upright read is nearly empty ({upright_chars} chars)"
+                         if unreadable
+                         else f"a turned block under an upright header "
+                              f"({tall} tall boxes, {upright_chars} chars)")
                       + f" — reading it at /Rotate {best}")
         return best
 
