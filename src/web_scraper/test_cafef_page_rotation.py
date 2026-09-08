@@ -342,3 +342,91 @@ def test_nothing_else_is_widened(token):
 ])
 def test_the_readings_that_already_worked_are_unchanged(token, value):
     assert PdfParser.parse_num(token) == value
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 1c. `ROT-4` — a turned TABLE under an upright letterhead, which is neither signal
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# HOSE_HPG prints its income statement in LANDSCAPE on a portrait page whose `/Rotate` is 0,
+# and that page also carries a horizontal letterhead and footer. Measured 2026-09-08 over 262
+# pages of 8 filings: **59 pages read better turned and the entry gate saw 16 of them.**
+#
+# The missed pages are mixed, and being mixed is exactly what defeats both signals at once —
+# the letterhead's few wide boxes supply 252-376 characters, over `MIN_UPRIGHT_CHARS`, while
+# diluting the tall-box share to 0.29-0.69, under `VERTICAL_LINES_SHARE`. One page missed the
+# share bar by 0.01.
+#
+# ⚠️ **THE SEPARATION IS IN THE AND.** Among pages carrying a tall block of 12+ boxes, the ones
+# that should turn read 15-376 characters upright and the one that should not reads 2,387.
+# Neither half decides anything: the candidate is still settled by READING it, and a rotation
+# must still return more characters than the base before it is ranked.
+#
+# ⚠️ **AND HPG's Q3-2018 IS WHY THIS READ AS A SCAN PROBLEM RATHER THAN A THRESHOLD.** It is
+# the one Q3 whose income statement parses; its page 6 is turned exactly like the other years'
+# and its share clears the bar at 0.82, while Q3-2019, -2021, -2022, -2023, -2024 and -2025 sit
+# below it. A single filing on the far side of a cut is not an era.
+
+
+def _mixed_page(tall_n=21, wide_n=42, tall_text="I", wide_text="letter"):
+    """The measured shape of HPG Q3-2024 page 6: a turned table under an upright letterhead.
+
+    63 boxes, 21 of them tall, 273 characters — against a real 63 / 21 / 283.
+    """
+    return _lines(tall_n, wide=False, text=tall_text) + _lines(wide_n, wide=True, text=wide_text)
+
+
+def test_a_turned_table_under_an_upright_header_is_probed_and_turned():
+    """The `ROT-4` page: neither signal fires, and the page is turned all the same."""
+    engine = _Engine({90: [_word(0, 0, 9, 9, "34.300.352.057.045")] * 90, 270: []})
+    assert _parser(onnx=engine)._page_rotation(_Page(), _mixed_page()) == 90
+
+
+def test_and_neither_existing_signal_would_have_found_it():
+    """⚠️ THE POINT OF THE ENTRY, STATED AS A MEASUREMENT. The share is under the bar AND the
+    upright read is over the emptiness floor — the page falls between the two."""
+    words = _mixed_page()
+    tall = sum(1 for w in words if (w[3] - w[1]) > (w[2] - w[0]))
+    chars = sum(len(w[4]) for w in words)
+    assert tall / len(words) < PdfParser.VERTICAL_LINES_SHARE   # the first signal is silent
+    assert chars >= PdfParser.MIN_UPRIGHT_CHARS                 # and so is the second
+    assert tall >= PdfParser.MIXED_TALL_LINES                   # the third one carries it
+    assert chars < PdfParser.MIXED_UPRIGHT_CHARS
+
+
+def test_a_tall_block_under_a_page_of_real_text_stays_upright():
+    """⚠️ THE CONTROL, AND IT IS A REAL PAGE. The one page of the 262 carrying a tall block of
+    12+ that must NOT turn reads **2,387 characters** upright against the turned candidates'
+    15-376 — so the character half of the AND is what refuses it, and the engine is never
+    called. A page with this much upright text has upright text on it."""
+    words = (_lines(13, wide=False, text="I")
+             + _lines(99, wide=True, text="mot dong chu that dai o"))
+    assert sum(len(w[4]) for w in words) > 2000
+    engine = _Engine({90: [_word(0, 0, 9, 9, "1.234.567")] * 90, 270: []})
+    assert _parser(onnx=engine)._page_rotation(_Page(), words) == 0
+    assert engine.calls == []
+
+
+def test_a_sparse_page_without_a_tall_block_is_not_probed_on_this_signal():
+    """⚠️ WHAT THE TALL-BOX HALF IS FOR: it bounds the COST, not the accuracy. A signature or
+    cover page is sparse and upright, and probing every one of them buys nothing — the
+    decision gate would refuse them all. Below `MIXED_TALL_LINES` this entry stays shut, and
+    `MIN_UPRIGHT_CHARS` still covers the page that reads as nothing at all."""
+    words = _lines(5, wide=False, text="I") + _lines(40, wide=True, text="signat")
+    chars = sum(len(w[4]) for w in words)
+    assert PdfParser.MIN_UPRIGHT_CHARS <= chars < PdfParser.MIXED_UPRIGHT_CHARS
+    engine = _Engine({90: [], 270: []})
+    assert _parser(onnx=engine)._page_rotation(_Page(), words) == 0
+    assert engine.calls == []
+
+
+def test_the_mixed_entry_still_refuses_a_rotation_that_reads_worse():
+    """⚠️ THE ENTRY WIDENS; THE DECISION DOES NOT. A page that enters on the mixed signal and
+    reads FEWER characters turned is left exactly as it was found — the seed that `ROT-3`
+    installed is what protects every page this entry newly admits."""
+    # ⚠️ THE BASE IS READ TOO, so the fixture has to give it something to win with.
+    engine = _Engine({0: [_word(0, 0, 9, 9, "mot dong chu")] * 30,
+                      90: [_word(0, 0, 9, 9, "1")], 270: []})
+    page = _Page()
+    assert _parser(onnx=engine)._page_rotation(page, _mixed_page()) == 0
+    assert page.rotation == 0
