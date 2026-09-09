@@ -108,7 +108,8 @@ runtime that was MEASURED, never an estimate — an unmeasured cell reads `—`.
 |---|---|---|---|---|
 | **F1** | OCR one quarter locally | `python -m web_scraper.pdf_ocr_job --symbol <SYM> --periods <Q>-<YYYY>` | 1m 41s (VCB Q1-2026) · 32.9 min (BID Q4-2016) | — → this is the baseline a Kaggle run is scored against |
 | **F2** | OCR a whole ticker | ⚠️ **NOT a command.** Clone `src/kaggle_gpu/RUN__pdf_ocr_control.ipynb` → `RUN__pdf_ocr_control_<sym>.ipynb`, edit **cell 2 only**, resolve the parameters read-only, then **WAIT** | 185 min (HOSE_FPT, 71 filings, T4) | [../workflows/ocr-a-ticker.md](../workflows/ocr-a-ticker.md) |
-| **F3** | recompute parser coverage | `RUN__pdf_ocr_summary.ipynb` — no OCR, no network | seconds | — → ⚠️ `complete` is CONTINUITY, not coverage; read the cell count for coverage |
+| **F3** | recompute parser coverage | `RUN__pdf_ocr_summary.ipynb` — no OCR, no network | seconds · 6.1 s for the last cell (784 tickers) | — → ⚠️ `complete` is CONTINUITY, not coverage; read the cell count for coverage. ⚠️ **The LAST cell writes `src/kaggle_gpu/pdf_ocr_coverage.csv`** — 784 rows, the whole universe, and the only thing `F4` reads |
+| **F4** | read the OCR backlog, most liquid first | `$n=<X>; Get-Content src\kaggle_gpu\pdf_ocr_coverage.csv -TotalCount ($n+1)` | 0.9 s | — → ⚠️ **rows are sorted by TURNOVER, not market cap** (this repo has no share count for 773 of 784), and the key is NOT a column. Stale check + full steps: [../workflows/summarize-ocr.md](../workflows/summarize-ocr.md), `/wf-summarize-ocr` |
 
 ---
 

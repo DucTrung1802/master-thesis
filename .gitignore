@@ -66,6 +66,10 @@ wandb/
 !experiment_history.csv
 # per-ticker feature-group -> bronze-table map
 !src/data_preprocessor/feature_groups.csv
+# the OCR coverage table — 784 rows, written by the last cell of RUN__pdf_ocr_summary.ipynb
+# and the ONLY thing `/wf-summarize-ocr` reads. Untracked it means a fresh checkout cannot
+# answer the question without a notebook run.
+!src/kaggle_gpu/pdf_ocr_coverage.csv
 # experiment_4 disclosure-date deliverable + user-editable overrides are tracked
 !experiment/experiment_4/vcb_quarter_publish_dates.csv
 !experiment/experiment_4/vcb_quarter_publish_dates_detail.csv

@@ -12,6 +12,7 @@ slash command that launches each workflow:
 | `/wf-run-a-selection` | which channels carry signal? — stage 2/4 | decide the ROOT |
 | `/wf-refresh-the-data` | the corpus is stale — scrape → carry up → verify | `O3` |
 | `/wf-ocr-a-ticker` | OCR ticker `<SYM>` LOCAL\|KAGGLE | clone, then **wait** |
+| `/wf-summarize-ocr [X]` | which tickers are still worth OCRing? — top X of 784, most liquid first | `F4`, and open nothing else |
 | `/wf-quote-a-number` | is this number safe to put in a document? | `O1` |
 | `/wf-record-a-finding` | I measured something / found a defect / finished an item | pick the register |
 | `/wf-finish-and-commit` | the work is done | `O5` |

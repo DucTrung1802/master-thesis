@@ -29,6 +29,7 @@
 | [run-a-selection.md](run-a-selection.md) | `/wf-run-a-selection` | *"which channels carry signal?"* — stage 2/4, local or on a T4 | decide the ROOT before the draws |
 | [refresh-the-data.md](refresh-the-data.md) | `/wf-refresh-the-data` | *"the corpus is stale"* — scrape → carry up → verify | `O3`, to see whether it actually is |
 | [ocr-a-ticker.md](ocr-a-ticker.md) | `/wf-ocr-a-ticker` | *"OCR ticker `<SYM>` LOCAL\|KAGGLE"* — the standing request shape | clone the control notebook, then **wait** |
+| [summarize-ocr.md](summarize-ocr.md) | `/wf-summarize-ocr` | *"which tickers are still worth OCRing?"* — top X of 784, most liquid first | `F4` — one `Get-Content`, and ⚠️ **open nothing else** |
 | [quote-a-number.md](quote-a-number.md) | `/wf-quote-a-number` | *"is this number safe to put in a document?"* | `O1` — a green run on a stale table is a number about a table that no longer exists |
 | [record-a-finding.md](record-a-finding.md) | `/wf-record-a-finding` | *"I measured something / I found a defect / I finished an item"* | decide which of the four registers owns it |
 | [finish-and-commit.md](finish-and-commit.md) | `/wf-finish-and-commit` | *"the work is done"* | `O5` — `python ../tools/state_check.py` |
