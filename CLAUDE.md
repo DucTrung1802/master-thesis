@@ -218,7 +218,7 @@ through gold and unified, `gold.stocks_ta` rebuilt (`STA-1`, `SKW-1` both closed
 **19 of 20 "split boxes" are ONE box**, its "59 open" was **56**. ⚠️ **A pass is a gate opening, not
 a cell** (§5 rule 21). ⚠️ **`BND-1` broke 2026-09-06**: 3-of-3 writes UNGUARDED. ⚠️ **AND A FINISHED
 PARSE IS NOT A WRITTEN CSV** (`MRG-2`): MBB, **176 of 186 accepted, 0 written**. ⚠️ **SIX PARSER DEFECTS TOOK HPG 170 → 192 of 195, income statement 65/65** (2026-09-09) — `VAS-4` `SGB-1` `SGB-2` `EQU-1` `NSB-1` `TSM-1`, and ⚠️ **one of the 22 new cells is WRONG** (`DPC-2`).
-[ISSUES.md](.claude/current_state/ISSUES.md) — **114 open**, 44 resolved, codes permanent. ⚠️
+[ISSUES.md](.claude/current_state/ISSUES.md) — **115 open**, 44 resolved, codes permanent. ⚠️
 **SEVEN change how a number may be READ and are the ones to open before quoting anything**: `NUL-1`
 (no null prices in any search) · `NUL-3` (**on a panel quote the daily-IC t-stat, never
 `ic_clears`**) · `RPR-1` (29 run folders deleted) · `OUT-1` (one corrupt cell → a +0.266
