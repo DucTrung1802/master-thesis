@@ -6,7 +6,7 @@ import itertools
 import os
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 # ===== Local / Custom Modules =====
 from web_scraper.cafef_pdf_parser import (
@@ -5081,6 +5081,91 @@ class FinancialsBuilder:
         except Exception as e:
             self._warn(f"  could not read existing {path}: {e}")
             return {}
+
+    def fill_period_grid(self, exchange: str, symbol: str, template: str,
+                         periods: Sequence[str], *,
+                         reports: Optional[Sequence[str]] = None,
+                         apply: bool = True) -> Dict[str, dict]:
+        """Give each statement CSV a row for EVERY quarter in `periods` — `source='missing'`
+        where nothing was ever written — so the file reads as a CONTIGUOUS grid from the
+        ticker's first filing to its last.
+
+        ⚠️ **THE OCR PATH LEAVES HOLES AND `build()` DOES NOT, AND THAT ASYMMETRY IS WHAT THIS
+        CLOSES.** `_write` spans `attempted ∪ parsed` and turns every quarter in between into a
+        blank `missing` row — its own docstring says why: *"A grid built from the parsed periods
+        hides its own failures"*. But `pdf_ocr_merge` passes `attempted = exactly the periods
+        being written`, deliberately (a wider grid there would manufacture blanks for quarters
+        the run never opened), so a quarter an OCR run ATTEMPTED AND FAILED gets no row at all.
+        Measured 2026-09-10 over the 24 parsed tickers: SHB's balance sheet held **34 rows over
+        a 70-quarter span**, MBB 53 of 66, SAB 39 of 53 — and nothing in the file said the other
+        36 had ever been looked at. A reader diffing two quarters across such a hole is diffing
+        across a gap the file does not admit to.
+
+        ⚠️ **IT ONLY EVER ADDS.** A period already on disk keeps its row byte for byte, whatever
+        its `source`; the file's own header is reused unchanged, so a fill can never reshape a
+        table or re-order its columns. What it writes is exactly the six facts a `missing` row
+        is allowed to assert — symbol, exchange, template, period, year, quarter — plus
+        `source='missing'`, and a blank in every other column. ⚠️ **Never `consolidated`, never
+        `publish_date`, never a zero**: those are facts about a document nothing read (the same
+        rule `_write` states at its `prov = m if produced else {}` line), and `0` in a figure
+        column would be a number a downstream join cannot tell from a parsed one.
+
+        ⚠️ **A TICKER WITH NO CSV IS LEFT ALONE, AND THAT IS NOT AN OVERSIGHT.** A file holding
+        nothing but `missing` rows asserts that a ticker was measured when it never was, and it
+        would make `NEEDS_BOOTSTRAP` — `no pdf row on disk`, the `BND-1` test — read off a file
+        that exists. The first real write creates the file; this fills the grid around it.
+
+        `periods` is the repo-native `Q4-2008` form and need not be sorted or contiguous: the
+        grid is `periods ∪ what is on disk`, so a quarter the ticker files and a quarter only
+        the CSV knows about both survive. -> `{report: {path, added, rows, span, note}}`.
+        """
+        want = {p for p in periods if p}
+        out: Dict[str, dict] = {}
+        for report in (reports or REPORTS):
+            path = statement_path(template, report, exchange, symbol)
+            rows = self._existing(exchange, symbol, template, report)
+            if not rows:
+                out[report] = {"path": path, "added": 0, "rows": 0, "span": None,
+                               "note": "no CSV on disk — the first write creates it"}
+                continue
+            try:
+                with open(path, encoding="utf-8-sig") as f:
+                    head = csv.DictReader(f).fieldnames or []
+            except Exception as e:                        # noqa: BLE001 — reported, not raised
+                self._warn(f"  could not read the header of {path}: {e}")
+                out[report] = {"path": path, "added": 0, "rows": len(rows), "span": None,
+                               "note": f"unreadable header: {e}"}
+                continue
+            grid = sorted(want | set(rows), key=_period_key)
+            # ⚠️ CONTIGUOUS, not merely the union: a quarter the company never filed still owes
+            # the reader a row saying so, and `periods` carries only the quarters with a filing.
+            (y, q), (y1, q1) = _period_key(grid[0]), _period_key(grid[-1])
+            gaps: List[str] = []
+            while (y, q) <= (y1, q1):
+                period = f"Q{q}-{y}"
+                if period not in rows:
+                    gaps.append(period)
+                    rows[period] = dict({c: "" for c in head},
+                                        symbol=symbol, exchange=exchange, template=template,
+                                        period=period, year=y, quarter=q, source="missing")
+                y, q = (y + 1, 1) if q == 4 else (y, q + 1)
+            ordered = [rows[p] for p in sorted(rows, key=_period_key)]
+            if gaps and apply:
+                tmp = path + ".tmp"
+                with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
+                    w = csv.DictWriter(f, fieldnames=head, extrasaction="ignore", restval="")
+                    w.writeheader()
+                    w.writerows(ordered)
+                os.replace(tmp, path)
+            out[report] = {"path": path, "added": len(gaps), "rows": len(ordered),
+                           "span": (ordered[0]["period"], ordered[-1]["period"]),
+                           "note": "" if apply else "plan only — nothing written"}
+            if gaps:
+                self._log(f"  {report:<18} {len(gaps):>3} `missing` row(s) added "
+                          f"({ordered[0]['period']}..{ordered[-1]['period']}, "
+                          f"{len(ordered)} quarters)"
+                          + ("" if apply else "   [PLAN ONLY]"))
+        return out
 
     def _skippable_years(self, exchange: str, symbol: str, template: str,
                          docs: List[dict]) -> set:

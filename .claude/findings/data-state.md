@@ -962,6 +962,184 @@ title. All 12 affected HPG documents were re-read with `notes_boundary` first: *
 values and three differ only by a value the notes ADDED**, never one they changed. The other seven
 tickers are unmeasured, so the default is left alone.
 
+### ⚠️ 2026-09-10 — THE COVERAGE NUMBER WAS TAKEN OVER THE SUCCESSES: `GRD-1`, and the parse rate behind it
+
+⚠️ **THE OCR PATH WROTE NO ROW AT ALL FOR A QUARTER IT ATTEMPTED AND FAILED ON, so every coverage
+number taken off a statement CSV had the failures out of its denominator.** `build()` has never had
+this: `_write` spans every quarter ATTEMPTED and turns each one that produced nothing into a blank
+`source='missing'` row, and its docstring says why — *"A grid built from the parsed periods hides its
+own failures"*. `pdf_ocr_merge` hands `_write` **exactly the periods being written**, deliberately,
+so that a merge cannot manufacture blanks for filings it never opened; the cost was the hole.
+
+Measured over the 24 parsed tickers, before the fix:
+
+| | rows on disk | contiguous span | holes |
+|---|---|---|---|
+| SHB balance sheet | 34 | 70 | **36** |
+| SSI (three statements) | 66 | 204 | **138** |
+| STB (three statements) | 105 | 219 | **114** |
+| TCX (three statements) | 3 | 123 | **120** |
+| **all 24 tickers** | **3,450** | **4,464** | **1,014** |
+
+⚠️ **AND THE SAME 3,193 `pdf` STATEMENTS READ 92.5 % OR 71.5 % DEPENDING ONLY ON WHICH DENOMINATOR
+THE FILE OFFERED** — 3,193/3,450 against 3,193/4,464. A 21-point difference and not one statement
+changed. ⚠️ The bronze ingest had already documented the grid it was not getting
+(`_ingest_bronze_cafef_financial_statements`: *"the panel is a contiguous quarter grid"*).
+
+**Closed the same day** by `FinancialsBuilder.fill_period_grid` and `pdf_ocr_batch.fill_grid`, run
+after the merges by `run_batch` and by the control notebook's §9 (`FILL_GRID`). It is add-only, the
+file's own header is reused, a `missing` row asserts nothing but its coordinates, the range is
+`documents()`' first-filed..last-filed and never the calendar, and a ticker with no CSV is left
+alone. ✅ **Verified on the corpus: 1,014 insertions, 0 deletions across 54 files, and all 72 CSVs
+are a sorted contiguous grid.** Re-running it adds 0 — it is idempotent.
+
+#### ⚠️ The parse rate, now that the denominator is honest — `RAT-1`
+
+Every run folder since 2026-09-07: **2,994 (period, report) cells, 998 documents, 74.7 h**.
+
+| | | |
+|---|---|---|
+| statements `pdf` | 2,602 / 2,994 | **86.9 %** |
+| quarters with all three | 688 / 998 | **68.9 %** |
+| the corpus on disk | 3,193 / 4,464 | **71.5 %** |
+| hours spent on documents that never produced all three | 37.0 h / 74.7 h | **49.5 %** |
+
+⚠️ **THE TWO RATES ARE 18 POINTS APART AND NEITHER IS THE OTHER.** The statement rate is what a
+*">95 % of PDFs parse"* target reads against; the quarter rate is what decides whether anything can
+be WRITTEN, because the per-quarter writer's gate is the FILING and not the statement.
+
+⚠️ **A COMPLETE DOCUMENT IS 1.9 min MEDIAN AND A TWO-OF-THREE ONE IS 5.6**, because
+`_parse_cascaded` breaks only when all three statements are accepted — so the two read at layer 1
+pay for the whole escalation. **Raising the rate is the only lever that makes a run cheaper and
+better at once**; a per-document layer budget would trade one for the other.
+
+⚠️ **236 OF THE 428 ABSENT STATEMENTS (55 %) GIVE ONE REASON FROM EVERY LAYER** — one defect each,
+and fixing it wins the whole cell. This is the ranking to work down:
+
+| absent statements | of which single-cause | defect |
+|---|---|---|
+| 98 | **48** | `no such statement on any page` — `_page_kind`, and `SET-2` says six of eight FPT cells recorded that way were winnable after a classifier change |
+| 59 | **44** | `is: operating profit does not close` |
+| 77 | **30** | `bs: assets != liabilities + equity` |
+| 79 | **26** | `cash: no closing balance` |
+| 164 | **26** | `fragmented reading` — the detector splits one printed figure into two boxes (`SPL-1`) |
+| 38 | **18** | `is: no profit before tax` |
+| 34 | **14** | `cash: closing balance != the balance sheet's cash line` |
+
+⚠️ **AND THE ALTERNATE FILING IS NOT THE ANSWER TO THE REST.** 571 of 1,333 filed quarters (43 %)
+have a second filing on disk, but of the 310 documents that came back short, **240 have no alternate
+at all**; 22 of the remaining 70 already fired the retry. `ALT-1` caps out near +48 documents.
+
+`pdf_ocr_batch.parse_scorecard` and `refusal_histogram` compute all of this from the artefacts —
+free, no OCR — and the control notebook's §7, §8 and §10 print it, so the target is measured on
+every run rather than assumed.
+
+#### ⚠️ `ONLY_MISSING` RETIRED — one switch, and the gap mode is 73 % less OCR
+
+The control notebook took THREE parameters to answer one question, and two of them could disagree:
+`QUARTERS = []` with `ONLY_MISSING = False` and `OVERWRITE = False` resolved to every filed quarter,
+and `run_batch` then spawned one subprocess per quarter for `prepare()` to refuse each complete one —
+70 launches to rediscover what §3 had already computed, reported as `⚠️ exit 1 and NO run folder`.
+`OVERWRITE` is the only mode switch now: `False` is the gap (**365 documents against 1,333 filed**,
+measured the same day), `True` is the whole ticker.
+
+⚠️ **AND THE PAIRING THAT WAS REFUSED OUTRIGHT IS NOW THE DEFAULT.** `SPAN_OPERANDS` needed
+`OVERWRITE = True` because a span operand is by definition a quarter already `pdf` in all three, so
+`partition_by_disk` dropped it — which made the CHEAP mode mutually exclusive with the one thing that
+unblocks a cumulative Q4. The two decisions one field was making are two fields now:
+`JobSpec.overwrite` (what the disk skip drops) and `JobSpec.force_differs` (what the merge may
+replace), and the artefact records both. ✅ Verified on GVR: `OVERWRITE = False` keeps its 2018-Q2
+span operand and the job reports `skipped: 0`.
+
+---
+
+#### ⚠️ THE SWEEP — 177 cells recovered with NO GPU, and the gap that is left is 299 documents
+
+⚠️ **THE CEILING WAS NEVER THE PARSER, AND THE DECOMPOSITION IS THE WHOLE FINDING.** Replaying
+every run folder against the statement CSVs, of the 765 cells with a filing and no `pdf` row:
+
+| | cells | what it needs |
+|---|---|---|
+| never opened by any run | **332** | GPU |
+| last refused by a cascade SHORTER than today's 117 layers | **214** | GPU — a re-run under the current cascade |
+| **PARSED, accepted, and never written** | **216** | ✅ nothing — done 2026-09-10 |
+| refused by today's cascade | **3** | the only true parser gap |
+
+✅ **THE 216 CAME BACK FREE.** `merge_batch` runs `statement_screens.screen_run` itself now and
+withholds a statement only where the magnitude band was LIFTED and the filing's own arithmetic
+fails. 177 released, 51 held. `.claude/docs/PDF_OCR.md` had said since 2026-09-04 that *"the
+arithmetic screens are what replaces it"* — as ADVICE, to be executed by hand, and 147 cells
+sitting parsed-and-unwritten across six tickers is what advice nobody executes looks like.
+
+| | before | after |
+|---|---|---|
+| the corpus | 3,193 / 4,464 = **71.5 %** | 3,370 / 4,464 = **75.5 %** |
+| SHB | 39.0 % | **72.4 %** |
+| MCH · VHM · MBB · LPB | 56.8 · 53.5 · 76.8 · 80.4 | **80.2 · 73.7 · 87.4 · 88.7** |
+| winnable cells | 765 | **589** |
+
+⚠️ **THE 51 HELD ARE REAL, NOT COLLATERAL.** SHB Q4-2010's cash flow closes at 202,000,000 where
+its own opening + net + fx gives 9,511,572,000,000; SHB Q4-2013's balance sheet asserts assets
+143.6 tn against liabilities + equity 10.5 tn. Each passed NO magnitude guard and each fails an
+identity the filing states about itself — the two facts together are why they are not on disk.
+
+⚠️ **WHAT IS LEFT IS 589 CELLS IN 299 DOCUMENTS** — SSI 46 · GAS 43 · STB 39 · SHB 34 · SAB 22 ·
+TCX 16 · VIC 13 · MCH/VHM/GVR 12 — and at the measured 1.9 min (a complete document) to 5.6 min
+(a two-of-three one) that is **9.5 to 27.9 hours of GPU**. The notebook's gap mode opens exactly
+those and nothing else.
+
+⚠️ **AND ONE TEMPTING SHORTCUT IS MEASURED WRONG.** GAS prints `Tiền tồn cuối năm` where the corp
+chart says `Tiền và tương đương tiền cuối kỳ (70)`, and 28 of the 67 cash flows refused
+`no closing cash balance` carry that label. Adding the spelling to `FinancialsBuilder.CASH_CLOSE`
+recovers **24 with the filing's own `opening + net + fx == closing` confirming each** and moves
+**0** accepted anchors — and it was REVERTED. ⚠️ **`CASH_CLOSE` satisfies `reconcile`'s GATE and
+populates NO COLUMN**, so it would write `pdf` rows whose closing-cash cell is blank, which
+`reconcile`'s own comment already records for five ACB/VCB quarters as the worst of both
+outcomes. `GCW-1`'s `cash_wording` schema ALIAS is the right route, it already exists, and GAS
+was simply last run before it shipped — that run's cascade was 100 layers and ended at `cashbs`.
+`.claude/tools/replay_cash_close.py` is the measurement, and it is kept for the negative result.
+
+---
+
+#### ⚠️ TWO THINGS BLOCKED THE RUN BEFORE IT COULD START, AND BOTH WERE GUARDS THAT HAD STOPPED GUARDING
+
+**`LCK-1` — a recycled pid made the GPU lock permanent.** `gpu_lock`'s own docstring promises it
+is *"advisory and self-healing: a lock whose pid is dead is taken over, or a killed run would
+block every later one"*, and the test it used was `psutil.pid_exists(pid)` — which answers *"does
+a process with this number exist"* and not *"is the process that WROTE this lock still running"*.
+
+| | |
+|---|---|
+| the SHB batch died at | 00:01:12, leaving `{"pid": 13720, "label": "HOSE_SHB"}` |
+| pid 13720 by 00:39:37 | a **`conhost`**, started 38 minutes later |
+| what every later run saw | `another PDF-OCR run (pid 13720, HOSE_SHB) holds the OCR device` |
+
+⚠️ **THE LOCK ALREADY CARRIED THE PROOF AND NOTHING READ IT.** A process cannot write a lock
+before it starts, so a holder whose `create_time` is LATER than the lock's own `started` is a
+different process wearing a recycled pid. That is a proof rather than a heuristic, it needs no
+new field, and every lock ever written carries `started`. `_pid_alive(pid, started)` compares
+them with one second of slack, because the stamp is written to whole seconds AFTER the process
+begins. ⚠️ Without `psutil` it still answers `True` — cannot tell means refuse rather than
+clobber, since what this guards is two runs silently sharing one 4 GiB card (`GPU-1`). Eight
+tests in `test_cafef_gpu_lock.py`.
+
+**`MPD-1` — a filing the index lists and the disk does not hold, and it fired again.** ACB
+Q3-2009 is the ONE quarter in the corpus with an index row and no PDF (§8 of the OCR guide names
+it). It raised a bare `FileNotFoundError: [WinError 2]` at `os.path.getsize(task.path)` inside a
+297-document sweep, exactly as it once ended a 67-document job in 30 seconds. It is skipped and
+SAID now, with the file named and the fix named (`re-scrape raw/cafef_pdfs`). ⚠️ **The guard sits
+at the READ SITE and not in `prepare()`**, whose contract is *"no OCR, no PDF"* — putting it
+there broke three tests that pin exactly that, and they were right: a resolver that stats the
+filings is a resolver that needs them present. `build()` has always had this guard; this is the
+OCR path being brought level with it.
+
+⚠️ **BOTH ARE THE SAME SHAPE — A GUARD WHOSE SELF-HEALING BRANCH WAS UNREACHABLE, AND NEITHER WAS
+VISIBLE UNTIL SOMETHING TRIED TO USE IT AT SCALE.** The lock had been blocking every OCR run on
+this machine for hours and nothing said so; the missing filing had a permanent issue code and a
+hand-written workaround instead of a fix.
+
+---
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

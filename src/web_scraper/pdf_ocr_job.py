@@ -1363,7 +1363,15 @@ def compare(builder: FinancialsBuilder, result: DocumentResult) -> Dict[str, dic
 #           layers four times on 2026-08-30 for want of that distinction. ⚠️ On a v<4 folder an
 #           absent `absent_reasons` means "this run predates the field", never "nothing was
 #           permanently absent" — `settled_absences` reads it that way and contributes nothing.
-SCHEMA_VERSION = 4
+#   v5 (2026-09-10) — `inputs.force_differs`, the second half of what `overwrite` used to decide
+#           on its own: `overwrite` says what `partition_by_disk` DROPS, `force_differs` says
+#           whether the upsert may replace a `pdf` row that DISAGREES. They had to come apart
+#           because `plan_batch` adds SPAN OPERANDS — quarters already complete, re-opened only
+#           to record a `months` span — so a gap-filling run must keep them (`overwrite=True`)
+#           without thereby licensing the merge to overwrite a differing figure. ⚠️ `null` is
+#           "it followed `overwrite`", which is what every v<5 folder did; on a v<5 folder the
+#           ABSENT key means "this run predates the field" and never "it was False" (§5 rule 2).
+SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True)
@@ -1397,6 +1405,17 @@ class JobSpec:
     # RUN'S OWN, and this module reconstructs the band from disk instead (`seed_history`), so
     # the two gates look at different populations. Overwrite when the PARSER changed.
     overwrite: bool = False
+    # ⚠️ **THE SECOND OF `overwrite`'s TWO DECISIONS, SEPARABLE SINCE 2026-09-10.** The comment
+    # above says one word decides at both ends — which quarters are OPENED, and whether the
+    # upsert may replace a `pdf` row that DISAGREES. Those are one question only while the
+    # caller's quarter list is the caller's whole intent. They come apart the moment a PLANNER
+    # chooses the list: `pdf_ocr_batch.plan_batch` adds SPAN OPERANDS — quarters already `pdf`
+    # in all three statements, re-opened solely to record a `months` span the Q4 they unblock
+    # needs — and those are exactly the quarters `partition_by_disk` drops. So a gap-filling run
+    # that carries operands must pass `overwrite=True` to keep them, and it must NOT thereby
+    # license the merge to overwrite a figure that differs.
+    # `None` keeps the old behaviour exactly: `force_differs` follows `overwrite`.
+    force_differs: Optional[bool] = None
     period_min: Optional[str] = fin.FINANCIALS_PERIOD_MIN
     # ⚠️ None means RESOLVE it (templates.csv, then CafeF's fingerprint), never "assume bank".
     template: Optional[str] = None
@@ -1471,6 +1490,10 @@ class JobSpec:
             "quarters": canonical_quarters(self.quarters),
             "allow_parent": self.allow_parent, "period_min": self.period_min,
             "overwrite": self.overwrite, "merge_into_csv": self.merge_into_csv,
+            # ⚠️ RECORDED SEPARATELY, and `null` means "it followed `overwrite`" rather than
+            # "false" — the artefact has to be able to say which of the two decisions a run
+            # actually took (§5 rule 2).
+            "force_differs": self.force_differs,
             "force_empty_band": self.force_empty_band,
             "template_requested": self.template,
             "layers_requested": list(self.layers) if self.layers else None,
@@ -1671,13 +1694,50 @@ def _upsert_period(folder: Path, task: DocumentTask, *, overwrite: bool,
     return result
 
 
-def _pid_alive(pid: int) -> bool:
+def _pid_alive(pid: int, started: Optional[str] = None) -> bool:
+    """Is the process that WROTE this lock still running?
+
+    ⚠️ **"A PROCESS WITH THIS PID EXISTS" IS NOT THAT QUESTION, AND THE DIFFERENCE IS A LOCK
+    THAT NEVER CLEARS.** Measured 2026-09-10: a SHB batch died at 00:01:12 leaving
+    `{"pid": 13720, "label": "HOSE_SHB", "started": "2026-09-10T00:01:12"}`, and by the time
+    the next run asked, pid 13720 was a **`conhost` started at 00:39:37** — Windows recycles
+    pids freely. `pid_exists` said True, the lock was honoured, and every subsequent OCR run on
+    this machine raised `another PDF-OCR run holds the OCR device` against a process that had
+    been dead for forty minutes. The self-healing branch below could never be reached.
+
+    ⚠️ **THE LOCK ALREADY CARRIED THE ANSWER.** A process cannot write a lock before it starts,
+    so a holder whose `create_time` is LATER than the lock's own `started` is a different
+    process wearing a recycled pid. That is a proof rather than a heuristic, and it needs no
+    new field. A lock written before this check existed carries `started` too.
+
+    ⚠️ **WITHOUT `psutil` THIS STILL ANSWERS `True`** — cannot tell means refuse rather than
+    clobber, exactly as before, because the failure it guards against is two runs silently
+    sharing one 4 GiB card (`GPU-1`).
+    """
     try:
         import psutil
-
-        return psutil.pid_exists(pid)
     except ImportError:
         return True   # ⚠️ cannot tell -> assume alive, i.e. refuse rather than clobber
+    try:
+        proc = psutil.Process(pid)
+    except Exception:                                     # noqa: BLE001 — NoSuchProcess and kin
+        return False
+    if not started:
+        return True
+    try:
+        # `started` is written by `datetime.now().isoformat(timespec="seconds")` — local, naive.
+        from datetime import datetime as _dt
+
+        lock_at = _dt.fromisoformat(started).timestamp()
+    except (ValueError, OSError, OverflowError):
+        return True                                       # unreadable stamp -> refuse, as before
+    try:
+        birth = proc.create_time()
+    except Exception:                                     # noqa: BLE001 — a process we cannot see
+        return True
+    # ⚠️ A SECOND OF SLACK, because `started` is written to whole-second precision AFTER the
+    # process began: the true owner's birth is at or before the stamp, never measurably after.
+    return birth <= lock_at + 1.0
 
 
 @contextlib.contextmanager
@@ -1726,13 +1786,17 @@ def gpu_lock(label: str = "", out_root: Optional[os.PathLike] = None):
         pid = int(held.get("pid", -1))
         # ⚠️ Our OWN pid is refused too. There is no legitimate re-entry: two parses inside
         # one process contend for the same VRAM exactly as two processes do.
-        if pid > 0 and _pid_alive(pid):
+        # ⚠️ **`started` IS PASSED, AND WITHOUT IT THIS GUARD NEVER SELF-HEALS ON WINDOWS.**
+        # A pid is recycled within the hour; `_pid_alive` compares the holder's birth against
+        # the stamp the lock itself carries, so a recycled pid reads as what it is.
+        if pid > 0 and _pid_alive(pid, held.get("started")):
             raise RuntimeError(
                 f"another PDF-OCR run (pid {pid}, {held.get('label')}, started "
                 f"{held.get('started')}) holds the OCR device. Two runs share one GPU and "
                 f"the loser's onnx layers RAISE with CUDA out of memory — see `gpu_lock`. "
                 f"Wait for it, or kill it and delete {path}.")
-        print(f"⚠️ taking over a stale OCR lock from dead pid {pid} ({path})")
+        print(f"⚠️ taking over a stale OCR lock from dead pid {pid} "
+              f"({held.get('label')}, started {held.get('started')}) — {path}")
         path.unlink(missing_ok=True)
 
     # ⚠️ `O_CREAT | O_EXCL`, not `open(path, "w")` — the check above and the create are
@@ -1851,6 +1915,27 @@ def _run_locked(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
             builder._logger = log
             builder.on_layer = log.layer
             builder.on_page = log.page
+            # ⚠️ **A FILING THE INDEX ADVERTISES AND THE DISK DOES NOT HOLD IS SKIPPED AND SAID,
+            # NOT A TRACEBACK.** `documents()` reads CafeF's index and nothing on the way here
+            # asks whether the PDF actually arrived, so this line — the first that touches the
+            # file — raised `FileNotFoundError: [WinError 2]` and took the whole run down.
+            # Measured 2026-09-10 on ACB Q3-2009, the ONE quarter in the corpus with an index
+            # row and no file (`.claude/docs/PDF_OCR.md` §8 names it), inside a 297-document
+            # sweep: the batch driver went on, because a child that dies leaves no run folder
+            # and says so, but the artefact recorded nothing and the log carried a stack trace
+            # where a sentence belonged.
+            # ⚠️ **`build()` HAS ALWAYS HAD THIS GUARD** — `if not os.path.exists(path):
+            # self._warn(f"  {period}: file missing on disk")` — so this is the OCR path being
+            # brought level with it, not a new policy. ⚠️ And it is HERE rather than in
+            # `prepare()`, whose contract is *"no OCR, no PDF"*: a resolver that stats the
+            # filings is a resolver that needs them present, and three tests pin that it does
+            # not. The quarter is simply absent from the run, which is the honest record —
+            # nothing was read, so nothing is claimed.
+            if not os.path.exists(task.path):
+                log.line(f"⚠️ {as_quarter(task.period)}: the filing is in the PDF index and "
+                         f"NOT on disk — {os.path.basename(task.path)}. Skipped; re-scrape "
+                         f"`raw/cafef_pdfs` for this quarter.")
+                continue
             log.document(index, task, os.path.getsize(task.path) / 1024 ** 2)
 
             history = seed_history(builder, task.exchange, task.symbol, task.template,
@@ -1924,7 +2009,10 @@ def _run_locked(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
             if merge_into_csv:
                 log.stage("merge")
                 _report = _upsert_period(
-                    folder, task, overwrite=spec.overwrite, log=log,
+                    folder, task,
+                    overwrite=(spec.overwrite if spec.force_differs is None
+                               else spec.force_differs),
+                    log=log,
                     backup=merge_backup is None,
                     force_empty_band=spec.force_empty_band)
                 merge_events.append(pdf_ocr_merge.merge_event(_report))

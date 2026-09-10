@@ -171,7 +171,7 @@ of `bronze.cafef_financial_reports` is what makes it auditable. **Read it before
 
 ---
 
-## 6. State today (2026-09-09)
+## 6. State today (2026-09-10)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section is the
 bug.** It was 7 days stale once already.
@@ -217,7 +217,7 @@ through gold and unified, `gold.stocks_ta` rebuilt (`STA-1`, `SKW-1` both closed
 11; **33 of GAS's 56 were ONE WORDING** (`GCW-1`, 2/35 → 32/35), 2 more a truncated total (`GTR-1`),
 **19 of 20 "split boxes" are ONE box**, its "59 open" was **56**. ⚠️ **A pass is a gate opening, not
 a cell** (§5 rule 21). ⚠️ **`BND-1` broke 2026-09-06**: 3-of-3 writes UNGUARDED. ⚠️ **AND A FINISHED
-PARSE IS NOT A WRITTEN CSV** (`MRG-2`): MBB, **176 of 186 accepted, 0 written**. ⚠️ **SIX PARSER DEFECTS TOOK HPG 170 → 192 of 195, income statement 65/65** (2026-09-09) — `VAS-4` `SGB-1` `SGB-2` `EQU-1` `NSB-1` `TSM-1`, and ⚠️ **one of the 22 new cells is WRONG** (`DPC-2`).
+PARSE IS NOT A WRITTEN CSV** (`MRG-2`): MBB, **176 of 186 accepted, 0 written**. ⚠️ **SIX PARSER DEFECTS TOOK HPG 170 → 192 of 195, income statement 65/65** (2026-09-09) — `VAS-4` `SGB-1` `SGB-2` `EQU-1` `NSB-1` `TSM-1`, and ⚠️ **one of the 22 new cells is WRONG** (`DPC-2`). ⚠️ **AND THE COVERAGE NUMBER WAS TAKEN OVER THE SUCCESSES** (`GRD-1`, fixed 2026-09-10): the OCR path wrote no row for a quarter it FAILED on, so **1,014 quarter-cells had no row of any kind** and the same 3,193 statements read **92.5 %** of what was listed and **71.5 %** of the real 4,464-cell grid. The grid is contiguous on all 72 CSVs now. ⚠️ **AND THE REMAINING GAP IS UNSPENT GPU, NOT AN UNFIXED PARSER** (`RAT-1`): of the 765 cells with a filing and no `pdf` row, **332 were never opened**, **214 met only a SHORTER cascade**, **216 had PARSED and were never written**, and **3 lost to today's 117 layers**. ✅ The 216 came back with no GPU at all — `merge_batch` runs the arithmetic screens itself now and withholds only what fails the filing's own identities (177 released, 51 held), taking the corpus **71.5 % -> 75.5 %** and SHB **39.0 % -> 72.4 %**. **What is left is 589 cells in 299 documents, 9.5-27.9 h**, and the notebook's gap mode is the tool.
 [ISSUES.md](.claude/current_state/ISSUES.md) — **117 open**, 44 resolved, codes permanent. ⚠️
 **SEVEN change how a number may be READ and are the ones to open before quoting anything**: `NUL-1`
 (no null prices in any search) · `NUL-3` (**on a panel quote the daily-IC t-stat, never

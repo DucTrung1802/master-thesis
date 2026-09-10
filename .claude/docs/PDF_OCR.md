@@ -76,12 +76,16 @@ resolves** — the plan in §4 reads what §3 produced.
 ENVIRONMENT = "LOCAL"        # "LOCAL" = parse here | "KAGGLE" = ship it to a T4
 EXCHANGE    = "HOSE"         # HOSE | HNX | UPCOM
 SYMBOL      = "VIC"
-QUARTERS = ["2014-Q3"]       # A LIST. [] = every quarter this ticker files. YYYY-QQ.
-ONLY_MISSING = False         # True narrows an EMPTY list to the gaps. ⚠️ The "OUTSTANDING"
-                             #   sentinel this line used to carry was retired 2026-09-03 —
-                             #   two types in one parameter cost three measured readings.
-OVERWRITE = False            # False = fill the GAPS; True = re-parse and replace
-MERGE_INTO_CSV = True        # upsert into raw_data/.../statements/
+QUARTERS = ["2014-Q3"]       # A LIST. [] = resolved in §3, and OVERWRITE says how. YYYY-QQ.
+OVERWRITE = False            # ⚠️ THE ONE MODE SWITCH since 2026-09-10.
+                             #   False + QUARTERS=[] -> the quarters missing at least one of
+                             #     the three statements, plus their span operands. THE DEFAULT.
+                             #   True  + QUARTERS=[] -> every quarter the ticker files.
+                             #   It also decides whether the merge may replace a DIFFERS.
+RETRY_SETTLED = False        # True puts the cells a past run proved unproducible back in
+FILL_GRID = True             # every quarter first-filed..last-filed gets a row, `missing`
+                             #   where nothing was written (`GRD-1`)
+MERGE_INTO_CSV = False       # the LOCAL one-process path only; §9 is the writer
 FORCE_EMPTY_BAND = False     # write even when `sane` had no band. ⚠️ NO LONGER what
                              # bootstraps a new ticker — since 2026-09-06 a quarter with
                              # all three statements is written band or no band. See below.
@@ -89,12 +93,38 @@ PERIODS  = None              # optional; the repo-native form; intersects with Q
 TEMPLATE = "corp"            # None = resolve it and record which route answered
 ```
 
+### ⚠️ `ONLY_MISSING` WAS RETIRED 2026-09-10 — `OVERWRITE` IS THE ONLY MODE SWITCH
+
+It was a THIRD parameter answering a question `OVERWRITE` already answered, and the two could
+disagree in a way that cost process launches rather than raising: `QUARTERS = []` with
+`ONLY_MISSING = False` and `OVERWRITE = False` resolved to every filed quarter, and `run_batch`
+then spawned one subprocess per quarter for `prepare()` to refuse each complete one — 70
+launches to rediscover what §3 had already computed, reported as `⚠️ exit 1 and NO run folder`.
+
+| the old | the new |
+|---|---|
+| `QUARTERS = []`, `ONLY_MISSING = True` | `QUARTERS = []`, `OVERWRITE = False` — **the default** |
+| `QUARTERS = []`, `ONLY_MISSING = False` | `QUARTERS = []`, `OVERWRITE = True` |
+
+⚠️ **AND `SPAN_OPERANDS` NO LONGER FIGHTS THE GAP MODE.** A span operand is by definition a
+quarter already `pdf` in all three, so `partition_by_disk` dropped it at `OVERWRITE = False` and
+the notebook refused the pair outright — which made the CHEAP mode mutually exclusive with the
+one thing that unblocks a cumulative Q4. §3 owns the selection now: the job is told
+`overwrite=True` so nothing §3 chose is dropped twice, and the merge's DIFFERS refusal travels
+separately as `JobSpec.force_differs`, which follows your flag. Both are in the artefact.
+
 ### ⚠️ `OVERWRITE` — one word, and it decides at BOTH ends
 
 | | `False` (the default) | `True` |
 |---|---|---|
+| `QUARTERS = []` resolves to | the quarters missing ≥1 statement, plus span operands | every quarter the ticker files |
 | a quarter already `pdf` in all three statements | **dropped before any OCR**, and before it is uploaded | re-parsed |
 | a figure that DIFFERS from a good `pdf` row | refused by the merge | written |
+
+⚠️ **THE TWO ROWS ARE TWO FIELDS SINCE 2026-09-10** — `JobSpec.overwrite` (what
+`partition_by_disk` drops) and `JobSpec.force_differs` (what the merge may replace). The
+notebook sets the first to `True` always, because §3 has already chosen the quarters and its
+span operands are exactly what that rule would drop; the second follows your `OVERWRITE`.
 
 ⚠️ **A QUARTER IS "COMPLETE" ONLY WHEN ALL THREE STATEMENTS READ `pdf`.** One filing produces
 all three, so a quarter missing its cash flow re-opens the document; the two statements that
@@ -153,7 +183,7 @@ read-only, no OCR, no network beyond the template fingerprint. What they answer,
 | `ENVIRONMENT` | the word you said — `LOCAL` or `KAGGLE`, nothing infers it |
 | `KAGGLE_ACCOUNT` | **left `auto`** — §4 surveys every `KAGGLE_API_TOKEN*` in `.env` and takes the SMALLEST remaining GPU balance that still covers this run's estimate (documents x 2.6 min + 0.5 h, x1.25), so the other account keeps a whole untouched week for the next long ticker. ⚠️ **A ticker already pushed from this machine keeps its account whatever the quota says** — the kernel and the payload dataset live under that username, and `kgpu/.accounts.json` is the ledger. Name a label — the username, i.e. the lower-cased suffix of its `KAGGLE_API_TOKEN_<USERNAME>` variable — only to override; `python -m kgpu accounts` lists them. ⚠️ **LOCAL ignores it and the §2 readout says so.** Measured 2026-09-08: `ductrung180200` held **3.59 h of 30** — under a whole-ticker run — and was the account every code path took until the tokens were renamed (`ACC-1`) |
 | `EXCHANGE` / `SYMBOL` | the ticker, and the board it is listed on. ⚠️ Both must be registered — `CAFEF_FINANCIALS_TICKERS` **and** `config.json` — or a Dagster path is silently unaddressable (CLAUDE.md §6-2-untricies) |
-| `QUARTERS` / `ONLY_MISSING` | `[]` + `ONLY_MISSING = True` when the ticker already has statement CSVs — parse the GAP, not the ticker. `[]` + `False` only when it has none |
+| `QUARTERS` / `OVERWRITE` | `[]` + `OVERWRITE = False` when the ticker already has statement CSVs — parse the GAP, not the ticker. `[]` + `True` only when it has none, or when taking a ticker to FULL coverage |
 | `TEMPLATE` | left `None` so it RESOLVES and records which route answered — but the resolved value is stated in the header, because `bank` and `corp` are different failure modes (`CRP-1`) |
 | `OVERWRITE` / `SPAN_OPERANDS` | `False`/`False` when `plan_batch` reports **no span operands**, which is the safer pair: a quarter already `pdf` in all three is dropped before any OCR and a DIFFERS is refused. `True`/`True` only when there ARE operands — §2 refuses `SPAN_OPERANDS` without `OVERWRITE` |
 | `FORCE_EMPTY_BAND` | ⚠️ **the judgement call, and it is quantified rather than guessed.** `seed_history` is asked, per open quarter and per report, whether `sane` would have a band at all; the header carries the count of cells that would be REFUSED with the guard on. Default **`False`** — the guard stays — because lifting it is `BND-1` and the arithmetic screens then have to replace it by hand |
@@ -189,8 +219,8 @@ success.
 | a batch, in any order | `QUARTERS = ["2013-Q4", "2014-Q1"]` |
 | the repo-native form | `PERIODS = ["Q3-2014"]`, `QUARTERS = []` |
 | one quarter, stated twice | `QUARTERS = ["2014-Q3"]` **and** `PERIODS = ["Q3-2014"]` → Q3-2014 |
-| **everything** ⚠️ | `QUARTERS = []` — 70+ documents, hours of GPU |
-| **exactly the gaps** ⭐ | `QUARTERS = []` **and** `ONLY_MISSING = True` — see below |
+| **everything** ⚠️ | `QUARTERS = []` **and** `OVERWRITE = True` — 70+ documents, hours of GPU |
+| **exactly the gaps** ⭐ | `QUARTERS = []` **and** `OVERWRITE = False` — the default, see below |
 
 ⚠️ **AN EMPTY LIST MEANS EVERY QUARTER, NEVER NONE.** `[]` and `None` build the identical job
 inside `plan()`. That is its contract, and it is why the default is the *absence* of a filter
@@ -199,18 +229,20 @@ rather than a list anything recomputes.
 ⚠️ **AND `QUARTERS` IS A LIST AND NOTHING ELSE SINCE 2026-09-03.** The control notebooks took
 the strings `"ALL"` and `"OUTSTANDING"` beside the list until then; both are REFUSED now, by one
 `TypeError` covering a string, a `None` and anything else that is not a list. **`"ALL"` is `[]`,
-and `"OUTSTANDING"` is `ONLY_MISSING = True`.** Two types in one parameter had cost three
+and `"OUTSTANDING"` is `OVERWRITE = False`.** Two types in one parameter had cost three
 readings that each reported the wrong mistake: `QUARTERS = ""` is a FALSY string, so it fell
 past the sentinel test and opened every quarter SILENTLY; `"  "` fell the same way and then
 raised about the quarter FORM; and a bare `"2014-Q4"` with the brackets forgotten raised about
 the MODE.
 
-### ⭐ `ONLY_MISSING = True` — the gaps, resolved from disk (2026-09-02)
+### ⭐ `OVERWRITE = False` — the gaps, resolved from disk (2026-09-02, made the default 2026-09-10)
 
 Read only when `QUARTERS` is empty. §3 reads the three statement CSVs and the PDF index, prints every
 `(quarter, statement)` cell this ticker is still missing, and fills `QUARTERS` with the quarters
 that have at least one cell a re-run could still WIN — dropping the ones already measured
-permanently absent.
+permanently absent, unless `RETRY_SETTLED = True` puts them back (`SET-2`).
+
+⚠️ **IT IS ALSO THE PERFORMANCE ANSWER, AND THAT IS MEASURED.** Over the 24 parsed tickers on 2026-09-10 the gap is **365 documents against 1,333 filed** — a corpus-wide gap run is **73 % less OCR** than a corpus-wide re-parse, and it opens the only quarters that can change anything.
 
 ⚠️ **THE NOTEBOOK COULD NOT ANSWER THAT QUESTION UNTIL 2026-09-02, AND IT COST A SESSION.** A
 request to parse "VCB Q2-2009 and Q3-2009" arrived on a ticker whose Q3-2009 had read `pdf` in
@@ -224,7 +256,7 @@ call the run makes — and "already done" is `parsed_reports()`, which is `pdf` 
 
 ⚠️ **AN EMPTY RESULT RAISES, and it has to.** `plan()` reads an empty `quarters` list as EVERY
 quarter, so a "nothing left to do" answer that fell through would open 70 filings. Name the
-quarters explicitly if you meant to re-parse something anyway. **VCB has read `OUTSTANDING` as
+quarters explicitly if you meant to re-parse something anyway. **VCB and CTG have read the gap mode as
 this raise since 2026-09-02**, which is the sentinel working, not a fault.
 
 ⚠️ **AND WHAT IS OUTSTANDING IS NOT WHAT IS WRONG.** This resolves cells that are `missing`; a
@@ -351,6 +383,33 @@ untouched — deliberately, and it now says so and names the command:
 python -m kgpu merge <job>            # finishes it
 python -m kgpu merge <job> --force-empty-band     # ...for a ticker with no CSV yet
 ```
+
+### ⚠️ THE PARSE RATE — printed, in three places, because they are three populations (2026-09-10)
+
+*"Does more than 95 % of a PDF parse?"* had no answer the notebook could give until §7, §8 and
+§10 were given one. Three numbers, and **none of them is the other**:
+
+| where | what it scores | measured 2026-09-10 |
+|---|---|---|
+| §7 `statements` | the (period, report) cells **this run opened** | 2,602 of 2,994 = **86.9 %** |
+| §7 `quarters` | those cells scored all-or-nothing per FILING — the writer's gate | 688 of 998 = **68.9 %** |
+| §10 `coverage` | every cell the **ticker** has, over the grid `GRD-1` made contiguous | 3,193 of 4,464 = **71.5 %** |
+
+⚠️ **A GAP-FILLING BATCH OPENS THE HARD QUARTERS BY CONSTRUCTION**, so §7's rate reads lower than
+the ticker's own. And §10's denominator only became honest when the holes were filled: the same
+3,193 statements read **92.5 %** against the rows that existed and **71.5 %** against the grid.
+
+⚠️ **HALF THE GPU HOURS GO TO THE DOCUMENTS THAT FAIL — 49.5 % of 74.7 h.** A complete document
+is **1.9 min** median and a two-of-three one **5.6**, because `_parse_cascaded` breaks only when
+all three statements are accepted, so the two read at layer 1 pay for the whole escalation.
+**Raising the rate is the only lever that makes a run cheaper and better at once**; a layer
+budget trades one for the other.
+
+⚠️ **AND §8 RANKS THE REFUSALS, WHICH IS THE PLAN.** `refusal_category` folds each layer's
+sentence onto the defect it names and the second column counts the statements whose EVERY layer
+gave that one reason — **236 of 428, one defect each**. Ranked: `no such statement on any page`
+48 · `is: operating profit does not close` 44 · `bs: assets != liab+equity` 30 · `cash: no
+closing balance` 26 · `fragmented reading` 26 · `is: no profit before tax` 18. `RAT-1`.
 
 ### The log's shape — one line, leading with the OVERALL % (2026-08-30)
 
@@ -498,6 +557,29 @@ one cell** even though `_write` rewrote all three files. ⚠️ That check also 
 landing under `src/kaggle_gpu/` — `BACKUP_ROOT` was relative to the CWD, so the one thing that
 makes a merge reversible went where nobody looks. It is anchored to the repo now.
 
+### ⚠️ THE QUARTER GRID — `FILL_GRID`, and why a hole is a claim the file declines to make
+
+`build()` writes a blank `source='missing'` row for every quarter it ATTEMPTED and could not
+read; the OCR path did not, because `pdf_ocr_merge` hands `_write` **exactly the periods being
+written** so that a merge cannot manufacture blanks for filings it never opened. The cost was
+that a quarter this path attempted and FAILED on had no row at all, and the file could not tell
+*"we read this and it is not there"* from *"we never looked"* — **1,014 quarter-cells across the
+24 parsed tickers**, SHB's balance sheet holding 34 rows over a 70-quarter span. `GRD-1`.
+
+`FILL_GRID = True` runs `pdf_ocr_batch.fill_grid` after the merges — inside `run_batch` on
+LOCAL, and again in the notebook's §9, which is idempotent and reports `already contiguous`.
+
+| | |
+|---|---|
+| it only ever **ADDS** | a period already on disk keeps its row byte for byte, whatever its `source`, and the file's own header is reused — a fill can never reshape a table |
+| a `missing` row asserts **its coordinates and nothing else** | symbol, exchange, template, period, year, quarter, `source=missing`. Never a `publish_date`, never `consolidated`, and never a `0` in a figure column |
+| the range is the **FILING CHAIN**, never the calendar | first-filed to last-filed, from `documents()` — so it reaches the current quarter exactly when CafeF has published one. BID reaches Q2-2026 and BSR stops at Q4-2020 |
+| a ticker with **no CSV** is left alone | a file of nothing but `missing` rows asserts a ticker was measured when it never was, and it would make the `BND-1` bootstrap test read off a file that exists |
+
+⚠️ **THE BRONZE INGEST HAD ALREADY DOCUMENTED THE GRID IT WAS NOT GETTING** —
+`_ingest_bronze_cafef_financial_statements`: *"A quarter that could not be read is written as a
+blank `source='missing'` row, never zero-filled, and the panel is a contiguous quarter grid."*
+
 ### ⚠️ The four refusals, and the measurement behind each
 
 | refused | why | override |
@@ -538,6 +620,12 @@ screens.report(flagged)
 identity — and `screen_run` adds total-assets continuity, **which needs the whole batch because
 a figure wrong by 10^6 reconciles perfectly against itself**. Hold the flagged pairs out of the
 merge through `merge_run`'s own `periods`/`reports` filter, never by editing the artefact.
+
+### ⚠️ AND SINCE 2026-09-10 THE MERGE RUNS THEM ITSELF — `MERGE_SCREEN`
+
+`merge_batch(screen=True)` calls `screen_run` and WITHHOLDS a flagged statement **wherever the band was lifted**, naming each as it holds it. It does not overrule `sane`: a row judged against a real band keeps that verdict, because the two check different things and a screen that could veto a guarded row would be a gate nobody measured.
+
+⚠️ **THE MEASUREMENT THAT MADE IT AUTOMATIC: 147 CELLS PARSED, ACCEPTED, AND NEVER WRITTEN**, across six tickers on 2026-09-10, every one refused for an empty band while this section told a person to screen them by hand. Screening them released 177 cells and held 51 — the corpus went **71.5 % -> 75.5 %** with no OCR. The 51 are real: a closing balance of 202,000,000 against the filing's own 9,511,572,000,000, an `assets != liab+equity` gap of 4.18 tn. ⚠️ A flag is still not a verdict on the figure — continuity is a per-quarter rate and a batch parses the OUTSTANDING quarters — so read a held row against the filing and use `REPAIR` for any you settle.
 
 ⚠️ **THE `unit` SCREEN IS DELIBERATELY NOT PART OF IT.** Taking the MINORITY `unit` of a
 report as the suspect convicted 8 TCB statements correctly and then flagged **32 CTG ones that
@@ -611,7 +699,7 @@ and free; only `data`/`run` upload. CLAUDE.md §6-2-sextricies.
 Sections 4 and 6 are about ONE run. The question they cannot answer is the planning one:
 **which quarters are left, on every ticker that has ever been parsed?**
 
-⚠️ **FOR ONE TICKER, THE CONTROL NOTEBOOK'S §3 ANSWERS IT AND `ONLY_MISSING = True` ACTS ON
+⚠️ **FOR ONE TICKER, THE CONTROL NOTEBOOK'S §3 ANSWERS IT AND `OVERWRITE = False` ACTS ON
 IT** ([§2](#2-choosing-the-filings)). This one is the cross-ticker view: it ranks tickers, it does
 not name a cell, and it is where you decide WHICH ticker to open next.
 
@@ -669,8 +757,8 @@ long and is not 46 separate problems.
 by a run whose every layer said `no such statement on any page of this filing`, and that is a
 verdict on `_page_kind` as much as on the document — every settled FPT cell was re-tried after the
 2026-09-04/05 classifier changes and **six of eight were winnable**. Re-test the settled column
-after any change to page classification; `ONLY_MISSING = True` drops those cells before any OCR,
-so re-testing one means naming its quarter in `QUARTERS` explicitly.
+after any change to page classification; the gap mode drops those cells before any OCR, so re-testing
+one means `RETRY_SETTLED = True`, or naming its quarter in `QUARTERS` explicitly.
 
 ⚠️ **AND NEITHER `complete` NOR THE `pdf` COUNT IS THIS COLUMN.** `complete` measures
 continuity from the START of the filing chain, so ACB, BID, BSR and FPT read `True` today with 2,

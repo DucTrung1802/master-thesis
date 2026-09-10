@@ -227,6 +227,170 @@ def plan_batch(tickers: Sequence[str], *, exchange: str = "HOSE",
     return plans
 
 
+# ⚠️ **THE REFUSAL TAXONOMY — a SUMMARY of `absent_reasons`, never a replacement for it.**
+# The artefact records the exact sentence each layer gave and that stays the evidence; this
+# folds the sentences onto the DEFECT they name so 428 of them can be ranked. The bucket is
+# chosen by the first substring that matches, so order is significance, and anything unmatched
+# comes back as its own text rather than as "other" — a bucket called "other" is where a new
+# failure mode goes to be invisible.
+#
+# ⚠️ **MEASURED 2026-09-10 over every run since 2026-09-07** — 428 absent statements, and the
+# number that matters is that **236 of them (55 %) give ONE reason from EVERY layer of the
+# cascade**, i.e. one defect fixed wins the whole cell. Ranked: `no such statement on any page`
+# 48, `is: operating profit` 44, `bs: assets != liab+equity` 30, `cash: no closing balance` 26,
+# `fragmented reading` 26, `is: no profit before tax` 18. That ranking is what a session
+# attacking the parse RATE should read before opening a filing.
+REFUSAL_CATEGORIES: Tuple[Tuple[str, str], ...] = (
+    ("split across two boxes", "fragmented reading"),
+    ("no such statement", "no such statement on any page"),
+    ("fx not mapped", "cash: fx not mapped"),
+    ("no closing cash balance", "cash: no closing balance"),
+    ("closing cash balance", "cash: closing != balance sheet"),
+    ("!= liabilities + equity", "bs: assets != liab+equity"),
+    ("assets != liabilities", "bs: assets != liab+equity"),
+    ("section sum does not close", "bs: section sum does not close"),
+    ("no total assets", "bs: no total assets"),
+    ("no total to balance", "no total to balance against"),
+    ("operating profit does not close", "is: operating profit does not close"),
+    ("no profit before tax", "is: no profit before tax"),
+    ("rows parsed", "too few rows parsed"),
+    ("sane:", "sane (magnitude guard)"),
+)
+
+
+def refusal_category(reason: str) -> str:
+    """One refusal sentence -> the DEFECT it names. Unmatched text is returned as itself."""
+    low = (reason or "").lower()
+    for needle, label in REFUSAL_CATEGORIES:
+        if needle in low:
+            return label
+    return (reason or "").strip()[:60] or "(no reason recorded)"
+
+
+def parse_scorecard(folders: Sequence[os.PathLike | str]) -> Dict[str, object]:
+    """What fraction of what these run folders OPENED came back `pdf`.
+
+    ⚠️ **TWO DENOMINATORS AND THEY ANSWER DIFFERENT QUESTIONS.** `cells` is (period, report)
+    pairs — the statement-level rate, and the one a ">95 % of PDFs parse" target is naturally
+    read against. `documents` is quarters, scored all-or-nothing on all three statements,
+    which is the rate that decides whether a quarter can be WRITTEN at all: the per-quarter
+    writer's gate is the FILING, not the statement. Measured 2026-09-10 across every run since
+    2026-09-07 they are **86.9 %** and **68.9 %** — so quoting one for the other misstates the
+    state of the corpus by 18 points in whichever direction flatters it.
+
+    ⚠️ **IT SCORES WHAT WAS OPENED AND NOT WHAT EXISTS.** A quarter no run has ever attempted
+    is outside every number here; `fill_grid` and the statement CSVs are where the corpus-wide
+    denominator lives. A scorecard over the run folders of a gap-filling batch is a rate over
+    the HARD quarters by construction, and reads lower than the ticker's own coverage.
+    """
+    cells = ok = 0
+    per_doc: Dict[Tuple[str, str], int] = {}
+    seconds: Dict[Tuple[str, str], float] = {}
+    for folder in folders:
+        meta = Path(folder) / "metadata.json"
+        if not meta.is_file():
+            continue
+        try:
+            m = json.loads(meta.read_text(encoding="utf-8"))
+        except Exception:                                 # noqa: BLE001 — an interrupted child
+            continue
+        run = str(folder)
+        for r in m.get("results") or []:
+            cells += 1
+            good = r.get("status") == "pdf"
+            ok += good
+            key = (run, r.get("period", ""))
+            per_doc[key] = per_doc.get(key, 0) + int(good)
+            seconds[key] = max(seconds.get(key, 0.0), float(r.get("seconds") or 0))
+    docs = len(per_doc)
+    whole = sum(1 for n in per_doc.values() if n == len(fin.REPORTS))
+    return {"cells": cells, "cells_pdf": ok,
+            "cell_rate": (ok / cells) if cells else None,
+            "documents": docs, "documents_complete": whole,
+            "document_rate": (whole / docs) if docs else None,
+            "minutes": sum(seconds.values()) / 60,
+            "minutes_incomplete": sum(s for k, s in seconds.items()
+                                      if per_doc[k] < len(fin.REPORTS)) / 60}
+
+
+def refusal_histogram(folders: Sequence[os.PathLike | str]) -> Tuple[Dict[str, int],
+                                                                    Dict[str, int]]:
+    """`(every category seen, the categories that were the ONLY one)` over these run folders.
+
+    ⚠️ **THE SECOND DICT IS THE ACTIONABLE ONE.** A statement whose every layer gave the same
+    reason has one defect between it and a parse; a statement with four reasons has been
+    refused by four different gates and fixing any one of them changes nothing. Over the corpus
+    the split is 236 of 428 — so a majority of what is still missing is single-cause.
+    """
+    every: Dict[str, int] = {}
+    sole: Dict[str, int] = {}
+    for folder in folders:
+        for doc in sorted((Path(folder) / "documents").glob("*.json")):
+            try:
+                d = json.loads(doc.read_text(encoding="utf-8"))
+            except Exception:                             # noqa: BLE001
+                continue
+            for tried in (d.get("absent_reasons") or {}).values():
+                cats = {refusal_category(why) for _layer, why in tried}
+                for c in cats:
+                    every[c] = every.get(c, 0) + 1
+                if len(cats) == 1:
+                    c = next(iter(cats))
+                    sole[c] = sole.get(c, 0) + 1
+    return every, sole
+
+
+def fill_grid(plan: TickerPlan, *, builder: Optional[fin.FinancialsBuilder] = None,
+              allow_parent: bool = True, apply: bool = True,
+              log: Optional[Callable[[str], None]] = None) -> Dict[str, dict]:
+    """Every quarter from this ticker's FIRST filing to its LAST gets a row in all three
+    statement CSVs — `source='missing'` for the ones nothing was written for.
+
+    ⚠️ **THE HOLE IS NOT A DETAIL OF PRESENTATION, IT IS A CLAIM THE FILE DECLINES TO MAKE.**
+    A quarter an OCR run attempted and failed on leaves NO row at all: `pdf_ocr_merge` builds
+    `_write`'s quarter grid from *exactly the periods being written*, deliberately, so that a
+    merge cannot manufacture blanks for quarters it never opened. The cost is that the finished
+    file cannot tell "we read this and it is not there" from "we never looked" — measured
+    2026-09-10 across the 24 parsed tickers: **1,014 quarter-cells with no row of any kind**,
+    SHB's balance sheet holding 34 rows over a 70-quarter span. `build()` has never had this
+    hole (`_write`'s own docstring: *"A grid built from the parsed periods hides its own
+    failures"*), and this is the OCR path being brought level with it.
+
+    ⚠️ **IT IS A SEPARATE STEP AND NOT A WIDER `attempted`.** Widening the merge's grid would
+    put the blank-manufacturing back inside the writer, where it would fire on every partial
+    merge and depend on the ordering of a dict for its safety. Here the intent is explicit, the
+    range is derived from `documents()` — the same source `plan()` and every count in this
+    module read — and `apply=False` prints what it would do.
+
+    ⚠️ **ANCHORED ON THE FILINGS, NEVER ON THE CALENDAR.** The grid runs first-filed to
+    last-filed, so it reaches the current quarter exactly when CafeF has published one: BID
+    reaches Q2-2026 and BSR stops at Q4-2020, because that is where each ticker's filing chain
+    stops. A grid run to `date.today()` would write `missing` rows asserting a company failed to
+    file quarters nobody has filed yet.
+    """
+    say = log or (lambda _s: None)
+    builder = builder or fin.FinancialsBuilder(logger=None)
+    periods = [t.period for t in job.plan(builder, plan.exchange, plan.symbol,
+                                          allow_parent=allow_parent, template=plan.template)]
+    if not periods:
+        say(f"   {plan.key}: no filing to anchor a grid on — nothing filled")
+        return {}
+    out = builder.fill_period_grid(plan.exchange, plan.symbol, plan.template, periods,
+                                   apply=apply)
+    added = sum(v["added"] for v in out.values())
+    span = next((v["span"] for v in out.values() if v["span"]), None)
+    if added:
+        say(f"   {plan.key}: {added} `missing` row(s) added across three statements"
+            + (f", grid {span[0]}..{span[1]}" if span else "")
+            + ("" if apply else "   [PLAN ONLY]"))
+    elif any(v["rows"] for v in out.values()):
+        say(f"   {plan.key}: the grid is already contiguous"
+            + (f" ({span[0]}..{span[1]})" if span else ""))
+    else:
+        say(f"   {plan.key}: no statement CSV on disk yet — the first write creates it")
+    return out
+
+
 def complete_periods(folder: os.PathLike | str) -> List[str]:
     """The periods this run folder read in ALL THREE statements, oldest first.
 
@@ -368,7 +532,7 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
               compare: bool = True, notes: str = "",
               vram_floor_mb: int = VRAM_FLOOR_MB, retries: int = RETRIES,
               merge_each: bool = False, merge_apply: bool = True,
-              merge_reports: Optional[Sequence[str]] = None,
+              merge_reports: Optional[Sequence[str]] = None, fill_gaps: bool = True,
               log: Optional[Callable[[str], None]] = None, progress=None) -> List[Path]:
     """Parse every document of every plan, ONE PER PROCESS. Returns the run folders, in order.
 
@@ -549,12 +713,61 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
             say(f"⚠️ {_tally['skipped']} statement(s) are still REFUSED and stay outside the "
                 f"CSVs — the reasons are the `skip` lines above, and each is a judgement "
                 f"about THAT filing.")
+    # ⚠️ **LAST, AND AFTER THE SWEEP, BECAUSE A QUARTER THE SWEEP WROTE MUST NOT BE FILLED IN
+    # AS `missing` FIRST AND THEN OVERWRITTEN.** The fill only ever ADDS a row for a period the
+    # file does not carry, so running it before the writes would still be correct — but it
+    # would leave the log reading `+1 missing` for a quarter that landed thirty seconds later,
+    # which is a readout that has to be un-learned. It runs whenever this driver is allowed to
+    # write at all (`merge_apply`), including on a run that wrote nothing: a run whose every
+    # statement was refused is EXACTLY the run whose CSV most needs to say the quarters were
+    # looked at (`BND-1`).
+    if fill_gaps and merge_apply:
+        say("")
+        say("grid — every quarter from the first filing to the last, `missing` where nothing "
+            "was written")
+        for plan in plans:
+            fill_grid(plan, allow_parent=allow_parent, apply=True, log=say)
     return folders
+
+
+def _screen_folders(folders: Sequence[os.PathLike | str],
+                    log: Callable[[str], None]) -> Dict[tuple, list]:
+    """`{(ticker, period, report): [why]}` — the arithmetic screens, per ticker.
+
+    ⚠️ **PER TICKER, BECAUSE `screen_run` KEYS ON `(period, report)` AND NOTHING ELSE.** Its
+    continuity check is a per-quarter rate over total assets, which is only meaningful within
+    one company; handing it two tickers' folders at once would both collide their keys and
+    compare one company's balance sheet against another's.
+    """
+    from web_scraper import statement_screens as screens
+
+    by_ticker: Dict[str, list] = {}
+    for folder in folders:
+        meta = Path(folder) / "metadata.json"
+        if not meta.is_file():
+            continue
+        try:
+            inp = json.loads(meta.read_text(encoding="utf-8"))["inputs"]
+        except Exception:                                 # noqa: BLE001 — an interrupted child
+            continue
+        by_ticker.setdefault(f"{inp['exchange']}_{inp['symbol']}", []).append(folder)
+    out: Dict[tuple, list] = {}
+    for ticker, group in sorted(by_ticker.items()):
+        try:
+            flagged = screens.screen_run(group)
+        except Exception as e:                            # noqa: BLE001
+            log(f"⚠️ the screens raised on {ticker} ({type(e).__name__}: {e}) — nothing is "
+                f"withheld on their account, and that is the honest reading of a check that "
+                f"did not run (§5 rule 2)")
+            continue
+        for (period, report), why in flagged.items():
+            out[(ticker, period, report)] = why
+    return out
 
 
 def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
                 force_empty_band: bool = False, force_differs: bool = False,
-                reports: Optional[Sequence[str]] = None,
+                reports: Optional[Sequence[str]] = None, screen: bool = True,
                 log: Optional[Callable[[str], None]] = None) -> Dict[str, int]:
     """Upsert the batch's run folders — ONE PERIOD PER CALL, OLDEST FIRST, UNFORCED.
 
@@ -597,7 +810,29 @@ def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
     tasks.sort(key=lambda t: (t[0], t[1]))
 
     say(f"{'APPLY' if apply else 'PLAN'} — {len(tasks)} (ticker, period) pass(es), oldest first")
-    written = skipped = already = 0
+    # ⚠️ **THE SCREENS RUN WHERE THE GUARD IS LIFTED, AND THAT IS THE WHOLE OF THEIR SCOPE.**
+    # A quarter whose filing produced all three statements is written band or no band — refusing
+    # it is `BND-1`'s loop rather than a guard — and `force_empty_band` lifts the rest. Where
+    # the band is lifted `sane` judged NOTHING, and the guide has said since 2026-09-04 that
+    # *"the arithmetic screens are what replaces it"*. Until now that was advice: a person had
+    # to call `screens.screen_run` and hold the flagged pairs out by hand, and the 147 cells
+    # measured 2026-09-10 sitting parsed-and-unwritten across six tickers are what advice
+    # nobody executes looks like.
+    # ⚠️ **THEY DO NOT OVERRULE `sane`, AND THEY ARE NOT CONSULTED WHERE IT SPOKE.** A
+    # statement judged against a real band keeps that verdict however the identities read —
+    # they check different things (`sane` compares magnitudes against accepted quarters, these
+    # are the filing's own arithmetic) and a screen that could veto a guarded row would be a
+    # second gate nobody measured. Flagged-and-guarded rows are still PRINTED.
+    # ⚠️ **AND A FLAG IS NOT A VERDICT ON THE FIGURE.** `screen_run`'s continuity check is a
+    # per-quarter rate and a batch parses the OUTSTANDING quarters, so an honest 1.79x between
+    # two quarters a year apart is flagged (FPT's Q2-2009/Q2-2010). What withholding buys is
+    # that an unguarded row reaches disk only when the filing's own identities close — which
+    # is strictly more than the nothing that guarded it before.
+    flagged = _screen_folders(folders, say) if screen else {}
+    if flagged:
+        say(f"screens: {len(flagged)} statement(s) fail an identity the filing asserts about "
+            f"itself — withheld only where `sane` had no band")
+    written = skipped = already = withheld = failed = 0
     backed: set = set()
     # ⚠️ **ONE FOLDER IS READ ONCE.** The one-process path writes every document of a run into
     # a single folder, so asking `complete_periods` per (ticker, period) task would re-parse
@@ -613,11 +848,48 @@ def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
         # that produced two statements of three is the operator's call, and stays one.
         if folder not in complete:
             complete[folder] = complete_periods(folder)
-        report = pdf_ocr_merge.merge_run(
-            folder, apply=apply, periods=[period], reports=reports,
-            force_empty_band=force_empty_band or period in complete[folder],
-            force_differs=force_differs,
-            backup=ticker not in backed, quiet=True)
+        lift = force_empty_band or period in complete[folder]
+        # ⚠️ **WITHHELD THROUGH `merge_run`'s OWN `reports` FILTER, never by editing the
+        # artefact** — the run folder is immutable and is the evidence. An EMPTY list would be
+        # falsy and `merge_run` reads that as "all three", so a period whose every statement is
+        # flagged is skipped outright rather than merged wide open.
+        allowed = list(reports or fin.REPORTS)
+        if lift and flagged:
+            held = [r for r in allowed if (ticker, period, r) in flagged]
+            for r in held:
+                say(f"  hold   {period:9} {r:18} unguarded and fails an identity: "
+                    f"{'; '.join(flagged[(ticker, period, r)])[:90]}")
+            withheld += len(held)
+            allowed = [r for r in allowed if r not in held]
+            if not allowed:
+                skipped += len(held)
+                continue
+        # ⚠️ **AN OS-LEVEL WRITE FAILURE IS A FACT ABOUT THE MACHINE, NOT ABOUT THE FILING, AND
+        # IT MUST NOT END THE SWEEP.** Measured 2026-09-10: a corpus-wide sweep died on
+        # `PermissionError: [WinError 5]` at `os.replace(bs_HOSE_BID.csv.tmp, ...)` — a Windows
+        # lock, an editor or a scanner holding the CSV open for a moment — with ten tickers
+        # still unmerged behind it, and it left the orphaned `.tmp` beside the intact original.
+        # `_write` renders to that `.tmp` and replaces atomically, so the file on disk is either
+        # the old one or the new one and never a half (the run that hit this was verified: 72
+        # lines, every figure column identical, the grid still contiguous). What was lost was
+        # the REST OF THE BATCH, which is the same shape as `GPU-1` — one document's machine
+        # trouble ending work that had nothing to do with it.
+        # ⚠️ It is SAID and COUNTED, never swallowed: a ticker skipped for a lock is a ticker
+        # whose statements are still in the run folder and not on disk (`BND-1`), and the retry
+        # is free — re-running the sweep finds everything already written `identical`.
+        try:
+            report = pdf_ocr_merge.merge_run(
+                folder, apply=apply, periods=[period],
+                reports=allowed if (reports or (lift and flagged)) else None,
+                force_empty_band=lift,
+                force_differs=force_differs,
+                backup=ticker not in backed, quiet=True)
+        except OSError as e:
+            failed += 1
+            say(f"⚠️ {ticker} {period}: the WRITE failed — {type(e).__name__}: {e}")
+            say("   That is the machine, not the filing (a file lock, a full disk). Nothing "
+                "of this period reached disk; re-run the sweep.")
+            continue
         for line in report.lines()[1:]:
             say("  " + line.strip())
         if getattr(report, "backup", None):
@@ -641,9 +913,19 @@ def merge_batch(folders: Sequence[os.PathLike | str], *, apply: bool = False,
     say("")
     say(f"-> {written} statement(s) written, {already} already on disk unchanged, "
         f"{skipped} refused"
+        + (f", {withheld} withheld by the screens" if withheld else "")
+        + (f", {failed} could not be WRITTEN" if failed else "")
         + ("" if apply else "   (nothing was written — this was a PLAN)"))
+    if withheld:
+        say(f"⚠️ the {withheld} withheld passed NO magnitude guard AND fail an identity the "
+            f"filing asserts about itself. They are in the run folder, not on disk; read the "
+            f"figures against the filing before deciding any of them.")
+    if failed:
+        say(f"⚠️ {failed} period(s) could not be written at all — the machine refused the file, "
+            f"not the merge. Their statements are in the run folder and NOT on disk; re-run "
+            f"this sweep once whatever held the file has let go.")
     return {"written": written, "skipped": skipped, "already": already,
-            "passes": len(tasks)}
+            "withheld": withheld, "failed": failed, "passes": len(tasks)}
 
 
 def _newest_folder(out_root: Path, exchange: str, symbol: str,
