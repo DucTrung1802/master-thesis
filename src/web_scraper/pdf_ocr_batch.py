@@ -145,7 +145,16 @@ GPU_LEASE_ENV = "CAFEF_GPU_LEASE"
 # not fit are `GPU-1`: layers raise, the cascade goes on, and the merge refuses the document
 # whole — the run does not end, it just spends its GPU producing refusals.
 GPU_LEASE_SLOTS_ENV = "CAFEF_GPU_LEASE_SLOTS"
-GPU_LEASE_POLL_SECONDS = 3
+# ⚠️ **A LEASE WITHOUT A TURNSTILE IS ONE LANE WEARING TWO COATS** (measured 2026-09-11). The
+# holder releases its slot and re-takes it for the NEXT document while the waiting lane is
+# asleep in its poll, so the gap a waiter must hit is the merge — a second or two — and it
+# misses every one. VNM finished 9 documents in 35 minutes while VPB, started at the same
+# instant, finished ZERO and burned 1 second of CPU waiting. A waiter therefore takes a
+# TURNSTILE byte first and holds it while it waits for a slot: the returning holder has to
+# queue behind that turnstile, so the lane that has been waiting gets the next free slot.
+GPU_LEASE_POLL_SECONDS = 1
+# One byte, far past any plausible slot count, so the two never collide.
+GPU_LEASE_TURNSTILE_BYTE = 4096
 
 
 def gpu_lease_slots(path: Optional[Path] = None) -> int:
@@ -205,8 +214,20 @@ def gpu_lease(enabled: bool = True, log: Optional[Callable[[str], None]] = None)
             fh.write(bytes(slots))
     fd = os.open(str(path), os.O_RDWR)
     waited = 0.0
-    held = None
+    held = turnstile = None
     try:
+        # ⚠️ THE TURNSTILE IS TAKEN FIRST AND HELD WHILE WAITING — that is the whole fairness
+        # mechanism. Without it the lane that just released barges back in ahead of a lane that
+        # has been waiting for half an hour.
+        while turnstile is None:
+            try:
+                _lock_exclusive(fd, GPU_LEASE_TURNSTILE_BYTE)
+                turnstile = GPU_LEASE_TURNSTILE_BYTE
+            except OSError:
+                if waited == 0:
+                    say(f"   queueing for the GPU — another lane is ahead ({path})")
+                time.sleep(GPU_LEASE_POLL_SECONDS)
+                waited += GPU_LEASE_POLL_SECONDS
         while held is None:
             for slot in range(slots):
                 try:
@@ -220,11 +241,14 @@ def gpu_lease(enabled: bool = True, log: Optional[Callable[[str], None]] = None)
                     say(f"   waiting for a GPU slot — all {slots} held ({path})")
                 time.sleep(GPU_LEASE_POLL_SECONDS)
                 waited += GPU_LEASE_POLL_SECONDS
+        _unlock(fd, turnstile)
+        turnstile = None
         if waited:
             say(f"   GPU slot {held + 1}/{slots} acquired after {waited:.0f}s")
         yield path
     finally:
         try:
+            _unlock(fd, turnstile)
             _unlock(fd, held)
         finally:
             os.close(fd)

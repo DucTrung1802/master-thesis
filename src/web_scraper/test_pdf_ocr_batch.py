@@ -86,6 +86,49 @@ def test_two_holders_of_one_lease_cannot_overlap(monkeypatch, tmp_path):
         os.close(fd)
 
 
+def test_a_waiting_lane_holds_the_turnstile_so_the_holder_cannot_barge(monkeypatch, tmp_path):
+    """⚠️ THE DEFECT THIS PINS MADE TWO LANES INTO ONE, measured 2026-09-11.
+
+    A lane releases its slot and re-takes it for the NEXT document while the waiting lane is
+    asleep in its poll, so the only gap a waiter can hit is the merge — a second or two. VNM
+    finished 9 documents in 35 minutes while VPB, started at the same instant, finished ZERO.
+    The waiter must therefore take the TURNSTILE byte and HOLD it while it waits, so the
+    returning holder queues behind it.
+    """
+    import os
+    import threading
+
+    lock = tmp_path / "lease"
+    monkeypatch.setenv(batch.GPU_LEASE_ENV, str(lock))
+    monkeypatch.setattr(batch, "GPU_LEASE_POLL_SECONDS", 0.05)
+
+    lock.write_bytes(bytes(1))
+    blocker = os.open(str(lock), os.O_RDWR)          # stands in for the lane holding the card
+    batch._lock_exclusive(blocker, 0)
+
+    entered = threading.Event()
+
+    def waiter():
+        with batch.gpu_lease(True):
+            entered.set()
+
+    thread = threading.Thread(target=waiter, daemon=True)
+    thread.start()
+    # the waiter cannot be inside yet, and while it waits the turnstile must be HELD
+    assert not entered.wait(timeout=0.5)
+    probe = os.open(str(lock), os.O_RDWR)
+    try:
+        with pytest.raises(OSError):
+            batch._lock_exclusive(probe, batch.GPU_LEASE_TURNSTILE_BYTE)
+    finally:
+        os.close(probe)
+
+    batch._unlock(blocker, 0)
+    os.close(blocker)
+    assert entered.wait(timeout=5), "the waiter never got the card"
+    thread.join(timeout=5)
+
+
 def test_a_short_card_is_reported_and_the_document_still_starts(monkeypatch):
     """⚠️ IT MUST NOT RAISE, and that is a decision rather than laziness.
 
