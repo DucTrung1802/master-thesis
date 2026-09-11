@@ -973,6 +973,41 @@ def _cascade_uses_gpu(layers: Optional[Sequence[str]]) -> bool:
 
 
 
+def _operands_unreachable(plan: TickerPlan, quarter: str,
+                          say: Callable[[str], None]) -> bool:
+    """True when the only report still open on `quarter` is a cumulative income statement whose
+    priors are STILL not on disk — so opening the filing again cannot produce a written cell.
+
+    ⚠️ **THE SAME QUESTION `plan_batch` ASKS, ASKED LATER**, and of the same function: the merge's
+    `_quarter_priors`, with no `pending`, against whatever disk holds NOW. Nothing is inferred
+    here that the write would not itself decide.
+
+    ⚠️ **IT NEVER SKIPS A DOCUMENT WITH ANOTHER REPORT OPEN.** The filing is the unit a run reads,
+    so one report the cascade has not met keeps the whole document — the rule `ASK-1` settled.
+    """
+    from web_scraper import cafef_financials as _fin
+    from web_scraper import pdf_ocr_merge
+
+    builder = _fin.FinancialsBuilder(logger=None)
+    tasks = {job.as_quarter(t.period): t
+             for t in job.plan(builder, plan.exchange, plan.symbol,
+                               allow_parent=True, template=plan.template)}
+    task = tasks.get(quarter)
+    if task is None or not task.cumulative:
+        return False
+    done = set(job.parsed_reports(builder, task))
+    gap = set(job.REPORTS) - done
+    if gap != {_fin.INCOME_STATEMENT}:
+        return False
+    _priors, why = pdf_ocr_merge._quarter_priors(
+        builder, plan.exchange, plan.symbol, plan.template, task.period, {})
+    if not why:
+        return False
+    say(f"── skip {plan.key} {quarter} — its only open report is a CUMULATIVE income "
+        f"statement the merge still cannot write: {why} (`OPB-1`)")
+    return True
+
+
 def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = None,
               out_root: Optional[os.PathLike | str] = None,
               allow_parent: bool = True, overwrite: bool = True,
@@ -1066,6 +1101,17 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
     for plan in plans:
         for quarter in plan.quarters:
             done += 1
+            # ⚠️ **THE PLAN WAS RESOLVED BEFORE THIS RUN STARTED LOSING, SO ASK AGAIN** (`OPB-1`,
+            #    the run-time half, measured on VHM 2026-09-12). `plan_batch` drops a cumulative
+            #    Q4 whose de-cumulation operands it cannot supply — but a Q3 that was IN the plan
+            #    counts as suppliable, and then the run refuses it. VHM Q4-2021 parsed all three
+            #    statements in 4.8 min and the merge refused its income statement, because
+            #    Q3-2021 had been refused fourteen minutes earlier in the SAME run.
+            # ⚠️ ASKED AGAINST DISK, WHICH IS WHY IT WORKS HERE: `merge_each` writes between
+            #    documents, so the answer moves as the run proceeds — a Q3 that WINS unblocks its
+            #    Q4 exactly as before, and only a Q3 that has already lost skips one.
+            if merge_each and _operands_unreachable(plan, quarter, say):
+                continue
             # ⚠️ The FLOOR of this document, not its ceiling: it has not been read yet, and a
             # bar that credits work before it happens is the one thing a progress readout must
             # not do. `end()` is the caller's, once the batch returns.

@@ -34,6 +34,48 @@ def test_an_unmeasurable_card_does_not_block_the_run(monkeypatch):
     assert batch.wait_for_vram(floor_mb=99_999, timeout=0) is None
 
 
+def test_a_document_is_skipped_when_this_run_has_just_lost_its_operand(monkeypatch):
+    """⚠️ `OPB-1`'s RUN-TIME HALF — the plan was resolved before the run started losing.
+
+    Measured on VHM 2026-09-12: Q4-2021 parsed all three statements in 4.8 min and the merge
+    refused its income statement, because Q3-2021 — which WAS in the plan, and so counted as a
+    suppliable operand — had been refused fourteen minutes earlier in the same run.
+    """
+    from web_scraper import cafef_financials as fin
+    from web_scraper import pdf_ocr_job as job
+    from web_scraper import pdf_ocr_merge
+
+    task = _cumulative_q4()
+    plan = batch.TickerPlan(exchange="HOSE", symbol="VHM", template="corp",
+                            template_how="stub", quarters=["2021-Q4"])
+    monkeypatch.setattr(fin, "FinancialsBuilder", lambda **_k: object())
+    monkeypatch.setattr(job, "plan", lambda *a, **k: [task])
+    monkeypatch.setattr(job, "parsed_reports", lambda _b, _t: ["balance_sheet", "cash_flow"])
+    monkeypatch.setattr(pdf_ocr_merge, "_quarter_priors",
+                        lambda *a, **k: (None, "Q3-2021 is `missing` on disk"))
+    said = []
+    assert batch._operands_unreachable(plan, "2021-Q4", said.append) is True
+    assert any("OPB-1" in line for line in said), said
+
+
+def test_a_document_with_another_report_open_is_never_skipped(monkeypatch):
+    """⚠️ THE FILING IS THE UNIT A RUN READS (`ASK-1`): one report the cascade has not met keeps
+    the whole document, whatever the income statement's operands say."""
+    from web_scraper import cafef_financials as fin
+    from web_scraper import pdf_ocr_job as job
+    from web_scraper import pdf_ocr_merge
+
+    task = _cumulative_q4()
+    plan = batch.TickerPlan(exchange="HOSE", symbol="VHM", template="corp",
+                            template_how="stub", quarters=["2021-Q4"])
+    monkeypatch.setattr(fin, "FinancialsBuilder", lambda **_k: object())
+    monkeypatch.setattr(job, "plan", lambda *a, **k: [task])
+    monkeypatch.setattr(job, "parsed_reports", lambda _b, _t: ["cash_flow"])   # bs still open
+    monkeypatch.setattr(pdf_ocr_merge, "_quarter_priors",
+                        lambda *a, **k: (None, "Q3-2021 is `missing` on disk"))
+    assert batch._operands_unreachable(plan, "2021-Q4", lambda _s: None) is False
+
+
 # ── the plan: what it refuses to open ─────────────────────────────────────────
 def _cumulative_q4(**over):
     from web_scraper import pdf_ocr_job as job
