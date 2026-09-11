@@ -34,6 +34,69 @@ def test_an_unmeasurable_card_does_not_block_the_run(monkeypatch):
     assert batch.wait_for_vram(floor_mb=99_999, timeout=0) is None
 
 
+# ── the plan: what it refuses to open ─────────────────────────────────────────
+def _cumulative_q4(**over):
+    from web_scraper import pdf_ocr_job as job
+    fields = dict(exchange="HOSE", symbol="VHM", period="Q4-2021", template="corp",
+                  path="FY-2021.pdf", file="FY-2021.pdf", consolidated="True",
+                  assurance="audited", cumulative=True)
+    fields.update(over)
+    return job.DocumentTask(**fields)
+
+
+def _stub_plan(monkeypatch, task, *, priors, parsed=("balance_sheet", "cash_flow")):
+    """Everything `plan_batch` reads from disk, replaced — the wiring is what is under test."""
+    from web_scraper import pdf_ocr_job as job
+    from web_scraper import pdf_ocr_merge
+    monkeypatch.setattr(job, "plan", lambda *a, **k: [task])
+    monkeypatch.setattr(job, "parsed_reports", lambda _b, _t: list(parsed))
+    monkeypatch.setattr(job, "settled_absences", lambda *a, **k: {})
+    monkeypatch.setattr(job, "span_operands", lambda *a, **k: [])
+    monkeypatch.setattr(job, "resolve_template", lambda _b, _s: ("corp", "stub"))
+    monkeypatch.setattr(pdf_ocr_merge, "_quarter_priors", lambda *a, **k: priors)
+
+
+def test_a_cumulative_q4_whose_operand_is_withheld_is_not_planned(monkeypatch, tmp_path):
+    """⚠️ `OPB-1` — 19 MINUTES OF GPU, 0 CELLS, AND THE NEXT RUN PLANS THE SAME FIVE.
+
+    Measured on VHM 2026-09-12. A Q4 income statement off the audited annual filing is the
+    YEAR, and the merge writes it only as `FY - (Q1+Q2+Q3)`. VHM's Q3 income statements read
+    `missing` and had been refused by the full cascade, so `ASK-1`'s skip withheld them — while
+    `span_operands` returns a prior only when it is ALREADY a `pdf` row, on the reasoning that
+    an outstanding prior is one "the caller already has". The skip is exactly the case where
+    the caller does not, so all five Q4s parsed at layer 1, were refused, and came back on the
+    next plan unchanged.
+    """
+    _stub_plan(monkeypatch, _cumulative_q4(), priors=(None, "Q3-2021 is `missing` on disk"))
+    [plan] = batch.plan_batch(["VHM"], exchange="HOSE", reports_root=tmp_path,
+                              builder=object(), skip_exhausted_on=False)
+    assert plan.quarters == []
+    assert plan.blocked == {"2021-Q4": "Q3-2021 is `missing` on disk"}
+
+
+def test_a_q4_whose_operands_the_merge_can_reach_is_still_planned(monkeypatch, tmp_path):
+    """⚠️ THE OTHER HALF, AND `SET-3` IS WHY IT IS A TEST. A filter that withholds a winnable
+    cell raises the coverage rate by deleting the work, which is the one failure mode a skip
+    must never have. The question is asked of the MERGE's own `_quarter_priors`, so the plan
+    and the write agree by construction rather than by a second copy of the rule.
+    """
+    _stub_plan(monkeypatch, _cumulative_q4(), priors=({"Q1-2021": {}}, ""))
+    [plan] = batch.plan_batch(["VHM"], exchange="HOSE", reports_root=tmp_path,
+                              builder=object(), skip_exhausted_on=False)
+    assert plan.quarters == ["2021-Q4"]
+    assert plan.blocked == {}
+
+
+def test_a_non_cumulative_quarter_is_never_blocked(monkeypatch, tmp_path):
+    """A standalone quarter's income statement needs no priors — nothing to be blocked on."""
+    _stub_plan(monkeypatch, _cumulative_q4(period="Q2-2021", cumulative=False),
+               priors=(None, "Q1-2021 is `missing` on disk"))
+    [plan] = batch.plan_batch(["VHM"], exchange="HOSE", reports_root=tmp_path,
+                              builder=object(), skip_exhausted_on=False)
+    assert plan.quarters == ["2021-Q2"]
+    assert plan.blocked == {}
+
+
 # ── the GPU lease — the mutex the VRAM poll is not ────────────────────────────
 def test_the_lease_is_a_no_op_until_it_is_asked_for(monkeypatch):
     """⚠️ THE SHIPPED BEHAVIOUR IS UNCHANGED, and that is the point of the env var.

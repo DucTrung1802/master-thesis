@@ -298,6 +298,11 @@ class TickerPlan:
     #    `plan_batch(skip_exhausted_on=True)` — the plan REPORTS what it withheld, it never
     #    withholds silently.
     exhausted: Dict[str, List[str]] = field(default_factory=dict)
+    # ⚠️ `{quarter: why}` DROPPED because the only report still open on them is a CUMULATIVE
+    #    income statement whose de-cumulation operands this plan cannot supply (`OPB-1`). The
+    #    document parses perfectly and the merge can never write it, so opening it is pure
+    #    GPU. As with `exhausted`, the plan SAYS what it withheld.
+    blocked: Dict[str, str] = field(default_factory=dict)
 
     @property
     def key(self) -> str:
@@ -519,11 +524,48 @@ def plan_batch(tickers: Sequence[str], *, exchange: str = "HOSE",
             outstanding = keep
         operands = (job.span_operands(builder, exchange, symbol, tpl, outstanding)
                     if span_operands and outstanding else [])
+        # ⚠️ **A CUMULATIVE Q4 WHOSE OPERAND THIS PLAN HAS WITHHELD IS A LOOP, NOT A PLAN**
+        #    (`OPB-1`, measured on VHM 2026-09-12). `span_operands` returns a prior only when
+        #    it is ALREADY a `pdf` row with a blank span; its docstring says an outstanding
+        #    prior needs no returning because "the caller already has it" — and `ASK-1`'s skip,
+        #    added later, is exactly the case where the caller does NOT. VHM's five Q4 income
+        #    statements parsed at layer 1 every time, were refused every time because Q3 reads
+        #    `missing`, and Q3 was withheld as exhausted: **19 minutes of GPU, 0 cells, and the
+        #    next run plans the same five.**
+        # ⚠️ **THE TEST IS THE MERGE'S OWN**, not a second copy of it: `_quarter_priors` is the
+        #    function that will decide this for real, asked here with the quarters this plan
+        #    intends to write standing in for what it would have by then.
+        blocked_here: Dict[str, str] = {}
+        if outstanding:
+            from web_scraper import pdf_ocr_merge          # local, as `merge_batch` imports it
+            # ⚠️ THE REPO-NATIVE `Q4-2021` SPELLING, taken from the TASK rather than rebuilt
+            #    from the sortable one — `as_quarter` converts one way and there is no inverse,
+            #    and inventing one here would be a second spelling rule (`plan`'s docstring).
+            available = {by_quarter[q].period for q in set(outstanding) | set(operands)
+                         if q in by_quarter}
+            keep = []
+            for quarter in outstanding:
+                task = by_quarter[quarter]
+                done_here = set(job.parsed_reports(builder, task))
+                gap = set(job.REPORTS) - done_here - set(settled_here.get(quarter, ()))
+                why = ""
+                if gap == {fin.INCOME_STATEMENT} and task.cumulative:
+                    pending = {p: {} for p in available if p != task.period}
+                    _priors, why = pdf_ocr_merge._quarter_priors(
+                        builder, exchange, symbol, tpl, task.period, pending)
+                if why:
+                    blocked_here[quarter] = why
+                else:
+                    keep.append(quarter)
+            if len(keep) != len(outstanding):
+                outstanding = keep
+                operands = (job.span_operands(builder, exchange, symbol, tpl, outstanding)
+                            if span_operands and outstanding else [])
         plans.append(TickerPlan(
             exchange=exchange, symbol=symbol, template=tpl, template_how=how,
             quarters=sorted(set(outstanding) | set(operands)), operands=operands,
             settled=settled_here, filed=len(filed), complete=complete,
-            exhausted=exhausted_here))
+            exhausted=exhausted_here, blocked=blocked_here))
     return plans
 
 
