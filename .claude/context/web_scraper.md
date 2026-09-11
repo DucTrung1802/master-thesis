@@ -2607,6 +2607,35 @@ is the same decode on fewer images; that is what makes the equality above struct
 lucky. ⚠️ **The retry fires on an ENGINE ERROR and never on a refusal** — a refusal is a
 measurement of the filing, and repeating it returns the same answer at the same cost.
 
+#### ⚠️ A THIRD ENGINE IS NOT A LEVER ON A PAGE NOBODY FOUND — VHM, 2026-09-12
+
+`EOC-1` measured easyocr winning 2 of 8 open cells, both on SCANS, and VHM looked like the
+ideal case: **14 of its 15 winnable documents are scans** (1 text page in 70-220), and all 15
+had been refused by the 115 onnx layers. So the run asked the five easyocr layers and nothing
+else — `ENGINES = ["easyocr"]`, the cheapest form of a NEW question.
+
+| measured 2026-09-12, VHM, easyocr only | |
+|---|---|
+| documents run · GPU | 5 · ~90 min |
+| open cells attacked | 6 |
+| open cells won | **0** |
+| Q1-2026 alone (142-page scan) | 39 min, all three statements refused |
+
+⚠️ **AND THE REASONS SAY WHY, WHICH IS THE POINT.** Four of the six refusals are `no such
+statement on any page of this filing` — a verdict on the PAGE CLASSIFIER wearing the words of
+one on the document (`SET-2`), and **no OCR engine can read a page that was never selected**.
+The rest are `only 1 rows parsed` and `no total to balance against`: row MAPPING, again not
+recognition quality.
+
+⚠️ **SO THE ENGINE QUESTION IS ANSWERED FOR THIS TICKER AND THE PARSER QUESTION IS NOT.** VHM's
+17 open cells on filings that exist need the page classifier and the anchor mapping, not a
+fourth engine — and the free replay over every VHM run folder ranks its refusals the same way:
+`too few rows parsed` 12, `no total to balance against` 6, `is: no profit before tax` 5.
+
+⚠️ **THE OTHER 12 CELLS CANNOT BE PARSED BY ANYTHING**: 2017-Q1/Q2/Q3 predate the listing and
+2026-Q2 is not in CafeF's index at all — scraped 2026-08-23, both of VHM's 2026 rows are Q1.
+§5 rule 24: `missing` is the correct answer until a SCRAPE brings a document.
+
 #### ⚠️ WHERE THE CASCADE ACTUALLY WINS — 68.7 % AT LAYER 1 (measured 2026-09-11)
 
 Replayed over the `metadata.json` of **1,272 run folders**, 6,299 accepted statements carrying a
