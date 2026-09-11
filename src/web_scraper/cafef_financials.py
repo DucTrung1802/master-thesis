@@ -1026,6 +1026,50 @@ class FinancialsBuilder:
         # onnx layer reaches it, and what it recovers still faces reconcile + `sane` + the cash
         # breakdown and identity gates.
         ParseLayer("tesseract@400+relax", "tesseract", 400, relax_totals=True),
+        # ⚠️ **A THIRD ENGINE, AND IT WINS CELLS THE OTHER 115 LAYERS LOSE** (`EOC-1`,
+        # 2026-09-11). `easyocr` has been implemented in `PdfParser._ocr_page_easyocr` since the
+        # beginning and **no `ParseLayer` had ever used it**, on a module-header note that it
+        # "fragments boxes differently". ⚠️ That note was written while the easyocr branch of
+        # `_read_page` SKIPPED `_merge_split_figures` — the repair the onnx branch gets and the
+        # Tesseract branch was given on 2026-09-08 (`TSM-1`); this branch got it on 2026-09-11
+        # (`TSM-2`). "Fragments boxes differently" was the symptom of a missing repair.
+        #
+        # ⚠️ **MEASURED BEFORE SHIPPING, ON CELLS THAT ARE ACTUALLY OPEN.** Eight documents drawn
+        # from the 206 open cells whose page WAS found and whose reading was refused: **2 cells
+        # won**, both on documents all 115 ONNX layers had lost — STB Q1-2016's cash flow and
+        # STB Q3-2015's balance sheet. ⚠️ **BOTH WINS ARE ON SCANS**, which is the shape of the
+        # result: `_read_page` uses a page's NATIVE TEXT LAYER when it has one (`MIN_PAGE_TEXT`),
+        # so on a text PDF no OCR engine runs and these layers are a no-op by construction. 0 of
+        # 4 text documents, 2 of 4 scans. Of the 205 open cells with a found page, **89 are TEXT
+        # and 116 are SCAN**, so this addresses at most 116 before its hit rate is applied.
+        #
+        # ⚠️ **HERE, BESIDE TESSERACT, BECAUSE THE CASCADE ESCALATES CREDULITY AND A SECOND
+        # ENGINE IS NOT AN ESCALATION.** Appending the five to the END was the first attempt and
+        # **it broke 20 tests**, correctly: `ParseLayer.is_strict`'s contract is that *no layer
+        # reading the box AS PRINTED may run after a widening one*, and a strict `easyocr@200` at
+        # position 118 would have let a RELAXED onnx reading win a statement an EXACT easyocr
+        # reading could have taken. `tesseract@200` sits at position 4 for the same reason, and
+        # this block follows it.
+        #
+        # ⚠️ **THE PRICE IS THAT A FAILING DOCUMENT MEETS THEM EARLY — 3.2-26.8 min, median ~12,
+        # for the five** — and the compensation is that a document easyocr CAN read stops here
+        # instead of running 110 more layers. ⚠️ **`ONNX_ONLY = True` drops them exactly as it
+        # drops tesseract** (`TSS-1`), so the control notebook's default path pays nothing and
+        # stays reproducible against a Kaggle worker. The difference from tesseract is that
+        # `easyocr` is a pip package rather than a system binary, so a worker COULD carry it;
+        # whether its model weights can ship in the payload dataset the way the onnx models
+        # already do is **not measured**, and is the open question before enabling them there.
+        #
+        # ⚠️ **AND THE COST IS HOST RAM, NOT VRAM — MEASURED 7.1 GB PEAK ON ONE DOCUMENT** (GAS
+        # Q3-2013, 2026-09-11, a multi-page scan at `easyocr@400`). It fell back to 0.9 GB within
+        # seconds, so it is a render spike and not a leak, but on a 16 GB machine it took
+        # available memory to 366 MB. ⚠️ **`run_batch`'s only memory gate is `vram_floor_mb`,
+        # which cannot see this at all** — so do not run these beside another OCR process.
+        ParseLayer("easyocr@200", "easyocr", 200),
+        ParseLayer("easyocr@300", "easyocr", 300),
+        ParseLayer("easyocr@400", "easyocr", 400),
+        ParseLayer("easyocr@300+relax", "easyocr", 300, relax_totals=True),
+        ParseLayer("easyocr@400+relax", "easyocr", 400, relax_totals=True),
         # THE BREAKDOWN'S COMPONENT SET, WIDENED — added last, after every existing layer, so a
         # statement that reconciles today can never reach them (the design rule here: a change
         # that recovers six quarters and quietly breaks a sixtieth is a net loss). These recover

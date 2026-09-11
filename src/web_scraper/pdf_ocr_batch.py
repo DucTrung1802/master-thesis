@@ -71,8 +71,12 @@ layers RAISED are all still refused, here as in the sweep.
 """
 from __future__ import annotations
 
+import csv
+import datetime as dt
+import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -89,6 +93,9 @@ from web_scraper import pdf_ocr_job as job
 # were holding CUDA contexts. This is a FLOOR on free memory, not a budget for the run —
 # a document that starts with less does not fail cleanly, it falls through to whatever layer
 # did not raise (`GPU-1`).
+# The repo root — this file is `src/web_scraper/pdf_ocr_batch.py`.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 VRAM_FLOOR_MB = 2600
 
 # How long to wait for the card to come free before giving up. A browser tab or a notebook
@@ -124,6 +131,11 @@ class TickerPlan:
     settled: Dict[str, List[str]] = field(default_factory=dict)   # quarter -> reports
     filed: int = 0
     complete: int = 0
+    # ⚠️ `{quarter: [report]}` DROPPED from `quarters` because the same cascade, under the same
+    #    parser, has already refused every report still open on them (`ASK-1`). Empty unless
+    #    `plan_batch(skip_exhausted_on=True)` — the plan REPORTS what it withheld, it never
+    #    withholds silently.
+    exhausted: Dict[str, List[str]] = field(default_factory=dict)
 
     @property
     def key(self) -> str:
@@ -179,11 +191,116 @@ def wait_for_vram(floor_mb: int = VRAM_FLOOR_MB, timeout: int = VRAM_WAIT_SECOND
     return free
 
 
+
+# ⚠️ **THE PARSER IS PART OF A VERDICT, SO A SKIP HAS TO BE SCOPED TO IT** (`ASK-1`).
+# `exhausted_quarters` below refuses to re-run a document whose open cells the same cascade has
+# already lost. That is only safe while the code that produced the loss is the code about to
+# run: a parser change makes every stale verdict re-winnable, and a skip that ignores it is
+# `SET-3`'s self-sealing loop one register up — a cell never re-run, so its reason never
+# updates, so it is never re-run.
+_PARSER_SOURCES = ("src/web_scraper/cafef_pdf_parser.py",
+                   "src/web_scraper/cafef_financials.py")
+
+
+def _git(*args: str) -> Optional[str]:
+    """`git <args>` from the repo root, or `None` if git cannot answer."""
+    try:
+        out = subprocess.run(("git",) + args, cwd=str(REPO_ROOT), capture_output=True,
+                             text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
+
+
+def parser_blobs(commit: Optional[str] = None) -> Optional[Tuple[str, ...]]:
+    """Content hashes of the OCR parser's sources — `None` when they cannot be established.
+
+    ⚠️ **`None` IS "DO NOT SKIP ANYTHING", NEVER "THEY MATCH"** (§5 rule 2 at the fingerprint).
+    A run folder records `git_commit` as `<sha>` or `<sha>+dirty`; a DIRTY tree says the parser
+    of that moment was never committed and cannot be recovered, so it can never be compared —
+    it is not a match and not a mismatch, it is unknown, and unknown means run the document.
+
+    With no `commit` the working tree is hashed (`git hash-object`), which is what is about to
+    run; with one, the blobs that commit recorded (`git rev-parse <commit>:<path>`). Comparing
+    BLOBS rather than commits is what lets a folder from an older commit still count: the
+    parser is the same file whatever else moved around it.
+    """
+    if commit is not None and ("+dirty" in commit or not commit):
+        return None
+    blobs = []
+    for path in _PARSER_SOURCES:
+        got = (_git("hash-object", path) if commit is None
+               else _git("rev-parse", f"{commit}:{path}"))
+        if not got:
+            return None
+        blobs.append(got)
+    return tuple(blobs)
+
+
+def exhausted_quarters(reports_root, exchange: str, symbol: str, *,
+                       layers: Optional[Sequence[str]],
+                       parser: Optional[Tuple[str, ...]] = None,
+                       ) -> Dict[str, List[str]]:
+    """`{YYYY-QQ: [report]}` for cells a run of THIS cascade, under THIS parser, already lost.
+
+    ⚠️ **THE GAP PLAN REMEMBERS WHAT WAS WON AND NOT WHAT WAS ASKED, AND IT COST FOUR HOURS IN
+    ONE DAY** (`ASK-1`, 2026-09-11). `plan_batch` selects a quarter when any of its three
+    reports is not `pdf`, which answers *"what does this ticker still owe"* and not *"what is
+    worth spending GPU on"*. Measured the same day: of 241 open cells across the corpus, **184
+    had already met the full 115-layer ONNX cascade and lost**, so a gap run spends its whole
+    budget reproducing refusals — SHB's 18 `SPR-1` documents returned **0 cells in 2.2 h**, and
+    a tesseract-only pass over 37 SHB documents wrote ONE statement and left the next pass
+    planning all 37 again.
+
+    ⚠️ **A CELL IS EXHAUSTED ONLY WHEN THE PAST RUN BROUGHT AT LEAST THIS CASCADE TO IT.** A
+    folder that ran a SUBSET answers a smaller question, and its refusal says nothing about the
+    layers it never reached. `layers=None` means "whatever this run uses" and matches any
+    recorded cascade, so pass the list when one is known.
+
+    ⚠️ **AND ONLY WHEN THE PARSER IS THE SAME FILE** — see `parser_blobs`. Today every folder on
+    disk was written either at a dirty tree or at a commit whose parser differs, so this returns
+    EMPTY and nothing is skipped. That is the correct answer, not a limitation: the parser
+    changed under those verdicts, so they are all re-winnable.
+    """
+    current = parser or parser_blobs()
+    if current is None:
+        return {}
+    want = set(layers or ())
+    seen: Dict[str, set] = {}
+    cache: Dict[str, Optional[Tuple[str, ...]]] = {}
+    pattern = f"*__{exchange.lower()}_{symbol.lower()}__pdf_ocr"
+    for folder in sorted(Path(reports_root).glob(pattern), key=lambda f: f.name):
+        try:
+            meta = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        commit = str(meta.get("git_commit") or "")
+        if commit not in cache:
+            cache[commit] = parser_blobs(commit)
+        if cache[commit] != current:
+            continue
+        ran = set((meta.get("inputs") or {}).get("layers") or ())
+        # ⚠️ A folder that recorded no layer list says nothing about which cascade it ran.
+        if not ran or (want and not want <= ran):
+            continue
+        for result in meta.get("results") or ():
+            if result.get("status") == "pdf":
+                continue
+            try:
+                quarter = job.as_quarter(result.get("period", ""))
+            except Exception:                   # noqa: BLE001
+                continue
+            seen.setdefault(quarter, set()).add(result.get("report"))
+    return {q: sorted(r for r in reports if r) for q, reports in seen.items()}
+
+
 def plan_batch(tickers: Sequence[str], *, exchange: str = "HOSE",
                reports_root: os.PathLike | str,
                allow_parent: bool = True,
                span_operands: bool = True,
                template: Optional[str] = None,
+               skip_exhausted: Optional[Sequence[str]] = None,
+               skip_exhausted_on: bool = False,
                builder: Optional[fin.FinancialsBuilder] = None) -> List[TickerPlan]:
     """What each ticker still owes, resolved from the statement CSVs and the PDF index.
 
@@ -206,8 +323,10 @@ def plan_batch(tickers: Sequence[str], *, exchange: str = "HOSE",
         filed = job.plan(builder, exchange, symbol, allow_parent=allow_parent, template=tpl)
         settled = job.settled_absences(reports_root, exchange, symbol)
         outstanding, settled_here, complete = [], {}, 0
+        by_quarter: Dict[str, job.DocumentTask] = {}
         for task in filed:
             quarter = job.as_quarter(task.period)
+            by_quarter[quarter] = task
             done = set(job.parsed_reports(builder, task))
             gap = [r for r in job.REPORTS if r not in done]
             if not gap:
@@ -218,12 +337,31 @@ def plan_batch(tickers: Sequence[str], *, exchange: str = "HOSE",
                 settled_here[quarter] = [r for r in gap if r in known]
             if any(r not in known for r in gap):
                 outstanding.append(quarter)
+        # ⚠️ **WHAT HAS ALREADY BEEN ASKED COMES OUT OF THE PLAN, AND ONLY WHEN IT IS
+        #    THE SAME QUESTION** (`ASK-1`). A quarter is dropped when EVERY report still open
+        #    on it was refused by a past run of at least this cascade under this parser — one
+        #    report the cascade has not met keeps the whole document, because the document is
+        #    the unit a run reads.
+        exhausted_here: Dict[str, List[str]] = {}
+        if skip_exhausted_on:
+            spent = exhausted_quarters(reports_root, exchange, symbol,
+                                       layers=skip_exhausted)
+            keep = []
+            for quarter in outstanding:
+                done_here = set(job.parsed_reports(builder, by_quarter[quarter]))
+                gap = set(job.REPORTS) - done_here - set(settled_here.get(quarter, ()))
+                if gap and gap <= set(spent.get(quarter, ())):
+                    exhausted_here[quarter] = sorted(gap)
+                else:
+                    keep.append(quarter)
+            outstanding = keep
         operands = (job.span_operands(builder, exchange, symbol, tpl, outstanding)
                     if span_operands and outstanding else [])
         plans.append(TickerPlan(
             exchange=exchange, symbol=symbol, template=tpl, template_how=how,
             quarters=sorted(set(outstanding) | set(operands)), operands=operands,
-            settled=settled_here, filed=len(filed), complete=complete))
+            settled=settled_here, filed=len(filed), complete=complete,
+            exhausted=exhausted_here))
     return plans
 
 
@@ -341,7 +479,7 @@ def refusal_histogram(folders: Sequence[os.PathLike | str]) -> Tuple[Dict[str, i
 
 
 def fill_grid(plan: TickerPlan, *, builder: Optional[fin.FinancialsBuilder] = None,
-              allow_parent: bool = True, apply: bool = True,
+              allow_parent: bool = True, apply: bool = True, to_ceiling: bool = True,
               log: Optional[Callable[[str], None]] = None) -> Dict[str, dict]:
     """Every quarter from this ticker's FIRST filing to its LAST gets a row in all three
     statement CSVs — `source='missing'` for the ones nothing was written for.
@@ -367,6 +505,16 @@ def fill_grid(plan: TickerPlan, *, builder: Optional[fin.FinancialsBuilder] = No
     reaches Q2-2026 and BSR stops at Q4-2020, because that is where each ticker's filing chain
     stops. A grid run to `date.today()` would write `missing` rows asserting a company failed to
     file quarters nobody has filed yet.
+
+    ⚠️ **AND THAT LOWER CEILING MADE A STALE SCRAPE INVISIBLE** (`GRD-2`, 2026-09-11). "Where
+    this ticker's filing chain stops" and "where the SCRAPE stops" are the same sentence on
+    disk, so BSR's grid ending in 2020 read as a company that stopped filing. Measured over the
+    784 index files: **91 tickers stop at Q1-2026 while 4 carry Q2-2026** — the chain had not
+    stopped, the index was one quarter behind, and no CSV said so. `to_ceiling` extends the
+    grid to `corpus_ceiling()`, which is still derived from FILINGS and never from the calendar
+    alone: the quarter must have ENDED *and* some issuer must have filed for it. A `missing`
+    row there asserts only that the repo holds no figure for a quarter that is over — which is
+    exactly what `GRD-1` exists to make the file say.
     """
     say = log or (lambda _s: None)
     builder = builder or fin.FinancialsBuilder(logger=None)
@@ -375,6 +523,14 @@ def fill_grid(plan: TickerPlan, *, builder: Optional[fin.FinancialsBuilder] = No
     if not periods:
         say(f"   {plan.key}: no filing to anchor a grid on — nothing filled")
         return {}
+    ceiling = corpus_ceiling() if to_ceiling else None
+    if ceiling and fin._period_key(ceiling) > fin._period_key(max(periods, key=fin._period_key)):
+        # ⚠️ ONE SYNTHETIC PERIOD, and `fill_period_grid` fills contiguously to it. It writes
+        #    only the six facts a `missing` row may assert, so nothing here claims a filing.
+        say(f"   {plan.key}: the index stops at "
+            f"{max(periods, key=fin._period_key)} and the corpus reaches {ceiling} — "
+            f"extending the grid, the gap is the SCRAPE (`GRD-2`)")
+        periods = list(periods) + [ceiling]
     out = builder.fill_period_grid(plan.exchange, plan.symbol, plan.template, periods,
                                    apply=apply)
     added = sum(v["added"] for v in out.values())
@@ -389,6 +545,69 @@ def fill_grid(plan: TickerPlan, *, builder: Optional[fin.FinancialsBuilder] = No
     else:
         say(f"   {plan.key}: no statement CSV on disk yet — the first write creates it")
     return out
+
+
+# ⚠️ `{PDFS_DIR: ceiling}` — `use_data_root` re-points that global, so it is the cache key.
+_CEILING_CACHE: Dict[str, Optional[str]] = {}
+_QUARTER_RE = re.compile(r"^Q([1-4])-(\d{4})$")
+# The last day of each quarter, used to ask whether a quarter has ENDED.
+_QUARTER_END = {1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
+
+
+def corpus_ceiling(*, today: Optional[dt.date] = None) -> Optional[str]:
+    """The newest quarter that HAS ENDED and that some ticker's filing index carries.
+
+    ⚠️ **A TICKER'S OWN LAST FILING IS THE WRONG CEILING FOR ITS GRID, BECAUSE A STALE SCRAPE
+    LOOKS EXACTLY LIKE A COMPANY THAT STOPPED FILING** (`GRD-2`, 2026-09-11). `fill_grid` ran
+    first-filed to last-filed, which is faithful to the index and invisible when the index is
+    behind. Measured over the 784 index files that day: **91 tickers stop at Q1-2026 while 4
+    carry Q2-2026** — one quarter of scrape staleness that no CSV admitted to, and BSR, MCH and
+    TCX stop in 2019-2020 with five years of the same silence.
+
+    ⚠️ **BOTH GUARDS ARE LOAD-BEARING AND NEITHER IS THE CALENDAR ALONE.** `fill_grid`'s own
+    docstring argued against a calendar ceiling in as many words — *"a grid run to
+    `date.today()` would write `missing` rows asserting a company failed to file quarters
+    nobody has filed yet"* — and it was right, so:
+
+    * **it must have ENDED.** On 2026-09-11 one index file carries `Q3-2026`, a quarter that
+      does not close until 2026-09-30. That row is a data error, and a ceiling taken from the
+      raw maximum would propagate it to all 784 tickers.
+    * **somebody must have FILED it.** A quarter that has ended but whose ~30-day filing window
+      is still open is a quarter nobody owes a statement for yet.
+
+    A `missing` row under this ceiling asserts only what is true: **the quarter is over, some
+    issuer has filed for it, and this repo holds no figure.** Returns `None` when the index
+    cannot be read — no ceiling, no extension (§5 rule 2).
+    """
+    index = Path(fin.PDFS_DIR) / "index"
+    cache_key = str(index)
+    if cache_key in _CEILING_CACHE:
+        return _CEILING_CACHE[cache_key]
+    today = today or dt.date.today()
+    best: Optional[Tuple[int, int]] = None
+    try:
+        files = sorted(index.glob("*.csv"))
+    except OSError:
+        files = []
+    for path in files:
+        try:
+            with io.open(path, encoding="utf-8-sig", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    hit = _QUARTER_RE.match((row.get("period") or "").strip())
+                    if not hit:
+                        continue
+                    quarter, year = int(hit.group(1)), int(hit.group(2))
+                    month, day = _QUARTER_END[quarter]
+                    if dt.date(year, month, day) > today:
+                        continue        # not over yet — nobody can have filed it
+                    if best is None or (year, quarter) > best:
+                        best = (year, quarter)
+        except (OSError, ValueError):
+            continue                    # a damaged index file names no ceiling
+    answer = f"Q{best[1]}-{best[0]}" if best else None
+    _CEILING_CACHE[cache_key] = answer
+    return answer
+
 
 
 def complete_periods(folder: os.PathLike | str) -> List[str]:
@@ -526,6 +745,30 @@ def _merge_finished_quarters(folder: Path, plan: TickerPlan, *, apply: bool,
     return written, unguarded
 
 
+# ⚠️ **THE ENGINES THAT NEED NO GPU, NAMED ONCE.** `_cascade_uses_gpu` is the only reader.
+CPU_ENGINES = ("tesseract",)
+
+
+def _cascade_uses_gpu(layers: Optional[Sequence[str]]) -> bool:
+    """Will the cascade about to run touch the card at all?
+
+    ⚠️ **A TESSERACT-ONLY RUN WAS SPENDING 120 s PER DOCUMENT WAITING FOR VRAM IT NEVER USES**
+    (`VRW-1`, 2026-09-11). `run_batch` called `wait_for_vram` before every document whatever the
+    cascade, so three CPU-only sweeps running beside one GPU job each stalled two minutes per
+    document — 20 documents in, that was 40 minutes of twenty idle cores waiting on a card none
+    of them had asked for. The gate is worth keeping for `onnx`: a document that starts short of
+    memory is a document whose layers raise, and `VCR-1` then refuses it whole.
+
+    ⚠️ **AN UNKNOWN LAYER NAME COUNTS AS GPU WORK** (§5 rule 2 at the gate). "Not in the shipped
+    cascade" is not evidence of "runs on the CPU", and the safe direction here is to wait.
+    """
+    if not layers:
+        return True                 # the whole shipped cascade — 115 of its 117 layers are onnx
+    engines = {layer.name: layer.engine for layer in fin.FinancialsBuilder.LAYERS}
+    return any(engines.get(name, "onnx") not in CPU_ENGINES for name in layers)
+
+
+
 def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = None,
               out_root: Optional[os.PathLike | str] = None,
               allow_parent: bool = True, overwrite: bool = True,
@@ -587,8 +830,27 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
     this reports is the batch's own position, and the child reports its own in its `run.log`.
     """
     say = log or (progress.note if progress is not None else print)
-    out_root = Path(out_root or job.DEFAULT_OUT_ROOT)
+    # ⚠️ **RESOLVED, BECAUSE THE CHILD DOES NOT SHARE THIS PROCESS'S WORKING DIRECTORY**
+    #    (`CWD-2`, 2026-09-11). Each document is a subprocess launched with `cwd=<repo>/src`,
+    #    and `--out` is handed over as written. A RELATIVE root therefore names
+    #    `<repo>/src/<root>` to the child and `<cwd>/<root>` to `_newest_folder` here — so the
+    #    child writes its run folder, the parent globs an empty directory, and every document
+    #    reports "exit 0 and NO run folder". ⚠️ **NOTHING RAISES AND NOTHING IS LOST — IT IS
+    #    NOT MERGED**: `merge_each` never sees a folder, so a finished GPU run writes no row
+    #    and its artefacts sit one directory down, invisible to every planning tool. Measured
+    #    on MSN, 2026-09-11: 10 documents, ~2 h of RTX 3050, 9 of them with statements
+    #    accepted, `reports/pdf_ocr_msn/` empty and `src/reports/pdf_ocr_msn/` holding all ten.
+    #    `CWD-1` is the same defect one module over, and its fix anchored the path instead of
+    #    resolving it — here the caller's root is the answer, it just has to mean one place.
+    out_root = Path(out_root or job.DEFAULT_OUT_ROOT).resolve()
     total = sum(len(p.quarters) for p in plans)
+    # ⚠️ **SAID ONCE, BECAUSE A GATE THAT SILENTLY DOES NOT FIRE IS A GATE NOBODY CAN AUDIT**
+    #    (`VRW-1`). The decision is the cascade's, not the machine's — a CPU-only run is not
+    #    competing for the card and must not queue behind whatever is.
+    uses_gpu = _cascade_uses_gpu(layers)
+    if not uses_gpu:
+        say(f"   cascade is {'/'.join(CPU_ENGINES)}-only — the {vram_floor_mb} MiB VRAM gate "
+            f"is OFF for this batch (`VRW-1`)")
     folders: List[Path] = []
     raised: List[str] = []
     # ⚠️ ONE BACKUP PER TICKER, not one per quarter — `merge_batch` and
@@ -605,7 +867,8 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
             # not do. `end()` is the caller's, once the batch returns.
             if progress is not None:
                 progress.inside((done - 1) / max(1, total))
-            wait_for_vram(vram_floor_mb, log=say)
+            if uses_gpu:
+                wait_for_vram(vram_floor_mb, log=say)
             cmd = [sys.executable, "-m", "web_scraper.pdf_ocr_job",
                    "--exchange", plan.exchange, "--symbol", plan.symbol,
                    "--quarters", quarter, "--template", plan.template,
@@ -632,7 +895,8 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
                     env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
                     say(f"   retry {attempt}/{retries} with CAFEF_ONNX_REC_BATCH={size} "
                         f"(same reading, fewer crops per decode)")
-                    wait_for_vram(vram_floor_mb, log=say)
+                    if uses_gpu:
+                        wait_for_vram(vram_floor_mb, log=say)
                 started = time.time()
                 code = subprocess.call(cmd, cwd=str(Path(job.__file__).resolve().parents[1]),
                                        env=env)

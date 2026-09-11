@@ -4,8 +4,10 @@
 comments say which. None of them touches the cascade: `run_batch` spawns `pdf_ocr_job`, and
 that module has its own suite.
 """
+import datetime as dt
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -570,3 +572,225 @@ def test_progress_is_optional_so_the_cli_prints_what_it_always_printed(tmp_path,
     batch.run_batch([plan], out_root=tmp_path)
     out = capsys.readouterr().out
     assert out.lstrip().startswith("──") and "%" not in out.splitlines()[0]
+
+
+# ── `CWD-2` — one root, one directory ─────────────────────────────────────────
+
+def _quiet(monkeypatch, tmp_path, seen):
+    """Everything `run_batch` touches outside the two facts under test."""
+    monkeypatch.setattr(batch, "wait_for_vram",
+                        lambda *_a, **_kw: seen.setdefault("waits", []).append(1))
+    monkeypatch.setattr(subprocess, "call",
+                        lambda cmd, **_kw: seen.update(cmd=list(cmd)) or 0)
+    monkeypatch.setattr(batch, "_newest_folder",
+                        lambda root, *_a, **_kw: seen.update(looked_in=root) or tmp_path)
+    monkeypatch.setattr(batch, "_engine_errors", lambda _f: 0)
+    return batch.TickerPlan(exchange="HOSE", symbol="MSN", template="corp",
+                            quarters=["2021-Q4"], template_how="override",
+                            operands=[], settled={}, filed=1, complete=False)
+
+
+def test_a_relative_out_root_reaches_the_child_as_an_ABSOLUTE_path(tmp_path, monkeypatch):
+    """⚠️ **THE CHILD DOES NOT SHARE THIS PROCESS'S WORKING DIRECTORY** (`CWD-2`).
+
+    Every document is a subprocess launched with `cwd=<repo>/src`, so a relative `--out` names
+    `<repo>/src/<root>` there and `<cwd>/<root>` here. Measured on MSN 2026-09-11: ten
+    documents and ~2 h of GPU wrote all ten run folders into `src/reports/pdf_ocr_msn/`, the
+    parent globbed an empty `reports/pdf_ocr_msn/`, and every one reported "exit 0 and NO run
+    folder" — nothing raised, nothing was lost, and nothing was merged.
+    """
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+    plan = _quiet(monkeypatch, tmp_path, seen)
+
+    # `fill_gaps` reads the PDF index from a RELATIVE data root, which this `chdir` moves
+    # out from under it; the fact under test is the path handed to the child.
+    batch.run_batch([plan], out_root="reports/pdf_ocr_msn", fill_gaps=False)
+
+    handed = seen["cmd"][seen["cmd"].index("--out") + 1]
+    assert Path(handed).is_absolute()
+    assert Path(handed) == (tmp_path / "reports" / "pdf_ocr_msn").resolve()
+
+
+def test_the_parent_looks_in_the_same_directory_it_told_the_child_to_write(tmp_path,
+                                                                          monkeypatch):
+    """The other half: a root that means two places is only visible when both are named."""
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+    plan = _quiet(monkeypatch, tmp_path, seen)
+
+    # `fill_gaps` reads the PDF index from a RELATIVE data root, which this `chdir` moves
+    # out from under it; the fact under test is the path handed to the child.
+    batch.run_batch([plan], out_root="reports/pdf_ocr_msn", fill_gaps=False)
+
+    assert Path(seen["cmd"][seen["cmd"].index("--out") + 1]) == seen["looked_in"]
+
+
+# ── `VRW-1` — a CPU cascade does not queue behind the card ────────────────────
+
+def test_a_tesseract_only_cascade_does_NOT_wait_for_vram(tmp_path, monkeypatch):
+    """⚠️ **20 CORES SPENT 120 s PER DOCUMENT WAITING FOR A CARD THEY NEVER TOUCH** (`VRW-1`).
+
+    Measured 2026-09-11: three tesseract-only sweeps running beside one GPU job took the
+    full `VRAM_WAIT_SECONDS` timeout on 20 of their first 158 documents — 40 minutes of
+    nothing, and the gate could not have protected them from anything.
+    """
+    seen = {}
+    plan = _quiet(monkeypatch, tmp_path, seen)
+
+    batch.run_batch([plan], layers=["tesseract@200", "tesseract@400+relax"],
+                    out_root=tmp_path)
+
+    assert seen.get("waits") is None
+
+
+def test_a_cascade_WITH_onnx_still_waits(tmp_path, monkeypatch):
+    """The gate is worth keeping where it was measured: a document that starts short of VRAM
+    is a document whose layers raise, and `VCR-1` then refuses it whole."""
+    seen = {}
+    plan = _quiet(monkeypatch, tmp_path, seen)
+
+    batch.run_batch([plan], layers=["tesseract@200", "onnx@200"], out_root=tmp_path)
+
+    assert seen.get("waits") == [1]
+
+
+def test_NO_named_layers_means_the_whole_cascade_and_it_waits(tmp_path, monkeypatch):
+    """`layers=None` is the shipped 117, of which 115 are onnx."""
+    seen = {}
+    plan = _quiet(monkeypatch, tmp_path, seen)
+
+    batch.run_batch([plan], out_root=tmp_path)
+
+    assert seen.get("waits") == [1]
+
+
+def test_an_UNKNOWN_layer_name_is_treated_as_gpu_work(tmp_path, monkeypatch):
+    """⚠️ §5 rule 2 at the gate: "not in the shipped cascade" is not evidence of "runs on the
+    CPU", and the safe direction is to wait."""
+    seen = {}
+    plan = _quiet(monkeypatch, tmp_path, seen)
+
+    batch.run_batch([plan], layers=["tesseract@200", "easyocr@200"], out_root=tmp_path)
+
+    assert seen.get("waits") == [1]
+
+
+# ── `GRD-2` — the grid reaches the corpus, not this ticker's stale index ──────
+
+class _Task:
+    def __init__(self, period):
+        self.period = period
+
+
+class _Builder:
+    def __init__(self, seen):
+        self.seen = seen
+
+    def fill_period_grid(self, _ex, _sym, _tpl, periods, **_kw):
+        self.seen["periods"] = list(periods)
+        return {}
+
+
+def _index(root, **by_symbol):
+    """A `raw_data/cafef/pdfs/index/` directory holding one CSV per ticker."""
+    index = root / "pdfs" / "index"
+    index.mkdir(parents=True)
+    for symbol, periods in by_symbol.items():
+        lines = ["symbol,exchange,year,quarter,period,name"]
+        lines += [f"{symbol},HOSE,{p.split('-')[1]},{p[1]},{p},f.pdf" for p in periods]
+        (index / f"HOSE_{symbol}.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return index
+
+
+def _grid_periods(monkeypatch, filed, ceiling, **kwargs):
+    """Run `fill_grid` over `filed` and return the period list it handed the writer."""
+    seen = {}
+    monkeypatch.setattr(batch.job, "plan", lambda *_a, **_kw: [_Task(p) for p in filed])
+    monkeypatch.setattr(batch, "corpus_ceiling", lambda **_kw: ceiling)
+    plan = batch.TickerPlan(exchange="HOSE", symbol="BSR", template="corp",
+                            template_how="override", quarters=[], operands=[], settled={},
+                            filed=len(filed), complete=False)
+    batch.fill_grid(plan, builder=_Builder(seen), apply=False, **kwargs)
+    return seen.get("periods")
+
+
+@pytest.fixture()
+def fresh_ceiling():
+    """`corpus_ceiling` memoises on `PDFS_DIR`; a test that changes it must clear that."""
+    batch._CEILING_CACHE.clear()
+    yield
+    batch._CEILING_CACHE.clear()
+
+
+def test_a_quarter_that_has_not_ENDED_is_never_the_ceiling(tmp_path, monkeypatch,
+                                                           fresh_ceiling):
+    """⚠️ **ONE MISLABELLED INDEX ROW WOULD OTHERWISE REACH ALL 784 TICKERS** (`GRD-2`).
+
+    Measured 2026-09-11: one index file carried `Q3-2026`, a quarter that does not close until
+    2026-09-30. A ceiling taken from the raw maximum would have written a `missing` row for a
+    quarter nobody can have filed, in every CSV in the corpus.
+    """
+    _index(tmp_path, AAA=["Q1-2026", "Q2-2026"], BBB=["Q3-2026"])
+    monkeypatch.setattr(batch.fin, "PDFS_DIR", str(tmp_path / "pdfs"))
+
+    assert batch.corpus_ceiling(today=dt.date(2026, 9, 11)) == "Q2-2026"
+
+
+def test_the_ceiling_is_the_newest_ENDED_quarter_ANY_index_carries(tmp_path, monkeypatch,
+                                                                   fresh_ceiling):
+    """The other guard: a quarter that has ended but that nobody has filed is not a ceiling
+    either, because the ~30-day filing window may still be open."""
+    _index(tmp_path, AAA=["Q4-2019"], BBB=["Q1-2026"], CCC=["Q4-2025"])
+    monkeypatch.setattr(batch.fin, "PDFS_DIR", str(tmp_path / "pdfs"))
+
+    assert batch.corpus_ceiling(today=dt.date(2026, 9, 11)) == "Q1-2026"
+
+
+def test_an_index_that_cannot_be_READ_names_no_ceiling(tmp_path, monkeypatch, fresh_ceiling):
+    """⚠️ §5 rule 2 at the ceiling: no answer is `None`, and `None` extends nothing."""
+    monkeypatch.setattr(batch.fin, "PDFS_DIR", str(tmp_path / "nothing-here"))
+
+    assert batch.corpus_ceiling(today=dt.date(2026, 9, 11)) is None
+
+
+def test_a_damaged_index_file_is_skipped_rather_than_raising(tmp_path, monkeypatch,
+                                                             fresh_ceiling):
+    """784 files, and one of them being unreadable may not end a batch."""
+    index = _index(tmp_path, AAA=["Q1-2026"])
+    (index / "HOSE_BAD.csv").write_text("\n".join(["period", "FY-2009", "x"]) + "\n",
+                                        encoding="utf-8")
+    monkeypatch.setattr(batch.fin, "PDFS_DIR", str(tmp_path / "pdfs"))
+
+    assert batch.corpus_ceiling(today=dt.date(2026, 9, 11)) == "Q1-2026"
+
+
+def test_the_grid_EXTENDS_to_the_ceiling_when_this_tickers_index_is_behind(monkeypatch):
+    """⚠️ **A STALE SCRAPE AND A COMPANY THAT STOPPED FILING ARE THE SAME SENTENCE ON DISK**
+    (`GRD-2`). BSR's index stops at Q4-2020 and the corpus reaches Q2-2026; the grid now says
+    so instead of ending quietly in 2020."""
+    got = _grid_periods(monkeypatch, ["Q3-2020", "Q4-2020"], "Q2-2026")
+
+    assert got[-1] == "Q2-2026"
+    assert got[:2] == ["Q3-2020", "Q4-2020"]
+
+
+def test_a_grid_ALREADY_past_the_ceiling_is_left_alone(monkeypatch):
+    """The ceiling raises a floor; it is never a truncation."""
+    got = _grid_periods(monkeypatch, ["Q1-2026", "Q2-2026"], "Q1-2026")
+
+    assert got == ["Q1-2026", "Q2-2026"]
+
+
+def test_to_ceiling_False_keeps_the_first_filed_to_last_filed_grid(monkeypatch):
+    """The behaviour every CSV on disk was built under, still reachable."""
+    got = _grid_periods(monkeypatch, ["Q3-2020", "Q4-2020"], "Q2-2026", to_ceiling=False)
+
+    assert got == ["Q3-2020", "Q4-2020"]
+
+
+def test_NO_ceiling_extends_nothing(monkeypatch):
+    """An unreadable index must not shorten OR lengthen a grid."""
+    got = _grid_periods(monkeypatch, ["Q3-2020", "Q4-2020"], None)
+
+    assert got == ["Q3-2020", "Q4-2020"]

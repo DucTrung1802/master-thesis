@@ -129,7 +129,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 # ===== Local / Custom Modules =====
 # ⚠️ The line format is `utils`', not this module's: the Kaggle CONTROL side prints its own
@@ -1004,6 +1004,20 @@ class DocumentResult:
     # `missing` permanent and correct (§5 rule 24) and every re-run of it waste. Kept as DATA
     # rather than left in the prose of `log`, so a reader does not have to match a sentence.
     absent_reasons: Dict[str, List[tuple]] = field(default_factory=dict)
+    # ⚠️ **THE SAME REASONS, ATTRIBUTED TO THE LAST LAYER THAT GAVE THEM RATHER THAN THE
+    # FIRST** (`RSN-1`, 2026-09-11). `absent_reasons` keeps the FIRST layer per distinct
+    # reason, which is the right record of what the cascade encountered and **the wrong one
+    # for aiming a fix**: layer 1 is `onnx@200` with no flags and no `join_lost`, so a corpus
+    # census of first refusals is a census of what the SHALLOWEST reading saw. `SPR-1`'s sweep
+    # was aimed at 89 cells on exactly that evidence and returned ONE — SHB 18 documents /
+    # 2.2 h / 0 cells — because `join_lost` had already repaired those figures at layer 55 of
+    # 115. This field is the same map built by OVERWRITING instead of `setdefault`, so a
+    # reader can ask "what did the deepest layer still object to?" and get an answer.
+    #
+    # ⚠️ **IT IS NOT A RANKING OF DIFFICULTY EITHER, AND THE TWO TOGETHER ARE.** A reason that
+    # appears in `absent_reasons` and NOT here was overturned somewhere in the cascade; one
+    # that appears in both, with a late layer name, survived every reading the cascade has.
+    absent_deepest: Dict[str, List[tuple]] = field(default_factory=dict)
     # ⚠️ **THE ROWS BEHIND AN ABSENT STATEMENT — the CAUSE, where `absent_reasons` is the
     # SYMPTOM.** `no total assets` names a missing anchor and never the label that is there
     # instead, so diagnosing one costs a second OCR run of a scan this run already read. The
@@ -1028,6 +1042,8 @@ class DocumentResult:
             "absent_rows": self.absent_rows,
             "absent_reasons": {r: [list(x) for x in v]
                                for r, v in self.absent_reasons.items()},
+            "absent_deepest": {r: [list(x) for x in v]
+                               for r, v in self.absent_deepest.items()},
             "facts": self.facts,
             "error": self.error,
             "log": self.log,
@@ -1183,10 +1199,16 @@ def run_document(builder: FinancialsBuilder, task: DocumentTask,
         if _report in accepted:
             continue
         _first: Dict[str, str] = {}
+        # ⚠️ `_last` is the same loop without `setdefault` — the DEEPEST layer to give each
+        #    reason, which is the only one a parser fix can be aimed at (`RSN-1`).
+        _last: Dict[str, str] = {}
         for _layer, _why in _tried:
             _first.setdefault(_why, _layer)
+            _last[_why] = _layer
         result.absent_reasons[_report] = [(_layer, _why)
                                           for _why, _layer in _first.items()]
+        result.absent_deepest[_report] = [(_layer, _why)
+                                          for _why, _layer in _last.items()]
     if result.engine_errors:
         engines = sorted({name.split("@")[0] for name, _ in result.engine_errors})
         logger.log_warning(
@@ -1355,6 +1377,9 @@ def compare(builder: FinancialsBuilder, result: DocumentResult) -> Dict[str, dic
 #           126 statements and one that upserted none carried the identical artefact. On a v2
 #           folder the absent block means "this run predates the field", never "nothing was
 #           written" — which is exactly the distinction the version exists for.
+#   v5 (2026-09-11) — `absent_deepest` beside it, the SAME reasons attributed to the LAST
+#           layer that gave each rather than the first (`RSN-1`). An absent field means
+#           the run predates v5, never that the deepest layer agreed with layer 1.
 #   v4 (2026-08-31) — `absent_reasons` on each document JSON: `{report: [(layer, why)]}` for
 #           the statements the cascade REFUSED, distinct reasons only, first layer that gave
 #           each. The reason lived in `run.log` prose alone, so no reader could separate *"this
@@ -1568,6 +1593,26 @@ def settled_absences(reports_root: os.PathLike, exchange: str, symbol: str,
     so a settled absence is settled about the DOCUMENT that was read, not about the ticker
     forever.
 
+    ⚠️ **THE VERDICT IS TAKEN FROM EVERY FOLDER THAT SPOKE, NOT FROM EACH ONE AS IT IS READ**
+    (`SET-3`, 2026-09-11). The rule below — *every recorded reason, not any of them* — was
+    applied WITHIN one document json and to one folder at a time, so a single folder recording
+    nothing but `no such statement` settled the cell however many other folders had found the
+    page and refused it on arithmetic. **A two-layer `tesseract@200` + `tesseract@400+relax`
+    run cannot classify most pages and records exactly that sentence**, and running one over
+    SHB on 2026-09-11 retired SIX balance sheets — 2012-Q1, 2012-Q3, 2015-Q1, 2021-Q1, 2021-Q3
+    and 2022-Q1 — about which 115-layer runs had already said `assets 300,000,000 !=
+    liabilities + equity 800,000,000` and `6 figure(s) split across two boxes`. ⚠️ **A SETTLED
+    CELL LEAVES THE `winnable` DENOMINATOR, so retiring a winnable one RAISES the reported
+    parse rate**: the corpus read 94.15 % with those six gone and 94.01 % with them back, and
+    the higher number was the bug. A seventh, HPG's 2022-Q1 income statement, had been settled
+    the same way by an earlier run.
+
+    ⚠️ **SO A CELL IS SETTLED ONLY WHEN EVERY REASON EVER RECORDED FOR IT, IN EVERY FOLDER, IS
+    `NO_SUCH_STATEMENT`** — which is the same argument the rule below already makes, applied at
+    the scope it always meant. It cannot be over-strict: `reconcile` runs only on a statement
+    some layer FOUND, so an arithmetic refusal anywhere is proof the page exists, and a filing
+    that genuinely lacks the statement can never produce one.
+
     ⚠️ **KEYED `YYYY-QQ`, THOUGH THE ARTEFACT STORES `QQ-YYYY`.** The caller is comparing
     against a batch filter a person wrote, and `normalise_quarter` — the only way one gets in —
     yields the sortable form. Returning the artefact's own spelling would put the conversion at
@@ -1576,6 +1621,11 @@ def settled_absences(reports_root: os.PathLike, exchange: str, symbol: str,
     """
     settled: Dict[str, Dict[str, str]] = {}
     pattern = f"*__{exchange.lower()}_{symbol.lower()}__pdf_ocr"
+    # ⚠️ `{quarter: {report: [(folder name, that folder recorded NOTHING BUT NO_SUCH)]}}`.
+    #    Nothing is decided inside the loop — see `SET-3` in the docstring: deciding per folder
+    #    is what let the shallowest run in the corpus retire a cell the deepest one was still
+    #    arguing about.
+    spoke: Dict[str, Dict[str, List[Tuple[str, bool]]]] = {}
     for folder in sorted(Path(reports_root).glob(pattern), key=lambda f: f.name):
         for doc in sorted((folder / "documents").glob("*.json")):
             try:
@@ -1606,12 +1656,23 @@ def settled_absences(reports_root: os.PathLike, exchange: str, symbol: str,
                 # `no total assets`) and CTG Q1-2014's cash flow (`no closing cash balance`)
                 # were both being reported SETTLED on the strength of one later, differently
                 # cropped layer that failed to classify the page at all.
-                if tried and all(why == fin.NO_SUCH_STATEMENT for _layer, why in tried):
-                    try:
-                        quarter = as_quarter(data.get("period", ""))
-                    except Exception:  # noqa: BLE001 — an unreadable period names no quarter
-                        continue
-                    settled.setdefault(quarter, {})[report] = folder.name
+                if not tried:
+                    continue
+                try:
+                    quarter = as_quarter(data.get("period", ""))
+                except Exception:  # noqa: BLE001 — an unreadable period names no quarter
+                    continue
+                spoke.setdefault(quarter, {}).setdefault(report, []).append(
+                    (folder.name,
+                     all(why == fin.NO_SUCH_STATEMENT for _layer, why in tried)))
+
+    # ⚠️ **ONE DISSENTING FOLDER IS ENOUGH TO KEEP A CELL OPEN**, and the folder NAMED is the
+    #    last one to have said it — the same one the per-folder assignment used to leave
+    #    behind, so a caller reading that name sees no change.
+    for quarter, reports in spoke.items():
+        for report, entries in reports.items():
+            if all(only_no_such for _name, only_no_such in entries):
+                settled.setdefault(quarter, {})[report] = entries[-1][0]
     return settled
 
 

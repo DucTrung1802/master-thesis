@@ -50,7 +50,7 @@
 
 | file | ~tokens | what it answers |
 |---|---|---|
-| [../CLAUDE.md](../../CLAUDE.md) | **5.5k** | *what is this project, and what has it PROVED?* **The map and the verdict, and nothing else** — §2 the headline negative, §6 the current state, **§7 the module→file routing you are meant to lazy-load from**. ⚠️ **Was 162.7k, then 2,549 lines, both on 2026-09-06**; the evidence is in Tier 1's `findings/` rows and the hub is capped at 300 lines by R2 |
+| [../CLAUDE.md](../../CLAUDE.md) | **6.6k** | *what is this project, and what has it PROVED?* **The map and the verdict, and nothing else** — §2 the headline negative, §6 the current state, **§7 the module→file routing you are meant to lazy-load from**. ⚠️ **Was 162.7k, then 2,549 lines, both on 2026-09-06**; the evidence is in Tier 1's `findings/` rows and the hub is capped at 300 lines by R2 |
 | **.claude/current_state/INDEX.md** *(this file)* | **4.0k** | *where is everything else, and what does it cost to open?* |
 | [../.claude/rules/common.md](../rules/common.md) | **1.4k** | *what rules hold in EVERY session, whatever the task?* Added 2026-09-06; auto-loaded via `@.claude/rules/common.md` in `CLAUDE.md`. **R1: everything written into a file is English** (the conversation stays Vietnamese; `*_VI.md` and Vietnamese DATA are the two named exceptions). **R2: `CLAUDE.md` is at most 300 lines**, checked by `state_check.py`, with the table saying where displaced prose goes. ⚠️ **A new file in `.claude/rules/` is loaded only if `CLAUDE.md` imports it** — add the `@` line in the same commit |
 
@@ -79,7 +79,7 @@ MEANS — and are not [`current_state/`](README.md) snapshots, which hold what a
 | open this | ~tokens | when you are… |
 |---|---|---|
 | [verdict.md](../findings/verdict.md) | **2.3k** | ⚠️ **about to propose any modelling work.** §2 in full — the five defeats, the horizon nobody controlled for, the width ladder that survived, its caveats, and §2d's one remaining lever |
-| [data-state.md](../findings/data-state.md) | **18.9k** | asking what the DATA looks like today. §6-2-§6-3 — the `pool__ta` prune, the 2026-08-23 re-scrape and carry-up, the freshness distribution, `DEP-1`, the filings/OCR summary, **MSN 2026-09-07 (the gaps were REFUSALS: `JVW-2` and `MSO-5` fixed, `PBT-1`/`SPN-2`/`BSP-1` open)**, the audit |
+| [data-state.md](../findings/data-state.md) | **22.7k** | asking what the DATA looks like today. §6-2-§6-3 — the `pool__ta` prune, the 2026-08-23 re-scrape and carry-up, the freshness distribution, `DEP-1`, the filings/OCR summary, **MSN 2026-09-07 (the gaps were REFUSALS: `JVW-2` and `MSO-5` fixed, `PBT-1`/`SPN-2`/`BSP-1` open)**, the audit |
 | [cross-sectional.md](../findings/cross-sectional.md) | **8.5k** | quoting the headline result. §6-0-§6-0-ter — the walk-forward, seven architectures, the dataset sweep. ⚠️ **§6-0-c is the caveat list and is why the rest is readable** |
 | [model-chain.md](../findings/model-chain.md) | **6.9k** | running the chain end to end. §3b-§3d-bis + §4 — the eight stages, the two selection layers, Kaggle panel mode. ⚠️ the COMMANDS are the [runbook](../runbook/RUNBOOK.md)'s; this is the reasoning around them |
 | [data-layers.md](../findings/data-layers.md) | **5.6k** | asking where a column comes from. §3a-§3a-bis — the 83 assets, all ten `pool__*` tables and what each measured, the forex ingest, the FILTER layer |

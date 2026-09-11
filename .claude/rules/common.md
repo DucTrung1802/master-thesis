@@ -7,8 +7,8 @@
 > another rules file here, add its `@` import to `CLAUDE.md` in the same commit, or it is a file
 > nobody reads.**
 >
-> ⚠️ **This file is in the always-loaded budget** — `CLAUDE.md` (5.5k) + `../current_state/INDEX.md`
-> (4.8k) + this (1.4k) = **11.7k**, re-measured 2026-09-06 and down from 165.7k. Keep it to rules: a
+> ⚠️ **This file is in the always-loaded budget** — `CLAUDE.md` (6.6k) + `../current_state/INDEX.md`
+> (4.8k) + this (1.4k) = **12.8k**, re-measured 2026-09-06 and down from 165.7k. Keep it to rules: a
 > rule that needs a page of evidence belongs in [`standing-rules.md`](standing-rules.md) or a package
 > file under `.claude/context/`, with a one-line pointer from here. ⚠️ **`CLAUDE.md` is no longer the
 > place to put displaced prose** — R2 caps it at 300 lines; R2's own table says where each kind goes.

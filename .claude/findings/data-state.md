@@ -1140,6 +1140,369 @@ hand-written workaround instead of a fix.
 
 ---
 
+### ⚠️ 2026-09-11 — THE REMAINING GAP IS NOT UNSPENT GPU ANY MORE: 211 OF 241 OPEN CELLS HAVE ALREADY MET THE FULL CASCADE
+
+⚠️ **`RAT-1` SAID THE GAP WAS UNSPENT GPU AND IT WAS RIGHT ON 2026-09-10. IT IS NOT RIGHT NOW.**
+That decomposition found 332 cells never opened and 214 met only by a shorter cascade; those
+have since been run. Re-measured 2026-09-11 over every run folder and all 72 statement CSVs:
+
+| | cells |
+|---|---|
+| grid, first filing to last, all 72 CSVs | 4,464 |
+| `pdf` | **3,717** |
+| cells with a filing behind them (`filed`) | 3,999 |
+| settled — the filing PROVABLY holds no such statement | 41 |
+| **winnable = filed − settled** | **3,958** |
+| **rate on winnable** | **93.91 %** |
+| still needed for a 95 % rate | **43** |
+
+**And the 241 open cells split like this** — the number that says how high the rate can go:
+
+| | cells | what moves it |
+|---|---|---|
+| the full 115-layer cascade tried and lost | **184** | a PARSER change, nothing else |
+| parsed by the full cascade, refused at the MERGE | 27 | see the de-cumulation chain below |
+| met only a SHORTER cascade | 29 | GVR 18 + MSN 11 — both running on Kaggle |
+| never opened by any run | 1 | ACB Q3-2009 cash flow, and see below |
+
+⚠️ **THE ONE NEVER-OPENED CELL IS THE ONE `settled_absences` WAS WRITTEN ABOUT.** ACB's 2009
+quarterlies are three-page **BÁO CÁO TÀI CHÍNH TÓM TẮT** forms (Mẫu CBTT-03) carrying a balance
+sheet and a four-line P&L and no cash flow at all. Running it is the loop that function exists
+to stop. **So nothing is left for a local GPU that the full cascade has not already lost**, and
+the honest ceiling without a parser change is **about 94.7 %**.
+
+#### ⚠️ `SPR-1` — the fix is real, its reach is about zero, and the reason is the cascade's own layer 55
+
+| sweep, `SPR-1` signature only | documents | GPU | cells won |
+|---|---|---|---|
+| SHB | 18 | 2.2 h | **0** |
+| GAS | 14 | 1.0 h | **1** |
+
+The split-box refusal is repaired at `onnx@200+joinlost`, **layer 55 of 115**, by
+`_split_number_runs`' `join_lost` branch — not by `_merge_split_figures`, which runs before the
+splitter and never sees its pieces. SHB Q3-2019's balance sheet shows both halves in one place:
+`1 figure(s) split across two boxes` at `onnx@300`, then at `onnx@200+joinlost` no split at all
+and `assets 300,000,000 != liabilities + equity 800,000,000` instead. ⚠️ **A cell whose cascade
+reached layer 55 cannot be won by a split-repair change**, and 53 of the still-open cells whose
+best split-box refusal is ONE fragment are all past it.
+
+#### ⚠️ The 27 "merge-away" cells are a CHAIN, and 23 of its 28 roots are dead
+
+25 of the 27 are Q4 or Q2 **income statements**, i.e. the cumulative filings. `pdf_ocr_merge`
+already de-cumulates them — it refuses only when `_quarter_priors` cannot gather every Q1..Q(q−1)
+as a `pdf` row whose span is a KNOWN three months. Every one of the 25 is blocked by a named
+prior quarter that is `missing` on disk:
+
+| what the cascade has said about the blocking prior | priors | cells it would release |
+|---|---|---|
+| the full 115 found nothing | **23** | 50 |
+| parsed by the full cascade, itself withheld | 4 | 8 |
+| met only 110 layers | 1 | 2 |
+
+⚠️ **So `ceiling.py`'s "needs NO GPU, only a merge" bucket is not free** — it is a second-order
+view of the same 184.
+
+#### ⚠️ `RSN-1` — every refusal ranking on disk ranks LAYER 1
+
+`_parse_cascaded` keeps DISTINCT reasons only, one per KIND, attributed to the first layer that
+gave it, and `absent_reasons`, the document `log` and the run WARNING all carry that same short
+list. A document that ran 115 layers leaves about five lines. That is how `SPR-1`'s sweep came
+to be aimed at 89 cells and return one, and it means `RAT-1`'s ranking of 428 absent statements
+is a ranking of first refusals. **The deepest refusal is recoverable only by re-running under a
+hook on `reconcile` and `apply_layer`** — one full cascade per document.
+
+---
+
+#### ⚠️ MSN, 2026-09-11 — the LAST unmet cells met the full cascade and returned NOTHING
+
+MSN held the only 11 open cells in the corpus that had met a SHORTER cascade than today's. The
+Kaggle job meant to close them returned 404 on its session output and that account's quota was
+spent, so they were run locally on the RTX 3050 against all 115 ONNX layers, one process per
+document, `overwrite=False`.
+
+| MSN close-out, 10 documents | |
+|---|---|
+| GPU time | **2.51 h**, RTX 3050 4 GB |
+| documents finished | 10 of 10 |
+| statements accepted | 20 — every document gave 2 of its 3 |
+| **already on disk, IDENTICAL** | **16** |
+| held: the magnitude band was EMPTY | 4 |
+| **new cells** | **0** |
+
+⚠️ **NOT ONE OF THE 11 WAS WON.** Every statement the cascade accepted was a report the CSV
+already carried as `pdf`; the report that was `missing` is the one it refused, in all ten
+documents — the last of them, Q1-2026, reading `balance_sheet=78 items
+[onnx@200]; cash_flow=16 items [onnx@200]; absent ['income_statement']` after 22.0 minutes.
+This is `ASK-1`'s shape at its clearest — the plan selects a QUARTER when any of its
+three reports is open, and then re-reads the whole document to re-derive the two that were never
+in question.
+
+⚠️ **SO THE "UNSPENT GPU" COLUMN IS NOW GVR's ALONE**, and `RAT-1`'s headline sentence has
+expired a second time. Of MSN's 26 open cells the other 15 are five quarters with NO FILING
+(Q1/Q2/Q3-2009, Q1-2014, Q3-2015) — `missing` is the correct answer there and no cascade changes
+it (§5 rule 24).
+
+⚠️ **AND THE 14 IDENTICAL READINGS ARE A REPRODUCIBILITY MEASUREMENT NOBODY ASKED FOR.** Rows
+written earlier, by a different run on different hardware, were re-derived character-for-character
+by today's cascade — 16 of 16. `ORT-2` measured the opposite direction (an `onnxruntime` version
+*inside* the supported line changing what the OCR reads), so a clean reproduction across runs is
+worth the line.
+
+#### ⚠️ `CWD-2` — and the run above could not say any of this for itself
+
+The measurement was only available because the run folders were found by hand. `run_batch`
+launches one child per document with `cwd=<repo>/src` and passes `--out` **as written**, so the
+relative `reports/pdf_ocr_msn` meant `<repo>/src/reports/pdf_ocr_msn` to the child and
+`<repo>/reports/pdf_ocr_msn` to `_newest_folder` in the parent. Every document printed
+`exit 0 and NO run folder`, `folders` stayed empty, and `merge_each` never fired.
+
+⚠️ **NOTHING RAISED, NOTHING WAS LOST, AND NOTHING WAS MERGED** — the ten folders sat one
+directory down where no planning tool looks. A run that writes no row and reports no error is
+`BND-1`'s silence with a different cause, and the default root being absolute is why this has
+never bitten the notebook. ✅ Fixed by resolving the root; **2 tests**; `CWD-1` is the same
+defect one module over.
+
+#### ⚠️ `VRW-1` — 20 idle cores waiting on a card they never touch
+
+`run_batch` called `wait_for_vram` before every document whatever the cascade ran. Measured
+while three tesseract-only sweeps ran beside the MSN job: **20 waits and 15 full 120 s timeouts
+in the first 158 documents**, 30 minutes of nothing, on an engine with no CUDA path at all. The
+gate stays for `onnx` — a document that starts short of VRAM is a document whose layers raise,
+and `VCR-1` refuses it whole — and is now decided per batch from `ParseLayer.engine`, printed
+rather than silent, with an unknown layer name counted as GPU work (§5 rule 2 at the gate).
+✅ **4 tests.** The three sweeps were restarted on the fix, skipping the 50 documents each had
+already read.
+
+---
+
+#### ⚠️ THE OPEN CELLS, CLASSIFIED BY WHETHER THE PAGE WAS EVER FOUND — 2026-09-11
+
+Every previous classification of the gap counted CASCADE DEPTH — never opened, met a shorter
+cascade, met the full one. That ranks how much GPU was spent and says nothing about whether more
+of it could help. This one reads each open cell's recorded `absent_reasons` and asks a different
+question: **did any run ever find the page?**
+
+| 276 open cells with a filing | cells |
+|---|---|
+| the page was **NEVER FOUND** by any run — every recorded reason is `no such statement on any page` | **41** |
+| no run folder records a reason at all | 29 |
+| **the page WAS found and the READING was refused** | **206** |
+
+⚠️ **THE 41 ARE EXACTLY THE `settled` CELLS, AND THAT IS A CROSS-CHECK RATHER THAN A
+COINCIDENCE.** `honest_rate.py` counts 41 settled and 3,958 winnable against 3,723 `pdf`, a gap
+of 235; 276 − 41 = 235. Two independent readers of the same disk — `settled_absences` walking
+run folders, and this walking `absent_reasons` — agree cell for cell. **`settled` MEANS "no page",
+and the word is now measured rather than asserted.**
+
+⚠️ **SO THE ACTIONABLE GAP IS 206 CELLS, NOT 235, AND ITS DEFECT IS READING AND NOT FINDING.**
+`assets != liabilities + equity`, `operating profit does not close`, `no closing cash balance`,
+`only N rows parsed` — every one of those says the reader saw the statement and got it wrong,
+which is the only failure a different engine or a parser fix can address. A page that is not in
+the filing cannot be conjured (§5 rule 24), though `SET-2` is the standing reminder that the
+PAGE CLASSIFIER has moved cells out of that bucket before and could again.
+
+⚠️ **AND THIS IS WHY "SMALLEST DOCUMENT FIRST" WAS THE WRONG SAMPLE.** The first open-cell probe
+ordered by PDF size and drew ACB Q1-2008 (0.1 MB), FPT Q3-2010 (0.2 MB) and FPT Q1-2009
+(0.3 MB) — all three `no such statement on any page`, all three summary forms. **Size selects
+for documents that contain no statement.** The reason string is the selector that matches the
+question.
+
+##### The 206, by report, by ticker, and by what the run wrote down
+
+| report | cells | | ticker | cells |
+|---|---|---|---|---|
+| balance_sheet | 90 | | SHB 39 · GAS 23 · TCX 18 | 80 |
+| income_statement | 61 | | VHM 15 · VIC 14 · GVR 11 | 40 |
+| cash_flow | 55 | | MCH 11 · SSI 11 · SSB 10 · MSN 10 · STB 9 · SAB 9 | 60 |
+
+| recorded reason (a cell can carry several) | mentions |
+|---|---|
+| **`N figure(s) split across two boxes`**, N = 1 · 2 · 3 · 4 · 6 · 7 | **52 · 23 · 19 · 13 · 15 · 11** |
+| `no closing cash balance` | 36 |
+| `no total assets` | 29 |
+| `operating profit does not close` | 25 + 11 |
+| `no total to balance against` | 17 |
+| `only 1 rows parsed` | 17 |
+| `no profit before tax` | 16 |
+| `section sum does not close: a_tai_san_ngan_han + b_…` | 15 |
+| `assets != liabilities + equity` | 12 + 11 |
+
+⚠️ **AND THIS TABLE MUST NOT BE USED TO AIM A PARSER FIX, WHICH IS THE WHOLE POINT OF
+PRINTING IT.** `RSN-1`: `_parse_cascaded` keeps one reason per KIND, attributed to the **FIRST**
+layer that gave it. Layer 1 is `onnx@200` with no flags and **no `join_lost`** — the repair that
+arrives at layer 55 of 115. So *"133 mentions of split boxes"* is a census of what the shallowest
+layer saw, and says nothing about what the cascade still saw 54 layers later.
+
+⚠️ **THAT MISREADING HAS ALREADY BEEN PAID FOR ONCE.** `SPR-1`'s split-repair sweep was aimed at
+89 cells on exactly this evidence and returned **one** — SHB 18 documents / 2.2 h / 0 cells, GAS
+14 / 1.0 h / 1 cell — because `join_lost` had already repaired those figures at layer 55.
+**Every future attempt to target a parser change is aimed at layer 1 until `RSN-1` is fixed**,
+and the fix is cheap next to the GPU it keeps wasting: record the DEEPEST refusal per report
+beside the first.
+
+#### ⚠️ 89 OF THE 205 OPEN CELLS ARE ON PDFs NO OCR ENGINE EVER TOUCHES
+
+`PdfParser._read_page` uses a page's NATIVE TEXT LAYER when it has one and OCRs only when it does
+not — `MIN_PAGE_TEXT = 200` characters is the line. So on a filing that carries text, **the
+engine is not in the loop at all**, and adding one changes nothing about it by construction.
+
+| the 205 open cells where the page was found, by what the parser actually reads | cells |
+|---|---|
+| **TEXT** — native layer, no OCR engine runs | **89** (bs 41 · is 29 · cf 19) |
+| **SCAN** — rasterised and OCR'd, so the engine matters | **116** (bs 48 · is 32 · cf 36) |
+
+⚠️ **THIS CORRECTS A READING MADE THE SAME HOUR.** The easyocr probe returned byte-identical
+refusals to ONNX on VIC Q3-2009 and VIC Q1-2009 — `section sum does not close:
+a_tai_san_ngan_han + b_t…` — and that was first read here as *"two different engines read the
+same page and both got it wrong, so the defect is semantic"*. **Neither engine read those pages.**
+VIC Q1-2009 is 26 pages of which 25 carry a text layer; STB Q3-2008 is 33 of 32. The identical
+refusal is what a text PDF must produce, and it is evidence about nothing.
+
+⚠️ **THE ONE PLACE THE ARGUMENT SURVIVES IS TCB Q4-2008 — 6 pages, ZERO with a text layer.**
+Both engines genuinely ran there and both said `no total assets`, which is why the rendered page
+was worth looking at and why the label-less-total finding above stands.
+
+⚠️ **SO THE GAP DECOMPOSES INTO THREE JOBS, NOT ONE.** Of the 276 open cells with a filing:
+**41** have no page to read (permanent, §5 rule 24, unless the page CLASSIFIER changes — `SET-2`);
+**89** are a PARSING problem on text that is already perfect, where row pairing, label mapping
+and the arithmetic gates are the whole story; **116** are a READING problem on a scan, which is
+the only population an engine change can address; and 29 carry no recorded reason. **An easyocr
+layer's ceiling is 116 cells, not 205** — before its measured hit rate is applied at all.
+
+#### ⚠️ `no total assets` IS NOT AN OCR FAILURE — THE TOTAL HAS NO LABEL TO READ
+
+TCB Q4-2008 is a **6-page pure scan with no text layer on any page**, so every reading of it
+came from an OCR engine. Its balance sheet was refused by **all 115 ONNX layers and by easyocr**,
+every one of them giving the same reason: `reconcile: no total assets`. `absent_reasons` carries exactly one
+entry for it, which — the field keeping the FIRST layer per DISTINCT reason — means no layer of
+the cascade ever said anything else about it.
+
+The stored `absent_rows` dump shows a reading that is **good**: thirty rows, every line item of
+a bank balance sheet present with plausible figures. What is missing is every TOTAL. So the page
+was rendered and looked at (2026-09-11), and the answer is on its face:
+
+⚠️ **THIS FILING PRINTS ITS TOTALS WITH NO LABEL AT ALL.** After the nine asset lines comes a
+horizontal rule and then `59.360.485` / `39.542.496` in the two numeric columns, **with an empty
+label column**. The same shape repeats three more times — after the liabilities
+(`53.744.931`), after equity (`5.615.554`), and once more for liabilities + equity
+(`59.360.485`). The words *"Tổng tài sản"* appear nowhere on the page. The document expresses
+the total **typographically**, by a rule and a position, and the parser's row model requires a
+label.
+
+⚠️ **AND THE FILING'S OWN ARITHMETIC PROVES THE ROW, SO NO HEURISTIC IS NEEDED.** The nine asset
+lines as printed sum to **59,360,485** — exactly the unlabelled row, to the million đồng it is
+denominated in. A ruled, label-less numeric row that equals the sum of the rows above it inside
+the section it closes is that section's total, and the proof is the identity `reconcile` already
+computes. This is the opposite of `P67`'s ratio problem: here the arithmetic is available.
+
+⚠️ **THE SAME DOCUMENT ALSO CARRIES A TRUNCATED FIGURE, AND THAT ONE IS OCR.** *Ứng trước để mua
+chứng khoán* prints `921.250` and was read as `250` — so even with the total row found, the
+identity misses by 921,000. **A cell can need two independent fixes**, which is `HPG`'s lesson
+from 2026-09-09 (six defects, 170 → 192) and is why a one-defect estimate of the remaining gap
+would be optimistic.
+
+⚠️ **HOW FAR THIS REACHES IS NOT MEASURED, AND ONE ATTEMPT TO MEASURE IT FAILED — SAY SO RATHER THAN QUOTE IT** (§5 rule 2). It is the obvious candidate for `no total assets` (29
+mentions), `no total to balance against` (17) and some of `section sum does not close` (15) —
+up to ~46 of the 206 — but that census ranks LAYER 1 (`RSN-1`) and one rendered page is one page.
+
+A CPU-only census was written and run on 2026-09-11 and **its answer is not usable**. It looked
+for a y-band carrying a figure in the value zone and no alphabetic token anywhere, on TEXT
+filings where the word boxes come from the PDF itself. Whole-filing scan: **52 of 75 documents
+"present"**, GVR Q1-2026 scoring 1,753 such rows. Re-scoped to the pages `absent_rows` records
+for that statement: **46 of 89**, GVR Q3-2021's income statement still scoring 246 over 18 pages.
+**Both numbers are artefacts of the detector**, which matches note tables, comparative columns
+and page furniture, and of `absent_rows.pages`, which lists every page the classifier considered
+rather than the statement's own. A filing does not print 246 totals.
+
+⚠️ **THE MEASUREMENT THAT WOULD WORK NEEDS `RSN-1`'s DATA, WHICH DID NOT EXIST UNTIL TODAY.**
+The precise population is *statements where `no total assets` survived to the DEEPEST layer*, and
+`absent_deepest` began recording that on 2026-09-11. Until runs have written it, the reach of
+this finding is **one rendered page**, and that is the whole of the evidence.
+
+#### ⚠️ `GLU-1` — THE HEADER BAND IS GLUED ONTO THE FIRST DATA ROW, AND THAT IS WHY THE IDENTITY FAILS
+
+VIC Q1-2009's balance sheet is refused `section sum does not close: a_tai_san_ngan_han +
+b_tai_san_dai_han = 300 against a printed 6,021,566,399,923`. The filing is a TEXT PDF, so no
+OCR engine touches it, and **its own printed face closes to the đồng**:
+
+| the filing, as printed on pages 5-6 | |
+|---|---|
+| `A. TÀI SẢN NGẮN HẠN 100` | 2,263,099,976,679 |
+| `B. TÀI SẢN DÀI HẠN 200` | 3,962,440,251,566 |
+| A + B | **6,225,540,228,245** |
+| `TỔNG CỘNG TÀI SẢN 270` | **6,225,540,228,245** |
+
+⚠️ **THE `300` IN THE ERROR IS `100 + 200` — THE VAS LINE CODES.** The parser's own rows say so:
+`tai_san_a_tai_san_ngan_han [100, 2263099976679, 2373803866870]`. Two things went wrong and the
+second is the one that matters:
+
+1. the code column is read as the first data column — the cascade HAS a repair for this,
+   `code_column_by_value` at layer 102; and
+2. **the section header `TÀI SẢN` is glued onto `A. TÀI SẢN NGẮN HẠN`**, so the row is keyed
+   `tai_san_a_tai_san_ngan_han` and the role `a_tai_san_ngan_han` is answered by nothing.
+
+⚠️ **`onnx@{200,300,400}+codecol` LEAVES IT REFUSED WITH THE IDENTICAL MESSAGE**, which is the
+whole reason this is worth a code: the first defect is already repaired in the cascade and the
+second is not. ⚠️ **AND IT IS NOT A TEXT-PATH ARTEFACT** — TCB Q4-2008, a pure scan, reads
+`Nợ phải trả Tiền vay từ Ngân hàng Nhà nước` and `Vốn chủ sở hữu Vốn cổ phần` as single rows,
+the same glue on a different reader.
+
+| the 1,131 refused statements carrying a stored row dump | |
+|---|---|
+| **a canonical role hidden behind a glued header** | **62** |
+| none | 1,069 |
+
+The commonest glued keys: `nguon_von_a_no_phai_tra` 18 · `tai_san_a_tai_san_ngan_han` 13 ·
+`tai_san_stt_a_tai_san_ngan_han` 8 · `nguon_von_stt_a_no_phai_tra` 8. Several swallow the
+column headings as well — `tai_san_ma_so_thuyet_minh_a_tai_san_ngan_han`,
+`tai_san_ma_so_ghi_chu_a_tai_san_ngan_han` — which names the mechanism: **the header BAND, not
+a stray word.**
+
+⚠️ **THE 62 RANKS LAYER 1 AND IS A POPULATION TO INVESTIGATE, NOT A COUNT OF WINNABLE CELLS**
+(`RSN-1` — `absent_rows` stores the EARLIEST reading). What separates it from the `SPR-1` census
+that cost 3.2 h for one cell is that **one of the 62 was carried end to end**: the deeper repair
+was run and measured, and it does not fix it.
+
+#### ⚠️ THE 9-MONTH OPERAND IS ON DISK — the ladder was dropped on a measurement of the CSV
+
+`_quarter_priors` demands every Q1..Q(q−1) as a three-month `pdf` row, so a Q4 income statement
+needs three operands and dies on any one. The accountant's identity needs one: **Q4 = FY − 9M**,
+the 9-month figure being the Q3 filing's own cumulative column. `cumulative_ladder.py` asked
+whether any row on disk carries a 6- or 9-month `months` value, found none, and the ladder was
+dropped. ⚠️ **THAT ANSWER IS TRUE AND IT IS ABOUT THE WRONG ARTEFACT.** The parser writes ONE
+column and DUMPS all of them: `accepted.income_statement.row_dump` holds every numeric column
+the page printed — which is the only reason `replay_duplicate_column.py` can exist.
+
+Measured 2026-09-11 over the 21 blocked Q4 income statements, no OCR, reading every run folder
+that ever accepted the Q3 statement rather than only the newest:
+
+| what the Q3 artefact holds | cells |
+|---|---|
+| **a plausible 9-month column, already on disk** | **6** |
+| no run folder holds an accepted Q3 income statement | 14 |
+| a second column that is a PRIOR-YEAR comparative | 1 |
+
+| cell | Q3 artefact | rows compared | median ratio to the quarter column |
+|---|---|---|---|
+| SHB Q4-2019 | Q3-2019 | 19 of 19 larger | ×5.78 |
+| MBB Q4-2017 | Q3-2017 | 12 of 12 larger | ×4.03 |
+| SSI Q4-2020 | Q3-2020 | 37 of 38 larger | ×3.35 |
+| GAS Q4-2022 | Q3-2022 | 21 of 21 larger | ×2.92 |
+| MCH Q4-2016 | Q3-2016 | 56 of 59 larger | ×2.85 |
+| SHB Q4-2012 | Q3-2012 | 10 of 10 larger | ×2.39 |
+| **GVR Q4-2023** | Q3-2023 | **30 of 68** larger | **×0.99 — a prior-year comparative** |
+
+⚠️ **GVR's ROW IS THE ONE TO DESIGN AGAINST.** A ×0.99 median on 30 of 68 rows is a comparative
+column, not a cumulative, and a guard built on "larger, about three times" would take it on the
+SHB Q4-2019 evidence (×5.78 is no closer to 3 than 0.99 is). **The operand has to be proved from
+the filing's own arithmetic** — the identity the statement asserts about itself — and never from
+a ratio. `TSS-1` and `DPC-2` are both what a plausible-looking wrong column costs.
+
+⚠️ **THIS IS THE LARGEST LEVER LEFT AND IT NEEDS NO GPU** — 21 of the 37 cells between the
+corpus and 95 %, 6 of them with the operand already in hand. `P67` carries it.
+
+---
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

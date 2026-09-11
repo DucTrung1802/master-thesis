@@ -23,7 +23,9 @@ OCR_LANG = "vie"
 #                accuracy-tied with the PaddleOCR-server stack and ~10× faster than it; the engine
 #                to re-OCR the archive with. Reads the same word boxes the parser expects.
 #   "easyocr"  — a CUDA/GPU alternative (see _ocr_page): it fragments boxes differently and is NOT
-#                adopted; kept for comparison.
+#                adopted; kept for comparison. ⚠️ NO `ParseLayer` USES IT, so nothing in the
+#                cascade can reach it, and the "fragments boxes differently" above was measured
+#                while this branch skipped `_merge_split_figures` — `TSM-2`, fixed 2026-09-11.
 OCR_ENGINE = os.environ.get("CAFEF_OCR_ENGINE", "tesseract").lower()
 
 BALANCE_SHEET = "balance_sheet"
@@ -577,6 +579,31 @@ class PdfParser:
     # sits 6-13pt from its own text, so 24pt admits one intervening noise line and no more.
     # `label_wrap` only.
     CARRY_GAP = 24.0
+    # ⚠️ **A LINE THAT OPENS A NEW VAS ITEM TAKES NO CARRY** (`GLU-1`, 2026-09-11). The carry
+    # exists for a label that WRAPPED, and it had no bound of any kind: any label-only line
+    # above a value line was prepended to it. A standalone SECTION HEADING is a label-only
+    # line — `TÀI SẢN`, `NGUỒN VỐN`, and the column band `Mã số` / `Thuyết minh` — so a balance
+    # sheet's first row came out keyed `tai_san_a_tai_san_ngan_han` instead of
+    # `tai_san_ngan_han`, and `schema_of` maps the identity's `a_tai_san_ngan_han` column from
+    # the latter. The role was then answered by nothing and `reconcile` refused the statement
+    # with `section sum does not close` — on VIC Q1-2009, a TEXT filing whose printed face
+    # closes to the đồng. **Measured over the stored dumps: 67 refused statements gain at least
+    # one schema key when the heading comes off** (`no_phai_tra` 32, `tai_san_ngan_han` 15).
+    #
+    # ⚠️ **THE TEST IS THE ITEM MARKER AND DELIBERATELY NOT A LIST OF HEADING WORDS.** Stripping
+    # a leading `Tài sản` / `Nguồn vốn` by name destroys `Tài sản khác`, `Tài sản cố định`,
+    # `Tài sản ngắn hạn khác` and `Nguồn vốn ủy thác` — all real accounts that open with those
+    # words. What separates them is STRUCTURE: a heading precedes an item that opens with its
+    # own `A.` / `B.` / `I.` / `1.`, and a wrapped tail never does. It also survives the OCR
+    # noise the glue rides on — FPT Q2-2014 reads `NGUỒN VÓN A. NỢ PHẢI TRÀ`, where a
+    # word-list rule would already have missed `VÓN`.
+    #
+    # ⚠️ **AND IT LEAVES EVERY MEASURED CARRY REPAIR STANDING**, which is the reason it is this
+    # test and not a distance: BID Q1-2012's closing balance wraps to `thời điểm cuối kỳ` and
+    # BID Q1-2026's to `V điểm đầu kỳ` — neither opens an item, so both still rejoin their own
+    # heads. A distance bound would have cut them, the gaps being 5.8pt and 7.5pt against
+    # ordinary spacing of 13-32pt on the very same pages.
+    STARTS_ITEM = re.compile(r"^(?:[A-ZĐ]|[IVXLC]{1,4}|\d{1,2})[.)]$")
 
     # ⚠️ **THE OPENING BRACKET OF A NEGATIVE FIGURE COMES BACK AS A QUOTE MARK.** A `(` printed
     # tight against a digit is a thin arc, and on BID's Q3-2011 income statement the recogniser
@@ -1703,6 +1730,22 @@ class PdfParser:
           * the gap is under `MERGE_MAX_GAP`;
           * the right box begins with a FULL three-digit group;
           * the two joined with a thousands separator form one well-formed figure.
+
+        ⚠️ **IT ABSORBS A RUN, NOT A PAIR — AND WALKING PAIRWISE WAS A DEFECT** (`SPR-1`,
+        2026-09-11). This merged `ws[i]` with `ws[i+1]` and then stepped `i += 2`, so a figure
+        the recogniser broke into THREE pieces — one printed number that lost TWO thousands
+        separators — came out as two boxes and `split_figures` counted exactly ONE fragment,
+        which `reconcile` then refused the whole statement on. **Measured over every run folder
+        on 2026-09-11: of the 89 still-open cells refusing on split boxes, 55 sit at exactly
+        one fragment and 67 at one or two** — that signature and no other. The head keeps
+        absorbing while the next box qualifies.
+
+        ⚠️ **EVERY ABSORPTION STILL PAYS THE FULL PRICE**, measured from the head's CURRENT
+        right edge, so nothing the pairwise version refused is accepted here. The two cases
+        that must not merge were checked directly: two adjacent period columns
+        (`1.558.887.407` + `1.541.259.663`) join to a one-digit group and fail
+        `MERGE_JOIN_RE`, and a right box opening with `(` fails `MERGE_TAIL_RE` — `SPB-1`'s
+        pair, which the gate had to learn from this repair in the first place.
         """
         by_line: dict = {}
         for w in words:
@@ -1715,18 +1758,28 @@ class PdfParser:
             ws = sorted(ws, key=lambda w: w[0])
             i = 0
             while i < len(ws) - 1:
-                a, b = ws[i], ws[i + 1]
-                at, bt = str(a[4]).strip(), str(b[4]).strip()
-                joined = at.rstrip(")") + "." + bt
-                if (b[0] - a[2] < cls.MERGE_MAX_GAP
-                        and cls.MERGE_TAIL_RE.match(bt)
-                        and cls.MERGE_JOIN_RE.match(joined)):
-                    replacements[id(a)] = ((a[0], a[1], b[2], max(a[3], b[3]), joined)
-                                           + tuple(a[5:]))
+                # ⚠️ The head grows as it absorbs, so the gap and the join are tested against
+                # what has been built so far — `head[2]` is the last absorbed box's right edge
+                # and `head[4]` the figure to date. Testing against `ws[i]` instead would ask
+                # whether the THIRD piece continues the FIRST, which it does not.
+                head, j = ws[i], i + 1
+                while j < len(ws):
+                    b = ws[j]
+                    bt = str(b[4]).strip()
+                    joined = str(head[4]).strip().rstrip(")") + "." + bt
+                    if not (b[0] - head[2] < cls.MERGE_MAX_GAP
+                            and cls.MERGE_TAIL_RE.match(bt)
+                            and cls.MERGE_JOIN_RE.match(joined)):
+                        break
+                    head = ((head[0], head[1], b[2], max(head[3], b[3]), joined)
+                            + tuple(head[5:]))
                     merged.add(id(b))
-                    i += 2
-                    continue
-                i += 1
+                    j += 1
+                if j > i + 1:
+                    replacements[id(ws[i])] = head
+                    i = j
+                else:
+                    i += 1
         if not replacements:
             return words
         return [replacements.get(id(w), w) for w in words if id(w) not in merged]
@@ -1826,6 +1879,19 @@ class PdfParser:
             return text, words, True
         if self.engine == "easyocr":
             text, words = self._ocr_page_easyocr(page)
+            # ⚠️ **THE GATE JUDGED THIS ENGINE BY A REPAIR IT NEVER RECEIVED EITHER** (`TSM-2`,
+            # 2026-09-11). `TSM-1` fixed exactly this for the Tesseract branch on 2026-09-08 —
+            # `split_figures` counts fragments on EVERY engine, and `SPB-1` states the rule in
+            # as many words: *the two must agree about what a continuation is*. The merge was
+            # added to the tesseract path and to the onnx path, and this third branch was left
+            # as it was. ⚠️ **AND THE MODULE HEADER CALLS THAT THE REASON THE ENGINE WAS
+            # DROPPED** — *"it fragments boxes differently and is NOT adopted"* — which is the
+            # symptom of a missing repair, not of an engine that cannot read.
+            # ⚠️ MERGE BEFORE THE SPLIT, for the reason the onnx branch above states: this
+            # branch returns `splittable=True`, so `_split_number_runs` runs afterwards, and a
+            # merge placed after it would re-join the splitter's own character-offset pieces.
+            words = self._merge_split_figures(words, self.Y_TOL,
+                                              page.rect.width * self.VALUE_ZONE)
             return text, words, True
 
         tp = page.get_textpage_ocr(language=OCR_LANG, dpi=self.dpi, full=True,
@@ -3116,6 +3182,11 @@ class PdfParser:
                     # An EMPTY `since_code` means the code was the last thing before these
                     # figures, so the label is above it — BID Q1-2012's opening balance.
                     base = since_code if (self.label_wrap and since_code) else carry
+                    # ⚠️ `GLU-1` — see `STARTS_ITEM`. A value line whose own label opens a new
+                    #    VAS item is not the tail of the line above it, whatever that line
+                    #    held, so the carry is DROPPED rather than prepended.
+                    if label and self.STARTS_ITEM.match(label[0]):
+                        base = []
                     words_ = base + label
                     # ⚠️ `not label`, NOT `not words_`, UNDER `label_wrap`. The original test
                     # fires only when the value line has neither a label nor a carry; a label
