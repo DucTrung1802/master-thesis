@@ -2348,8 +2348,12 @@ def _git_commit() -> Optional[str]:
     import subprocess
 
     try:
+        # ⚠️ `CREATE_NO_WINDOW`: a console program spawned from a windowless parent still gets
+        # a console of its own on Windows, and this one fires once per document.
         out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT,
-                             capture_output=True, text=True, timeout=10)
+                             capture_output=True, text=True, timeout=10,
+                             creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                                            if os.name == "nt" else 0))
         return out.stdout.strip() or None
     except Exception:  # noqa: BLE001 — a worker has no repo, and that is not a failure
         return None
