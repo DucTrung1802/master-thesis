@@ -71,6 +71,7 @@ layers RAISED are all still refused, here as in the sweep.
 """
 from __future__ import annotations
 
+import contextlib
 import csv
 import datetime as dt
 import io
@@ -79,6 +80,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -116,6 +118,97 @@ VRAM_WAIT_SECONDS = 120
 # same cost.
 RETRIES = 2
 RETRY_REC_BATCH = (32, 12)
+
+# ⚠️ **THE VRAM FLOOR IS A POLL, AND A POLL IS NOT A MUTEX** (added 2026-09-11). `wait_for_vram`
+# asks `nvidia-smi` how much is free and, after `VRAM_WAIT_SECONDS`, STARTS ANYWAY — which is
+# right for one batch sharing a desktop with a browser, and wrong the moment a second BATCH is
+# running: two waiters both read 3,600 MiB free, both start, and a 4 GiB card holding two
+# documents that each peaked at 2.9-3.2 GiB is `GPU-1` — layers raise, the cascade goes on, and
+# a statement nothing could read is reported `pdf`. So a run that shares the card with another
+# run takes a LEASE, and the poll stays where it is for everything the lease cannot see (a
+# browser, a stray kernel).
+# ⚠️ **OFF UNLESS ASKED FOR.** `CAFEF_GPU_LEASE` unset is the shipped behaviour, unchanged: one
+# notebook on one card queues behind nothing. The scheduler that runs several tickers at once
+# sets it, and then exactly one DOCUMENT is on the card at a time while every other phase —
+# model-free planning, the merge, the CSV write, the next kernel booting — overlaps freely.
+# ⚠️ **THE LOCK IS HELD BY THE OS, NOT BY A FILE'S CONTENTS**, so a lane killed mid-document
+# releases it on exit and leaves nothing stale to reap. A PID written into a file would need a
+# liveness check, and a wrong liveness check is how a mutex becomes decorative.
+GPU_LEASE_ENV = "CAFEF_GPU_LEASE"
+GPU_LEASE_POLL_SECONDS = 3
+
+
+def gpu_lease_path() -> Optional[Path]:
+    """Where the lease lives, or `None` when this run is not taking one.
+
+    `CAFEF_GPU_LEASE=1` (or any truthy value that is not a path) uses one well-known file per
+    machine; an explicit path lets two independent fleets hold two leases.
+    """
+    raw = os.environ.get(GPU_LEASE_ENV, "").strip()
+    if not raw or raw.lower() in ("0", "false", "no", "off"):
+        return None
+    if raw.lower() in ("1", "true", "yes", "on"):
+        return Path(tempfile.gettempdir()) / "cafef_pdf_ocr_gpu.lock"
+    return Path(raw)
+
+
+@contextlib.contextmanager
+def gpu_lease(enabled: bool = True, log: Optional[Callable[[str], None]] = None):
+    """Hold the machine's single OCR-document lease for the body of the `with`.
+
+    A no-op when `CAFEF_GPU_LEASE` is unset or `enabled` is False — the second is `VRW-1`'s
+    rule one level up: **a CPU-only cascade is not competing for the card and must not queue
+    behind whatever is.**
+    """
+    path = gpu_lease_path() if enabled else None
+    if path is None:
+        yield None
+        return
+    say = log or (lambda _s: None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(path), os.O_RDWR | os.O_CREAT)
+    waited = 0.0
+    try:
+        while True:
+            try:
+                _lock_exclusive(fd)
+                break
+            except OSError:
+                if waited == 0:
+                    say(f"   waiting for the GPU lease — another run holds the card ({path})")
+                time.sleep(GPU_LEASE_POLL_SECONDS)
+                waited += GPU_LEASE_POLL_SECONDS
+        if waited:
+            say(f"   GPU lease acquired after {waited:.0f}s")
+        yield path
+    finally:
+        try:
+            _unlock(fd)
+        finally:
+            os.close(fd)
+
+
+def _lock_exclusive(fd: int) -> None:
+    """Take an exclusive, NON-BLOCKING lock on one byte of `fd`; raise `OSError` if held."""
+    if os.name == "nt":
+        import msvcrt
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock(fd: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+    else:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_UN)
 
 
 @dataclass
@@ -867,49 +960,54 @@ def run_batch(plans: Sequence[TickerPlan], *, layers: Optional[Sequence[str]] = 
             # not do. `end()` is the caller's, once the batch returns.
             if progress is not None:
                 progress.inside((done - 1) / max(1, total))
-            if uses_gpu:
-                wait_for_vram(vram_floor_mb, log=say)
-            cmd = [sys.executable, "-m", "web_scraper.pdf_ocr_job",
-                   "--exchange", plan.exchange, "--symbol", plan.symbol,
-                   "--quarters", quarter, "--template", plan.template,
-                   "--out", str(out_root),
-                   "--notes", notes or f"{plan.key} {quarter} — batch, one process per document"]
-            if overwrite:
-                cmd.append("--overwrite")
-            if allow_parent:
-                cmd.append("--allow-parent")
-            if not compare:
-                cmd.append("--no-compare")
-            if layers:
-                cmd += ["--layers", *layers]
-            say(f"── {done}/{total}  {plan.key} {quarter} " + "─" * 30)
-            folder = None
-            for attempt in range(retries + 1):
-                env = dict(os.environ)
-                if attempt:
-                    # ⚠️ SMALLER, AND SAID. The first attempt is the shipped configuration; a
-                    # retry is a DIFFERENT one, and a run folder that does not record which
-                    # produced it is a run folder that cannot be reproduced.
-                    size = RETRY_REC_BATCH[min(attempt, len(RETRY_REC_BATCH)) - 1]
-                    env["CAFEF_ONNX_REC_BATCH"] = str(size)
-                    env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-                    say(f"   retry {attempt}/{retries} with CAFEF_ONNX_REC_BATCH={size} "
-                        f"(same reading, fewer crops per decode)")
-                    if uses_gpu:
-                        wait_for_vram(vram_floor_mb, log=say)
-                started = time.time()
-                code = subprocess.call(cmd, cwd=str(Path(job.__file__).resolve().parents[1]),
-                                       env=env)
-                folder = _newest_folder(out_root, plan.exchange, plan.symbol, since=started)
-                mins = (time.time() - started) / 60
-                if folder is None:
-                    say(f"   ⚠️ exit {code} and NO run folder — nothing for {quarter}")
-                    break
-                errs = _engine_errors(folder)
-                say(f"   exit {code}   {mins:.1f} min   {folder.name}"
-                    + (f"   ⚠️ {errs} layer(s) RAISED" if errs else ""))
-                if not errs:
-                    break
+            # ⚠️ THE LEASE SPANS THE RETRIES, not each attempt: releasing between them would
+            # let another lane take the card in the gap and turn one document's retry into the
+            # next document's OOM. And it is released BEFORE the merge below, which touches no
+            # GPU — that release is where the overlap this flag exists for actually happens.
+            with gpu_lease(uses_gpu, log=say):
+                if uses_gpu:
+                    wait_for_vram(vram_floor_mb, log=say)
+                cmd = [sys.executable, "-m", "web_scraper.pdf_ocr_job",
+                       "--exchange", plan.exchange, "--symbol", plan.symbol,
+                       "--quarters", quarter, "--template", plan.template,
+                       "--out", str(out_root),
+                       "--notes", notes or f"{plan.key} {quarter} — batch, one process per document"]
+                if overwrite:
+                    cmd.append("--overwrite")
+                if allow_parent:
+                    cmd.append("--allow-parent")
+                if not compare:
+                    cmd.append("--no-compare")
+                if layers:
+                    cmd += ["--layers", *layers]
+                say(f"── {done}/{total}  {plan.key} {quarter} " + "─" * 30)
+                folder = None
+                for attempt in range(retries + 1):
+                    env = dict(os.environ)
+                    if attempt:
+                        # ⚠️ SMALLER, AND SAID. The first attempt is the shipped configuration; a
+                        # retry is a DIFFERENT one, and a run folder that does not record which
+                        # produced it is a run folder that cannot be reproduced.
+                        size = RETRY_REC_BATCH[min(attempt, len(RETRY_REC_BATCH)) - 1]
+                        env["CAFEF_ONNX_REC_BATCH"] = str(size)
+                        env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+                        say(f"   retry {attempt}/{retries} with CAFEF_ONNX_REC_BATCH={size} "
+                            f"(same reading, fewer crops per decode)")
+                        if uses_gpu:
+                            wait_for_vram(vram_floor_mb, log=say)
+                    started = time.time()
+                    code = subprocess.call(cmd, cwd=str(Path(job.__file__).resolve().parents[1]),
+                                           env=env)
+                    folder = _newest_folder(out_root, plan.exchange, plan.symbol, since=started)
+                    mins = (time.time() - started) / 60
+                    if folder is None:
+                        say(f"   ⚠️ exit {code} and NO run folder — nothing for {quarter}")
+                        break
+                    errs = _engine_errors(folder)
+                    say(f"   exit {code}   {mins:.1f} min   {folder.name}"
+                        + (f"   ⚠️ {errs} layer(s) RAISED" if errs else ""))
+                    if not errs:
+                        break
             if folder is None:
                 continue
             folders.append(folder)

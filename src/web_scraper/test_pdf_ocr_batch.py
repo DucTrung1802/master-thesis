@@ -34,6 +34,58 @@ def test_an_unmeasurable_card_does_not_block_the_run(monkeypatch):
     assert batch.wait_for_vram(floor_mb=99_999, timeout=0) is None
 
 
+# ── the GPU lease — the mutex the VRAM poll is not ────────────────────────────
+def test_the_lease_is_a_no_op_until_it_is_asked_for(monkeypatch):
+    """⚠️ THE SHIPPED BEHAVIOUR IS UNCHANGED, and that is the point of the env var.
+
+    One notebook on one card must queue behind nothing; a lease taken by default would make
+    every single-lane run pay for a lock nobody else is holding.
+    """
+    monkeypatch.delenv(batch.GPU_LEASE_ENV, raising=False)
+    assert batch.gpu_lease_path() is None
+    with batch.gpu_lease(True) as held:
+        assert held is None
+
+
+def test_a_cpu_only_cascade_does_not_queue_for_the_card(monkeypatch, tmp_path):
+    """`VRW-1` one level up: a tesseract-only batch is not competing for the GPU.
+
+    Measured 2026-09-11 in the defect it is named after — a CPU-only cascade queued 120 s per
+    document for VRAM it never touches, 15 full timeouts in 158 documents. A lease would turn
+    that waste into a hard serialisation against runs it has no reason to wait for.
+    """
+    monkeypatch.setenv(batch.GPU_LEASE_ENV, str(tmp_path / "lease"))
+    with batch.gpu_lease(False) as held:
+        assert held is None
+
+
+def test_two_holders_of_one_lease_cannot_overlap(monkeypatch, tmp_path):
+    """⚠️ THE WHOLE REASON THE LEASE EXISTS: two lanes, one document on the card.
+
+    `wait_for_vram` is a POLL — both lanes read the same free MiB and both start, which on a
+    4 GiB card holding two documents that each peaked at 2.9-3.2 GiB is `GPU-1`: layers raise,
+    the cascade goes on, and a statement nothing could read is reported `pdf`.
+    """
+    lock = tmp_path / "lease"
+    monkeypatch.setenv(batch.GPU_LEASE_ENV, str(lock))
+    with batch.gpu_lease(True) as first:
+        assert first == lock
+        import os
+        fd = os.open(str(lock), os.O_RDWR | os.O_CREAT)
+        try:
+            with pytest.raises(OSError):
+                batch._lock_exclusive(fd)      # a second lane finds it held
+        finally:
+            os.close(fd)
+    # released on exit — the next lane takes it without waiting
+    fd = os.open(str(lock), os.O_RDWR | os.O_CREAT)
+    try:
+        batch._lock_exclusive(fd)
+        batch._unlock(fd)
+    finally:
+        os.close(fd)
+
+
 def test_a_short_card_is_reported_and_the_document_still_starts(monkeypatch):
     """⚠️ IT MUST NOT RAISE, and that is a decision rather than laziness.
 
