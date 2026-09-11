@@ -2607,6 +2607,62 @@ is the same decode on fewer images; that is what makes the equality above struct
 lucky. ⚠️ **The retry fires on an ENGINE ERROR and never on a refusal** — a refusal is a
 measurement of the filing, and repeating it returns the same answer at the same cost.
 
+#### ⚠️ WHERE THE CASCADE ACTUALLY WINS — 68.7 % AT LAYER 1 (measured 2026-09-11)
+
+Replayed over the `metadata.json` of **1,272 run folders**, 6,299 accepted statements carrying a
+known onnx layer. **No OCR, no GPU** — the layer that won is already recorded per statement.
+
+| accepted by layer | statements | cumulative |
+|---|---|---|
+| **1** | 4,325 | **68.7 %** |
+| 5 | 5,230 | 83.0 % |
+| 20 | 5,391 | 85.6 % |
+| 55 | 5,966 | 94.7 % |
+| 115 | 6,299 | 100 % |
+
+⚠️ **THIS IS THE ARGUMENT AGAINST A BREADTH-FIRST PASS, NOT FOR ONE.** The obvious reading is
+"cap the cascade at 20 and sweep everything cheaply" — but the documents that win at layer 1
+already cost ~1 minute, and the ones that need depth still pay their 6-30 minutes on the second
+pass **plus** the shallow pass they lost. A two-pass plan therefore raises total GPU and only
+moves visible coverage earlier. ⚠️ It also stores a SHALLOW verdict against every cell it fails,
+which is `SET-3`'s shape — a shallow run settling a cell a full run would win.
+
+⚠️ **AND IT SAYS WHAT A LONG DOCUMENT IS: A DOCUMENT THAT IS LOSING.** A filing still running at
+layer 37 of 115 has already failed 36 readings; the expected cost of one document is about
+`0.69 x 1.5 min + 0.31 x 12 min`, so the mean hides two populations rather than describing one.
+
+#### ⚠️ AND A PRE-FLIGHT FLOOR IS A POLL, WHICH IS NOT A MUTEX — the GPU lease (2026-09-11)
+
+`wait_for_vram` protects one batch from a browser tab. It cannot protect two BATCHES from each
+other: both read the same free MiB from `nvidia-smi`, both see enough, both start — and after
+`VRAM_WAIT_SECONDS` it says so and **starts anyway**, which is right for a desktop and wrong for
+a fleet. Two documents on a 4 GiB card, each measured at 2.0 GiB, is `GPU-1` with extra steps.
+
+`gpu_lease` is the mutex the poll is not, measured on this machine the same day:
+
+| measured 2026-09-11, RTX 3050 4 GiB | |
+|---|---|
+| one document, `REC_BATCH=64` | **2,030 MB** RSS, card at **2,313 MiB of 4,096**, 30-45 % GPU utilisation |
+| two lanes, one slot | documents on the card at once: **1**, peak **1** over the whole run |
+| a lane KILLED mid-document | the next lane entered after **0.2 s** — the OS holds the lock, so nothing stale is left to reap |
+| three holders, `slots=1` / `slots=2` | entered at 0/6/12 s and 0/0/6 s — the slot count is the admission number, exactly |
+
+⚠️ **OFF UNLESS ASKED FOR** (`CAFEF_GPU_LEASE`), so one notebook on one card still queues behind
+nothing, and **OFF for a tesseract-only cascade** — `VRW-1`'s rule one level up: a CPU-only run
+is not competing for the card and must not wait for it.
+
+⚠️ **THE LEASE SPANS A DOCUMENT'S RETRIES AND IS RELEASED BEFORE THE MERGE.** Releasing between
+attempts would let the other lane take the card in the gap and turn one document's retry into
+the next document's OOM; releasing before the merge is where the overlap the flag exists for
+actually happens, since the merge touches no GPU.
+
+⚠️ **`slots` IS READ AT EVERY ACQUISITION, AND `<lock>.slots` BEATS THE ENVIRONMENT.** A
+whole-ticker lane is hours long, so a number fixed at spawn can only be changed by killing
+documents in flight — and the number worth changing is the one the operator learns by watching
+the card. **Raise it only on a measurement of peak VRAM**: two documents that do not fit do not
+fail loudly, they raise layers, and the merge then refuses each document whole. The honest
+companion lever is `CAFEF_ONNX_REC_BATCH`, the one VRAM knob measured not to change what is read.
+
 #### ⚠️ THE MERGE ORDER IS THE OTHER HALF
 
 `merge_run` plans a folder against disk and writes afterwards, so the `months` span a Q3 records

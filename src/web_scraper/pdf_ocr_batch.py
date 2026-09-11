@@ -135,7 +135,38 @@ RETRY_REC_BATCH = (32, 12)
 # releases it on exit and leaves nothing stale to reap. A PID written into a file would need a
 # liveness check, and a wrong liveness check is how a mutex becomes decorative.
 GPU_LEASE_ENV = "CAFEF_GPU_LEASE"
+# ⚠️ **HOW MANY DOCUMENTS THE CARD MAY HOLD AT ONCE, AND THE DEFAULT IS ONE.** A document
+# measured 2,030 MB of RSS and took the card to 2,313 MiB of 4,096 on 2026-09-11, so a second
+# one does not fit at the shipped `CAFEF_ONNX_REC_BATCH`. The knob exists because a SMALLER
+# decode batch is the one VRAM lever that does not change what is read — `onnx_ocr.REC_BATCH`
+# carries that measurement, 64 vs 12 giving the IDENTICAL `rows_sha` on all three statements of
+# CTG Q3-2019 — so a fleet that sets `CAFEF_ONNX_REC_BATCH` low can afford two slots.
+# ⚠️ **RAISE IT ONLY ON A MEASUREMENT OF PEAK VRAM, NEVER ON A GUESS.** Two documents that do
+# not fit are `GPU-1`: layers raise, the cascade goes on, and the merge refuses the document
+# whole — the run does not end, it just spends its GPU producing refusals.
+GPU_LEASE_SLOTS_ENV = "CAFEF_GPU_LEASE_SLOTS"
 GPU_LEASE_POLL_SECONDS = 3
+
+
+def gpu_lease_slots(path: Optional[Path] = None) -> int:
+    """How many documents may hold the card at once. 1 unless the operator measured otherwise.
+
+    ⚠️ **READ AT EVERY ACQUISITION, AND A CONTROL FILE BESIDE THE LOCK WINS.** A fleet of
+    whole-ticker runs is hours long per lane, so an environment variable fixed at spawn cannot
+    be changed without killing documents in flight — and the number worth changing is exactly
+    the one an operator learns from watching the card. `<lock>.slots` holding an integer takes
+    effect on the NEXT document, machine-wide; delete it and the env value rules again.
+    """
+    if path is not None:
+        control = path.with_suffix(path.suffix + ".slots")
+        try:
+            return max(1, int(control.read_text(encoding="utf-8").strip()))
+        except (OSError, ValueError):
+            pass
+    try:
+        return max(1, int(os.environ.get(GPU_LEASE_SLOTS_ENV, "1")))
+    except ValueError:
+        return 1
 
 
 def gpu_lease_path() -> Optional[Path]:
@@ -165,50 +196,64 @@ def gpu_lease(enabled: bool = True, log: Optional[Callable[[str], None]] = None)
         yield None
         return
     say = log or (lambda _s: None)
+    slots = gpu_lease_slots(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(path), os.O_RDWR | os.O_CREAT)
+    # ⚠️ ONE BYTE PER SLOT IN ONE FILE. Byte-range locks are independent, so N slots need no N
+    # files and no directory scan — and an unheld slot is simply a byte nobody has locked.
+    if not path.exists() or path.stat().st_size < slots:
+        with open(path, "ab") as fh:
+            fh.write(bytes(slots))
+    fd = os.open(str(path), os.O_RDWR)
     waited = 0.0
+    held = None
     try:
-        while True:
-            try:
-                _lock_exclusive(fd)
-                break
-            except OSError:
+        while held is None:
+            for slot in range(slots):
+                try:
+                    _lock_exclusive(fd, slot)
+                    held = slot
+                    break
+                except OSError:
+                    continue
+            if held is None:
                 if waited == 0:
-                    say(f"   waiting for the GPU lease — another run holds the card ({path})")
+                    say(f"   waiting for a GPU slot — all {slots} held ({path})")
                 time.sleep(GPU_LEASE_POLL_SECONDS)
                 waited += GPU_LEASE_POLL_SECONDS
         if waited:
-            say(f"   GPU lease acquired after {waited:.0f}s")
+            say(f"   GPU slot {held + 1}/{slots} acquired after {waited:.0f}s")
         yield path
     finally:
         try:
-            _unlock(fd)
+            _unlock(fd, held)
         finally:
             os.close(fd)
 
 
-def _lock_exclusive(fd: int) -> None:
-    """Take an exclusive, NON-BLOCKING lock on one byte of `fd`; raise `OSError` if held."""
+def _lock_exclusive(fd: int, slot: int = 0) -> None:
+    """Exclusively lock BYTE `slot` of `fd`, without blocking; raise `OSError` if it is held."""
     if os.name == "nt":
         import msvcrt
+        os.lseek(fd, slot, os.SEEK_SET)
         msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
     else:
         import fcntl
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, 1, slot, os.SEEK_SET)
 
 
-def _unlock(fd: int) -> None:
+def _unlock(fd: int, slot: Optional[int] = 0) -> None:
+    if slot is None:
+        return
     if os.name == "nt":
         import msvcrt
         try:
-            os.lseek(fd, 0, os.SEEK_SET)
+            os.lseek(fd, slot, os.SEEK_SET)
             msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
         except OSError:
             pass
     else:
         import fcntl
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        fcntl.lockf(fd, fcntl.LOCK_UN, 1, slot, os.SEEK_SET)
 
 
 @dataclass
