@@ -128,3 +128,55 @@ def test_the_tesseract_path_still_does_not_run_the_number_run_splitter():
     assert "_merge_split_figures" in code
     assert "_split_number_runs" not in code
     assert code.rstrip().endswith("return text, words, False")
+
+
+# ── `SPB-2` — the same rule, on the OTHER half of the pair that must agree ────
+
+def test_a_COMPLETE_negative_figure_is_not_glued_to_the_next_period_column():
+    """⚠️ **`SPB-2`, 2026-09-13 — `SPB-1`'s RULE HAD BEEN APPLIED TO ONE OF THE TWO FUNCTIONS
+    THAT MUST AGREE, AND THE OTHER HELD THE DANGEROUS HALF.**
+
+    A closing bracket ENDS a figure, so a box closing with `)` cannot be a left half — the
+    gate has known that since `SPB-1` and refuses such a pair (`_joinable`, asserted below and
+    in `test_the_gate_reads_a_bracket_as_a_boundary_in_both_directions`). The REPAIR knew only
+    the mirror image: `MERGE_TAIL_RE` refuses a right box that OPENS with `(`, and nothing
+    refused a left box that CLOSES with one — while `head[4].rstrip(")")` stripped exactly the
+    evidence that would have said so, immediately before the join.
+
+    ⚠️ **AND THIS IS THE DIRECTION THAT COSTS A FIGURE RATHER THAN A CELL.** The gate refusing
+    a good statement is visible — the cell reads `missing` and the run folder says why. The
+    repair joining `(1.234)` to the next column's `567` produces `(1.234.567`, which is a
+    WELL-FORMED negative figure that every gate below then believes: `reconcile` sees no
+    fragment to count, the row is written, and nothing downstream can tell. `DPC-2`'s shape —
+    one wrong cell among the recovered ones.
+    """
+    left = _num("(1.234)", 300.0, w=40.0)
+    right = _num("567", 342.0, w=18.0)
+    p = _parser()
+
+    merged = p._merge_split_figures([left, right], p.Y_TOL, WIDTH * p.VALUE_ZONE)
+
+    assert [w[4] for w in merged] == ["(1.234)", "567"]
+    # and the gate agrees about the same pair — that agreement IS the fix
+    assert _count(left, right) == 0
+
+
+def test_every_genuine_split_still_merges():
+    """⚠️ **THE FIX MUST NOT BE A NARROWING OF THE REPAIR**, which is what `SPR-1` was about:
+    `join_lost` repairs the same family at layer 55 of 115 and this is the layer-1 reading. All
+    three measured shapes still come back whole — the two-box pair `SPL-1` was named for, the
+    three-box run `SPR-1` found (55 of 89 open cells sat at exactly one counted fragment), and
+    an OPEN left half of a negative, whose `(` is unmatched and therefore genuinely mid-figure.
+    """
+    p = _parser()
+    lo = WIDTH * p.VALUE_ZONE
+
+    def merge(*words):
+        return [w[4] for w in p._merge_split_figures(list(words), p.Y_TOL, lo)]
+
+    assert merge(_num("7.005.559", 300.0, w=30.0),
+                 _num("045", 331.0, w=14.0)) == ["7.005.559.045"]
+    assert merge(_num("1", 300.0, w=6.0), _num("234", 307.0, w=14.0),
+                 _num("567", 322.0, w=14.0)) == ["1.234.567"]
+    assert merge(_num("(1.234", 300.0, w=30.0),
+                 _num("567", 331.0, w=14.0)) == ["(1.234.567"]

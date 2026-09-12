@@ -1729,6 +1729,7 @@ class PdfParser:
           * same line, within `y_tol`, the right box immediately after the left one;
           * the gap is under `MERGE_MAX_GAP`;
           * the right box begins with a FULL three-digit group;
+          * **neither box's brackets say it is already a whole figure** (`_joinable`);
           * the two joined with a thousands separator form one well-formed figure.
 
         ⚠️ **IT ABSORBS A RUN, NOT A PAIR — AND WALKING PAIRWISE WAS A DEFECT** (`SPR-1`,
@@ -1767,7 +1768,20 @@ class PdfParser:
                     b = ws[j]
                     bt = str(b[4]).strip()
                     joined = str(head[4]).strip().rstrip(")") + "." + bt
+                    # ⚠️ **`_joinable` IS THE SHARED PREDICATE AND IT IS SHARED SO THE TWO
+                    # CANNOT DRIFT AGAIN** (`SPB-2`, 2026-09-13). `SPB-1` made the GATE adopt
+                    # this repair's bracket rule and left the repair holding only HALF of it:
+                    # `MERGE_TAIL_RE` refuses a right box that OPENS with `(`, and nothing
+                    # refused a left box that CLOSES with `)`. A closing bracket ENDS a
+                    # figure, so such a box cannot be a left half — and `head[4].rstrip(")")`
+                    # was stripping exactly that evidence before the join. Measured directly:
+                    # `(1.234)` and `567` 2.0pt apart merge to `(1.234.567`, a complete
+                    # negative figure glued to the next PERIOD COLUMN. ⚠️ **AND THIS IS THE
+                    # DANGEROUS DIRECTION OF THE SAME DEFECT** — the gate refuses a cell,
+                    # where the repair writes a WRONG FIGURE that every gate below then
+                    # believes, because the joined value is well-formed.
                     if not (b[0] - head[2] < cls.MERGE_MAX_GAP
+                            and cls._joinable(str(head[4]), bt)
                             and cls.MERGE_TAIL_RE.match(bt)
                             and cls.MERGE_JOIN_RE.match(joined)):
                         break
