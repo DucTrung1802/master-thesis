@@ -2735,6 +2735,80 @@ once any earlier test has imported the real module — so a stub placed in `sys.
 when the file runs alone and is **ignored in the full suite**. Patch the module's functions, not
 `sys.modules`. CLAUDE.md §6-2-sexquinquagies.
 
+#### ⚠️ THE THREE QUESTIONS A GAP PLAN MUST ASK, AND ONLY ONE OF THEM EXISTED (2026-09-12)
+
+`plan_batch` answers *"what does this ticker still OWE"*. Three different questions decide
+whether GPU is worth spending on that, and they are not interchangeable:
+
+| ask | function | VN30, 2026-09-12 |
+|---|---|---|
+| which cells did a run **WIN** that disk does not hold? | **`unwritten_cells`** | **358 of 779** open cells |
+| which cells has **this cascade under this parser** already lost? | `exhausted_quarters` | unreadable for **1,214 of 1,472** folders (`FPR-1`) |
+| which cells has **nothing ever opened at all**? | **`unasked_quarters`** | **1** |
+
+⚠️ **`unwritten_cells` IS `exhausted_quarters`' COMPLEMENT AND IT WAS THE EXPENSIVE HALF TO BE
+MISSING.** From the statement CSV a cell the cascade WON and no merge wrote reads `missing`
+exactly like one it lost — so `plan_batch` opened the document again, and that is what *"re-running
+a ticker the cascade has seen returns ~0"* was made of: **VPB 24.5 min, VHM 90 min, GAS 92.2 min,
+every one for 0 quarters** (`HLD-1`). It reads `documents/*.json`'s **`accepted`** — the parse —
+and never `results`, which is the scorecard: a `results` row reads `pdf` when `compare()` found a
+matching row on disk, so a scorecard cannot tell *"this was written"* from *"this reproduced what
+was already there"*. A document whose layers RAISED is never offered (`VCR-1`).
+
+⚠️ **`release_batch` IS WHAT ACTS ON IT, AND IT IS FREE.** Only the folders holding such a cell
+are swept — FPT has **347** run folders and `merge_batch` makes one `merge_run` call per (ticker,
+period) — with the empty-band refusal LIFTED and the arithmetic screens ON, `force_differs` never
+passed. **246 statements written, no GPU: VN30 cells 85.1 % -> 89.7 %, quarters 74.3 % -> 76.0 %**,
+122 withheld by the screens. ⚠️ **A SECOND PASS WON 3 MORE AND STOPPED** — the pass exists because
+`merge_run` plans against disk and writes afterwards, so a prior written in pass 1 reaches a Q4's
+planner only in pass 2; what is left is cumulative income statements whose `Q1`/`Q3` operand has
+never been WON at all.
+
+⚠️ **`unasked_quarters` IS THE ONLY ONE OF THE THREE THAT ASSUMES NOTHING, AND ITS ANSWER ENDED
+THE GPU QUESTION FOR VN30.** A cell nothing has asked cannot have lost, whatever parser was in
+force. **One cell** — ACB 2009-Q3's cash flow, whose PDF is not on disk, on a three-page
+`Mẫu CBTT-03` form that cannot contain one. ⚠️ **A FIRST PASS AT IT REPORTED 113 AND WAS COUNTING
+`HLD-1` BACKWARDS**: it ignored `results` rows whose status was `pdf`, reasoning that such a cell
+is done — but a statement the run ACCEPTED and the merge then withheld carries exactly that row
+beside a `missing` cell on disk. **A run that opened a document asked every statement of it.**
+
+⚠️ **SO THE REFUSALS ARE THE WHOLE REMAINING LEVER, AND `absent_deepest` IS THE FIELD TO RANK
+THEM BY** (`RSN-1` — `absent_reasons` keeps the FIRST layer per reason, which ranks layer 1):
+
+| deepest-layer reason, VN30's 536 open cells | cells | give ONLY this reason |
+|---|---|---|
+| `fragmented reading` | 119 | 13 |
+| `cash: no closing balance` | 52 | 7 |
+| `is: operating profit does not close` | 42 | **23** |
+| `bs: assets != liab+equity` | 41 | 12 |
+| `no such statement on any page` | 41 | **23** |
+| `bs: section sum does not close` | 38 | 7 |
+| `is: no profit before tax` | 36 | 13 |
+| `bs: no total assets` | 29 | **15** |
+| `too few rows parsed` | 30 | 9 |
+
+#### ⚠️ CONTIGUITY IS A THIRD NUMBER AND NOBODY HAD IT — `kgpu.fleet.coverage` (2026-09-12)
+
+*"89.7 % of cells"* and *"75.9 % of quarters"* both hide the question a user of the series
+actually has: **can I difference or compound across it?** `coverage` adds `holes` — non-solid
+quarters sitting BETWEEN two solid ones — and `band`, the longest unbroken run.
+
+| VN30, after the release | |
+|---|---|
+| cells · quarters | 4,678 / 5,214 = 89.7 % · 1,320 / 1,738 = 75.9 % |
+| **holes** | **310** |
+| tickers that are ONE band | **5 of 30** — ACB, BID, CTG, TCB, VCB |
+| worst | SHB 41 holes · VNM 39 · TPB 25 · PLX 22 **on a band of 2** |
+
+⚠️ **A GAP AT EITHER END IS NOT A HOLE, AND CONFLATING THEM WOULD MAKE A LATE LISTING LOOK LIKE A
+PARSE FAILURE.** VHM's 2017-Q1/Q2/Q3 predate its listing and BSR stopped filing in 2020; neither
+is something a run can close, and `GRD-2` is the same distinction at the top edge.
+
+⚠️ **AND `holes` IS NOT `1 - rate`.** A ticker can read 90 % with every gap in one block at the
+start — a clean series that simply begins later — or scattered through the middle, which is a
+series nothing can difference across. **The two readings need different work and only `holes`
+tells them apart.**
+
 ### ⚠️ 3i. FOUR DEFECTS BETWEEN A CORRECT OCR READ AND THE CSV — CTG, 2026-09-02
 
 CTG held seven outstanding cells and **not one of them was an OCR failure**: every figure below

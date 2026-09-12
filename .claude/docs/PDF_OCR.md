@@ -207,6 +207,71 @@ it is `complete = True` **and** `outstanding = 0`, never `complete` alone.
 
 ---
 
+## 1b. ⚠️ THE WHOLE UNIVERSE — `UNIVERSE`, and the notebook becomes the fleet (2026-09-12)
+
+§1a is one ticker, waiting for a person. **`UNIVERSE` is the other shape of the same notebook**:
+the universe partitioned across this card and every Kaggle session, one subprocess per lane.
+
+```python
+UNIVERSE = "VN30"         # None = one ticker (the default) | "VN30" | "VN100"
+FLEET_RUN = False         # ⚠️ THE SECOND FLAG — `EXECUTE` must ALSO be True
+FLEET_LOCAL_LANES = 1     # ⚠️ raising it needs a VRAM measurement, not an opinion
+FLEET_ACCOUNTS = None     # None = every token in .env | [] = LOCAL ONLY | ["lyductrung"]
+FLEET_SESSIONS = 2        # Kaggle allows 2 concurrent GPU sessions PER ACCOUNT
+```
+
+⚠️ **`UNIVERSE = None` LEAVES EVERY CELL UNCHANGED.** §1b prints one line and the notebook is
+what it always was. This is deliberate: the per-ticker clone procedure of §1a is untouched, and
+a clone is still how ONE ticker gets read.
+
+⚠️ **AFTER THE FLEET, §2-§11 READ ONE TICKER AND SPEND NOTHING.** `EXECUTE` is forced off and
+`SYMBOL` is re-pointed at the ticker with the most still open, as a worked example — **a
+23-ticker fleet cannot show 23 tickers' verdicts in one §7, and a notebook that pretended to
+would be lying about what it shows.** The fleet's own record is one log per lane under
+`logs/fleet/`, and §1b's own before/after coverage is the universe-wide answer to *"did it
+land?"*.
+
+⚠️ **WHAT §1b DOES, IN ORDER, AND WHY THAT ORDER:**
+
+| step | what | spends |
+|---|---|---|
+| 1 | `fleet.coverage` — the BEFORE. §5 rule 2: a number taken only afterwards cannot be told from a stale one | nothing |
+| 2 | `fleet.plan_fleet` — the lanes, printed | nothing |
+| 3 | **`fleet.unasked` — cells NO run has ever opened** | nothing |
+| 4 | `fleet.run_fleet` — only at `FLEET_RUN and EXECUTE` | **hours of GPU** |
+| 5 | `fleet.release_and_fill` — `release_batch` then `fill_grid`, whether or not a lane ran | nothing |
+| 6 | `fleet.coverage` again — the AFTER, and the delta | nothing |
+
+⚠️ **STEP 3 IS THE ONE TO READ BEFORE SETTING `FLEET_RUN`, AND ON VN30 IT READS 1.** Measured
+2026-09-12: the gap plan proposed **311 documents** (~13 h of GPU) while **414 of the 536 open
+cells had already met the full 115-layer cascade and lost**, and exactly one cell had never been
+asked by anything — ACB 2009-Q3, whose PDF is not on disk. **When that line reads 0 the GPU is
+not the lever**; §8's refusal ranking and `.claude/context/web_scraper.md` §3h are where to look
+instead. The fleet is the thing to run AFTER a parser fix.
+
+⚠️ **STEP 5 IS FREE AND IS THE FIRST THING TO DO ON ANY UNIVERSE** (`HLD-1`). `_merge_finished_
+quarters` lifts the empty-band refusal only for a quarter whose filing produced ALL THREE
+statements, so a **2-of-3** filing's two good statements stay in the run folder — the band
+therefore never grows and the next run wins them again for nothing. **358 of VN30's 779 open
+cells were in that state; releasing 246 took the cell rate 85.1 % → 89.7 % with no OCR**, and
+the arithmetic screens withheld 122 that fail an identity the filing asserts about itself.
+
+⚠️ **AND §1b PRINTS A THIRD RATE THE OTHER TWO HIDE.** `holes` counts non-solid quarters sitting
+BETWEEN two solid ones — the gaps a difference or a compounding cannot cross. VN30 reads **310
+holes with only 5 of 30 tickers one unbroken band**, at 89.7 % of cells. ⚠️ A gap at either END
+is not a hole: VHM's 2017 quarters predate its listing and BSR stopped filing in 2020, and
+neither is something a run can close.
+
+Or from a terminal, with no notebook at all:
+
+```powershell
+cd src\kaggle_gpu
+python -m kgpu.fleet plan --universe VN30     # the lanes, the unasked count; spends nothing
+python -m kgpu.fleet run  --universe VN30     # one subprocess per lane
+```
+
+---
+
 ## 2. Choosing the filings
 
 `QUARTERS` and `PERIODS` are both optional and they **INTERSECT**. Each one **raises** when it

@@ -624,6 +624,83 @@ once the provider actually loaded. Pin the LINE — `onnxruntime-gpu>=1.19,<1.23
 logs Vietnamese account labels, so the run log can never be ASCII. Pull it with
 `PYTHONUTF8=1 python -m kgpu pull pdf-ocr`.
 
+## 7d. ⚠️ THE FLEET — a whole UNIVERSE across every GPU, one process per lane (2026-09-12)
+
+`kgpu/fleet.py`. Before it existed, driving VN30 meant cloning
+`RUN__pdf_ocr_control.ipynb` per ticker, choosing an account by hand and watching five logs —
+which is exactly what happened on 2026-09-12 and took VN30 **56.4 % → 74.3 %** on five GPUs in
+a day. Nothing about that needed a person except the bookkeeping.
+
+```powershell
+cd src\kaggle_gpu
+python -m kgpu.fleet plan --universe VN30              # the lanes, free, spends nothing
+python -m kgpu.fleet run  --universe VN30              # one subprocess per lane
+python -m kgpu.fleet run  --tickers PLX,VNM --accounts lyductrung --local-lanes 0
+python -m kgpu.fleet lane --kind local --tickers PLX   # ONE lane, in this process
+```
+
+⚠️ **A LANE IS A SUBPROCESS AND THAT IS NOT A PERFORMANCE CHOICE.** `accounts.activate` copies
+the chosen token into the process-wide `KAGGLE_API_TOKEN`, because `kagglesdk` reads that
+variable and nothing else (`ACC-1`, §2a) — so **two Kaggle lanes on two accounts cannot share a
+process**, and the symptom of trying would be a 403 *after* a payload had been uploaded. One
+process per lane is the only shape in which two accounts run at once.
+
+⚠️ **THE ASSIGNMENT IS A PARTITION, ASSERTED AND NOT ASSUMED.** Two lanes holding one ticker
+share its job name, and therefore its payload directory, its rehearsal directory and its kernel
+slug — *"the second overwrites the first's payload, and its kernel REPLACES the first"* (§1's
+job-name note). `assign` raises rather than returning such a plan.
+
+⚠️ **LONGEST-PROCESSING-TIME-FIRST, BECAUSE THE LANES MUST FINISH TOGETHER.** A 54-document
+ticker beside a 6-document one is nine hours against one, and the universe file is ordered by
+LIQUIDITY, so round-robin over it puts the big names on the first lanes and leaves the rest
+idle. Measured on VN30: 23 tickers and 311 documents balance to **62-63 documents per lane**
+across 5 lanes. ⚠️ The cost measure is the plan's document COUNT and not a duration — *"a long
+document is a document that is losing"*, and nothing here knows which will lose.
+
+⚠️ **THE TIE-BREAK PREFERS THE LOCAL LANE, AND THAT IS ECONOMICS.** Local GPU costs nothing;
+Kaggle's 30 GPU-h/week is metered, **does not pool** between accounts and resets weekly, so an
+hour left unspent locally is an hour of quota burnt that a longer ticker may need later. Sorting
+on the lane name alone put a lone ticker on `kaggle:one#1` purely because it sorts before
+`local`.
+
+⚠️ **`--local-lanes > 1` NEEDS A VRAM MEASUREMENT AND NOT AN OPINION.** One document measured
+**2,030 MB RSS with the card at 2,313 MiB of 4,096**, so two do not fit — and two that do not
+fit *do not fail loudly*: they raise layers, and the cascade then records a machine failure as a
+fact about the FILING (`GPU-1`). `CAFEF_GPU_LEASE` is the mutex and admits `slots` documents at
+a time; ⚠️ **its lease spans a whole document's cascade**, so `slots=1` serialises two local
+lanes almost entirely — the 20 idle cores the parse leaves (GPU median **0 %**, 96 % of ONE core
+of 20) are not reachable by adding lanes alone.
+
+⚠️ **`onnx_only` IS THE DEFAULT CASCADE FOR A FLEET** (`TSS-1`): `tesseract@200` is a real layer
+locally and does not exist on a worker, so leaving it in has the local lane and the T4 lanes
+running DIFFERENT cascades — and then `exhausted_quarters`, which reuses a refusal only when a
+past run brought *at least this* cascade to it, cannot compare the two lanes' verdicts.
+
+⚠️ **EVERY LANE ENDS WITH `release_batch`, AND SO DOES THE FLEET.** `HLD-1`: a filing that
+produced two statements of three keeps the empty-band refusal, so its two good statements sit in
+the run folder unwritten and the next run wins them again for nothing — **358 of VN30's 779 open
+cells** were in that state, and releasing them cost no GPU at all.
+
+### ⚠️ READ `never asked by ANY run` BEFORE YOU START ONE
+
+`fleet.unasked` counts open cells **nothing has ever opened** — the one *"is more GPU worth it"*
+test that needs no assumption about the parser, because a cell nothing asked cannot have lost.
+
+| VN30, 2026-09-12 | |
+|---|---|
+| the gap plan's proposal | **311 documents**, ~13 h of GPU |
+| open cells that already met the full 115-layer cascade and lost | **414 of 536** |
+| open cells **never asked by anything** | **1** (ACB 2009-Q3, and its PDF is not on disk) |
+
+⚠️ **SO THE FLEET IS THE THING TO RUN AFTER A PARSER FIX, NOT INSTEAD OF ONE.** It is built, it
+is tested, and its own pre-flight says the GPU is not the lever on this universe today
+(`FLT-2`). ⚠️ **`fleet.coverage` is the before/after**, and it carries the third number the two
+rates hide: **310 holes**, only **5 of 30 tickers one unbroken band**.
+
+⚠️ **CTRL-C KILLS THE CHILDREN AND NOT THE KAGGLE KERNELS.** A pushed kernel runs to completion
+whatever happens here; `python -m kgpu wait <job>` then `pull <job>` reattaches, and
+`release_batch` then writes whatever came home.
+
 ## 8. Adding another notebook
 
 1. Add a job to `kaggle_config.json`: `id`, `notebook` (repo-relative), the

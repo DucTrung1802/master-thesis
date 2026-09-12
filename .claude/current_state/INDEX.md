@@ -62,7 +62,7 @@ TODO item leaves its measurement in `CLAUDE.md` or a `.claude/context/` file and
 
 | file | ~tokens | open it when |
 |---|---|---|
-| [ISSUES.md](ISSUES.md) | **60.6k** | *what is BROKEN?* 97 open / 38 resolved, codes permanent. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`), `CFB-1` before quoting a BID cash flow, `CFV-1` before believing any cash flow accepted at a STRICT layer, and `TPL-1`/`CRP-1` before any non-bank financials parse |
+| [ISSUES.md](ISSUES.md) | **72.3k** | *what is BROKEN?* 97 open / 38 resolved, codes permanent. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`), `CFB-1` before quoting a BID cash flow, `CFV-1` before believing any cash flow accepted at a STRICT layer, and `TPL-1`/`CRP-1` before any non-bank financials parse |
 | [TODO.md](TODO.md) | **30.8k** | *what is NEXT?* ⚠️ **NUMBERS FROZEN 2026-08-23** — a `P<n>` is a permanent NAME and **PRIORITY IS THE ROW ORDER**, so read top-down and cite the number. Seven groups — ⭐ top rows are group **0 · PARSER** (`P54`, `P55`, `P51`, `P46`, `P47`(a), `P43`, `P48`, `P44`, `P45`), then **A data `P2`**, **B OCR `P37`/`P38`/`P6`/`P5`/`P4`**, C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ⚠️ A HYPHENATED code is RETIRED, and a bare `P<n>` written BEFORE 2026-08-23 means a different item — the crosswalks resolve it |
 | [pipeline.md](../docs/pipeline.md) | **4.8k** | *which ticker, on which date?* What the chain OUTPUTS — `(date, ticker, weight)`, 4,720 picks across 236 books. §6 is why there is no book for today; **§9d is the tradability gate that takes the CAGR from +181 % to +36.5 %** |
 | [PIPELINE_h10_CAGR74.md](../docs/PIPELINE_h10_CAGR74.md) | **7.2k** | *how does ONE number get made, end to end?* The h=10 chain returning CAGR +74.0 %/yr. **§12 is the caveat section and is why the file exists** |
@@ -126,7 +126,7 @@ the directory in the same commit.
 
 | open this | ~tokens | when you are… |
 |---|---|---|
-| [web_scraper.md](../context/web_scraper.md) | **64.9k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
+| [web_scraper.md](../context/web_scraper.md) | **70.7k** | touching a scraper, the PDF/OCR statement parser, or `raw_data/` layout |
 | [orchestration.md](../context/orchestration.md) | **47.6k** | touching Dagster, `config.json`, any asset, any bronze/silver/gold table, a scrape, or ⚠️ **the FILTER layer** (§"FILTER") |
 | [feature_selection.md](../context/feature_selection.md) | **45.4k** | running or reading a selection, or quoting any IC / null / bar. §15a the country-sweep guide, §16 the GPU conversion, §19 the ranker measurement |
 | [orchestration-preprocessor.md](../context/orchestration-preprocessor.md) | **26.1k** | changing HOW a table is built — the `_ingest_*` / `_helper_*` transform library. ⚠️ It is `src/orchestration/preprocessor/`, a NESTED package, which is why the file name carries both halves |
@@ -176,8 +176,8 @@ and do not follow its one-file-per-package rule.
 
 | open this | ~tokens | when you are… |
 |---|---|---|
-| [PDF_OCR.md](../docs/PDF_OCR.md) | 14.4k | **running the FILING OCR on a T4** — the control notebook, the `QUARTERS` filter, what a verdict means, and the five things that have gone wrong. ⚠️ **§1a is what *"OCR ticker `<SYM>` LOCAL\|KAGGLE"* means** — a prepared per-ticker clone that WAITS, and how each parameter is decided from disk; §6 is when a recovered quarter may be merged; **§8 is what is still MISSING across every ticker at once** — 130 cells, of which **56 winnable and 46 of those VIC** |
-| [kaggle_gpu.md](../docs/kaggle_gpu.md) | 8.1k | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE**, and §7's five measured traps. ⚠️ It was `src/kaggle_gpu/README.md`, renamed on the move because a bare `README.md` cannot sit in a shared folder |
+| [PDF_OCR.md](../docs/PDF_OCR.md) | 17.8k | **running the FILING OCR on a T4** — the control notebook, the `QUARTERS` filter, what a verdict means, and the five things that have gone wrong. ⚠️ **§1a is what *"OCR ticker `<SYM>` LOCAL\|KAGGLE"* means** — a prepared per-ticker clone that WAITS, and how each parameter is decided from disk; §6 is when a recovered quarter may be merged; **§8 is what is still MISSING across every ticker at once** — 130 cells, of which **56 winnable and 46 of those VIC** |
+| [kaggle_gpu.md](../docs/kaggle_gpu.md) | 10.6k | running a repo notebook on a Kaggle T4 — the payload dataset, the parameter patcher, `rehearse`, **§7b PANEL MODE**, and §7's five measured traps. ⚠️ It was `src/kaggle_gpu/README.md`, renamed on the move because a bare `README.md` cannot sit in a shared folder |
 | [RANKER_COMPARISON.md](../docs/RANKER_COMPARISON.md) | 4.6k | asking which ranker to keep, drop or add — the scorecard behind `feature_selection` §19 |
 | [FUNDAMENTAL_INDICATORS.md](../docs/FUNDAMENTAL_INDICATORS.md) | 3.5k | the fundamental indicator definitions |
 | [NULL_DRAWS_VI.md](../docs/NULL_DRAWS_VI.md) · [NULL_DRAWS.md](../docs/NULL_DRAWS.md) | 3.2k · 3.1k | how many null draws, and why (VI · EN) |

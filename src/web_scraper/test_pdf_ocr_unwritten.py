@@ -195,3 +195,42 @@ def test_a_ticker_with_nothing_unwritten_reaches_no_merge_at_all(tmp_path, disk,
     out = batch.release_batch(["PLX"], reports_root=tmp_path, apply=True, log=lambda _l: None)
 
     assert out == {"cells": 0, "written": 0, "withheld": 0, "folders": 0}
+
+
+# ── the one GPU question that does not depend on the parser ───────────────────
+
+def test_a_cell_no_run_ever_opened_is_the_only_unspent_gpu(tmp_path, disk):
+    """⚠️ `exhausted_quarters` may reuse a refusal only when the PARSER is the same file, and
+    for 1,214 of VN30's 1,472 run folders it cannot — they were written at a dirty tree. This
+    asks the strictly weaker question with no such precondition: **did anything ever ASK?**
+    """
+    disk["Q1-2018"] = REPORTS
+    disk["Q2-2018"] = []
+    disk["Q3-2018"] = []
+    folder = _folder(tmp_path, "20260912-000000__hose_plx__pdf_ocr")
+    (folder / "metadata.json").write_text(json.dumps({
+        "inputs": {"exchange": "HOSE", "symbol": "PLX"},
+        "results": [{"period": "Q2-2018", "report": r, "status": "absent"} for r in REPORTS],
+    }), encoding="utf-8")
+
+    assert batch.unasked_quarters(tmp_path, "HOSE", "PLX") == {"2018-Q3": sorted(REPORTS)}
+
+
+def test_an_ACCEPTED_result_row_still_counts_AS_ASKED(tmp_path, disk):
+    """⚠️ **THIS DISTINCTION COST A WRONG ANSWER, AND THE WRONG ANSWER WAS 113.** A first pass
+    counted only rows whose status was NOT `pdf`, reasoning that a `pdf` row means the cell is
+    done. It was counting `HLD-1`'s population backwards: a statement the run ACCEPTED and the
+    merge then withheld carries a `pdf` result row and a `missing` cell on disk, so "no refusal
+    recorded" read as "never asked" for exactly the cells that had been asked and answered.
+    **A run that opened a document asked every statement of it.**
+    """
+    disk["Q1-2018"] = REPORTS
+    disk["Q2-2018"] = REPORTS
+    disk["Q3-2018"] = []
+    folder = _folder(tmp_path, "20260912-000000__hose_plx__pdf_ocr")
+    (folder / "metadata.json").write_text(json.dumps({
+        "inputs": {"exchange": "HOSE", "symbol": "PLX"},
+        "results": [{"period": "Q3-2018", "report": r, "status": "pdf"} for r in REPORTS],
+    }), encoding="utf-8")
+
+    assert batch.unasked_quarters(tmp_path, "HOSE", "PLX") == {}

@@ -430,7 +430,16 @@ def exhausted_quarters(reports_root, exchange: str, symbol: str, *,
     changed under those verdicts, so they are all re-winnable.
     """
     current = parser or parser_blobs()
-    if current is None:
+    # ⚠️ **THE CONTENT DIGEST IS THE PRIMARY ROUTE SINCE 2026-09-12, AND THE GIT BLOBS ARE THE
+    # FALLBACK FOR FOLDERS THAT PREDATE IT.** `git_commit` reads `<sha>+dirty` on a dirty tree,
+    # which is honestly unknown and therefore unusable — **1,214 of 1,472 VN30 folders**, PLX's
+    # 51-document run of the same day among them, so a gap plan re-asked 32 questions the full
+    # cascade had just lost. `job.parser_digest()` hashes the two parser files' BYTES, needs no
+    # repository (a Kaggle worker has none), and answers the question that actually matters:
+    # is this the same parser? ⚠️ The two fingerprints are different alphabets and are NEVER
+    # compared with each other — a folder is judged by whichever kind it carries.
+    digest = job.parser_digest()
+    if current is None and digest is None:
         return {}
     want = set(layers or ())
     seen: Dict[str, set] = {}
@@ -441,11 +450,18 @@ def exhausted_quarters(reports_root, exchange: str, symbol: str, *,
             meta = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        commit = str(meta.get("git_commit") or "")
-        if commit not in cache:
-            cache[commit] = parser_blobs(commit)
-        if cache[commit] != current:
-            continue
+        recorded = tuple(meta.get("parser_digest") or ())
+        if recorded:
+            if digest is None or recorded != digest:
+                continue
+        else:
+            if current is None:
+                continue
+            commit = str(meta.get("git_commit") or "")
+            if commit not in cache:
+                cache[commit] = parser_blobs(commit)
+            if cache[commit] != current:
+                continue
         ran = set((meta.get("inputs") or {}).get("layers") or ())
         # ⚠️ A folder that recorded no layer list says nothing about which cascade it ran.
         if not ran or (want and not want <= ran):
@@ -459,6 +475,67 @@ def exhausted_quarters(reports_root, exchange: str, symbol: str, *,
                 continue
             seen.setdefault(quarter, set()).add(result.get("report"))
     return {q: sorted(r for r in reports if r) for q, reports in seen.items()}
+
+
+def unasked_quarters(reports_root, exchange: str, symbol: str, *,
+                     builder: Optional[fin.FinancialsBuilder] = None,
+                     allow_parent: bool = True,
+                     template: Optional[str] = None,
+                     ) -> Dict[str, List[str]]:
+    """`{YYYY-QQ: [report]}` for open cells **no run has ever opened at all.**
+
+    ⚠️ **THIS IS THE ONE "IS MORE GPU WORTH IT" TEST THAT DOES NOT DEPEND ON THE PARSER.**
+    `exhausted_quarters` must know whether the parser is the same file before it may reuse a
+    refusal, and for **1,214 of VN30's 1,472 run folders it cannot** — they were written at a
+    dirty tree. This asks a strictly weaker question with no such precondition: **did anything
+    ever ASK?** A cell nothing has asked cannot have lost, whatever parser was in force, so
+    opening it is the only GPU this corpus can spend without assuming something.
+
+    ⚠️ **MEASURED ON VN30, 2026-09-12: 1 CELL. ONE.** ACB 2009-Q3's cash flow — and its PDF is
+    not on disk (the one quarter across all 784 tickers that CafeF advertises and this machine
+    cannot open), on a three-page `Mẫu CBTT-03` summary form that cannot contain a cash flow
+    anyway. **So there is no unspent GPU on VN30**, and every one of the other 535 open cells
+    has been opened by some run: the levers left are the PARSER, the 122 the arithmetic screens
+    withhold, and the de-cumulation chains whose operand was never won. This is the same
+    conclusion the earlier 24-ticker corpus reached on 2026-09-11, now established for VN30.
+
+    ⚠️ **IT COUNTS `results` ROWS OF EVERY STATUS, INCLUDING `pdf`, AND THAT DISTINCTION COST A
+    WRONG ANSWER.** A first pass counted only rows whose status was NOT `pdf`, reasoning that a
+    `pdf` row means the cell is done — and reported **113** never-asked cells. It was counting
+    `HLD-1`'s population backwards: a statement the run ACCEPTED and the merge then withheld
+    carries a `pdf` result row and a `missing` cell on disk, so "no refusal recorded" read as
+    "never asked" for exactly the cells that had been asked and answered. **A run that opened a
+    document asked every statement of it.**
+    """
+    builder = builder or fin.FinancialsBuilder(logger=None)
+    tpl = template or job.resolve_template(builder, symbol)[0]
+    open_cells: Dict[str, set] = {}
+    for task in job.plan(builder, exchange, symbol, allow_parent=allow_parent, template=tpl):
+        done = set(job.parsed_reports(builder, task))
+        gap = {r for r in job.REPORTS if r not in done}
+        if gap:
+            open_cells[job.as_quarter(task.period)] = gap
+    if not open_cells:
+        return {}
+    asked: Dict[str, set] = {}
+    pattern = f"*__{exchange.lower()}_{symbol.lower()}__pdf_ocr"
+    for folder in sorted(Path(reports_root).glob(pattern), key=lambda f: f.name):
+        try:
+            meta = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for result in meta.get("results") or ():
+            try:
+                quarter = job.as_quarter(result.get("period", ""))
+            except Exception:                           # noqa: BLE001
+                continue
+            asked.setdefault(quarter, set()).add(result.get("report"))
+    out: Dict[str, List[str]] = {}
+    for quarter, reports in open_cells.items():
+        left = sorted(reports - asked.get(quarter, set()))
+        if left:
+            out[quarter] = left
+    return out
 
 
 def unwritten_cells(reports_root, exchange: str, symbol: str, *,

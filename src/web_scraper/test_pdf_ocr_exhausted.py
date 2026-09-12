@@ -171,3 +171,64 @@ def test_two_folders_contribute_to_the_same_quarter(tmp_path, same_parser):
 
     assert pb.exhausted_quarters(tmp_path, "HOSE", "ACB", layers=FULL) == {
         "2015-Q1": ["balance_sheet", "income_statement"]}
+
+
+# ── the content digest — the fingerprint `git_commit` could not give ──────────
+
+def _digest_folder(root, run_id, digest, layers, results, commit="deadbeef+dirty"):
+    """A run folder carrying a `parser_digest` instead of a usable commit."""
+    folder = root / f"{run_id}__hose_acb__pdf_ocr"
+    folder.mkdir(parents=True)
+    (folder / "metadata.json").write_text(json.dumps({
+        "git_commit": commit,
+        "parser_digest": list(digest),
+        "inputs": {"symbol": "ACB", "layers": layers},
+        "results": results,
+    }), encoding="utf-8")
+    return folder
+
+
+def test_a_dirty_tree_is_comparable_once_it_records_what_it_RAN(tmp_path, monkeypatch):
+    """⚠️ **1,214 OF VN30'S 1,472 RUN FOLDERS WERE UNCOMPARABLE, AND A GAP PLAN THEREFORE
+    RE-ASKED WHAT THEY HAD JUST LOST.** `git_commit` reads `<sha>+dirty` on a dirty tree, which
+    is honestly unknown — PLX's 51-document run of 2026-09-12 was one of them, so the next plan
+    opened all 32 cells its full cascade had refused hours earlier. A content digest answers the
+    question that actually matters: **is this the same parser?** Two dirty trees with identical
+    parser files are the same question, and git cannot say so.
+    """
+    digest = ("aa" * 32, "bb" * 32)
+    monkeypatch.setattr(pb.job, "parser_digest", lambda: digest)
+    # ⚠️ the git route must be UNABLE to answer, so the test cannot pass through it by accident
+    monkeypatch.setattr(pb, "parser_blobs", lambda commit=None: None)
+    _digest_folder(tmp_path, "20260912-132038", digest, FULL,
+                   [_result("Q1-2009", "cash_flow")])
+
+    assert pb.exhausted_quarters(tmp_path, "HOSE", "ACB", layers=FULL) == {
+        "2009-Q1": ["cash_flow"]}
+
+
+def test_a_DIFFERENT_parser_digest_is_a_mismatch_and_never_a_skip(tmp_path, monkeypatch):
+    monkeypatch.setattr(pb.job, "parser_digest", lambda: ("aa" * 32, "bb" * 32))
+    monkeypatch.setattr(pb, "parser_blobs", lambda commit=None: None)
+    _digest_folder(tmp_path, "20260912-132038", ("aa" * 32, "cc" * 32), FULL,
+                   [_result("Q1-2009", "cash_flow")])
+
+    assert pb.exhausted_quarters(tmp_path, "HOSE", "ACB", layers=FULL) == {}
+
+
+def test_the_two_fingerprints_are_never_compared_with_each_other(tmp_path, monkeypatch):
+    """⚠️ A git blob hash and a sha256 of file bytes are different alphabets over the same
+    files, so they can never be equal — and a folder is judged by whichever kind it CARRIES,
+    never by the other. A folder with a digest is not re-checked against the blobs, and one
+    without a digest still goes down the git route.
+    """
+    monkeypatch.setattr(pb.job, "parser_digest", lambda: ("aa" * 32, "bb" * 32))
+    monkeypatch.setattr(pb, "parser_blobs", lambda commit=None: PARSER)
+    # carries a digest that does NOT match, while its commit WOULD match through the blobs
+    _digest_folder(tmp_path, "20260912-120000", ("zz" * 32, "zz" * 32), FULL,
+                   [_result("Q1-2009", "cash_flow")], commit="deadbeef")
+    # carries no digest at all, so the blobs decide and they agree
+    _folder(tmp_path, "20260912-130000", "deadbeef", FULL, [_result("Q2-2009", "cash_flow")])
+
+    assert pb.exhausted_quarters(tmp_path, "HOSE", "ACB", layers=FULL) == {
+        "2009-Q2": ["cash_flow"]}

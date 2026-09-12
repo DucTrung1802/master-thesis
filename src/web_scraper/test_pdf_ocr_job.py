@@ -1236,8 +1236,17 @@ def test_kgpu_carries_the_knob_as_a_JOB_field_and_never_as_a_worker_parameter():
     _sys.path.insert(0, str(job.REPO_ROOT / "src" / "kaggle_gpu"))
     from kgpu import pdf_ocr
 
-    cfg = pdf_ocr.job("BSR", quarters=["2019-Q1"], force_empty_band=True)
+    # ⚠️ **`user=` IS PASSED BECAUSE THIS TEST FAILED ON EVERY TWO-ACCOUNT MACHINE** (fixed
+    # 2026-09-12). `pdf_ocr.job` derives both slugs from `kaggle_user()`, and
+    # `config.load_credentials` **raises on several accounts by design** — *"which account pays
+    # for a run is not a question a credential loader can answer"* (`ACC-1`). So the moment a
+    # second `KAGGLE_API_TOKEN_*` went into `.env` this test started reporting a RuntimeError
+    # about account selection while claiming to check where a merge knob lives. **A test whose
+    # verdict depends on ambient credentials is measuring the machine**, and this one had to
+    # break exactly when the fleet made two accounts the normal configuration.
+    cfg = pdf_ocr.job("BSR", quarters=["2019-Q1"], force_empty_band=True, user="tester")
 
     assert cfg.merge_force_empty_band is True
     assert "FORCE_EMPTY_BAND" not in cfg.parameters
-    assert pdf_ocr.job("BSR", quarters=["2019-Q1"]).merge_force_empty_band is False
+    assert pdf_ocr.job("BSR", quarters=["2019-Q1"],
+                       user="tester").merge_force_empty_band is False

@@ -961,6 +961,79 @@ class Progress(CollectingLogger):
             self.say(detail)
 
 
+#: the two files whose content decides what a refusal MEANS. Kept beside the digest that
+#: reads them, and mirrored by `pdf_ocr_batch._PARSER_SOURCES`, which names them as repo paths
+#: for the git route.
+PARSER_SOURCES = ("cafef_pdf_parser.py", "cafef_financials.py")
+
+
+def parser_digest() -> Optional[Tuple[str, ...]]:
+    """sha256 of the OCR parser's sources AS THEY ARE ON DISK — no git, so a worker can too.
+
+    ⚠️ **THIS EXISTS BECAUSE `git_commit` COULD NOT ANSWER FOR 1,214 OF 1,472 RUN FOLDERS.**
+    `pdf_ocr_batch.parser_blobs` compares the blobs a COMMIT recorded, and a folder written at
+    a dirty tree carries `<sha>+dirty` — which is honestly unknown, so `ASK-1`'s skip refuses
+    to use it and the whole run is re-asked. Measured 2026-09-12 over VN30: **258 of 1,472
+    folders had a usable fingerprint**, and PLX's 51-document run from the same day was not one
+    of them, so a gap plan opened every one of its 32 cells the full cascade had just lost.
+
+    ⚠️ **CONTENT, NOT PROVENANCE — and that is the whole point.** A commit is a claim about
+    history; what decides whether a past refusal still stands is whether the parser is the same
+    bytes. Two dirty trees with identical parser files are the same question, and git cannot
+    say so. ⚠️ It follows that this must NOT be derived from git at all: a Kaggle worker has no
+    repository (`_git_commit` returns `None` there and calls that "not a failure"), and a
+    fingerprint the worker cannot compute is one every T4 run would leave blank.
+
+    ⚠️ **`None` IS STILL "DO NOT SKIP ANYTHING"** (§5 rule 2). A missing or unreadable source
+    is unknown, and unknown means run the document.
+    """
+    import hashlib
+
+    here = Path(__file__).resolve().parent
+    out = []
+    for name in PARSER_SOURCES:
+        path = here / name
+        try:
+            out.append(hashlib.sha256(path.read_bytes()).hexdigest())
+        except OSError:
+            return None
+    return tuple(out)
+
+
+def layers_for_engines(engines: Optional[Sequence[str]] = None, *,
+                       onnx_only: bool = False) -> Optional[List[str]]:
+    """`ENGINES` / `ONNX_ONLY` -> a layer NAME list, or `None` for the whole cascade.
+
+    ⚠️ **THIS RULE LIVED ONLY INSIDE `RUN__pdf_ocr_control.ipynb` UNTIL 2026-09-12, AND THE
+    FLEET WOULD HAVE BEEN ITS SECOND COPY.** Two writers of one shape drift: the notebook
+    raises on an engine no layer uses, and a second implementation that merely filtered would
+    silently run the WHOLE cascade for a typo — which is `select_layers`' own argument one level
+    up, *"a name that matches nothing is a silent widening of the cascade"*.
+
+    ⚠️ **AN ENGINE IS A NEW QUESTION AND `onnx_only` IS PROVENANCE, NOT COST** (`TSS-1`).
+    `tesseract@200` is a real layer HERE and does not exist on a Kaggle worker, so the two
+    machines otherwise run different cascades and a local re-parse can win on a layer the row on
+    disk never saw. `engines` wins over `onnx_only` when both are given, because naming the
+    engines is the more specific request.
+
+    ⚠️ **`None` IS THE WHOLE CASCADE AND AN EMPTY LIST IS A RUN THAT ASKS NOTHING.** Callers
+    pass this straight into `select_layers`, which reads a falsy value as "all of them", so
+    returning `[]` here would be indistinguishable from the default — hence `None`.
+    """
+    known = {layer.engine for layer in FinancialsBuilder.LAYERS}
+    if engines:
+        wanted = {str(e).strip().lower() for e in engines}
+        unknown = wanted - known
+        if unknown:
+            raise ValueError(
+                f"no parse layer uses engine(s) {sorted(unknown)} — known: {sorted(known)}")
+        return [layer.name for layer in FinancialsBuilder.LAYERS if layer.engine in wanted]
+    if onnx_only:
+        return [layer.name for layer in FinancialsBuilder.LAYERS
+                if layer.name.startswith("onnx")]
+    return None
+
+
 def select_layers(names: Optional[Sequence[str]]) -> List[ParseLayer]:
     """The cascade, or the named subset of it, in the cascade's OWN order.
 
@@ -2097,6 +2170,12 @@ def _run_locked(spec: JobSpec, git_commit: Optional[str] = None) -> Path:
         "stage": "web_scraper.pdf_ocr_job",
         "created": runtime.iso(),
         "git_commit": git_commit or os.environ.get("KGPU_GIT_COMMIT") or _git_commit(),
+        # ⚠️ **THE FINGERPRINT `git_commit` COULD NOT GIVE** — sha256 of the parser sources as
+        # they actually ran. A dirty tree records `<sha>+dirty`, which `ASK-1`'s skip must read
+        # as unknown, so 1,214 of 1,472 folders could not be compared at all and a gap plan
+        # re-asked every question they had already lost. Content, not provenance — and computed
+        # without git, because a Kaggle worker has no repository.
+        "parser_digest": list(parser_digest() or ()),
         "notes": spec.notes,
         "inputs": {
             **spec.to_json(),
