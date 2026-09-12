@@ -339,6 +339,113 @@ def unasked(names: Sequence[Tuple[str, str]], *,
     return out
 
 
+# ── the ONE block where GPU still buys cells: the unasked alternate (`ALT-2`) ─
+
+def alternate_quarters(names: Sequence[Tuple[str, str]], *,
+                       reports_root: Optional[os.PathLike | str] = None,
+                       log: Optional[Callable[[str], None]] = None,
+                       ) -> Dict[str, Dict[str, object]]:
+    """`{ticker: {exchange, template, quarters, cells}}` — open cells whose quarter has an
+    alternate filing **on disk that no run has ever asked**.
+
+    ⚠️ **NO QUARTER-LEVEL CENSUS CAN FIND THESE, WHICH IS WHY THE FUNCTION EXISTS.** Every one
+    of these quarters HAS been opened — `unasked_quarters` counts it as asked and `ASK-1`'s
+    skip drops it — but it was opened on the CHOSEN filing only. `documents()` returns one
+    filing per period, and **asking a DIFFERENT filing of the same period is a new question**
+    (`ALT-2`). A plan built with `skip_exhausted_on=True` therefore proposes none of this work
+    and reports the universe as having nothing left to win.
+
+    ⚠️ **"NEVER ASKED" IS READ OFF THE RUN FOLDER'S LOG AND NOT OFF A FIELD**, because the
+    field does not exist: `_alternate_retry` announces itself with `retrying on the …` and
+    records the recovery in `origin`, and until 2026-09-12 it could reach neither on a worker.
+    So the test is *did any run folder for this ticker log the retry on this period* — which
+    over-counts if a run retried one alternate of a period that has two, and that is the
+    conservative direction: it can only make this plan SMALLER.
+
+    ⚠️ **AND THE ALTERNATE MUST BE ON DISK HERE.** The index is what CafeF advertises; a
+    filing that was never scraped is not a question this machine can ask, and counting it
+    would put a document on a lane to be skipped with a warning (`ALT-2`'s other half).
+    """
+    anchor()
+    from web_scraper import cafef_financials as fin
+    from web_scraper import pdf_ocr_job as job
+
+    say = log or (lambda _line: None)
+    root = Path(reports_root) if reports_root else REPO_ROOT / "reports" / "pdf_ocr"
+    builder = fin.FinancialsBuilder(logger=None)
+    out: Dict[str, Dict[str, object]] = {}
+    for symbol, exchange in names:
+        template = job.resolve_template(builder, symbol)[0]
+        tried = _retried_periods(root, exchange, symbol)
+        quarters: List[str] = []
+        cells = 0
+        on_disk = 0
+        for task in job.plan(builder, exchange, symbol, allow_parent=True, template=template):
+            gap = [r for r in job.REPORTS if r not in set(job.parsed_reports(builder, task))]
+            if not gap or not task.index_row:
+                continue
+            alts = [a for a in builder.alternates(exchange, symbol, task.index_row)
+                    if os.path.exists(os.path.join(fin.PDFS_DIR,
+                                                   a["path"].replace("/", os.sep)))]
+            if not alts:
+                continue
+            on_disk += len(gap)
+            if job.as_quarter(task.period) in tried:
+                continue
+            quarters.append(job.as_quarter(task.period))
+            cells += len(gap)
+        if quarters:
+            out[symbol] = {"exchange": exchange, "template": template,
+                           "quarters": sorted(quarters), "cells": cells,
+                           "on_disk_cells": on_disk}
+            say(f"   {symbol:5s} {len(quarters):3d} document(s), {cells:3d} cell(s) "
+                f"with an alternate NO run has asked")
+    return out
+
+
+def _retried_periods(root: Path, exchange: str, symbol: str) -> set:
+    """The periods some run folder of this ticker logged an alternate retry on."""
+    import json
+
+    tried = set()
+    repo_src_on_path()
+    from web_scraper import pdf_ocr_job as job
+
+    for folder in sorted(root.glob(f"*__{exchange.lower()}_{symbol.lower()}__pdf_ocr")):
+        for path in sorted((folder / "documents").glob("*.json")):
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if doc.get("period") and "retrying on the" in " ".join(doc.get("log") or []):
+                tried.add(job.as_quarter(doc["period"]))
+    return tried
+
+
+def alternate_plans(names: Sequence[Tuple[str, str]], *,
+                    reports_root: Optional[os.PathLike | str] = None,
+                    log: Optional[Callable[[str], None]] = None) -> List["object"]:
+    """`alternate_quarters` as `TickerPlan`s, richest first — what a lane consumes.
+
+    ⚠️ **THE PERIODS ARE HANDED OVER WHOLE AND `ASK-1` IS NOT CONSULTED.** That skip is
+    correct about the chosen filing and wrong about this work by construction, so the plan is
+    built from the census rather than filtered by `plan_batch` — and `run_batch` must be given
+    `overwrite=True`'s effect the same way the Kaggle side already does it, i.e. the plan has
+    already decided.
+    """
+    anchor()
+    from web_scraper import pdf_ocr_batch as batch
+
+    census = alternate_quarters(names, reports_root=reports_root, log=log)
+    plans = []
+    for symbol, row in census.items():
+        plans.append(batch.TickerPlan(
+            exchange=str(row["exchange"]), symbol=symbol, template=str(row["template"]),
+            template_how="resolved", quarters=list(row["quarters"])))
+    plans.sort(key=lambda p: (-len(p.quarters), p.symbol))
+    return plans
+
+
 def release_and_fill(names: Sequence[Tuple[str, str]], *, apply: bool = True,
                      fill: bool = True,
                      reports_root: Optional[os.PathLike | str] = None,
@@ -389,8 +496,13 @@ def run_local(tickers: Sequence[str], *, exchange: str = "HOSE",
               engines: Optional[Sequence[str]] = None,
               vram_floor_mb: Optional[int] = None,
               apply: bool = True,
+              mode: str = "open",
               log: Optional[Callable[[str], None]] = None) -> int:
     """Parse these tickers HERE — `run_batch`, then the release, then the grid.
+
+    ⚠️ **`mode="alternates"` IS A DIFFERENT QUESTION AND NOT A NARROWER ONE** (`ALT-2`): it
+    re-opens periods `ASK-1` has correctly retired, to ask a filing nothing has read. See
+    `alternate_plans` for why no quarter-level census can propose that work.
 
     ⚠️ **`merge_each=True` IS THE INTERRUPTION GUARANTEE AND IS WHY A LANE CAN BE KILLED.**
     Each finished quarter is upserted the moment its filing has produced all three statements,
@@ -403,9 +515,11 @@ def run_local(tickers: Sequence[str], *, exchange: str = "HOSE",
 
     say = log or print
     root = Path(reports_root) if reports_root else REPO_ROOT / "reports" / "pdf_ocr"
-    plans = winnable(tickers, exchange=exchange, reports_root=root, log=say)
+    names = [(t, exchange) for t in tickers]
+    plans = (alternate_plans(names, reports_root=root, log=say) if mode == "alternates"
+             else winnable(tickers, exchange=exchange, reports_root=root, log=say))
     if not plans:
-        say("nothing to parse on this lane — every ticker is done or exhausted")
+        say(f"nothing to parse on this lane (mode={mode}) — every ticker is done or exhausted")
         return 0
     say(f"{len(plans)} ticker(s), {sum(len(p.quarters) for p in plans)} document(s)")
     kwargs: Dict[str, object] = {}
@@ -428,8 +542,13 @@ def run_kaggle(tickers: Sequence[str], *, account: str, exchange: str = "HOSE",
                engines: Optional[Sequence[str]] = None,
                apply: bool = True,
                rehearse: bool = False,
+               mode: str = "open",
                log: Optional[Callable[[str], None]] = None) -> int:
     """Ship these tickers to ONE Kaggle session, one ticker at a time, in this process.
+
+    ⚠️ **`mode="alternates"` NEEDS `with_alternates` ON THE PAYLOAD AND IT IS ON BY DEFAULT**
+    (`ALT-2`) — without it the worker skips every alternate with a warning, which is exactly
+    the silent failure this mode exists to undo.
 
     ⚠️ **THE ACCOUNT IS FORCED, NEVER CHOSEN.** The fleet has already decided which lane this
     is, so letting `accounts.select` re-rank by quota here would let two lanes converge on one
@@ -449,9 +568,11 @@ def run_kaggle(tickers: Sequence[str], *, account: str, exchange: str = "HOSE",
 
     say = log or print
     root = Path(reports_root) if reports_root else REPO_ROOT / "reports" / "pdf_ocr"
-    plans = winnable(tickers, exchange=exchange, reports_root=root, log=say)
+    names = [(t, exchange) for t in tickers]
+    plans = (alternate_plans(names, reports_root=root, log=say) if mode == "alternates"
+             else winnable(tickers, exchange=exchange, reports_root=root, log=say))
     if not plans:
-        say("nothing to ship on this lane — every ticker is done or exhausted")
+        say(f"nothing to ship on this lane (mode={mode}) — every ticker is done or exhausted")
         return 0
 
     statuses = accounts.survey()
@@ -524,10 +645,10 @@ def _cascade(layers: Optional[Sequence[str]], engines: Optional[Sequence[str]],
 
 def _lane_command(lane: Lane, *, apply: bool, rehearse: bool,
                   engines: Sequence[str] = (), layers: Sequence[str] = (),
-                  vram_floor_mb: Optional[int] = None) -> List[str]:
+                  vram_floor_mb: Optional[int] = None, mode: str = "open") -> List[str]:
     argv = [sys.executable, "-m", "kgpu.fleet", "lane",
             "--kind", lane.kind, "--exchange", lane.exchange,
-            "--tickers", ",".join(lane.tickers), "--name", lane.name]
+            "--tickers", ",".join(lane.tickers), "--name", lane.name, "--mode", mode]
     if lane.account:
         argv += ["--account", lane.account]
     if not apply:
@@ -546,6 +667,7 @@ def _lane_command(lane: Lane, *, apply: bool, rehearse: bool,
 def run_fleet(lanes: Sequence[Lane], *, apply: bool = True, rehearse: bool = False,
               engines: Sequence[str] = (), layers: Sequence[str] = (),
               vram_floor_mb: Optional[int] = None,
+              mode: str = "open",
               log_dir: Optional[os.PathLike | str] = None,
               poll_seconds: float = 20.0,
               log: Optional[Callable[[str], None]] = None) -> Dict[str, int]:
@@ -575,7 +697,7 @@ def run_fleet(lanes: Sequence[Lane], *, apply: bool = True, rehearse: bool = Fal
         path = root / f"{stamp}__{lane.name.replace(':', '_').replace('#', '')}.log"
         handle = path.open("w", encoding="utf-8", buffering=1)
         argv = _lane_command(lane, apply=apply, rehearse=rehearse, engines=engines,
-                             layers=layers, vram_floor_mb=vram_floor_mb)
+                             layers=layers, vram_floor_mb=vram_floor_mb, mode=mode)
         handle.write(f"=== {lane.name} · {lane.kind} · {lane.account or '-'} · "
                      f"{len(lane.tickers)} ticker(s), {lane.documents} document(s) ===\n")
         handle.write(" ".join(argv) + "\n\n")
@@ -647,6 +769,7 @@ def plan_fleet(tickers: Sequence[Tuple[str, str]], *, local_lanes: int = 1,
                kaggle_accounts: Sequence[str] = (),
                sessions_per_account: int = SESSIONS_PER_ACCOUNT,
                skip_exhausted: bool = True,
+               mode: str = "open",
                log: Optional[Callable[[str], None]] = None) -> List[Lane]:
     """Resolve the whole plan and print it — **spends nothing, opens no PDF, no network.**
 
@@ -660,8 +783,13 @@ def plan_fleet(tickers: Sequence[Tuple[str, str]], *, local_lanes: int = 1,
         by_exchange.setdefault(exchange, []).append(ticker)
     lanes: List[Lane] = []
     for exchange, group in sorted(by_exchange.items()):
-        say(f"{exchange}: {len(group)} ticker(s) — resolving what is still winnable")
-        plans = winnable(group, exchange=exchange, skip_exhausted=skip_exhausted, log=say)
+        if mode == "alternates":
+            say(f"{exchange}: {len(group)} ticker(s) — resolving the UNASKED ALTERNATES "
+                f"(`ALT-2`), the one block where GPU still buys cells")
+            plans = alternate_plans([(t, exchange) for t in group], log=say)
+        else:
+            say(f"{exchange}: {len(group)} ticker(s) — resolving what is still winnable")
+            plans = winnable(group, exchange=exchange, skip_exhausted=skip_exhausted, log=say)
         say(f"   {len(plans)} ticker(s) with something to win, "
             f"{sum(len(p.quarters) for p in plans)} document(s)")
         lanes += assign(plans, local_lanes=local_lanes, kaggle_accounts=kaggle_accounts,
@@ -706,6 +834,10 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
                        help="name the cascade by engine, e.g. --engine easyocr")
         p.add_argument("--layer", action="append", default=[], help="an explicit layer list")
         p.add_argument("--vram-floor-mb", type=int, default=None)
+        p.add_argument("--mode", default="open", choices=("open", "alternates"),
+                       help="open = every winnable document; alternates = only the periods "
+                            "holding a filing NO run has read (`ALT-2`), which `ASK-1` "
+                            "correctly retires and which is the one GPU-shaped block left")
         if name == "run":
             p.add_argument("--dry-run", action="store_true",
                            help="parse but write no CSV — the run folders are still produced")
@@ -723,6 +855,7 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     lane.add_argument("--engine", action="append", default=[])
     lane.add_argument("--layer", action="append", default=[])
     lane.add_argument("--vram-floor-mb", type=int, default=None)
+    lane.add_argument("--mode", default="open", choices=("open", "alternates"))
 
     args = ap.parse_args(argv)
 
@@ -731,13 +864,13 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         if args.kind == "local":
             return run_local(tickers, exchange=args.exchange, layers=args.layer or None,
                              engines=args.engine or None, vram_floor_mb=args.vram_floor_mb,
-                             apply=not args.dry_run)
+                             apply=not args.dry_run, mode=args.mode)
         if not args.account:
             raise SystemExit("a kaggle lane needs --account <label>; the fleet never lets a "
                              "lane re-rank by quota (two lanes would converge on one account)")
         return run_kaggle(tickers, account=args.account, exchange=args.exchange,
                           layers=args.layer or None, engines=args.engine or None,
-                          apply=not args.dry_run, rehearse=args.rehearse)
+                          apply=not args.dry_run, rehearse=args.rehearse, mode=args.mode)
 
     if args.tickers:
         names = [(t.strip().upper(), args.exchange)
@@ -752,7 +885,7 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         labels = [a.label for a in acc.discover()]
     lanes = plan_fleet(names, local_lanes=args.local_lanes, kaggle_accounts=labels,
                        sessions_per_account=args.sessions,
-                       skip_exhausted=not args.no_skip_exhausted)
+                       skip_exhausted=not args.no_skip_exhausted, mode=args.mode)
     if args.command == "plan":
         return 0
     if not lanes:
@@ -760,7 +893,7 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
     codes = run_fleet(lanes, apply=not args.dry_run, rehearse=args.rehearse,
                       engines=args.engine, layers=args.layer,
-                      vram_floor_mb=args.vram_floor_mb)
+                      vram_floor_mb=args.vram_floor_mb, mode=args.mode)
     return 0 if all(c == 0 for c in codes.values()) else 1
 
 

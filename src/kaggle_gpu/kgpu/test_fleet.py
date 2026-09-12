@@ -156,3 +156,131 @@ def test_the_data_root_is_anchored_to_the_repo_and_not_to_the_cwd(monkeypatch):
 
     assert seen["root"] == fleet.REPO_ROOT / "raw_data" / "cafef"
     assert seen["root"].is_absolute()
+
+
+# ── the alternate mode: the one block where GPU still buys cells (`ALT-2`) ────
+
+_CASH_FLOW = "cash_flow"          # `cafef_pdf_parser.CASH_FLOW`, spelled here so this file
+                                  # imports no parser module to name one report
+
+
+class _AltBuilder:
+    """A builder that answers the three questions `alternate_quarters` asks of one."""
+
+    def __init__(self, alternates):
+        self._alternates = alternates
+
+    def alternates(self, exchange, symbol, chosen):
+        return list(self._alternates.get(chosen.get("period"), []))
+
+
+def _alt_env(monkeypatch, tmp_path, *, open_by_period, alternates, on_disk):
+    """Stand the three modules `alternate_quarters` reads behind a canned universe."""
+    fleet.anchor()
+    from web_scraper import cafef_financials as fin
+    from web_scraper import pdf_ocr_job as job
+
+    monkeypatch.setattr(fin, "PDFS_DIR", str(tmp_path))
+    for name in on_disk:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"%PDF-1.4")
+
+    tasks = [job.DocumentTask(
+        exchange="HOSE", symbol="AAA", period=period, template="corp",
+        path="/dev/null", file=f"{period}.pdf", consolidated="True", assurance="audited",
+        cumulative=False, index_row={"period": period}) for period in open_by_period]
+
+    monkeypatch.setattr(fleet, "anchor", lambda: None)
+    monkeypatch.setattr(job, "resolve_template", lambda b, s: ("corp", "resolved"))
+    monkeypatch.setattr(job, "plan", lambda *a, **k: list(tasks))
+    monkeypatch.setattr(job, "parsed_reports",
+                        lambda b, task: [r for r in job.REPORTS
+                                         if r not in open_by_period[task.period]])
+    monkeypatch.setattr(fin, "FinancialsBuilder", lambda **k: _AltBuilder(alternates))
+    return job
+
+
+def test_a_quarter_whose_alternate_was_never_asked_IS_the_plan(monkeypatch, tmp_path):
+    """⚠️ **`ASK-1` RETIRES THIS WORK CORRECTLY AND THAT IS WHY IT NEEDS ITS OWN CENSUS.** The
+    period HAS been opened — on the chosen filing — so `unasked_quarters` counts it asked and
+    a `skip_exhausted=True` plan proposes none of it. `documents()` returns one filing per
+    period and **asking a DIFFERENT filing is a new question** (`ALT-2`): 101 documents and
+    121 cells over VN30 on 2026-09-13, after 414 of 536 open cells had met the full cascade.
+    """
+    job = _alt_env(
+        monkeypatch, tmp_path,
+        open_by_period={"Q1-2020": [_CASH_FLOW]},
+        alternates={"Q1-2020": [{"path": "files/HOSE_AAA/alt.pdf", "file": "alt.pdf",
+                                 "assurance": "reviewed"}]},
+        on_disk=["files/HOSE_AAA/alt.pdf"])
+    monkeypatch.setattr(fleet, "_retried_periods", lambda *a, **k: set())
+
+    census = fleet.alternate_quarters([("AAA", "HOSE")])
+
+    assert census["AAA"]["quarters"] == ["2020-Q1"]
+    assert census["AAA"]["cells"] == 1
+
+
+def test_a_period_some_run_ALREADY_retried_is_not_asked_twice(monkeypatch, tmp_path):
+    """⚠️ **THE TEST IS THE RUN FOLDER'S LOG AND NOT A FIELD, BECAUSE THERE IS NO FIELD.**
+    `_alternate_retry` announces itself with `retrying on the …`, and it over-counts a period
+    holding two alternates of which one was asked — which can only make the plan SMALLER, and
+    that is the conservative direction for a plan that spends GPU.
+    """
+    job = _alt_env(
+        monkeypatch, tmp_path,
+        open_by_period={"Q1-2020": [_CASH_FLOW]},
+        alternates={"Q1-2020": [{"path": "files/HOSE_AAA/alt.pdf", "file": "alt.pdf",
+                                 "assurance": "reviewed"}]},
+        on_disk=["files/HOSE_AAA/alt.pdf"])
+    monkeypatch.setattr(fleet, "_retried_periods", lambda *a, **k: {"2020-Q1"})
+
+    assert fleet.alternate_quarters([("AAA", "HOSE")]) == {}
+
+
+def test_an_alternate_only_in_the_INDEX_is_not_a_question_this_machine_can_ask(
+        monkeypatch, tmp_path):
+    """⚠️ The index is what CafeF ADVERTISES and the files are what was scraped. Putting an
+    unscraped filing on a lane buys a document that is skipped with a warning — `ALT-2`'s
+    other half, which is the warning existing at all.
+    """
+    job = _alt_env(
+        monkeypatch, tmp_path,
+        open_by_period={"Q1-2020": [_CASH_FLOW]},
+        alternates={"Q1-2020": [{"path": "files/HOSE_AAA/never_scraped.pdf",
+                                 "file": "never_scraped.pdf", "assurance": "reviewed"}]},
+        on_disk=[])
+    monkeypatch.setattr(fleet, "_retried_periods", lambda *a, **k: set())
+
+    assert fleet.alternate_quarters([("AAA", "HOSE")]) == {}
+
+
+def test_a_SOLID_quarter_is_never_re_opened_for_its_alternate(monkeypatch, tmp_path):
+    """A period with all three statements on disk has nothing to win, whatever it holds."""
+    job = _alt_env(
+        monkeypatch, tmp_path,
+        open_by_period={"Q1-2020": []},
+        alternates={"Q1-2020": [{"path": "files/HOSE_AAA/alt.pdf", "file": "alt.pdf",
+                                 "assurance": "reviewed"}]},
+        on_disk=["files/HOSE_AAA/alt.pdf"])
+    monkeypatch.setattr(fleet, "_retried_periods", lambda *a, **k: set())
+
+    assert fleet.alternate_quarters([("AAA", "HOSE")]) == {}
+
+
+def test_the_mode_reaches_the_lane_subprocess_as_an_ARGUMENT():
+    """⚠️ **A LANE THAT DEFAULTED TO `open` WOULD SPEND THE WHOLE FLEET ON THE WRONG WORK, AND
+    IT WOULD LOOK LIKE A SUCCESSFUL RUN** — 311 documents of cells the cascade has already
+    lost, ~13 h, and a coverage delta of about zero. The parent decides the mode and the child
+    is TOLD, the same way the account is (`run_kaggle`'s `force_label`).
+    """
+    argv = fleet._lane_command(
+        fleet.Lane(name="local", kind="local", tickers=["AAA"]),
+        apply=True, rehearse=False, mode="alternates")
+
+    assert argv[argv.index("--mode") + 1] == "alternates"
+    # and the default is the ordinary gap plan, never the narrower question
+    plain = fleet._lane_command(fleet.Lane(name="local", kind="local", tickers=["AAA"]),
+                                apply=True, rehearse=False)
+    assert plain[plain.index("--mode") + 1] == "open"

@@ -739,3 +739,32 @@ So every probe job sets `results_into` **and** its `REPORT_ROOT` parameter to
 a run that feeds the CHAIN.** ⚠️ No number was wrong when this was found — the table on
 disk names its own two source runs — it was the next rebuild that would have been.
 
+
+### ⚠️ §7e — `--mode alternates`: the one block where GPU still buys cells (`ALT-2`)
+
+```powershell
+python -m kgpu.fleet plan --universe VN30 --mode alternates    # spends nothing
+python -m kgpu.fleet run  --universe VN30 --mode alternates    # 1 local + 4 T4 lanes
+```
+
+⚠️ **THE DEFAULT MODE (`open`) CANNOT PROPOSE THIS WORK, AND A RUN IN IT WOULD LOOK
+SUCCESSFUL.** `documents()` returns ONE filing per period, so every one of these periods has
+already been opened — on the chosen filing — and `ASK-1`'s skip retires it correctly.
+**Asking a DIFFERENT filing of the same period is a new question that no quarter-level census
+counts**, which is why `unasked_quarters` returned **1** for VN30 while `fleet.alternate_quarters`
+returns **101 documents / 121 cells** (2026-09-13).
+
+| mode | asks | VN30, 2026-09-13 |
+|---|---|---|
+| `open` | every winnable document, `ASK-1` applied | 311 documents, ~13 h, **414 of 536 open cells already lost to the full cascade** |
+| `alternates` | only periods holding a filing NO run has read | **101 documents, 121 cells**, ~0.9 h per lane |
+
+⚠️ **"NEVER ASKED" IS READ OFF THE RUN FOLDER'S LOG, NOT A FIELD** — there is no field;
+`_alternate_retry` announces itself with `retrying on the …`. A period with two alternates of
+which one was asked is counted asked, which can only make the plan SMALLER, and that is the
+conservative direction for a plan that spends GPU.
+
+⚠️ **A KAGGLE LANE IN THIS MODE NEEDS `data.documents.with_alternates`, WHICH IS ON BY
+DEFAULT** (`ALT-2`). Turning it off makes the worker skip every alternate with a warning —
+the exact silent failure this mode exists to undo — and costs roughly +1 min of upload per
+85 MB.
