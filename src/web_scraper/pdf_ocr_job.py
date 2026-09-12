@@ -1222,13 +1222,25 @@ def _alternate_retry(builder: FinancialsBuilder, task: DocumentTask,
         for report, got in more.items():
             if report in accepted:
                 continue
-            if report == fin.INCOME_STATEMENT and alt_cumulative != task.cumulative:
-                logger.log_warning(
-                    f"    {task.period}: {report} from the alternate REFUSED — cumulative "
-                    f"shape differs from the chosen filing")
-                continue
+            # ⚠️ **THE SHAPE MISMATCH IS NO LONGER A REFUSAL — THE SPAN TRAVELS INSTEAD**
+            # (2026-09-12, measured on POW Q2-2019). The old guard threw the statement away:
+            # *"cumulative shape differs from the chosen filing"*, on `_decumulate`'s reason —
+            # taking a quarterly alternate's P&L under a half-year chosen document's flag
+            # would subtract quarters from a figure that never contained them. **The reason
+            # was right and the remedy was the wrong end of it**: what went wrong is that
+            # `run_document` computed `months` from `task.cumulative`, i.e. from the CHOSEN
+            # document, for a statement read out of a different one. Fix the term and the
+            # hazard is gone; refuse the statement and the cell is gone with it.
+            # ⚠️ **AND THE MISMATCH IS USUALLY THE RIGHT WAY ROUND, WHICH IS WHY IT COST
+            # CELLS.** `documents()` ranks assurance-first, so a Q2 is typically the REVIEWED
+            # half-year (`months = 6`) while the alternate is the unaudited quarterly — **a
+            # standalone three-month figure, which is exactly what the CSV column holds.**
+            # POW Q2-2019's income statement parsed cleanly from that alternate and was
+            # thrown away for differing from a shape the column does not want.
             accepted[report] = got
-            origin[report] = alt
+            # ⚠️ `_cumulative` IS THIS FUNCTION'S OWN TERM AND IS PREFIXED SO IT CANNOT BE
+            # MISTAKEN FOR AN INDEX COLUMN. `run_document` reads it; nothing else may.
+            origin[report] = {**alt, "_cumulative": alt_cumulative}
             logger.line(f"    {task.period}: {report} recovered from "
                             f"{alt['assurance']} {alt['file']}")
     # ⚠️ **SAID, NEVER SILENT — and it is the WHOLE retry that was lost, not one filing.**
@@ -1364,9 +1376,19 @@ def run_document(builder: FinancialsBuilder, task: DocumentTask,
             # which overrules it. `pdf_ocr_merge` writes it into the row's `months` column
             # rather than deciding it again: a second copy of this rule would be wrong the
             # first time either term moved.
+            # ⚠️ **THE FLAG OF THE FILING THESE FIGURES CAME FROM, WHICH IS NOT ALWAYS THE
+            # CHOSEN ONE** (fixed 2026-09-12). `_alternate_retry` may read a statement out of
+            # a DIFFERENT filing of the same period, and this line used `task.cumulative`
+            # unconditionally — so a standalone quarterly recovered under a reviewed half-year
+            # would have been labelled `months = 6` and then de-cumulated against priors it
+            # never contained. That hazard is exactly why the retry used to REFUSE such a
+            # statement outright; refusing it lost the cell, and the wrong term was this one.
+            # `statement.quarter_column` needs no such care — `statement` IS the alternate's
+            # own parse, so the heading that overrules the flag is already the right one.
             "months": fin.statement_months(
                 report, task.period,
-                cumulative=bool(task.cumulative),
+                cumulative=bool(src["_cumulative"]) if src and "_cumulative" in src
+                else bool(task.cumulative),
                 quarter_column=bool(statement.quarter_column)),
             "values": {k: int(v) for k, v in row.items()},
         }

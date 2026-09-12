@@ -1851,3 +1851,52 @@ Also worth knowing without opening the file: `EVD-1` the missing nulls are ~1,00
 `DRF-1` 18 channels put 100 % of test beyond 5 train-sigmas; `COV-1` 248 of 952 shortlisted rows
 sit below 0.95 coverage; `RPR-1` datasets and run folders are git-ignored.
 ---
+
+### ⚠️ 2026-09-13 — `months` CAME FROM THE CHOSEN FILING FOR FIGURES READ OUT OF ANOTHER (`MTH-1`)
+
+`ALT-2` made the alternate retry fire on a worker; this is the defect it then exposed. `run_document`
+labelled every statement's `months` from `task.cumulative` — a property of the **chosen** document —
+while `_alternate_retry` can hand back a statement read out of a **different filing of the same
+quarter** with a different span flag.
+
+A cumulative flag decides the span: a year-to-date P&L is `months = 6` or `12`, a standalone quarterly
+is `3`, and `_decumulate` subtracts `Q1..Q(q-1)` from the first and nothing from the second. ⚠️ **So a
+quarterly alternate recovered under a half-year chosen filing would be labelled `months = 6` and then
+de-cumulated against priors it never contained** — six months of revenue in a three-month column,
+silently, which is worse than a `missing` cell.
+
+⚠️ **THE OLD CODE SAW THAT HAZARD AND AIMED AT THE WRONG END OF IT.** `_alternate_retry` refused any
+income statement whose cumulative shape differed from the chosen filing's. The reasoning was right;
+the remedy discarded the cell. ⚠️ **And the mismatch is usually the right way round**: `documents()`
+ranks assurance first, so a Q2's chosen filing is typically the REVIEWED half-year while the alternate
+is the unaudited quarterly — **a standalone three-month figure, which is exactly what the CSV column
+holds.** Fixed by recording the alternate's own flag on the origin dict as `_cumulative` (prefixed so
+it cannot be mistaken for an index column; read by `run_document` and nothing else).
+
+#### ✅ VALIDATED ON FOUR DOCUMENTS, 22.3 min of RTX 3050
+
+Four quarters chosen by page count from the 127 cells whose alternate no run had ever asked:
+
+| document | outcome |
+|---|---|
+| POW Q4-2025 | **balance_sheet `[onnx@200]` 58 items WRITTEN** — recovers a quarter disk recorded `missing` |
+| PLX Q4-2014 | **balance_sheet `[onnx@200+deskew]` 60 items WRITTEN** |
+| PLX Q4-2013 | **balance_sheet `[onnx@200+deskew]` 60 items WRITTEN** (via the held-quarter sweep) |
+| POW Q2-2019 | income_statement now reads `[onnx@200] 16 items` where the refusal used to be |
+
+⚠️ **POW Q2-2019 IS THE MEASUREMENT THE FIX WAS BUILT ON AND IT STILL DOES NOT REACH A CSV** — it is
+held by `OPB-1`, its Q1-2019 operand reading `missing`. **That is a different and honest block**, and
+the distinction matters: the old log line said `cumulative shape differs from the chosen filing`, a
+refusal of the statement, where the new one names a prior that has to be won first.
+
+| VN30, after | |
+|---|---|
+| cells | **4,681 / 5,214 = 89.8 %** (was 4,678) |
+| quarters | 1,321 / 1,738 = **76.0 %** |
+| holes | **311** (was 310) |
+| one unbroken band | 5 of 30 |
+
+⚠️ **A RECOVERED QUARTER CAN RAISE `holes` BY ONE, AND THAT IS THE NUMBER BEHAVING CORRECTLY** — a
+gap at the END of a series is not a hole, so solidifying the quarter beyond it puts that gap
+BETWEEN two solid ones. `holes` is a statement about the interior and it went up because the
+interior grew.
