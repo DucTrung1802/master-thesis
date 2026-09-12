@@ -1,4 +1,6 @@
-"""⚠️ A `pdf` CASH-FLOW ROW WITH NO CLOSING BALANCE IN ANY CLOSING COLUMN — `CCB-1`.
+"""⚠️ HOLLOW ROWS — a cell that counts as PARSED and hands the reader almost nothing.
+
+`CCB-1` (cash flow, no closing balance) and `HOL-1` (a statement of a handful of figures).
 
 Read-only, no OCR, no database. Reads the statement CSVs and counts rows that `source='pdf'`
 marks as parsed while every closing-cash column is blank.
@@ -62,3 +64,86 @@ if no_column:
     print(f"\n⚠️ {len(no_column)} file(s) have no closing column in their header at all — "
           f"a different chart, not a blank: {', '.join(no_column[:6])}")
 print(f"\nfirst 12: {blanks[:12]}")
+
+
+# ── `HOL-1` — a statement written `pdf` with a handful of figures ─────────────
+
+def _numeric_columns(rows):
+    """The columns that hold a FIGURE somewhere, so metadata is not counted as content.
+
+    ⚠️ **COUNTING METADATA AS A FILLED COLUMN IS HOW THIS MEASUREMENT FIRST CAME BACK CLEAN**
+    (2026-09-13). A naive filled-column count reported `1 row with <=5 filled` for the income
+    statement; `symbol`, `method`, `n_columns` and `document` are always populated, so every
+    hollow row scored four higher than its content. The honest answer is **64**.
+    """
+    out = []
+    for column in rows[0]:
+        for row in rows:
+            value = (row.get(column) or "").strip().replace("-", "").replace(".", "")
+            if value and value.isdigit():
+                out.append(column)
+                break
+    return [c for c in out if c not in {"period", "months", "year", "quarter",
+                                        "n_columns", "unit"}]
+
+
+def hollow_rows(threshold: int = 6) -> None:
+    """How many `pdf` rows of each statement carry `threshold` figures or fewer, by QUARTER.
+
+    ⚠️ **THE QUARTER SPLIT IS THE FINDING, NOT A BREAKDOWN.** Measured 2026-09-13:
+
+    | quarter | thin income statements | rate |
+    |---|---|---|
+    | Q1 | 1 of 425 | **0.2 %** |
+    | Q2 | 21 of 418 | **5.0 %** |
+    | Q3 | 2 of 388 | **0.5 %** |
+    | Q4 | 40 of 436 | **9.2 %** |
+
+    Q2 and Q4 are exactly the CUMULATIVE quarters, **59 of the 64 carry `months=3`**, and the
+    balance sheet — which is never de-cumulated — has **0** thin rows out of 1,679 at a median
+    of 58 figures. So the mechanism is `_decumulate`: `FY - (Q1+Q2+Q3)` fills a column only
+    where the year-to-date figure AND every prior held a value, so **one sparse prior
+    propagates its sparsity into the derived quarter**, and Q4 is worst because it subtracts
+    three. The run log says so per document (*"14 of 18 columns"*) and nothing aggregates it.
+    """
+    for sub in ("income_statement", "balance_sheet", "cash_flow"):
+        dist = collections.Counter()
+        by_quarter = collections.Counter()
+        all_quarter = collections.Counter()
+        months = collections.Counter()
+        thin = []
+        for path in sorted(glob.glob(os.path.join(ROOT, "*", sub, "*.csv"))):
+            with open(path, encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            if not rows:
+                continue
+            columns = _numeric_columns(rows)
+            for row in rows:
+                if row.get("source") != "pdf":
+                    continue
+                quarter = (row.get("period") or "??")[:2]
+                all_quarter[quarter] += 1
+                n = sum(1 for c in columns if (row.get(c) or "").strip())
+                dist[n] += 1
+                if n <= threshold:
+                    by_quarter[quarter] += 1
+                    months[row.get("months", "?")] += 1
+                    thin.append((os.path.basename(path)[3:-4], row.get("period"), n))
+        counts = sorted(dist.elements())
+        if not counts:
+            continue
+        median = counts[len(counts) // 2]
+        print("")
+        print(f"{sub}: {len(counts)} `pdf` row(s), median {median} figures, "
+              f"min {min(counts)} - {len(thin)} with <= {threshold}")
+        for quarter in sorted(all_quarter):
+            n, d = by_quarter[quarter], all_quarter[quarter]
+            print(f"    {quarter}: {n:3d} of {d:4d} = {100 * n / max(d, 1):4.1f}%")
+        if thin:
+            print(f"    their `months`: {dict(months)}")
+            print(f"    first 6: {thin[:6]}")
+
+
+if __name__ == "__main__":
+    print("=" * 70)
+    hollow_rows()
