@@ -3913,3 +3913,41 @@ constituents are HOSE-listed.
 - **Regenerate:** re-run the join if `industry.csv` or either membership list
   changes (the generator lived in session scratch, not the repo — recreate from the
   two sources above).
+
+### ⚠️ 2026-09-13 — `ACCOUNT_WORDING` IS CONSULTED ONLY UNDER `equity_wording` (layers 66-69 of 115)
+
+**Read this before adding an entry to `ACCOUNT_WORDING` or quoting `JVW-1`'s reach.**
+
+`_label_score`'s alias branch sits inside `if equity_wording:`. So a table with a GENERIC name
+is reachable only through a flag with a SPECIFIC one, and **two of its four pre-existing
+entries have nothing to do with equity** — `JVW-1`'s associates/JV line and `CDF-2`'s
+condensed-form PBT. **`JVW-1` has therefore always been conditional on that flag**, which its
+own `ISSUES.md` row does not say.
+
+| | |
+|---|---|
+| the flag's layers | **66, 67, 68, 69** of 115 — `onnx@{200,300}+equity[+relax]` |
+| so a full cascade | **does** reach it |
+| a shorter cascade | may not — and then the aliases are simply absent |
+
+⚠️ **THIS IS WHY A SCORE MEASUREMENT IS NOT A REACH MEASUREMENT.** `JVW-2` was measured by
+scoring 13 label spellings against the chart and the aliases: all 13 cleared `SCHEMA_MATCH`
+with margins of 0.849-0.902. **On the default path 23 of 24 cells still did not map at all.**
+Replayed at an `equity_wording` layer, 18 of 24 map *and* the identity closes. The tool is
+[`replay_jvw2.py`](../tools/replay_jvw2.py) and it asks both paths, because the difference
+between them is the finding. §5 rule 21 — a gate opening is not a cell — one level further
+back: **a score over the bar is not even a gate opening.**
+
+⚠️ **MOVING THE TABLE TO THE DEFAULT PATH WOULD BUY COST AND NOT CELLS, and it is NOT DONE.**
+The cascade reaches layer 66 anyway, so the same cells are won either way; what would change is
+~65 OCR passes per document. The branch is already a `max` over `(account,) + aliases`, so it
+can only RAISE a score and the flag is doing no safety work the equality-keying does not
+already do — but it is a change to the DEFAULT path for every statement in the corpus, which
+is `SET-3`'s hazard, and it wants its own measurement over the accepted statements first.
+
+⚠️ **AND THE TOLERANCE IS NOT THE LEVER HERE — CHECKED AND REJECTED.** 16 of the 24 residuals
+sit inside 1 % of the printed operating profit, which invites widening `OP_IDENTITY_TOL` (4
+đồng, exact, against the balance sheet's `GTL-1` rule of *four units of whatever the statement
+is printed in*). **The residuals are 5.57e9 to 3.58e11 — billions, not one-unit rounding** —
+so they are missing LINE ITEMS and not rounding, and a widened gate would raise the measured
+rate by retiring cells it cannot read (§5 rule 21, `SET-3`).
