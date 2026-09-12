@@ -1503,6 +1503,93 @@ corpus and 95 %, 6 of them with the operand already in hand. `P67` carries it.
 
 ---
 
+### ⚠️ 2026-09-12 — VN30: 46 % OF THE OPEN CELLS WERE ALREADY PARSED — `HLD-1`
+
+**The question was *"how do we get VN30 past 95 %"*, and the first honest answer was that nobody
+had asked what was already won.** Measured over the whole index, no OCR, seconds to recompute:
+
+| VN30, 2026-09-12, before any change | |
+|---|---|
+| quarters with all three statements `pdf` | **1,291 / 1,738 = 74.3 %** |
+| cells (quarter × statement) | **4,435 / 5,214 = 85.1 %** |
+| open cells **already accepted in a run folder** | **358 / 779 = 46.0 %** |
+| open cells the cascade REFUSED | 351 |
+| open cells never opened at all | 70 |
+| **quarters holding all three statements in a run folder while disk records them incomplete** | **119** |
+
+⚠️ **THE MECHANISM IS `BND-1`'s LOOP ONE LEVEL IN FROM WHERE IT WAS CLOSED.** On 2026-09-06 a
+quarter whose filing produced **all three** statements became writable band or no band — and
+that gate is `complete_periods`, which asks of the **FILING** and not of the statement. A filing
+that produced **two of three** keeps the empty-band refusal, so on a ticker bootstrapping from
+nothing its two good statements are held; the band is built from the `pdf` rows on disk, so it
+never grows; so the next run holds them again.
+
+⚠️ **AND NO FUNCTION COULD NAME THEM, WHICH IS WHY IT SURVIVED A WHOLE DAY OF GPU.**
+`exhausted_quarters` records what was **REFUSED**, so a gap plan can stop re-asking a question
+the cascade lost. Nothing recorded what was **WON and never written** — and from the statement
+CSV the two are one word: the cell reads `missing`, and `plan_batch` opens the document again.
+That is what *"re-running a ticker the cascade has seen returns ~0"* was made of: **VPB 24.5
+min, VHM 90 min, GAS 92.2 min, every one of them for 0 quarters.**
+
+**PLX is the worked example, and one run folder holds the whole story:**
+
+| HOSE_PLX, `20260912-132038`, 54 documents | |
+|---|---|
+| statements accepted | **130 of 162** |
+| written to the CSVs | **52** |
+| held — *"the magnitude band was EMPTY"* | **52** |
+| held — *"cumulative income statement, cannot de-cumulate here"* | **23** |
+| refused by the cascade | 32 |
+
+So PLX read **5.6 %** in the coverage table while **75 of its 110 open cells were sitting on
+disk, parsed.**
+
+#### ✅ What was built, and what it returned
+
+`pdf_ocr_batch.unwritten_cells` is the complement of `exhausted_quarters`:
+`{(quarter, report): [folders]}` for every cell a run **accepted** that disk does not hold.
+
+- ⚠️ **It reads `documents/*.json`'s `accepted`, which is the PARSE — never `results`, which is
+  the SCORECARD.** A `results` row reads `pdf` when the run's own `compare()` found a matching
+  row on disk, so a scorecard cannot tell *"this was written"* from *"this reproduced what was
+  already there"*.
+- ⚠️ **A document whose layers RAISED is never offered** (`VCR-1`): an exception measures the
+  MACHINE, so whatever won the cascade won by default and its `accepted` block looks exactly
+  like a good one — a real layer, a real item count.
+
+`release_batch` acts on it: it sweeps **only** the folders holding such a cell — FPT has 347 run
+folders and `merge_batch` makes one `merge_run` call per (ticker, period), so a whole-history
+sweep re-plans hundreds of periods to move nothing — with the empty-band refusal **LIFTED** and
+the arithmetic screens **ON**, `force_differs` never passed.
+
+| the release, VN30, 2026-09-12 | |
+|---|---|
+| run folders swept | 114 of 1,588 |
+| statements **written** | **246** |
+| already on disk unchanged | 2,063 |
+| **withheld by the screens** | **122** |
+| cells | **4,435 -> 4,678 / 5,214 = 85.1 % -> 89.7 %** |
+| quarters | **1,291 -> 1,320 / 1,738 = 74.3 % -> 76.0 %** |
+| GPU spent | **none** |
+
+⚠️ **THE QUARTER RATE MOVED FAR LESS THAN THE CELL RATE, AND THAT IS THE HONEST SHAPE OF IT.**
+A quarter needs all three, so releasing the two halves of a 2-of-3 filing raises the cell rate
+and leaves the quarter open. +243 cells bought +29 quarters.
+
+⚠️ **THE 122 WITHHELD ARE NOT A PARSER PROBLEM AND MUST NOT BE FORCED.** They passed **no**
+magnitude guard AND fail an identity the filing asserts about itself — a closing balance against
+its own components, `assets != liab+equity`. Each needs reading against the filing; `REPAIR` is
+the scoped tool for any that is settled. A flag is still not a verdict on the figure
+(`screen_run`'s continuity check is a per-quarter rate and a batch parses the OUTSTANDING
+quarters), but withholding buys that an unguarded row reaches disk only when the filing's own
+arithmetic closes.
+
+⚠️ **A SECOND PASS WON 3 MORE AND THEN STOPPED, WHICH IS THE MEASUREMENT THAT SAYS THE LEVER IS
+SPENT.** The pass exists because `merge_run` plans against disk and writes afterwards, so a
+prior written in pass 1 reaches a Q4's planner only in pass 2. What is left is cumulative income
+statements whose `Q1`/`Q3` operand **has never been won at all** — `OPB-1`'s dependency, which
+needs a parse and not a merge.
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

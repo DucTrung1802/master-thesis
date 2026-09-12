@@ -461,6 +461,136 @@ def exhausted_quarters(reports_root, exchange: str, symbol: str, *,
     return {q: sorted(r for r in reports if r) for q, reports in seen.items()}
 
 
+def unwritten_cells(reports_root, exchange: str, symbol: str, *,
+                    builder: Optional[fin.FinancialsBuilder] = None,
+                    allow_parent: bool = True,
+                    template: Optional[str] = None,
+                    ) -> Dict[Tuple[str, str], List[str]]:
+    """`{(YYYY-QQ, report): [run folder names]}` — cells a run ACCEPTED that disk does not hold.
+
+    ⚠️ **THIS IS THE BLIND SPOT `exhausted_quarters` LEAVES, AND IT IS THE EXPENSIVE HALF.**
+    That function records what was REFUSED, so a gap plan can stop re-asking a question the
+    cascade already lost. It says nothing at all about the opposite failure — a statement the
+    cascade WON, sitting in a run folder, that no merge ever wrote. Both look identical from the
+    statement CSV: the cell reads `missing`, and `plan_batch` opens the document again.
+
+    ⚠️ **MEASURED ON VN30, 2026-09-12: 358 of 779 open cells (46 %) are in this state**, and
+    119 quarters hold all three statements in a run folder while disk records the quarter
+    incomplete. That is `BND-1`'s loop one level in from where it was closed: a quarter whose
+    filing produced ALL THREE is written band or no band (`_merge_finished_quarters`), and a
+    filing that produced **two of three** is still refused for an empty band — so on a ticker
+    bootstrapping from nothing the two good statements are held, the band therefore stays
+    empty, and the next run holds them again. **PLX is the worked example: one 54-document run,
+    130 statements accepted, 52 written, 52 held for an empty band and 23 for a de-cumulation
+    it could not do.** *"Re-running a ticker the cascade has seen returns ~0"* is mostly this.
+
+    ⚠️ **A DOCUMENT WHOSE LAYERS RAISED IS NEVER REPORTED HERE** (`VCR-1`): an exception
+    measures the MACHINE, so whatever won the cascade won by default and its `accepted` block
+    looks exactly like a good one. `complete_periods` refuses such a document whole and so does
+    this — the cell stays open, and it is open for a reason a re-run can change.
+
+    ⚠️ **IT READS `accepted`, WHICH IS THE PARSE, AND NOT `results`, WHICH IS THE SCORECARD.**
+    A `results` row reads `pdf` when the run's own `compare()` found a matching row on disk, so
+    a scorecard cannot tell *"this was written"* from *"this reproduced what was already
+    there"*. The `documents/*.json` blob carries the figures themselves.
+    """
+    builder = builder or fin.FinancialsBuilder(logger=None)
+    tpl = template or job.resolve_template(builder, symbol)[0]
+    open_cells: Dict[str, set] = {}
+    for task in job.plan(builder, exchange, symbol, allow_parent=allow_parent, template=tpl):
+        done = set(job.parsed_reports(builder, task))
+        gap = {r for r in job.REPORTS if r not in done}
+        if gap:
+            open_cells[job.as_quarter(task.period)] = gap
+    if not open_cells:
+        return {}
+    found: Dict[Tuple[str, str], List[str]] = {}
+    pattern = f"*__{exchange.lower()}_{symbol.lower()}__pdf_ocr"
+    for folder in sorted(Path(reports_root).glob(pattern), key=lambda f: f.name):
+        for doc in sorted((folder / "documents").glob("*.json")):
+            try:
+                data = json.loads(doc.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not data.get("period") or data.get("error") or data.get("engine_errors"):
+                continue
+            try:
+                quarter = job.as_quarter(data["period"])
+            except Exception:                           # noqa: BLE001
+                continue
+            still_open = open_cells.get(quarter)
+            if not still_open:
+                continue
+            for report in (data.get("accepted") or {}):
+                if report in still_open:
+                    found.setdefault((quarter, report), []).append(folder.name)
+    return found
+
+
+def release_batch(tickers: Sequence[str], *, exchange: str = "HOSE",
+                  reports_root: os.PathLike | str,
+                  apply: bool = False,
+                  screen: bool = True,
+                  builder: Optional[fin.FinancialsBuilder] = None,
+                  log: Optional[Callable[[str], None]] = None) -> Dict[str, object]:
+    """Write the cells `unwritten_cells` found — **no OCR, no GPU, no network.**
+
+    ⚠️ **IT LIFTS THE EMPTY-BAND REFUSAL FOR EVERY PERIOD IT TOUCHES, AND THE ARITHMETIC
+    SCREENS ARE WHAT STANDS IN ITS PLACE.** That is not a new policy: `merge_batch(screen=True)`
+    has withheld a flagged statement wherever the band was lifted since 2026-09-10, and the
+    measurement that made it automatic was **147 cells parsed, accepted and never written**
+    across six tickers — screening them released 177 and held 51, taking the corpus
+    71.5 % -> 75.5 % with no OCR. This function is that move made addressable by TICKER instead
+    of by a folder list somebody assembles by hand.
+
+    ⚠️ **`force_differs` IS NEVER PASSED, AND THAT IS WHAT MAKES IT SAFE TO RUN ON ANYTHING.**
+    A cell this function can move reads `missing` or has no row at all; a figure that disagrees
+    with a good `pdf` row on disk is refused here exactly as in the sweep, and repairing one is
+    `REPAIR`'s job, with its own scoped diff.
+
+    ⚠️ **ONLY THE FOLDERS THAT HOLD AN UNWRITTEN CELL ARE SWEPT.** `merge_batch` makes one
+    `merge_run` call per (ticker, period) it is given, so handing it a ticker's whole history —
+    FPT has **347** run folders — would re-plan hundreds of periods already on disk to move
+    nothing. A ticker with no unwritten cell is skipped, and said.
+
+    ⚠️ **EVERY FIGURE IT WRITES PASSED NO MAGNITUDE GUARD.** `Decision.band == 0` is recorded
+    beside each such WRITE and carried into the run folder's `merge` block; the count comes back
+    as `unguarded`. Screen those numbers against the filing before quoting one.
+    """
+    say = log or print
+    builder = builder or fin.FinancialsBuilder(logger=None)
+    root = Path(reports_root)
+    picked: List[Path] = []
+    cells = 0
+    for symbol in tickers:
+        symbol = symbol.upper()
+        found = unwritten_cells(root, exchange, symbol, builder=builder)
+        if not found:
+            say(f"{exchange}_{symbol}: no unwritten cell — nothing to release")
+            continue
+        folders = sorted({name for names in found.values() for name in names})
+        cells += len(found)
+        by_report: Dict[str, int] = {}
+        for (_quarter, report) in found:
+            by_report[report] = by_report.get(report, 0) + 1
+        say(f"{exchange}_{symbol}: {len(found)} cell(s) parsed and NOT on disk "
+            f"({', '.join(f'{r} {n}' for r, n in sorted(by_report.items()))}) "
+            f"across {len(folders)} run folder(s)")
+        picked.extend(root / name for name in folders)
+    if not picked:
+        say("")
+        say("-> nothing to release. Every statement any run folder accepted is on disk.")
+        return {"cells": 0, "written": 0, "withheld": 0, "folders": 0}
+    say("")
+    say(f"sweeping {len(picked)} run folder(s) with the empty-band refusal LIFTED and the "
+        f"arithmetic screens ON — {'APPLY' if apply else 'PLAN'}")
+    result = dict(merge_batch(picked, apply=apply, force_empty_band=True,
+                              force_differs=False, screen=screen, log=say))
+    result["cells"] = cells
+    result["folders"] = len(picked)
+    return result
+
+
 def plan_batch(tickers: Sequence[str], *, exchange: str = "HOSE",
                reports_root: os.PathLike | str,
                allow_parent: bool = True,
