@@ -682,6 +682,15 @@ def run_fleet(lanes: Sequence[Lane], *, apply: bool = True, rehearse: bool = Fal
     ⚠️ **`PYTHONUTF8=1` IS SET FOR EVERY CHILD.** The parse logs Vietnamese account labels and
     this machine is cp1252, so a child without it dies on its own progress line (§5 rule 18).
 
+    ⚠️ **AND `PYTHONUNBUFFERED=1`, BECAUSE WITHOUT IT THE PER-LANE LOG IS EMPTY FOR HOURS**
+    (§5 rule 20, measured 2026-09-13 on the first `--mode alternates` fleet). A child's stdout
+    is a FILE here, not a tty, so CPython block-buffers it at 8 KiB — and a Kaggle lane prints
+    a dozen lines per ticker while it waits on a kernel, so four of the five lanes showed
+    nothing but their header for twenty minutes. **Everything this function is for depends on
+    that file**: `_tail` reads it for the heartbeat, and a session that comes back to a killed
+    fleet has nothing else. The local lane looked fine only because the parse flushes its own
+    progress line, which is exactly the trap — **one writer flushing hides four that do not.**
+
     ⚠️ **CTRL-C KILLS THE CHILDREN AND NOT THE KAGGLE KERNELS.** A pushed kernel runs to
     completion on Kaggle whatever happens here; `python -m kgpu wait <job>` / `pull <job>`
     reattaches, and the release then writes whatever came home.
@@ -690,7 +699,7 @@ def run_fleet(lanes: Sequence[Lane], *, apply: bool = True, rehearse: bool = Fal
     root = Path(log_dir) if log_dir else REPO_ROOT / "logs" / "fleet"
     root.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+    env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
 
     running: Dict[str, Tuple[subprocess.Popen, Path]] = {}
     for lane in lanes:
