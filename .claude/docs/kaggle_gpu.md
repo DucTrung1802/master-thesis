@@ -121,6 +121,18 @@ labels: which account pays for a run is not a question a credential loader can a
 | **ledger** | the owner is DERIVED (every `pdf_ocr` job) and this machine has pushed it before | the account that owns the live kernel, if it still covers the estimate |
 | **quota** | otherwise | `accounts.by_quota` — see below |
 
+⚠️ **AN ACCOUNT RUNS TWO GPU KERNELS AT ONCE, AND THIS REPO DROVE IT AS ONE UNTIL
+2026-09-12.** Kaggle allows **2 concurrent GPU sessions per account**, so two accounts are
+**four** kernels, not two — the fleet driver's lane count is per SESSION and not per account.
+⚠️ **IT BUYS WALL-CLOCK AND NOT QUOTA**: the 30 GPU-h/week is spent twice as fast and the
+tightest-fit rule above is unchanged, so two kernels on one account still cannot exceed that
+account's balance between them. ⚠️ **AND TWO LANES MUST NEVER HOLD THE SAME TICKER.** A
+pdf-ocr job's name is derived from its symbol and scope, and the payload directory, the
+rehearsal directory and the kernel slug all come from that name — *"two runs sharing a name
+share all three: the second overwrites the first's payload, and its kernel REPLACES the
+first"* (§1's job-name note). Partition the tickers between lanes; never let two lanes race
+down one list.
+
 ⚠️ **THE QUOTA TIER IS TIGHTEST FIT, NOT MOST-REMAINING** — the smallest balance that
 still covers `need_hours * 1.25 + 0.5 h`. **The weekly quota does not POOL**: two accounts
 holding 15 h each cannot run the ~70-filing ticker that one account holding 30 h can, so
