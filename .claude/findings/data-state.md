@@ -1908,15 +1908,15 @@ fixes shipped the same day (`MTH-1`, `SPB-2`, `JVW-2`).
 
 | VN30 | start of day | end |
 |---|---|---|
-| cells `pdf` | 4,678 = 89.7 % | **4,731 = 90.7 %** |
-| quarters all three | 1,320 = 75.9 % | **1,353 = 77.8 %** |
-| **holes** (non-solid BETWEEN two solid) | 310 | **283** |
+| cells `pdf` | 4,678 = 89.7 % | **4,736 = 90.8 %** |
+| quarters all three | 1,320 = 75.9 % | **1,357 = 78.1 %** |
+| **holes** (non-solid BETWEEN two solid) | 310 | **279** |
 | tickers that are ONE unbroken band | 5 of 30 | **5 of 30** |
 
-⚠️ **AND THE HONEST CELL NUMBER IS 87.7 %, NOT 90.7 %.** Of the 4,731 `pdf` cells, **100 are
+⚠️ **AND THE HONEST CELL NUMBER IS 87.7 %, NOT 90.7 %.** Of the 4,736 `pdf` cells, **100 are
 `CCB-1`** — a cash flow whose closing balance is blank in every closing column — and **58 are
 `HOL-1`** — a statement carrying six figures or fewer against a median of 19. That leaves
-**4,573 cells with real content = 87.7 % of the 5,214-cell grid**. ⚠️ **Three points of the
+**4,578 cells with real content = 87.8 % of the 5,214-cell grid**. ⚠️ **Three points of the
 headline are cells that parsed and say almost nothing, and neither block is fixed.** This is
 `GRD-1`'s lesson one level down: that fix made a hole admit it was a hole, and a row can still
 be present and empty.
@@ -1925,7 +1925,7 @@ be present and empty.
 
 | lever | spent | won |
 |---|---|---|
-| `ALT-2` alternates, 4 T4 lanes | ~4 h wall, 2 accounts | **32 cells** (VJC 8, VNM 10, BVH 6, others) |
+| `ALT-2` alternates, 5 lanes | ~5 h wall, 2 accounts | **38 cells** (VNM 10, GAS+POW+GVR+SAB 10, BVH+BCM+VIC 9, VJC+TPB+SHB+SSI+STB 8, PLX 1) |
 | `JVW-2` re-run, VNM + VHM | 62.1 min RTX 3050, 18 docs | **8 cells**, every one at `onnx@200+equity` |
 | `JVW-2` pass two | 4.1 min, 1 doc | **2 cells** (one at `+equity`, one at plain `onnx@200` once its operand existed) |
 | wider `operating profit` sweep | 96.3 min, 21 docs | **7 cells** |
@@ -1935,5 +1935,6 @@ be present and empty.
 from its document count. `JVW-2`'s 18-document run at 62 min returned 8 — **the best ratio of
 the day, and it came from a REPLAY that cost no GPU at all.**
 
-⚠️ **CONTIGUITY BARELY MOVED AND THAT IS THE HARD PART.** 27 holes closed out of 310, and **not
-one more ticker became a single band.** The 5 are still ACB, BID, CTG, TCB, VCB.
+⚠️ **CONTIGUITY BARELY MOVED AND THAT IS THE HARD PART.** **31 holes closed out of 310**, and
+**not one more ticker became a single band** — and a final free `release_and_fill` over all 30
+tickers added **0 cells and 0 grid rows**, so nothing winnable is left unwritten. The 5 are still ACB, BID, CTG, TCB, VCB.
