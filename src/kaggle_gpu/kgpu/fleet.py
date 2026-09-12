@@ -369,6 +369,7 @@ def alternate_quarters(names: Sequence[Tuple[str, str]], *,
     anchor()
     from web_scraper import cafef_financials as fin
     from web_scraper import pdf_ocr_job as job
+    from web_scraper import pdf_ocr_merge
 
     say = log or (lambda _line: None)
     root = Path(reports_root) if reports_root else REPO_ROOT / "reports" / "pdf_ocr"
@@ -379,7 +380,7 @@ def alternate_quarters(names: Sequence[Tuple[str, str]], *,
         tried = _retried_periods(root, exchange, symbol)
         quarters: List[str] = []
         cells = 0
-        on_disk = 0
+        on_disk = blocked = 0
         for task in job.plan(builder, exchange, symbol, allow_parent=True, template=template):
             gap = [r for r in job.REPORTS if r not in set(job.parsed_reports(builder, task))]
             if not gap or not task.index_row:
@@ -392,15 +393,35 @@ def alternate_quarters(names: Sequence[Tuple[str, str]], *,
             on_disk += len(gap)
             if job.as_quarter(task.period) in tried:
                 continue
+            # ⚠️ **`OPB-1` ARRIVING BY A SECOND ROUTE, AND THE FIRST ALTERNATES FLEET WALKED
+            # INTO IT** (2026-09-13). A quarter whose ONLY open report is a cumulative income
+            # statement cannot be written until its Q1..Q(q-1) operands are `pdf` rows — and
+            # re-reading the alternate changes nothing about that. **The local lane planned 21
+            # PLX documents and `run_batch` skipped 11 of them at run time for exactly this**,
+            # each printing `its only open report is a CUMULATIVE income statement the merge
+            # still cannot write`. The plan was proposing GPU it could never bank.
+            # ⚠️ **THE TEST IS THE MERGE'S OWN AND NOT A SECOND COPY**, the same rule
+            # `plan_batch` applies: `_quarter_priors` is the function that will decide this for
+            # real. Asked with no `pending`, because a one-document alternate retry brings no
+            # other quarter with it — which is the honest question here and is STRICTER than
+            # `plan_batch`'s, where a batch may win the operand in the same pass.
+            if set(gap) == {fin.INCOME_STATEMENT} and task.cumulative:
+                _priors, why = pdf_ocr_merge._quarter_priors(
+                    builder, exchange, symbol, template, task.period, {})
+                if why:
+                    blocked += 1
+                    continue
             quarters.append(job.as_quarter(task.period))
             cells += len(gap)
-        if quarters:
+        if quarters or blocked:
             out[symbol] = {"exchange": exchange, "template": template,
                            "quarters": sorted(quarters), "cells": cells,
-                           "on_disk_cells": on_disk}
+                           "on_disk_cells": on_disk, "blocked": blocked}
             say(f"   {symbol:5s} {len(quarters):3d} document(s), {cells:3d} cell(s) "
-                f"with an alternate NO run has asked")
-    return out
+                f"with an alternate NO run has asked"
+                + (f"   ({blocked} more blocked on a de-cumulation operand, `OPB-1`)"
+                   if blocked else ""))
+    return {k: v for k, v in out.items() if v["quarters"]}
 
 
 def _retried_periods(root: Path, exchange: str, symbol: str) -> set:

@@ -284,3 +284,74 @@ def test_the_mode_reaches_the_lane_subprocess_as_an_ARGUMENT():
     plain = fleet._lane_command(fleet.Lane(name="local", kind="local", tickers=["AAA"]),
                                 apply=True, rehearse=False)
     assert plain[plain.index("--mode") + 1] == "open"
+
+
+def test_a_quarter_BLOCKED_on_a_decumulation_operand_is_not_put_on_a_lane(
+        monkeypatch, tmp_path):
+    """⚠️ **`OPB-1` ARRIVING BY A SECOND ROUTE, AND THE FIRST ALTERNATES FLEET WALKED INTO
+    IT.** A quarter whose ONLY open report is a cumulative income statement cannot be written
+    until its Q1..Q(q-1) operands are `pdf` rows, and re-reading a different FILING of it
+    changes nothing about that. Measured 2026-09-13: the census proposed **101 documents** and
+    **59 of them were in this state** — the local lane planned 21 PLX documents and `run_batch`
+    skipped 11 at run time, each printing *"its only open report is a CUMULATIVE income
+    statement the merge still cannot write"*. The honest plan is **42 documents**.
+
+    ⚠️ **THE TEST IS THE MERGE'S OWN `_quarter_priors` AND NOT A SECOND COPY**, the same rule
+    `plan_batch` applies — asked here with NO `pending`, because a one-document alternate retry
+    brings no other quarter with it. That is stricter than `plan_batch`'s question, where a
+    batch may win the operand in the same pass, and stricter is the right direction for a plan
+    that spends GPU on a cell it cannot bank.
+    """
+    fleet.anchor()
+    from web_scraper import cafef_financials as fin
+    from web_scraper import pdf_ocr_merge
+
+    job = _alt_env(
+        monkeypatch, tmp_path,
+        open_by_period={"Q4-2020": [fin.INCOME_STATEMENT]},
+        alternates={"Q4-2020": [{"path": "files/HOSE_AAA/alt.pdf", "file": "alt.pdf",
+                                 "assurance": "reviewed"}]},
+        on_disk=["files/HOSE_AAA/alt.pdf"])
+    monkeypatch.setattr(fleet, "_retried_periods", lambda *a, **k: set())
+    # the task has to be CUMULATIVE for the block to apply, and its operand absent
+    monkeypatch.setattr(pdf_ocr_merge, "_quarter_priors",
+                        lambda *a, **k: (None, "Q1-2020 is `missing` on disk"))
+    from web_scraper import pdf_ocr_job as jb
+    tasks = [jb.DocumentTask(
+        exchange="HOSE", symbol="AAA", period="Q4-2020", template="corp", path="/dev/null",
+        file="q4.pdf", consolidated="True", assurance="audited", cumulative=True,
+        index_row={"period": "Q4-2020"})]
+    monkeypatch.setattr(jb, "plan", lambda *a, **k: list(tasks))
+
+    assert fleet.alternate_quarters([("AAA", "HOSE")]) == {}
+
+
+def test_a_quarter_missing_MORE_than_the_income_statement_is_still_asked(
+        monkeypatch, tmp_path):
+    """⚠️ **THE BLOCK IS NARROW ON PURPOSE.** `OPB-1` applies only where the income statement
+    is the ONLY thing still open — a quarter also missing its balance sheet has a cell the
+    alternate can win outright, and refusing it would be the block over-reaching.
+    """
+    fleet.anchor()
+    from web_scraper import cafef_financials as fin
+    from web_scraper import pdf_ocr_job as jb
+    from web_scraper import pdf_ocr_merge
+
+    _alt_env(monkeypatch, tmp_path,
+             open_by_period={"Q4-2020": [fin.INCOME_STATEMENT, fin.BALANCE_SHEET]},
+             alternates={"Q4-2020": [{"path": "files/HOSE_AAA/alt.pdf", "file": "alt.pdf",
+                                      "assurance": "reviewed"}]},
+             on_disk=["files/HOSE_AAA/alt.pdf"])
+    monkeypatch.setattr(fleet, "_retried_periods", lambda *a, **k: set())
+    monkeypatch.setattr(pdf_ocr_merge, "_quarter_priors",
+                        lambda *a, **k: (None, "Q1-2020 is `missing` on disk"))
+    tasks = [jb.DocumentTask(
+        exchange="HOSE", symbol="AAA", period="Q4-2020", template="corp", path="/dev/null",
+        file="q4.pdf", consolidated="True", assurance="audited", cumulative=True,
+        index_row={"period": "Q4-2020"})]
+    monkeypatch.setattr(jb, "plan", lambda *a, **k: list(tasks))
+
+    census = fleet.alternate_quarters([("AAA", "HOSE")])
+
+    assert census["AAA"]["quarters"] == ["2020-Q4"]
+    assert census["AAA"]["cells"] == 2

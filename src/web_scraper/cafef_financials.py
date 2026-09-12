@@ -2906,6 +2906,17 @@ class FinancialsBuilder:
     # is one wrapped line — a handful of words — never half a statement, and an unbounded search
     # would let any row match any account by discarding enough of itself.
     MAX_TAIL_TRIM = 6
+    # ⚠️ **WHAT COUNTS AS A NOTE REFERENCE — see `_prefix_trims`' trailing branch.** A roman
+    # numeral, a number under four digits, a single letter, or those glued ("6b", "vi_6b"
+    # arriving as two words). ⚠️ **IT MUST NOT MATCH A REAL WORD**, and the floor of THREE
+    # remaining words is the second guard. ⚠️ **A FLOOR OF TWO WAS MEASURED WRONG AND CAUGHT BY
+    # ITS OWN TEST**: `tien_v_1` trimmed to `tien_v`, and `_label_score`'s CONTAINMENT shortcut
+    # can reach a short account from a two-word fragment — the trim would then invent a match
+    # rather than reveal one. Three costs nothing on the measured population: every key this
+    # was built for trims to **six** words. And a trimmed candidate must still clear
+    # `SCHEMA_MATCH` and still pass the ordered walk, so it can only stop a good line being
+    # hidden behind somebody else's footnote.
+    NOTE_REF_RE = re.compile(r"^(?:[ivx]{1,4}|\d{1,3}|[a-z]|\d{1,3}[a-z]|[ivx]{1,4}\d{0,2}[a-z]?)$")
 
     # How an ANNUAL report words the two cash balances, against how the chart of accounts does.
     # Keyed schema-side so only these two lines are ever rewritten; everything else scores as
@@ -3075,6 +3086,41 @@ class FinancialsBuilder:
             ("loinhuantucongtyliendoanhlienket",
              "phanlaitucaccongtylienket",
              "loinhuantucaccongtylienket"),
+        # ⚠️ **`JVW-1` AGAIN, ON A DIFFERENT FAMILY OF SPELLINGS AND FOUND BY REPLAY** —
+        # `JVW-2`, measured 2026-09-13 by `.claude/tools/replay_operating_profit.py` over
+        # VN30's run folders. Of the 24 income statements whose EVERY deepest-layer reason is
+        # `operating profit does not close`, **19 have a residual that IS one row the reading
+        # produced**, and **17 of those rows are this one account** — the share of profit or
+        # loss from associates and joint ventures, VAS line 24, carried as OPTIONAL in
+        # `OP_IDENTITY` so a filing that never prints it is not failed. `JVW-1` says what that
+        # costs when a filing DOES print it: the identity fails by exactly that figure and the
+        # statement is refused whole.
+        # ⚠️ **THE SPELLINGS ARE A DIFFERENT SHAPE FROM `JVW-1`'s AND THE EXISTING ALIASES
+        # REACH NONE OF THEM**: every one says **"chia"** — *được chia từ*, *chia từ*, *chia sẻ
+        # từ* — where the chart says *phần lãi (lỗ) trong*. Measured against the chart and all
+        # three existing aliases, the 13 distinct keys score **0.600-0.785, every one under the
+        # 0.80 bar**; with these five and `_prefix_trims`' new trailing trim they score
+        # **0.849-0.902, all 13 over**. ⚠️ **BOTH HALVES ARE REQUIRED** — aliases alone leave 9
+        # short, the trim alone leaves 13 short.
+        # ⚠️ **`NST-1` CHECKED, AND THE REPORT SCOPING IS LOAD-BEARING HERE RATHER THAN
+        # TIDY.** Across all twelve charts `laichiatucongtylienketliendoanh` scores **0.820**
+        # against `corp/balance_sheet`'s `dautuvaocongtylienketliendoanh` and
+        # `lailochiatucongtylienketliendoanh` **0.794** — over and near the bar. Both rivals
+        # are BALANCE-SHEET accounts, which an income-statement row is never scored against,
+        # so keying on `INCOME_STATEMENT` removes the competition rather than tolerating it.
+        # Scoped to the four income-statement charts the best rival is **0.667**.
+        # ⚠️ **AND 17 IS NOT A CELL COUNT** (§5 rule 21 — a gate opening is not a cell): each
+        # statement must still close the identity and pass `sane`. **15 of the 17 are VNM**,
+        # one VHM, so this is one issuer's chart of accounts and not a corpus-wide lever. Two
+        # of the 19 residual matches are coincidences and were excluded by reading the row —
+        # POW Q3-2021 matched `chi_phi_ban_hang` and SHB Q4-2009 a credit-provision reversal.
+        (INCOME_STATEMENT, "phanlailotrongcongtyliendoanhlienket"):
+            ("loinhuanduocchiatucongtylienket",
+             "lochiatucongtylienket",
+             "lailochiatucongtylienketliendoanh",
+             "laichiatucongtylienketliendoanh",
+             "loinhuanchiasetuliendoanhlienket",
+             "phanlailotrongliendoanh"),
         # Decision 15/2006 wording, printed by the CONDENSED disclosure form (`CDF-2`).
         (INCOME_STATEMENT, "tongloinhuanketoantruocthue"): ("loinhuantruocthue",),
     }
@@ -3155,6 +3201,30 @@ class FinancialsBuilder:
         parts = key.split("_")
         for i in range(1, min(self.MAX_TAIL_TRIM, max(0, len(parts) - 2)) + 1):
             yield "_".join(parts[i:])
+        # ⚠️ **AND THE SAME THING AT THE OTHER END — A TRAILING NOTE REFERENCE** (`JVW-2`,
+        # 2026-09-13). The filing prints the note number beside the account name — "Lợi nhuận
+        # được chia từ công ty liên kết **V.4(c)**", "Phần lãi/(lỗ) trong liên doanh **VI.6b**"
+        # — and it comes through as trailing words of the key. This file already KNEW that
+        # ("…a `…_v_1` note reference is a single digit at the END, not two in the middle",
+        # `_split_merged`'s length floors) and the SCORER had no symmetric trim, so a label was
+        # scored with somebody else's footnote attached to it.
+        #
+        # ⚠️ **THE TRIM ALONE WINS NOTHING AND THAT IS WHY IT IS NOT THE FIX BY ITSELF** —
+        # measured over VN30's 13 distinct spellings of the associates line: it moves the score
+        # by 0.02-0.07 and **not one reaches `SCHEMA_MATCH`**, because the remaining gap is a
+        # genuine WORDING gap that only an alias bridges. With `ACCOUNT_WORDING`'s new entries
+        # all 13 clear the bar at 0.849-0.902, and with either half alone 9 or 13 stay short.
+        # **Two independent defects on one cell**, which is HPG's lesson of 2026-09-09.
+        #
+        # ⚠️ **AND ONE SCORE GOES DOWN**: `phan_lai_lo_trong_lien_doanh_vi_6b` scores 0.785
+        # raw and 0.767 trimmed, because the footnote's characters happened to match. That is
+        # why both the key AND its trims are yielded and the caller takes the MAX — a trim is
+        # an extra candidate, never a replacement.
+        tail = list(parts)
+        while len(tail) > 3 and self.NOTE_REF_RE.match(tail[-1]):
+            tail.pop()
+        if len(tail) != len(parts):
+            yield "_".join(tail)
 
     def _label_score(self, account: str, key: str, relax: bool = False,
                      annual_tail: bool = False,
