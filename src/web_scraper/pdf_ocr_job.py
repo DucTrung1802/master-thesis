@@ -1192,11 +1192,21 @@ def _alternate_retry(builder: FinancialsBuilder, task: DocumentTask,
     origin: Dict[str, dict] = {}
     if not task.index_row:
         return origin
+    absent_on_disk = []
     for alt in builder.alternates(task.exchange, task.symbol, task.index_row):
         if len(accepted) == len(REPORTS):
             break
         alt_path = os.path.join(fin.PDFS_DIR, alt["path"].replace("/", os.sep))
         if not os.path.exists(alt_path):
+            # ⚠️ **THIS `continue` WAS SILENT, AND IT KILLED THE WHOLE RETRY ON EVERY KAGGLE
+            # RUN.** It sits BEFORE the log line below, and a documents payload shipped ONE
+            # filing per quarter (`documents()`), so on a worker every alternate was skipped
+            # with nothing written anywhere — no line, no warning, no field. A green run that
+            # did not do the thing (§5 rule 10). Measured over VN30, 2026-09-12: **127 of the
+            # 536 open cells have an alternate on disk that was never retried**, and the
+            # tickers where the retry DID fire are the ones parsed locally (VNM 18 -> 2, SHB
+            # 14 -> 4, MSN 3 -> 0). `kgpu.export` ships them now; this SAYS SO when it has not.
+            absent_on_disk.append(alt.get("file") or alt["path"])
             continue
         missing = [r for r in REPORTS if r not in accepted]
         logger.line(f"{task.period}: {len(missing)} statement(s) absent — retrying on the "
@@ -1221,6 +1231,21 @@ def _alternate_retry(builder: FinancialsBuilder, task: DocumentTask,
             origin[report] = alt
             logger.line(f"    {task.period}: {report} recovered from "
                             f"{alt['assurance']} {alt['file']}")
+    # ⚠️ **SAID, NEVER SILENT — and it is the WHOLE retry that was lost, not one filing.**
+    # The index is what CafeF advertises and the files are what was scraped, so on THIS machine
+    # a gap here means the PDF was never downloaded; on a worker it means the payload did not
+    # ship it, which is how `ALT-1`'s retry came to be dead on every Kaggle run without one
+    # line anywhere saying so. Warned rather than raised: a missing alternate is not a failure
+    # of this document, it is a question that could not be asked.
+    if absent_on_disk and len(accepted) < len(REPORTS):
+        logger.log_warning(
+            f"    {task.period}: {len(absent_on_disk)} alternate filing(s) of this period are "
+            f"in the PDF INDEX and NOT on disk, so the retry could not ask them — "
+            f"{', '.join(absent_on_disk[:3])}"
+            f"{' …' if len(absent_on_disk) > 3 else ''}")
+        logger.log_warning(
+            f"    On a Kaggle worker that means the payload did not ship them "
+            f"(`data.documents.with_alternates`); here it means the scrape did not fetch them.")
     return origin
 
 

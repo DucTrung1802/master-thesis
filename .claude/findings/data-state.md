@@ -1590,6 +1590,121 @@ prior written in pass 1 reaches a Q4's planner only in pass 2. What is left is c
 statements whose `Q1`/`Q3` operand **has never been won at all** — `OPB-1`'s dependency, which
 needs a parse and not a merge.
 
+### ⚠️ 2026-09-12 — WHERE VN30's 536 REMAINING CELLS ACTUALLY ARE, and what each block needs
+
+The release (`HLD-1`, above) took VN30 to **cells 4,678/5,214 = 89.7 %** and **quarters
+1,320/1,738 = 75.9 %**. The question *"what gets us past 95 %"* then has a measurable answer,
+and it is **not more GPU**. Every count below is read off disk with no OCR.
+
+#### ⚠️ THERE IS NO UNSPENT GPU IN THIS UNIVERSE — 1 cell
+
+| asked of VN30's 536 open cells | |
+|---|---|
+| already met the **full 115-layer** onnx cascade and lost | **414** |
+| met only a shorter cascade | 9 |
+| **never asked by ANY run** | **1** |
+
+That one is ACB 2009-Q3's cash flow, whose PDF is not on disk — the single quarter across all
+784 tickers that CafeF advertises and this machine cannot open — on a three-page `Mẫu CBTT-03`
+summary form that cannot contain a cash flow. ⚠️ **So the gap plan's 311 documents (~13 h of
+GPU) would buy only what the parser has learned since those folders were written.** This is the
+same conclusion the 24-ticker corpus reached on 2026-09-11, now established for VN30.
+
+⚠️ **AND `exhausted_quarters` COULD NOT REACH THAT CONCLUSION BY ITSELF** (`FPR-1`). Its skip
+needs the parser to be the same FILE and reads that off `git_commit`, so a dirty tree is
+unusable: **258 of 1,472 folders had a usable fingerprint**, PLX's 51-document run of the same
+day not among them. `parser_digest()` — sha256 of the parser bytes, no git, so a worker can
+compute it too — fixes that for every future run and cannot fix the existing 1,214.
+
+#### ⚠️ 24 % OF THE GAP IS A QUESTION NOBODY ASKED — the alternate filings (`ALT-2`)
+
+`unasked_quarters` keys on the QUARTER. **Asking a DIFFERENT FILING of a quarter already opened
+is a new question**, and no quarter-level census counts it.
+
+| VN30 | |
+|---|---|
+| open cells whose quarter has an alternate filing **on disk** | **168** |
+| of those, cells whose alternate was **never retried** | **127** |
+| documents holding them | 105 |
+
+⚠️ **AND THE SPLIT NAMES THE MACHINE.** Every Kaggle-bootstrapped ticker reads 100 %
+never-tried — BVH 27/27, PLX 24/24, POW 13/13, VIB 12/12, VJC 11/11, TPB 6/6 — while the
+locally-parsed ones read far lower: VNM 18 → 2, SHB 14 → 4, MSN 3 → 0, VPB 2 → 0, GAS 8 → 4.
+**The retry has never once fired on a worker**, because the payload ships one filing per quarter
+and `_alternate_retry` skips a file it cannot find with a `continue` placed above its own log
+line. Fixed both ends 2026-09-12; **this is the one block where GPU still buys cells.**
+
+#### ⚠️ 19 % OF THE GAP IS NOT A PARSER PROBLEM AT ALL — the de-cumulation chain
+
+| open income statements | |
+|---|---|
+| **BLOCKED on a de-cumulation operand** | **104** |
+| not blocked | 104 |
+| distinct ROOT quarters they wait for | **82** |
+
+A cumulative Q2/Q4 income statement is written as `FY − (Q1+Q2+Q3)` and the merge subtracts only
+a prior that is a `pdf` row with a KNOWN three-month span. These 104 documents **parse
+perfectly** and the merge can never write them while their operand reads `missing`. ⚠️ **The
+multiplier is only ~1.3 dependents per root**, so this is 82 separate cells to win and not a
+lever with leverage — but it does mean **104 of the 536 are downstream of another cell** and
+will land without their own document being re-read.
+
+#### ⚠️ 11 % OF THE GAP IS A FILING THAT CANNOT HOLD THE CELL — and `missing` is correct
+
+Page counts read off each open cell's own filing (page tree only, nothing rendered):
+
+| the filing behind an open cell | cells |
+|---|---|
+| **≤ 10 pages — a condensed disclosure form** | **58** |
+| > 10 pages, a SCAN (no text layer) | 258 |
+| > 10 pages, with a TEXT layer | 219 |
+| no file on disk | 1 |
+
+⚠️ **THE LARGEST SINGLE-REASON REFUSAL BUCKET IS MOSTLY THE CORRECT ANSWER.** Of the 23 cells
+whose every layer says `no such statement on any page`, **17 are cash flows** and the filings
+are 1-7 pages: TPB Q1-2016 is five pages with a balance sheet and a P&L and no cash flow at all;
+TPB FY-2013 is five pages; VJC Q2-2023 is **one page**. §5 rule 24 — `missing` is the correct
+and permanent answer. ⚠️ **POW FY-2017 is the exception worth keeping: 42 pages**, and an annual
+report of that length does contain a cash flow.
+
+⚠️ **SO THE HONEST CEILING TODAY IS ~5,155 CELLS, NOT 5,214** — 4,678 of 5,155 = **90.7 % of
+what is winnable**, against 89.7 % of the whole grid. **Reaching 95 % of the grid needs +276
+cells**, and the repo's own record prices that: six parser defects took HPG from 170 to 192
+(+22). **That is roughly a dozen such efforts, and it is parser work, not GPU time.**
+
+#### ⚠️ THE 122 THE SCREENS WITHHELD ARE CONVICTED CORRECTLY — do not force them
+
+98 distinct (ticker, period, report) pairs, and the reasons are the filing's own arithmetic
+failing, not a false positive:
+
+- `opening + net + fx != closing` on the cash flow — the dominant bucket
+- `assets != liabilities + equity` and `sources C+D != total` on the balance sheet
+- continuity: BVH's total assets **220.8 tn → 18.3 tn in one quarter**, which is a read off by a
+  factor of 12
+
+⚠️ **A flag is still not a verdict on the figure** — `screen_run`'s continuity check is a
+per-quarter rate and a batch parses the OUTSTANDING quarters, so an honest jump between two
+quarters a year apart is flagged (FPT Q2-2009/Q2-2010, 1.79x). But nothing here looks like the
+FPT case: each needs reading against the filing, and `REPAIR` is the scoped tool for any settled.
+
+#### ⚠️ AND CONTIGUITY IS THE NUMBER THE TWO RATES HIDE — 310 holes, 5 of 30 one band
+
+`kgpu.fleet.coverage` counts `holes` (non-solid quarters sitting BETWEEN two solid ones) and
+`band` (the longest unbroken run).
+
+| VN30 | |
+|---|---|
+| **holes** | **310** |
+| tickers that are ONE unbroken band | **5 of 30** — ACB, BID, CTG, TCB, VCB |
+| worst | SHB 41 · VNM 39 · TPB 25 · PLX 22 (**on a band of 2**) · POW 22 · VJC 19 |
+
+⚠️ **A GAP AT EITHER END IS NOT A HOLE**, and conflating them would make a late listing look
+like a parse failure: VHM's 2017-Q1/Q2/Q3 predate its listing and BSR stopped filing in 2020.
+`GRD-2` is the same distinction at the top edge. ⚠️ **And `holes` is not `1 − rate`**: a ticker
+can read 90 % with every gap in one block at the start — a clean series that simply begins later
+— or scattered through the middle, which is a series nothing can difference across. **The two
+readings need different work and only `holes` tells them apart.**
+
 ### ⚠️ 6-3. THE DATA AUDIT — 2026-08-22, and the cross-section ENDS 2026-06-25
 
 Measured across every ticker-keyed table in all three schemas. Full tables and the

@@ -385,6 +385,17 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
     period_min = spec.get("period_min", "Q1-2008")
     with_statements = bool(spec.get("with_statements", True))
     with_models = bool(spec.get("with_models", True))
+    # ⚠️ **THE ALTERNATE FILINGS, AND WITHOUT THEM `ALT-1`'s RETRY IS DEAD ON EVERY WORKER.**
+    # `_alternate_retry` re-reads an ABSENT statement from the other filings of the same period
+    # and entity, and it finds them by `os.path.exists` — so on a payload holding one filing per
+    # quarter it skips every one with a bare `continue` **placed before its own log line**, and
+    # nothing in the run folder says a word. Measured over VN30, 2026-09-12: **127 of the 536
+    # open cells have an alternate on disk that was never retried**, and the tickers where the
+    # retry DID fire (VNM 18 -> 2, SHB 14 -> 4, MSN 3 -> 0, VPB 2 -> 0) are the ones parsed
+    # locally. TCB Q2-2019 is what the retry is worth: its closing cash is printed under the
+    # company's round stamp and no OCR configuration can read it, while the REVIEWED filing of
+    # the same quarter reads the whole tail cleanly at layer 1.
+    with_alternates = bool(spec.get("with_alternates", True))
 
     job.use_data_root()                       # the repo's own raw_data/cafef
     builder = FinancialsBuilder(logger=None)
@@ -433,6 +444,31 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
                     f"--partition {exchange}_{symbol})"
                 )
             _add(src, f"data/cafef/pdfs/files/{exchange}_{symbol}/{src.name}")
+
+        # ⚠️ **THE ALTERNATES TRAVEL BESIDE THE CHOSEN FILING, UNDER THE SAME DIRECTORY** —
+        # `_alternate_retry` resolves them through `fin.PDFS_DIR` + the INDEX's own `path`, and
+        # the index travels too, so the worker's lookup is the same one this machine makes.
+        # ⚠️ Only where `alternates` returns them: the ENTITY is fixed, not preferred, so a
+        # standalone filing never arrives this way and `allow_parent` stays the only route to
+        # one. ⚠️ **AND ONLY FOR A QUARTER BEING PARSED**, so the payload grows with the gap
+        # and not with the ticker's history.
+        alternates = 0
+        if with_alternates:
+            for task in tasks:
+                if not task.index_row:
+                    continue
+                for alt in builder.alternates(exchange, symbol, task.index_row):
+                    alt_src = root / "pdfs" / alt["path"].replace("/", os.sep)
+                    arc = f"data/cafef/pdfs/files/{exchange}_{symbol}/{alt_src.name}"
+                    # ⚠️ A missing alternate is NOT an error here, unlike a missing chosen
+                    # filing: the index is what CafeF advertises and the files are what was
+                    # scraped, and the retry's own `os.path.exists` is the authority either way.
+                    if alt_src.is_file() and arc not in staged:
+                        _add(alt_src, arc)
+                        alternates += 1
+            if alternates and not quiet:
+                print(f"  + {alternates} alternate filing(s) of the same period and entity — "
+                      f"without them `_alternate_retry` is silently dead on the worker")
 
         for schema in sorted((root / "financials" / "schema").glob("*.csv")):
             _add(schema, f"data/cafef/financials/schema/{schema.name}")
@@ -557,6 +593,12 @@ def _export_documents(cfg, folder: Path, manifest: dict, quiet: bool = False) ->
         "models": models,
         "archive": archive.name,
         "files": len(staged),
+        # ⚠️ **RECORDED, BECAUSE A SILENT SKIP IS WHAT THIS FIXES.** `_alternate_retry` finds an
+        # alternate by `os.path.exists` and skips a missing one with a bare `continue` placed
+        # BEFORE its own log line — so a worker without them ran no retry and said nothing.
+        # `with_alternates: false` and `alternates: 0` are different facts (§5 rule 2).
+        "with_alternates": with_alternates,
+        "alternates": alternates if with_alternates else None,
     }
     if not quiet:
         total = sum(staged.values())

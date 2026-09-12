@@ -360,7 +360,7 @@ def _validate(cfg: JobConfig) -> JobConfig:
             unknown = set(spec) - {
                 "exchange", "symbol", "periods", "quarters", "allow_parent", "period_min",
                 "overwrite",
-                "with_statements", "with_models",
+                "with_statements", "with_models", "with_alternates",
             }
             if unknown:
                 raise ValueError(
