@@ -2607,6 +2607,35 @@ is the same decode on fewer images; that is what makes the equality above struct
 lucky. ⚠️ **The retry fires on an ENGINE ERROR and never on a refusal** — a refusal is a
 measurement of the filing, and repeating it returns the same answer at the same cost.
 
+#### ⚠️ FIVE GPUs FOR A DAY — VN30 56.4 % -> 74.3 %, AND WHAT IT COST (2026-09-12)
+
+One RTX 3050 and **four Kaggle T4 kernels** (2 accounts x 2 sessions), a whole ticker per
+notebook clone, one document on the local card at a time. Ten tickers went from a blank CSV to
+a parsed one; the VN30 quarter grid moved **1,027 -> 1,291 of 1,738**.
+
+| from zero, in one day | | | | |
+|---|---|---|---|---|
+| VPB 83.6 % | BCM 80.0 % | VRE 68.4 % | VIB 60.3 % | BVH 49.3 % |
+| VNM 44.4 % | VJC 40.0 % | TPB 38.2 % | POW 29.7 % | PLX **5.6 %** |
+
+⚠️ **THE SPREAD IS THE RESULT, NOT THE MEAN.** PLX spent 175 T4-minutes for 3 quarters of 54
+and VPB got 51 of 61 — and **it does not follow the template**: TPB is a `bank` at 38.2 %,
+below `corp` VRE at 68.4 %. A ticker's yield cannot be predicted from what it is.
+
+⚠️ **AND RE-RUNNING A TICKER THE CASCADE HAS ALREADY SEEN RETURNS NOTHING — measured three
+times in one day.** VPB 24.5 min -> 0 quarters, VHM 90 min -> 0, GAS 92.2 min -> 0, VIC 88.2
+min -> 1. The mechanism: a quarter that yields **2 of 3** statements is HELD by the merge (all
+three off one filing), so disk still reads `missing` on all three, so the next plan re-opens
+the document, reads the same two, and holds again. `exhausted_quarters` cannot see it because
+it records only what was REFUSED, and those two were ACCEPTED. **The queue must not restart
+from the top of a list it has already walked.**
+
+⚠️ **THE LOCAL CARD IS NOT THE BOTTLENECK — ONE CPU CORE IS.** Measured mid-run: **540** of the
+cascade's layer executions re-map a cached parse (no OCR at all) against **38** that run an OCR
+pass; GPU utilisation sat at a **median 0 %** over 30 samples while the document child used
+**96 % of ONE core of 20**. Two documents would fit at rest (1,430 MiB each of 4,096) and not
+at an OCR peak (2,577 MiB), which is why the lease still admits one.
+
 #### ⚠️ A THIRD ENGINE IS NOT A LEVER ON A PAGE NOBODY FOUND — VHM, 2026-09-12
 
 `EOC-1` measured easyocr winning 2 of 8 open cells, both on SCANS, and VHM looked like the
