@@ -266,6 +266,9 @@ class ParseLayer:
     # does not remove them). A truncation removes them: GAS Q2-2021 reads `TỔNG NGUỒN VỐN` as
     # 216,601 against a printed 74,826,437,216,601. See `FinancialsBuilder._total_from_counterpart`.
     truncated_total: bool = False
+    # ⚠️ Take the two EQUAL LARGEST figures of a balance sheet as its two grand totals where no
+    # label names them — `GTT-1`. See `FinancialsBuilder._twin_totals`.
+    twin_totals: bool = False
     crop_pad: Optional[float] = None
     red_channel: bool = False
 
@@ -340,7 +343,9 @@ class ParseLayer:
                     # ⚠️ `truncated_total` REPLACES a grand total outright, on
                     # evidence from two other rows and another page, so it is
                     # `total_from_section`'s class exactly — see `GTR-1`.
-                    or self.truncated_total)
+                    or self.truncated_total
+                    # ⚠️ `twin_totals` WRITES both grand totals from position and equality alone.
+                    or self.twin_totals)
 
 # ⚠️ **THE EARLIEST QUARTER ANY FILING MAY CONTRIBUTE — a DECISION, taken 2026-08-24.**
 # Filings before Q1-2008 are blocked at the INPUT, so no pre-2008 document is ever opened and
@@ -2023,6 +2028,14 @@ class FinancialsBuilder:
         ParseLayer("onnx@200+dropdamaged+trunctotal", "onnx", 200,
                    join_lost_separator=True, drop_damaged_runs=True,
                    truncated_total=True, merged_tail=True, relax_totals=True),
+        # ── TWO EQUAL LARGEST FIGURES ARE THE GRAND TOTALS NO LABEL NAMED (`twin_totals`, `GTT-1`) ──
+        # ⚠️ TPB prints its totals on the section headers glued to the page title, SHB 2011 glues
+        # `TỔNG TÀI SẢN CÓ` to the line above: 13 of 15 such open sheets reconcile off their stored
+        # rows. Late, because they write totals from position and equality alone.
+        ParseLayer("onnx@200+twintotal", "onnx", 200, twin_totals=True),
+        ParseLayer("onnx@300+twintotal", "onnx", 300, twin_totals=True),
+        ParseLayer("onnx@200+codecol+twintotal", "onnx", 200, twin_totals=True,
+                   code_column_by_value=True),
         # ── A SCAN UNDER SOMEBODY ELSE'S OCR, READ BY OURS (`ocr_sandwich`, `SDW-1`) ──
         # ⚠️ **29 VN30 FILINGS WITH AN OPEN CELL ARE FULL-PAGE IMAGES UNDER INVISIBLE TEXT, AND
         # EVERY LAYER ABOVE READ THAT TEXT** (2026-09-13) — TPB Q1-2020's profit before tax is
@@ -2048,6 +2061,8 @@ class FinancialsBuilder:
                    code_column_by_value=True),
         ParseLayer("onnx@300+sandwich+codecol", "onnx", 300, ocr_sandwich=True,
                    code_column_by_value=True),
+        ParseLayer("onnx@200+sandwich+twintotal", "onnx", 200, ocr_sandwich=True,
+                   twin_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -2265,6 +2280,8 @@ class FinancialsBuilder:
                 # of each refuses an already-repaired column because `mirror == damaged`.
                 if layer.truncated_total and report == BALANCE_SHEET:
                     self._total_from_counterpart(st, row)
+                if layer.twin_totals and report == BALANCE_SHEET:
+                    self._twin_totals(st, row, template)
                 bs_cash, bs_firm = (None, False)
                 if report == CASH_FLOW and BALANCE_SHEET in accepted:
                     bs_cash, bs_firm = self.balance_sheet_cash(
@@ -4890,6 +4907,60 @@ class FinancialsBuilder:
         d, w = str(abs(damaged)), str(abs(whole))
         return (len(d) >= FinancialsBuilder.TRUNCATION_MIN_DIGITS
                 and len(d) < len(w) and d in w)
+
+    # Rows the two grand totals must sit apart — a total printed twice on consecutive lines is a
+    # subtotal repeated, not the two sides of a balance sheet (`GTT-1`).
+    TWIN_TOTAL_GAP = 5
+    # `{template: (total assets column, total resources column)}` — `C_ASSETS` / `C_RESOURCES` by chart.
+    TWIN_TOTAL_COLUMNS = {
+        "bank": ("tong_tai_san", "tong_no_phai_tra_va_von_chu_so_huu"),
+        "corp": ("tong_cong_tai_san", "tong_cong_nguon_von"),
+        "insurance": ("tong_cong_tai_san", "tong_cong_nguon_von"),
+        "securities": ("tong_cong_tai_san", "tong_cong_no_phai_tra_va_von_chu_so_huu"),
+    }
+
+    def _twin_totals(self, st: Statement, row: Dict[str, int], template: str) -> None:
+        """Both grand totals of a balance sheet from the two EQUAL LARGEST figures — `GTT-1`.
+
+        ⚠️ **A BANK FORM CAN PRINT ITS GRAND TOTALS ON THE SECTION HEADERS, GLUED TO THE PAGE TITLE,
+        AND NO LABEL THEN NAMES EITHER** (2026-09-13). TPB's balance sheets carry `TÀI SẢN` on the
+        first line of the table — read `ngan_hang_tmcp_tien_phong_bao_cao_tai_chinh_quy_i_2017_bang
+        [104,791,710 m, …]` or `thuyet_stt_chi_tieu_minh_a_tai_san` — and `NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ
+        HỮU` on `bang_khac_b_no_phai_tra_va_von_chu_so_huu [104,791,710 m, …]`; SHB's 2011 sheets
+        glue `TỔNG TÀI SẢN CÓ` onto `Trong đó: lợi thế thương mại`. Every layer refused them `no total
+        assets` with both figures on the page. Off `absent_rows`, no OCR: **15 open balance sheets
+        have their largest current figure on exactly two rows, and 13 of them reconcile once those
+        are taken as the totals** (TPB 6, VPB 3, SHB 2, VIB 1, SSI 1).
+
+        ⚠️ **THE EVIDENCE IS `GTL-1`'s**: the two grand totals are one accounting number printed
+        twice, on two halves of the statement — 819 of 837 accepted sheets carry them exactly equal —
+        and a sheet's grand total is its largest figure, since every other line is a part of one
+        side. So four locks, each failing safe: neither total is already mapped to a different
+        figure; the largest current figure appears on EXACTLY two rows; they are at least
+        `TWIN_TOTAL_GAP` rows apart; and the chart names both columns. It fills columns only, and
+        `reconcile` and `sane` judge the result as they judge any other reading.
+        """
+        # The chart's own two columns, named here rather than looked up: the lookup reads a schema
+        # file per layer, and a builder constructed without one must still parse.
+        assets_col, resources_col = self.TWIN_TOTAL_COLUMNS.get(template, (None, None))
+        if assets_col is None or resources_col is None:
+            return
+        if row.get(assets_col) is not None and row.get(resources_col) is not None:
+            return
+        # `getattr`: a statement object without rows contributes nothing and ends no parse.
+        figures = [(i, st._first_value(r.values))
+                   for i, r in enumerate(getattr(st, "rows", None) or [])]
+        figures = [(i, v) for i, v in figures if isinstance(v, int)]
+        if not figures:
+            return
+        top = max(v for _, v in figures)
+        at = [i for i, v in figures if v == top]
+        if len(at) != 2 or at[1] - at[0] < self.TWIN_TOTAL_GAP:
+            return
+        if any(row.get(c) is not None and row[c] != top for c in (assets_col, resources_col)):
+            return
+        row[assets_col] = top
+        row[resources_col] = top
 
     def _total_from_counterpart(self, st: Statement, row: Dict[str, int]) -> None:
         """Repair a grand total a lost box TRUNCATED, from the section sum the form prints.
