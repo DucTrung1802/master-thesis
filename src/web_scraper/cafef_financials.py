@@ -4927,6 +4927,8 @@ class FinancialsBuilder:
     # subtotal repeated, not the two sides of a balance sheet (`GTT-1`).
     TWIN_TOTAL_GAP = 5
     # `{template: (total assets column, total resources column)}` — `C_ASSETS` / `C_RESOURCES` by chart.
+    # Section-header columns a chart names for a grand total printed on its header line (`GTT-2`).
+    TWIN_TOTAL_HEADERS = ("b_no_phai_tra_va_von_chu_so_huu",)
     TWIN_TOTAL_COLUMNS = {
         "bank": ("tong_tai_san", "tong_no_phai_tra_va_von_chu_so_huu"),
         "corp": ("tong_cong_tai_san", "tong_cong_nguon_von"),
@@ -4973,6 +4975,16 @@ class FinancialsBuilder:
         if len(at) != 2 or at[1] - at[0] < self.TWIN_TOTAL_GAP:
             return
         if any(row.get(c) is not None and row[c] != top for c in (assets_col, resources_col)):
+            return
+        # ⚠️ **LOCK 5 — NO LINE ITEM MAY ALREADY HOLD THE GRAND TOTAL** (`GTT-2`, 2026-09-13). Banked on
+        # GPU, 6 of `GTT-1`'s 13 sheets had mapped one of the two twin rows INTO an account: VPB
+        # Q2-2012/Q3-2012/Q1-2013 wrote the 112.6 tn total as `viii_von_chu_so_huu` (neighbours
+        # 6.6-7.1 tn), VIB Q1-2016 as `xii_4_tai_san_co_khac`, SHB Q1-2011 as `xii_4_trong_do_loi_the_
+        # thuong_mai`, SSI Q1-2016 as two lines. A bank sheet has no section sum to convict that, so the
+        # repair abstains itself. The section-header columns the chart names for exactly that figure
+        # (TPB prints its total on `B. NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU`) are not line items.
+        if any(x == top for c, x in row.items()
+               if c not in (assets_col, resources_col) and c not in self.TWIN_TOTAL_HEADERS):
             return
         row[assets_col] = top
         row[resources_col] = top

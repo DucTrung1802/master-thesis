@@ -82,3 +82,17 @@ def test_the_flag_is_off_by_default_and_a_widening():
     assert ParseLayer("x", "onnx", 200).twin_totals is False
     assert not ParseLayer("x", "onnx", 200, twin_totals=True).is_strict
     assert any(l.twin_totals for l in FinancialsBuilder.LAYERS)
+
+
+def test_a_line_item_already_holding_the_total_abstains(b):
+    """⚠️ `GTT-2`: VPB Q1-2013 wrote its 112.6 tn grand total as `viii_von_chu_so_huu`."""
+    row = {"viii_von_chu_so_huu": TOTAL}
+    b._twin_totals(tpb_q1_2017(), row, "bank")
+    assert row == {"viii_von_chu_so_huu": TOTAL}
+
+
+def test_the_charts_own_section_header_column_may_hold_it(b):
+    """TPB prints the total on `B. NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU`, a column the bank chart names."""
+    row = {"b_no_phai_tra_va_von_chu_so_huu": TOTAL}
+    b._twin_totals(tpb_q1_2017(), row, "bank")
+    assert row["tong_tai_san"] == TOTAL and row["tong_no_phai_tra_va_von_chu_so_huu"] == TOTAL
