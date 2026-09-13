@@ -67,7 +67,7 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from web_scraper import cafef_financials as fin
 from web_scraper import pdf_ocr_job as job
@@ -245,10 +245,17 @@ def _unfiled_priors(builder: FinancialsBuilder, exchange: str, symbol: str,
     return [p for p in (f"Q{i}-{year}" for i in range(1, quarter)) if p not in filed]
 
 
+def _as_quarter(period: str) -> str:
+    """`Q1-2008` -> `2008-Q1`. The merge speaks the first and every planner speaks the second."""
+    quarter, year = period.split("-")
+    return f"{year}-{quarter}"
+
+
 def _quarter_priors(builder: FinancialsBuilder, exchange: str, symbol: str, template: str,
                     period: str,
-                    pending: Dict[str, Dict[str, int]]) -> Tuple[Optional[Dict[str, Dict[str, int]]],
-                                                                 str]:
+                    pending: Dict[str, Dict[str, int]],
+                    filed: Optional[Set[str]] = None,
+                    ) -> Tuple[Optional[Dict[str, Dict[str, int]]], str]:
     """`({prior period: figures}, "")` for Q1..Q(q-1) of `period`'s year, or `(None, why not)`.
 
     The operands of `_decumulate`'s subtraction, gathered from the two places a merge can
@@ -273,6 +280,21 @@ def _quarter_priors(builder: FinancialsBuilder, exchange: str, symbol: str, temp
 
     ⚠️ **A PRIOR MUST BE `source == 'pdf'`.** A `missing` row is a blank, and subtracting a
     blank silently returns the year-to-date figure unchanged — the exact wrong write.
+
+    ⚠️ **AND AN OPERAND THE ISSUER NEVER FILED IS PERMANENT, WHERE ONE THAT LOST TO THE PARSER
+    IS WORK — THIS FUNCTION PRINTED THE SAME SENTENCE FOR BOTH** (`OPB-2`, 2026-09-13).
+    `Q1-2008 is 'absent' on disk` is what a lost operand says and what an operand that was
+    never filed says, so **a permanent answer and a winnable one were filed under one message**
+    — `TRC-1`'s shape, inside the merge. Measured over VN30: of the **89** blocked dependent
+    income statements **16 (18 %) name an operand that is not a task at all** (SSB 8 — every Q1
+    from 2008 to 2015 — BID 3, VPB 2, POW/SAB/TPB 1 each), so those 16 cells are `missing` and
+    `missing` is correct (§5 rule 24), while **73 are parser work** (PLX 19, SHB 10).
+
+    ⚠️ **`filed` IS OPTIONAL AND THE MESSAGE IS WHAT IT CHANGES, NEVER THE VERDICT.** A caller
+    that holds the filing chain — every planner does, it is `job.plan`'s own output — passes the
+    quarters the issuer filed and the refusal then names which kind it is. Omitted, the wording
+    is exactly as before: this must not become a function whose ANSWER depends on how much the
+    caller happened to know.
     """
     year, quarter = int(period.split("-")[1]), int(period[1])
     on_disk = builder._existing(exchange, symbol, template, fin.INCOME_STATEMENT)
@@ -284,7 +306,12 @@ def _quarter_priors(builder: FinancialsBuilder, exchange: str, symbol: str, temp
             continue
         row = on_disk.get(prior)
         if not row or row.get("source") != "pdf":
-            return None, f"{prior} is `{(row or {}).get('source', 'absent')}` on disk"
+            source = (row or {}).get("source", "absent")
+            if filed is not None and _as_quarter(prior) not in filed:
+                return None, (f"{prior} was NEVER FILED — it is not a filing of this issuer, so "
+                              f"this quarter can never be de-cumulated and `missing` is the "
+                              f"correct answer (`OPB-2`)")
+            return None, f"{prior} is `{source}` on disk"
         span = str(row.get("months", "")).strip()
         if i != 1 and span != "3":
             return None, (f"{prior} covers `months={span or 'unrecorded'}` — only a THREE-month "

@@ -381,7 +381,13 @@ def alternate_quarters(names: Sequence[Tuple[str, str]], *,
         quarters: List[str] = []
         cells = 0
         on_disk = blocked = 0
-        for task in job.plan(builder, exchange, symbol, allow_parent=True, template=template):
+        # ⚠️ `OPB-2` — the filing chain, so a refusal can say whether the
+        # operand LOST to the parser or was never filed at all. It changes
+        # the wording and never the verdict.
+        tasks = list(job.plan(builder, exchange, symbol,
+                             allow_parent=True, template=template))
+        filed_quarters = {job.as_quarter(t.period) for t in tasks}
+        for task in tasks:
             gap = [r for r in job.REPORTS if r not in set(job.parsed_reports(builder, task))]
             if not gap or not task.index_row:
                 continue
@@ -407,7 +413,8 @@ def alternate_quarters(names: Sequence[Tuple[str, str]], *,
             # `plan_batch`'s, where a batch may win the operand in the same pass.
             if set(gap) == {fin.INCOME_STATEMENT} and task.cumulative:
                 _priors, why = pdf_ocr_merge._quarter_priors(
-                    builder, exchange, symbol, template, task.period, {})
+                    builder, exchange, symbol, template, task.period, {},
+                    filed=filed_quarters)
                 if why:
                     blocked += 1
                     continue
@@ -501,7 +508,13 @@ def fragmented_quarters(names: Sequence[Tuple[str, str]], *,
             continue
         quarters: List[str] = []
         cells = blocked = deep = 0
-        for task in job.plan(builder, exchange, symbol, allow_parent=True, template=template):
+        # ⚠️ `OPB-2` — the filing chain, so a refusal can say whether the
+        # operand LOST to the parser or was never filed at all. It changes
+        # the wording and never the verdict.
+        tasks = list(job.plan(builder, exchange, symbol,
+                             allow_parent=True, template=template))
+        filed_quarters = {job.as_quarter(t.period) for t in tasks}
+        for task in tasks:
             done = set(job.parsed_reports(builder, task))
             gap = [r for r in job.REPORTS if r not in done]
             if not gap:
@@ -518,7 +531,8 @@ def fragmented_quarters(names: Sequence[Tuple[str, str]], *,
             # Q1..Q(q-1) operands, and a new PARSER question changes nothing about that.
             if set(gap) == {fin.INCOME_STATEMENT} and task.cumulative:
                 _priors, why = pdf_ocr_merge._quarter_priors(
-                    builder, exchange, symbol, template, task.period, {})
+                    builder, exchange, symbol, template, task.period, {},
+                    filed=filed_quarters)
                 if why:
                     blocked += 1
                     continue

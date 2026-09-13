@@ -758,8 +758,12 @@ def plan_batch(tickers: Sequence[str], *, exchange: str = "HOSE",
                 why = ""
                 if gap == {fin.INCOME_STATEMENT} and task.cumulative:
                     pending = {p: {} for p in available if p != task.period}
+                    # ⚠️ `filed` upgrades the WORDING only (`OPB-2`): an operand the issuer
+                    # never filed is permanent, one that lost to the parser is work, and this
+                    # function printed the same sentence for both.
                     _priors, why = pdf_ocr_merge._quarter_priors(
-                        builder, exchange, symbol, tpl, task.period, pending)
+                        builder, exchange, symbol, tpl, task.period, pending,
+                        filed=set(by_quarter))
                 if why:
                     blocked_here[quarter] = why
                 else:
@@ -1207,7 +1211,8 @@ def _operands_unreachable(plan: TickerPlan, quarter: str,
     if gap != {_fin.INCOME_STATEMENT}:
         return False
     _priors, why = pdf_ocr_merge._quarter_priors(
-        builder, plan.exchange, plan.symbol, plan.template, task.period, {})
+        builder, plan.exchange, plan.symbol, plan.template, task.period, {},
+        filed=set(tasks) or None)
     if not why:
         return False
     say(f"── skip {plan.key} {quarter} — its only open report is a CUMULATIVE income "
