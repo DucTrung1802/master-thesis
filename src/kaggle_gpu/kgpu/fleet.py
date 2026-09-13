@@ -639,6 +639,53 @@ def release_and_fill(names: Sequence[Tuple[str, str]], *, apply: bool = True,
     return out
 
 
+def release_until_closed(names: Sequence[Tuple[str, str]], *, apply: bool = True,
+                         max_passes: int = 5,
+                         reports_root: Optional[os.PathLike | str] = None,
+                         log: Optional[Callable[[str], None]] = None) -> Dict[str, object]:
+    """`release_and_fill` until the cell count stops moving. **No OCR, no GPU, no network.**
+
+    ⚠️ **A DE-CUMULATION CHAIN NEEDS ITS OWN CLOSURE SWEEP, AND ONE PASS IS NOT ONE** (measured
+    2026-09-13). `OPB-1` says a cumulative Q2/Q4 is `FY − (Q1+Q2+Q3)` and `span_operands` accepts
+    only a prior already reading `pdf`, so **a root won in pass N makes its dependent writable in
+    pass N+1 and not before** — and the dependent may itself be the operand of a deeper quarter,
+    which is why the depth is 3 and not 2 (Q1 → Q2 → Q4 within one year). The symptom when this
+    is skipped is exact and was observed: `Q1-2018 is 'missing' on disk` printed **minutes
+    after** `Q1-2018 HELD`, and a second pass by hand then found 7 dependents already solid.
+
+    ⚠️ **OLDEST-FIRST IS WHAT MAKES A PASS PRODUCTIVE AND IT IS `release_batch`'s ORDER, NOT
+    THIS LOOP'S** — this only keeps asking. A run that wrote Q1-2025 makes `Q2-2025 = 6-month −
+    Q1` and `Q4-2025 = 12-month − Q1,Q2,Q3` writable in the same sweep, in that order.
+
+    ⚠️ **THE TERMINATION TEST IS THE CELL COUNT AND NOT THE RELEASE REPORT**, because a pass can
+    write a row that changes no cell (an identical re-write) and a pass can release nothing while
+    `fill_grid` still adds a `missing` row. The count is the thing the goal is stated in.
+    """
+    anchor()
+    say = log or print
+    out: Dict[str, object] = {}
+    before = coverage(names)
+    say(coverage_line("pass 0", before))
+    for n in range(1, max_passes + 1):
+        out[f"pass_{n}"] = release_and_fill(names, apply=apply, reports_root=reports_root,
+                                           log=None)
+        after = coverage(names)
+        say(coverage_line(f"pass {n}", after))
+        gained = int(after.get("cells", 0)) - int(before.get("cells", 0))
+        if gained <= 0:
+            say(f"closed after {n} pass(es) — the last one moved {gained:+d} cell(s)")
+            out["passes"] = n
+            break
+        say(f"   pass {n} gained {gained:+d} cell(s); a chain may still be open, asking again")
+        before = after
+    else:
+        say(f"⚠️ still gaining at pass {max_passes} — the cap stopped this, not the chain. "
+            f"Raise `max_passes` and re-run; nothing is lost by asking again.")
+        out["passes"] = max_passes
+    out["coverage"] = coverage(names)
+    return out
+
+
 # ── one lane, in this process ─────────────────────────────────────────────────
 
 def run_local(tickers: Sequence[str], *, exchange: str = "HOSE",

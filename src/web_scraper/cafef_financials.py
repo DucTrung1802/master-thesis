@@ -673,8 +673,13 @@ class FinancialsBuilder:
     TOTAL_RESOURCES = ("tong no phai tra va von chu so huu", "tong cong nguon von")
     TOTAL_LIABILITIES = ("tong no phai tra",)
     TOTAL_EQUITY = ("von chu so huu", "tong von chu so huu")
+    # ⚠️ **THE FILING MAY ABBREVIATE `lợi nhuận` TO `LN`, AND NOTHING KNEW THAT SPELLING**
+    # (`PBT-2`, 2026-09-13). PLX prints `Tổng LN kế toán trước thuế (50=30+40)` on every Q1
+    # income statement from 2016 on; the row IS read, with every figure, and `reconcile`
+    # answers `no profit before tax` because the needle is spelled out.
     PBT = ("tong loi nhuan truoc thue", "loi nhuan truoc thue",
-           "tong loi nhuan ke toan truoc thue")
+           "tong loi nhuan ke toan truoc thue",
+           "tong ln ke toan truoc thue", "tong ln truoc thue")
     NET_CF = ("luu chuyen tien thuan trong ky", "luu chuyen tien thuan trong nam")
     CASH_CLOSE = ("tien va cac khoan tuong duong tien tai thoi diem cuoi",
                   "tien va tuong duong tien cuoi ky")
@@ -727,7 +732,19 @@ class FinancialsBuilder:
              "tong_loi_nhuan_ke_toan_truoc_thue",
              "15_tong_loi_nhuan_ke_toan_truoc_thue",                        # corp
              "ix_tong_loi_nhuan_ke_toan_truoc_thue",                        # securities
-             "25_tong_loi_nhuan_ke_toan_truoc_thue")                        # insurance
+             "25_tong_loi_nhuan_ke_toan_truoc_thue",                        # insurance
+             # ⚠️ **`PBT-2` — THE ABBREVIATED SPELLING, MEASURED ON 9 CELLS CARRYING 15
+             # DEPENDENTS.** Of the 19 de-cumulation ROOTS refused `no profit before tax`,
+             # **12 hold the row and cannot map it** and 9 of those read
+             # `tong_ln_ke_toan_truoc_thue_50_30_40` — PLX's `Tổng LN kế toán trước thuế
+             # (50=30+40)`. ⚠️ **`JVW-2`'s trailing trim ALREADY reduces that to
+             # `tong_ln_ke_toan_truoc_thue`** (the line code `50_30_40` is three note-shaped
+             # tokens), so this is the one term that was missing — **two defects on one cell
+             # with one already fixed**, which is why the alias alone is enough here and was
+             # not enough for `JVW-2`. ⚠️ **A ROOT IS WORTH MORE THAN ITS CELL**: 89 blocked
+             # dependents name 73 roots, so a root the parser wins makes its Q2/Q4 writable in
+             # the same oldest-first pass (`OPB-1` meeting `HLD-1`).
+             "tong_ln_ke_toan_truoc_thue", "tong_ln_truoc_thue")
     C_NET_CF = ("hdtc_iv_luu_chuyen_tien_thuan_trong_ky",            # bank
                 "luu_chuyen_tien_thuan_trong_ky",
                 "hdtc_luu_chuyen_tien_thuan_trong_ky_50_20_30_40")   # corp / insurance

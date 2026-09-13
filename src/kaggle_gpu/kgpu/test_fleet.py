@@ -355,3 +355,48 @@ def test_a_quarter_missing_MORE_than_the_income_statement_is_still_asked(
 
     assert census["AAA"]["quarters"] == ["2020-Q4"]
     assert census["AAA"]["cells"] == 2
+
+
+# ── `release_until_closed` — a de-cumulation chain needs more than one pass ───
+
+def test_release_until_closed_stops_when_the_cell_count_stops_moving(monkeypatch):
+    """⚠️ **ONE PASS IS NOT A CLOSURE SWEEP** (`OPB-1` meeting `HLD-1`, 2026-09-13). A root won
+    in pass N makes its dependent writable in pass N+1 and not before, and the dependent can be
+    the operand of a deeper quarter — Q1 → Q2 → Q4 inside one year. The loop must keep asking
+    while the count moves and stop the moment it does not.
+    """
+    # ⚠️ FIVE values for three passes: `coverage` is called once BEFORE the loop, once per
+    # pass, and once more for the returned snapshot. A short iterator fails with
+    # `StopIteration` and says nothing about the loop — it was four the first time.
+    counts = iter([100, 104, 107, 107, 107])
+    passes = []
+
+    monkeypatch.setattr(fleet, "anchor", lambda: None)
+    monkeypatch.setattr(fleet, "coverage", lambda _names: {"cells": next(counts)})
+    monkeypatch.setattr(fleet, "coverage_line", lambda label, snap: f"{label} {snap['cells']}")
+    monkeypatch.setattr(fleet, "release_and_fill",
+                        lambda names, **kw: passes.append(1) or {"ok": True})
+
+    out = fleet.release_until_closed([("VNM", "HOSE")], log=lambda _line: None)
+
+    # 100 -> 104 -> 107 -> 107: three passes run, the third one gains nothing and ends it
+    assert len(passes) == 3, passes
+    assert out["passes"] == 3
+
+
+def test_release_until_closed_reports_the_cap_rather_than_claiming_closure(monkeypatch):
+    """⚠️ **A LOOP THAT HITS ITS CAP HAS NOT CLOSED ANYTHING, AND MUST NOT SAY IT HAS** — §5
+    rule 21's shape: a sweep that cannot fail is not a sweep. The message has to name the cap.
+    """
+    said = []
+    n = iter(range(100, 200, 4))
+
+    monkeypatch.setattr(fleet, "anchor", lambda: None)
+    monkeypatch.setattr(fleet, "coverage", lambda _names: {"cells": next(n)})
+    monkeypatch.setattr(fleet, "coverage_line", lambda label, snap: f"{label} {snap['cells']}")
+    monkeypatch.setattr(fleet, "release_and_fill", lambda names, **kw: {"ok": True})
+
+    out = fleet.release_until_closed([("VNM", "HOSE")], max_passes=3, log=said.append)
+
+    assert out["passes"] == 3
+    assert any("the cap stopped this" in line for line in said), said
