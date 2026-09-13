@@ -2093,3 +2093,28 @@ row moved** (the merge reaches that line only with identical line items and a di
 `II = 3 - 4` or `VI = 5 - 6`; **154 fail one**, and 187 of the 201 failing gaps exceed 10,000 units. On disk the same
 identities fail 369 checks (CTG 112, BID 42, VIB 32, MBB 31, VCB 28, VPB 20, TPB 19, SHB 16, STB 15, ACB 14, SSB 13,
 TCB 11, HDB 10, LPB 6). A reading failing one is now refused on every layer; the rows on disk are unrepaired.
+
+### ⚠️ 2026-09-13 — WHAT THE NEW BANK SHEETS SAY WHEN READ AGAINST THEIR NEIGHBOURS (`GTT-2`, `BBS-1`)
+
+Three GPU runs banked on bank charts (`BCC-1` +8 SHB, `GTT-1` 13 of 13, `SDW-1`'s MBB/TPB sheets). Every row written
+since `a193bf79` was then compared with its neighbouring solid quarters — a cell more than 10x off BOTH, or non-zero
+under 1,000 (zeros excluded; the first version counted zeros and raised two false alarms):
+
+| population | rows | flagged |
+|---|---|---|
+| rows written or changed since `a193bf79` | 64 | 40 — mostly flows (cumulative spans, sign swings), i.e. noise |
+| `GTT-1`'s 13 balance sheets | 13 | **7 wrong**: 6 carried the grand total as a line item (VPB x3 as equity, VIB, SHB, SSI), TPB Q1-2020 four fragments off embedded OCR text — rolled back, lock 5 added (`GTT-2`) |
+| today's bank sheets, account-sign test | 19 | 6 with a clearly wrong line (SHB Q3-2012/Q1-2018/Q1-2021, MBB Q1-2020, TPB Q1-2017/Q3-2017) — kept (`BBS-1`) |
+
+Candidate gates measured on the 815 newest accepted bank balance sheets before shipping anything:
+
+| rule | fails on accepted readings |
+|---|---|
+| `x_1` TSCĐ hữu hình = nguyên giá + hao mòn | 59 of 540 = 10.9 % |
+| `viii_chung_khoan_dau_tu` = its three lines | 76 of 607 = 12.5 % |
+| `ii_tien_gui_va_vay_cac_tctd_khac` = its two lines | 83 of 602 = 13.8 % |
+| `xii_tai_san_co_khac` = the four lines the chart lists | 349 of 390 = 89.5 % (the provision line is not a listed child) |
+| cost line negative / loans negative | 0.6-0.7 % / 0.9 % |
+| liability provision positive / treasury shares positive | 100 % / 29 % (conventions, not errors) |
+
+No gate shipped: the parent-sum identities need both signs and a curated child list, `BIS-1`'s method.
