@@ -22,6 +22,7 @@ What convicts is the MAGNITUDE, which is what `continuity` measures.
 """
 from __future__ import annotations
 
+import csv
 import json
 import os
 from pathlib import Path
@@ -71,6 +72,34 @@ SECTION_SUMS = {
     # printing the same two lines under its own names (BVH, above `RESOURCE_EXTRAS`) failed here too.
     "sources C+D": (("c_no_phai_tra", "d_von_chu_so_huu"), RESOURCE_EXTRAS, "tong_cong_nguon_von"),
 }
+
+
+# ⚠️ **`EQS-1` — A SECTION TOTAL SMALLER THAN ONE OF ITS OWN SUB-SECTIONS** (2026-09-14). BVH's
+# insurance chart prints `D. VỐN CHỦ SỞ HỮU` over `I. Vốn chủ sở hữu`, and the reading can hand the
+# section's column the next line down: Q3-2010 wrote `d_von_chu_so_huu` 6,267,090,790,000 beside
+# `i_von_chu_so_huu` 10,524,257,835,935, Q3-2012 6,804,714,340,000 beside 11,770,043,689,217 — the
+# charter capital in the total's place, under grand totals that reconcile. `(whole, part)` pairs;
+# over the 1,737 `pdf` balance sheets on disk the check fires on exactly those two.
+SECTION_PARTS = (("d_von_chu_so_huu", "i_von_chu_so_huu"),)
+
+
+# ⚠️ **`HLI-1` — A READING CONVICTED BY INSPECTION, WHICH NO ARITHMETIC ON THE PAGE CAN CONVICT**
+# (2026-09-14). A run folder is immutable and the release writes whatever it holds that passes the
+# screens (`GTT-3`), so a reading known to be wrong and invisible to every identity would be
+# re-written by the next sweep after a roll-back. BVH Q2-2011's balance sheet put the charter
+# capital 6,804,714,340,000 in `d_von_chu_so_huu` with `c_no_phai_tra` unmapped, so neither
+# `A = L + E` nor `EQS-1` can run on it. One row per reading, naming the run folder, with its reason.
+HELD_READINGS_PATH = (Path(__file__).resolve().parents[2] / "raw_data" / "cafef" / "financials"
+                      / "held_readings.csv")
+
+
+def held_readings(path: Optional[os.PathLike | str] = None) -> Dict[Tuple[str, str, str], str]:
+    """`{(run folder, period, report): reason}` from the held-readings register — `HLI-1`."""
+    path = Path(path) if path is not None else HELD_READINGS_PATH
+    if not path.exists():
+        return {}
+    with open(path, encoding="utf-8", newline="") as f:
+        return {(r["folder"], r["period"], r["report"]): r["reason"] for r in csv.DictReader(f)}
 
 
 def _q(period: str) -> Tuple[int, int]:
@@ -265,6 +294,12 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
                 carriers = sorted(k for k, x in values.items() if x == a and k not in exempt)
                 if carriers:
                     why.append("a line item holds the grand total {:,}: {}".format(a, ", ".join(carriers)))
+            for whole_col, part_col in SECTION_PARTS:
+                whole, part = values.get(whole_col), values.get(part_col)
+                if (whole is not None and part is not None and whole > 0 and part > 0
+                        and whole < part and not _close(whole, part)):
+                    why.append("{} {:,} is below {} {:,}, a part of it (`EQS-1`)"
+                               .format(whole_col, whole, part_col, part))
             # ⚠️ On `corp` this is the TRIVIAL identity and passes by construction on any
             # page that reads both totals (`CRP-1`); it is kept because on `bank` it is not.
             if a is not None and r is not None and not _close(a, r):
@@ -321,7 +356,8 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
 
 
 def screen_run(folders: Iterable[os.PathLike | str],
-               builder: Optional[FinancialsBuilder] = None
+               builder: Optional[FinancialsBuilder] = None,
+               held_path: Optional[os.PathLike | str] = None
                ) -> Dict[Tuple[str, str], List[str]]:
     """`{(period, report): [why]}` over a batch's run folders - the whole screen.
 
@@ -332,6 +368,7 @@ def screen_run(folders: Iterable[os.PathLike | str],
     builder = builder or FinancialsBuilder(logger=None)
     flagged: Dict[Tuple[str, str], List[str]] = {}
     assets: Dict[str, int] = {}
+    held = held_readings(held_path)
     for folder in folders:
         docs = sorted(Path(folder).glob("documents/*.json"))
         for path in docs:
@@ -339,6 +376,11 @@ def screen_run(folders: Iterable[os.PathLike | str],
             period = doc.get("period") or ""
             for report, why in screen_document(doc, builder).items():
                 flagged.setdefault((period, report), []).extend(why)
+            for report in (doc.get("accepted") or {}):
+                reason = held.get((Path(folder).name, period, report))
+                if reason:
+                    flagged.setdefault((period, report), []).append(
+                        f"held by inspection (`HLI-1`): {reason}")
             bs = (doc.get("accepted") or {}).get("balance_sheet") or {}
             total = _first(bs.get("values") or {}, builder.C_ASSETS)
             if total:

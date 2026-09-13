@@ -366,3 +366,41 @@ def test_other_income_is_judged_only_on_a_printed_statement(builder):
     v = {"5_thu_nhap_tu_hoat_dong_khac": -26_440 * _M}
     assert income_statement_screens(v, builder, derived=True) == []
     assert income_statement_screens(v, builder) != []
+
+
+# -- `EQS-1`: a section total below one of its own sub-sections ---------------------------
+def test_an_equity_total_below_its_own_sub_section_is_flagged(builder):
+    """BVH Q3-2010: the charter capital read into `D. VỐN CHỦ SỞ HỮU`'s column."""
+    doc = _doc("Q3-2010", balance_sheet={"tong_cong_tai_san": 42_604_783_076_412,
+                                          "tong_cong_nguon_von": 42_604_783_076_411,
+                                          "d_von_chu_so_huu": 6_267_090_790_000,
+                                          "i_von_chu_so_huu": 10_524_257_835_935})
+    why = screen_document(doc, builder)["balance_sheet"]
+    assert any("EQS-1" in w for w in why)
+
+
+def test_an_equity_total_equal_to_its_only_sub_section_is_not(builder):
+    doc = _doc("Q2-2010", balance_sheet={"tong_cong_tai_san": 100, "tong_cong_nguon_von": 100,
+                                          "d_von_chu_so_huu": 40, "i_von_chu_so_huu": 40})
+    assert screen_document(doc, builder) == {}
+
+
+# -- `HLI-1`: a reading convicted by inspection is held by name --------------------------
+def test_a_reading_on_the_held_register_is_held_and_no_other(builder, tmp_path):
+    folder = tmp_path / "20260914-054204__hose_bvh__pdf_ocr"
+    (folder / "documents").mkdir(parents=True)
+    for period in ("Q2-2011", "Q3-2011"):
+        doc = {"period": period, "accepted": {"balance_sheet": {"values": {
+            "tong_cong_tai_san": 43_329_976_794_364, "tong_cong_nguon_von": 43_329_976_794_364}}}}
+        (folder / "documents" / f"HOSE_BVH__{period}.json").write_text(json.dumps(doc), encoding="utf-8")
+    register = tmp_path / "held.csv"
+    register.write_text("folder,period,report,reason\n"
+                        "20260914-054204__hose_bvh__pdf_ocr,Q2-2011,balance_sheet,capital in the total\n",
+                        encoding="utf-8")
+    flagged = screen_run([folder], builder, held_path=register)
+    assert any("HLI-1" in w for w in flagged.get(("Q2-2011", "balance_sheet"), []))
+    assert not any("HLI-1" in w for w in flagged.get(("Q3-2011", "balance_sheet"), []))
+
+
+def test_no_register_holds_nothing(builder, tmp_path):
+    assert screen_run([], builder, held_path=tmp_path / "absent.csv") == {}

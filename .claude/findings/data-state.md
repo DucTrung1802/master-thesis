@@ -2182,3 +2182,26 @@ MBB Q4-2017 (`DCS-2`): written by the release with interest income 8,519,667 m o
 net-line inequality, then re-derived with that prior's convicted columns removed — 4 columns kept.
 
 VN30 (2026-09-14, after): **4,878/5,214 = 93.6 %**, quarters 1,459/1,738 = 83.9 %, holes 228, one band 5/30.
+
+### ⚠️ 2026-09-14 — A BVH RE-RUN, A PORTRAIT POSTER, AND TWO READINGS HELD BY NAME (`OVL-1`, `EQS-1`, `HLI-1`, `PBQ-1`)
+
+| run | documents | GPU | written | kept after checking each row |
+|---|---|---|---|---|
+| full cascade on BVH sheets old cascades refused `section sum does not close` | 6 | 39.2 min | +5 balance sheets | 2 (Q4-2009, Q2-2010); Q3-2010, Q2-2011, Q3-2012 carried the charter capital in `d_von_chu_so_huu` (`EQS-1`) |
+| poster and page-alignment combinations | 12 | 10.5 min | +4 (SSB BS Q4-2009/Q4-2012, VNM CF Q1-2016, VNM IS Q4-2016) | 3; VNM IS Q4-2016 inherited Q3-2016's wrong PBT/PAT (`PBQ-1`) |
+
+Checks that decided which rows stayed (read-only): BVH Q2-2010's C + D + minority equals its total to the đồng, while on
+the three rolled back `d_von_chu_so_huu` is a charter-capital figure below its own sub-section or its own components;
+VNM Q4-2016's PAT does not follow from its own operating profit, other income and tax, and Q3-2016's PBT and PAT do not
+follow from its operating profit. Over the corp `pdf` income statements on disk the PBT identity fails on 114 of 498 and
+the PAT identity on 73 of 442, which is why neither became a gate.
+
+Replays that chose the layers, off stored rows with no GPU: VNM Q1-2016's aligned cash flow reconciles only under
+`cash_wording` + `cash_extra_terms`, VNM Q4-2016's aligned income statement only under `equity_wording` + `merged_tail`.
+Measured and not shipped: stripping a table header band from row labels changes the verdict on 1 of 88 open cells that
+carry one; 5 open cells are refused by `sane` and every one also carries a reconcile refusal, so scaling its band for a
+cumulative span wins nothing; 27 open cells' stored rows reconcile under today's mapping with the split gate and `sane`
+off, and the ones read (SSI Q1-2020, VIC Q2-2013, FPT Q1-2012, SHB Q1-2023/Q1-2024) are refused by `sane`, the split gate
+or the cash checks.
+
+VN30 (2026-09-14, after): **4,883/5,214 = 93.7 %**, quarters 1,461/1,738 = 84.1 %, holes 226, one band 5/30.

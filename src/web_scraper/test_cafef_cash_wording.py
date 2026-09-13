@@ -221,6 +221,8 @@ def test_the_block_is_contiguous_and_past_every_strict_layer():
     """
     layers = fin.FinancialsBuilder.LAYERS
     at = [i for i, l in enumerate(layers) if l.cash_wording]
-    assert len(at) == 5
-    assert at == list(range(at[0], at[0] + 5)), "the block must stay contiguous"
+    # ⚠️ RESTATED 2026-09-14: six, with `onnx@200+alignpages+cashword+extra` (`MXP-1`) kept inside
+    # the block rather than appended elsewhere, so the invariant below is unchanged.
+    assert len(at) == 6
+    assert at == list(range(at[0], at[0] + 6)), "the block must stay contiguous"
     assert max(i for i, l in enumerate(layers) if l.is_strict) < at[0]

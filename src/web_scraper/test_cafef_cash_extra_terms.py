@@ -306,12 +306,19 @@ def test_every_span_layer_still_carries_the_wide_crop():
     the line does not map and the identity is unanswerable without the span. That is exactly
     the bar this test asks for: *do not re-add them without a quarter they demonstrably
     recover.*
+
+    ⚠️ **A SECOND MEASURED EXCEPTION, 2026-09-14** (`MXP-1`): `onnx@200+alignpages+cashword+extra`.
+    VNM Q1-2016's cash flow sits on a scanned page `align_pages` shifts 16 pt; off that aligned
+    reading's stored rows it RECONCILES only with the span counted (its `Chênh lệch do chuyển đổi
+    tiền tệ` line is the exact gap), and the closing it reads is the balance sheet's cash plus cash
+    equivalents on disk to the đồng. The crop stays DEFAULT because that is the reading measured. The
+    rule above binds it too: if its GPU run recovers nothing, it is removed.
     """
     pad6 = [l for l in FinancialsBuilder.LAYERS if l.cash_extra_terms and l.annual_tail]
     assert pad6 and all(l.crop_pad == 6.0 for l in pad6)
     bare = [l for l in FinancialsBuilder.LAYERS
             if l.cash_extra_terms and not l.annual_tail and l.crop_pad is None]
-    assert all(l.notes_tail for l in bare), (
+    assert all(l.notes_tail or l.align_pages for l in bare), (
         "a default-crop span layer needs a quarter it recovers — `P39` measured three that "
         "did not, and they were removed the same day")
 

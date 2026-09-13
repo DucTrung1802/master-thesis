@@ -105,3 +105,24 @@ def test_the_flag_is_off_by_default_a_widening_and_a_parse_key():
     a, b = ParseLayer("x", "onnx", 200), ParseLayer("x", "onnx", 200, poster_split=True)
     assert parse_key(a) != parse_key(b)
     assert ocr_key(a) == ocr_key(b)
+
+
+def poster_2017():
+    """SSB's FY-2017 layout: portrait, the auditor's report ACROSS the page above two statement panels."""
+    words = []
+    for i in range(20):
+        y = 20.0 + 9.0 * i
+        words += [_w(10.0 + 71.0 * k, 10.0 + 71.0 * k + 68.0, y, "kiểm") for k in range(8)]
+    words += _title(20.0, 220.0, "BẢNG CÂN ĐỐI KẾ TOÁN HỢP NHẤT")
+    words += _table(20.0, 240.0, 30, now=230.0, prior=280.0)
+    words += _table(300.0, 220.0, 8, now=520.0, prior=575.0)
+    words += _title(305.0, 320.0, "BÁO CÁO KẾT QUẢ HOẠT ĐỘNG KINH DOANH HỢP NHẤT")
+    words += _table(300.0, 340.0, 15, now=520.0, prior=575.0)
+    return {"text": "", "words": words, "kind": None, "from_form": False, "width": 596.0}
+
+
+def test_a_report_printed_across_the_page_above_the_panels_does_not_hide_them(parser):
+    pages = dict(enumerate(parser._split_poster(poster_2017())))
+    parser._fill_continuations(pages)
+    kinds = [pages[i]["kind"] for i in sorted(pages)]
+    assert kinds == [None, None, BALANCE_SHEET, BALANCE_SHEET, INCOME_STATEMENT]

@@ -2720,7 +2720,7 @@ class PdfParser:
     # gutters; inside a table the gap between the labels and a figure column, or between two figure
     # columns, can be as wide, which is why a panel of figures alone joins the panel to its left.
     POSTER_GUTTER = 6.0          # pt of zero word coverage that may separate two panels
-    POSTER_BANNER = 0.12         # the top share of the text whose words do not count for gutters
+    POSTER_FRAGMENT_GAP = 8.0    # pt between two words that are not one printed line fragment (a gutter is wider)
     POSTER_NARROW = 0.08         # a panel narrower than this share of the page joins its right neighbour
     POSTER_MIN_LABELS = 15       # a panel with fewer non-figure words joins its left neighbour
     POSTER_TITLES = ("bangcandoiketoan", "baocaoketquahoatdongkinhdoanh", "ketquahoatdongkinhdoanh",
@@ -2749,22 +2749,44 @@ class PdfParser:
             return False
         return self.norm(text).replace(" ", "").startswith(self.POSTER_TITLES)
 
-    def _split_poster(self, page: dict) -> Optional[List[dict]]:
-        """A one-page poster as virtual pages, left panel to right and top to bottom — `PST-1`.
+    def _poster_fragments(self, words: list) -> List[list]:
+        """`_poster_lines` cut wherever two neighbours on a line sit `POSTER_FRAGMENT_GAP` apart: a
+        title in one panel and a table header in the next share a baseline and are not one line."""
+        out: List[list] = []
+        for line in self._poster_lines(words):
+            fragment = [line[0]]
+            for w in line[1:]:
+                if w[0] - fragment[-1][2] > self.POSTER_FRAGMENT_GAP:
+                    out.append(fragment)
+                    fragment = []
+                fragment.append(w)
+            out.append(fragment)
+        return out
 
-        Panels are cut at vertical gutters with no word over them below the banner; a panel too
-        narrow to be one (the `TT` numerals) joins its right neighbour and a panel of figures
-        without labels (a table's own second column) joins its left. Each panel is then cut at its
-        statement titles, its words moved into the panel's own coordinates and its kind read from
-        its own text, so the equity section printed above the income statement becomes an
-        untitled page `_fill_continuations` hands to the balance sheet before it. `None` when the
-        page is not a poster: fewer than two panels, or no panel carrying a statement.
+    def _split_poster(self, page: dict) -> Optional[List[dict]]:
+        """A one-page poster as virtual pages — `PST-1`.
+
+        Panels are cut at vertical gutters with no word over them from the topmost statement title
+        down; a panel of figures without labels (a table's own second column) joins its left
+        neighbour and a too-narrow panel (the `TT` numerals) its right. Each panel is then cut at its
+        statement titles, its words moved into the panel's own coordinates and its kind read from its
+        own text, so the equity section printed above the income statement becomes an untitled page
+        `_fill_continuations` hands to the balance sheet before it.
+
+        ⚠️ **THE GUTTERS ARE MEASURED FROM THE FIRST TITLE DOWN, AND WHAT IS ABOVE IT COMES FIRST.**
+        SSB's FY-2017 poster is portrait and prints the auditor's report ACROSS the page above its two
+        statement panels, so no gutter ran the page's height and it read as one panel. The text above
+        the topmost title is emitted before every statement part, because a page without a table
+        between the balance sheet and its continuation would end the balance sheet's run.
+        `None` when the page is not a poster: no statement title, or fewer than two panels.
         """
         words, width = page["words"], float(page["width"])
         if not words:
             return None
-        top = min(w[1] for w in words)
-        band = top + self.POSTER_BANNER * (max(w[3] for w in words) - top)
+        titles = [f for f in self._poster_fragments(words) if self._is_poster_title(f)]
+        if not titles:
+            return None
+        band = min(w[1] for f in titles for w in f) - 1.0
         n = int(width) + 2
         cover = [0] * n
         for w in words:
@@ -2795,8 +2817,8 @@ class PdfParser:
                 # ⚠️ FIGURES BEFORE WIDTH: a table's own figure column is narrow too, and taken by the
                 # width rule first it carried the balance sheet's figures into the income statement's
                 # panel (SSB FY-2014, whose middle and right panels then read as one).
-                if i > 0 and sum(1 for w in members(panel)
-                                 if not self.NUM_RE.match(w[4])) < self.POSTER_MIN_LABELS:
+                if i > 0 and sum(1 for w in members(panel) if w[1] >= band
+                                 and not self.NUM_RE.match(w[4])) < self.POSTER_MIN_LABELS:
                     panels[i - 1][1] = panel[1]
                 elif panel[1] - panel[0] < self.POSTER_NARROW * width and i + 1 < len(panels):
                     panels[i + 1][0] = panel[0]
@@ -2807,25 +2829,30 @@ class PdfParser:
                 break
         if len(panels) < 2:
             return None
+
+        def part(panel, lines):
+            moved = [tuple([w[0] - panel[0], w[1], w[2] - panel[0], w[3]] + list(w[4:]))
+                     for line in lines for w in line]
+            text = "\n".join(" ".join(w[4] for w in line) for line in lines)
+            kind, from_form = self._page_kind(text)
+            return {"text": text, "words": moved, "kind": kind, "from_form": from_form,
+                    "width": panel[1] - panel[0]}
+
+        preamble: List[dict] = []
         virtual: List[dict] = []
         for panel in panels:
+            above = [w for w in members(panel) if w[1] < band]
+            if above:
+                preamble.append(part(panel, self._poster_lines(above)))
             segments: List[list] = [[]]
-            for line in self._poster_lines(members(panel)):
+            for line in self._poster_lines([w for w in members(panel) if w[1] >= band]):
                 if segments[-1] and self._is_poster_title(line):
                     segments.append([])
                 segments[-1].append(line)
-            for segment in segments:
-                if not segment:
-                    continue
-                moved = [tuple([w[0] - panel[0], w[1], w[2] - panel[0], w[3]] + list(w[4:]))
-                         for line in segment for w in line]
-                text = "\n".join(" ".join(w[4] for w in line) for line in segment)
-                kind, from_form = self._page_kind(text)
-                virtual.append({"text": text, "words": moved, "kind": kind,
-                                "from_form": from_form, "width": panel[1] - panel[0]})
+            virtual += [part(panel, segment) for segment in segments if segment]
         if not any(v["kind"] in REPORTS for v in virtual):
             return None
-        return virtual
+        return preamble + virtual
 
     # How far `_align_pages` may move a page. Measured offsets are 12.7-19.2 pt; a period column's
     # neighbour sits ~100 pt away, so a shift this size can never carry one column onto the next.
@@ -2989,6 +3016,14 @@ class PdfParser:
                 nums = sorted([w for w in self._numbers(ws) if w[2] >= lo],
                               key=lambda w: w[0])
                 for a, b in zip(nums, nums[1:]):
+                    # ⚠️ **AN OVERLAID DUPLICATE IS NOT A SPLIT** (`OVL-1`, 2026-09-14). SSB's FY-2009
+                    # poster carries its text twice on some figures: `18.239.254` spans 315.3-357.9 pt
+                    # and a second box `254` sits INSIDE it at 343.6-357.9, so the gap read -14.3 pt and
+                    # the balance sheet was refused as fragmented at every layer. The halves of a split
+                    # figure sit side by side; a box inside another that repeats its tail is one figure.
+                    if (b[0] >= a[0] - 0.5 and b[2] <= a[2] + 0.5
+                            and a[4].strip("()").endswith(b[4].strip("()"))):
+                        continue
                     if (b[0] - a[2] < self.SPLIT_MAX_GAP
                             and self._joinable(a[4], b[4])
                             and self.SPLIT_JOIN_RE.match(

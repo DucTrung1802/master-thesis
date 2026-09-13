@@ -1985,6 +1985,14 @@ class FinancialsBuilder:
                    relax_totals=True),
         ParseLayer("onnx@300+cashword+relax", "onnx", 300, cash_wording=True,
                    relax_totals=True),
+        # ⚠️ **AND ON A SCANNED PAGE SHIFTED INTO PLACE (`MXP-1`, 2026-09-14).** VNM Q1-2016's cash
+        # flow closes on a page `align_pages` moves 16 pt, under this block's closing-balance wording
+        # and with its `Chênh lệch do chuyển đổi tiền tệ` line counted (`cash_extra_terms`): replayed
+        # off the aligned reading's stored rows it RECONCILES, and its closing 1,228,329,938,789 is the
+        # balance sheet's cash plus cash equivalents on disk to the đồng. Kept inside this block so the
+        # block stays one contiguous run.
+        ParseLayer("onnx@200+alignpages+cashword+extra", "onnx", 200, align_pages=True,
+                   cash_wording=True, cash_extra_terms=True, relax_totals=True),
         # ── A LOST BOX TRUNCATED A GRAND TOTAL (`truncated_total`, `GTR-1`) ───────────────
         # ⚠️ **THE DAMAGE IS NOT WHAT `total_from_section` WAS BUILT FOR.** A seal covers
         # digits and the magnitude survives, so `SEAL-2`'s repair may demand the rebuilt sum
@@ -2060,12 +2068,31 @@ class FinancialsBuilder:
         ParseLayer("onnx@300+alignpages", "onnx", 300, align_pages=True),
         ParseLayer("onnx@200+codecol+alignpages", "onnx", 200, align_pages=True,
                    code_column_by_value=True),
+        # ⚠️ `MXP-1`'s first run aligned VNM's scanned pages and then lost each statement to a
+        # DIFFERENT defect on the aligned page: a total's label glued to the line above, the closing
+        # cash label, an operating-profit residual. The flags that already repair those, on aligned pages
+        # (`cash_wording` and `+equity` excepted: each is one contiguous block by design).
+        ParseLayer("onnx@200+alignpages+reseat", "onnx", 200, align_pages=True, reseat_words=True),
+        ParseLayer("onnx@200+alignpages+realign", "onnx", 200, align_pages=True, realign_rows=True),
+        ParseLayer("onnx@200+alignpages+wrap", "onnx", 200, align_pages=True, label_wrap=True),
+        # ⚠️ VNM Q4-2016's aligned income statement is 16.5 bn short of its operating profit, and the
+        # short line is the associates share (`JVW-2`): replayed under `equity_wording` + `merged_tail`
+        # it RECONCILES. Named `+jvshare`, not `+equity`, because it does not read the page
+        # classifier blind (`column_header_blind`) — that block stays one contiguous run.
+        ParseLayer("onnx@200+alignpages+jvshare", "onnx", 200, align_pages=True,
+                   equity_wording=True, merged_tail=True),
         # ── A ONE-PAGE POSTER, ITS STATEMENTS SIDE BY SIDE (`poster_split`, `PST-1`) ──
         # ⚠️ SSB's 2008-2015 annual summaries: auditor, balance sheet and income statement on one
         # sheet. Skipped on any filing of more than one page.
         ParseLayer("onnx@200+poster", "onnx", 200, poster_split=True),
         ParseLayer("onnx@300+poster", "onnx", 300, poster_split=True),
         ParseLayer("onnx@400+poster", "onnx", 400, poster_split=True),
+        # ⚠️ Three of SSB's poster balance sheets were refused for ONE to three split figures: the
+        # split repairs, on the poster's panels.
+        ParseLayer("onnx@200+poster+joinlost", "onnx", 200, poster_split=True, join_lost_separator=True),
+        ParseLayer("onnx@300+poster+joinlost", "onnx", 300, poster_split=True, join_lost_separator=True),
+        ParseLayer("onnx@200+poster+dropdamaged", "onnx", 200, poster_split=True, drop_damaged_runs=True),
+        ParseLayer("onnx@300+poster+dropdamaged", "onnx", 300, poster_split=True, drop_damaged_runs=True),
         # ── A SCAN UNDER SOMEBODY ELSE'S OCR, READ BY OURS (`ocr_sandwich`, `SDW-1`) ──
         # ⚠️ **29 VN30 FILINGS WITH AN OPEN CELL ARE FULL-PAGE IMAGES UNDER INVISIBLE TEXT, AND
         # EVERY LAYER ABOVE READ THAT TEXT** (2026-09-13) — TPB Q1-2020's profit before tax is
