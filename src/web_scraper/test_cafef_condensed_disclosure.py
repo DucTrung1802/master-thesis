@@ -209,8 +209,10 @@ def test_the_section_sum_carries_the_pre_2015_lines_as_OPTIONAL_terms(b):
     assert total == "tong_cong_nguon_von"
     assert set(optional) == {"ii_nguon_kinh_phi_va_quy_khac_430",
                              "i_11_loi_ich_co_dong_khong_kiem_soat"}
-    # …and the assets side has none: `A + B` is the whole of it under either circular.
-    assert b.SECTION_SUMS[0][1] == ()
+    # …and the assets side carries ONE, and not for either circular: `A + B` is the whole of a
+    # company's sheet, while BVH's 2009 consolidated sheets print their banking subsidiary's
+    # `Cho vay và ứng trước cho khách hàng` outside both sections (`LNS-1`, restated 2026-09-13).
+    assert b.SECTION_SUMS[0][1] == ("cho_vay_va_ung_truoc_cho_khach_hang",)
 
 
 def test_every_optional_term_carries_a_TEXT_needle(b):

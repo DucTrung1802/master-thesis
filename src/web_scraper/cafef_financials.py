@@ -3141,7 +3141,12 @@ class FinancialsBuilder:
     # unlikely to close either way, so accepting either convention costs the gate almost
     # nothing and refusing one of them costs a whole statement.
     SECTION_SUMS = (
-        (("a_tai_san_ngan_han", "b_tai_san_dai_han"), (), "tong_cong_tai_san"),
+        # ⚠️ `LNS-1` (2026-09-13): BVH's 2009 consolidated sheets print the banking subsidiary's
+        # `Cho vay và ứng trước cho khách hàng` OUTSIDE both sections — Q2-2009 A + B =
+        # 28,660,961,892,629 and the line 751,592,039,596 make the printed 29,412,553,932,225 to
+        # the đồng. Optional and tried in every subset, like the resources side's two terms.
+        (("a_tai_san_ngan_han", "b_tai_san_dai_han"), ("cho_vay_va_ung_truoc_cho_khach_hang",),
+         "tong_cong_tai_san"),
         (("c_no_phai_tra", "d_von_chu_so_huu"),
          ("ii_nguon_kinh_phi_va_quy_khac_430", "i_11_loi_ich_co_dong_khong_kiem_soat"),
          "tong_cong_nguon_von"),
@@ -3174,6 +3179,7 @@ class FinancialsBuilder:
     }
 
     SECTION_EXTRA_TEXT = {
+        "cho_vay_va_ung_truoc_cho_khach_hang": ("cho vay va ung truoc cho khach hang",),
         "ii_nguon_kinh_phi_va_quy_khac_430": ("nguon kinh phi va quy khac",),
         "i_11_loi_ich_co_dong_khong_kiem_soat": ("loi ich cua co dong thieu so",
                                                  "loi ich co dong khong kiem soat"),
