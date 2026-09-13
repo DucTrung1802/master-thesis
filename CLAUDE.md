@@ -171,7 +171,7 @@ of `bronze.cafef_financial_reports` is what makes it auditable. **Read it before
 
 ---
 
-## 6. State today (2026-09-13)
+## 6. State today (2026-09-14)
 
 ⚠️ **If a number here disagrees with the database, the database is right and this section is the
 bug.** It was 7 days stale once already.
