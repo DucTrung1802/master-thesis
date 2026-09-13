@@ -571,7 +571,18 @@ class PdfParser:
     # says where it is used rather than what it is drifts the first time it is used elsewhere.
     SECTION_HEADING = {
         CASH_FLOW: "luuchuyentienthuan",
+        # ⚠️ `BST-1` (2026-09-13): VNM FY-2010's last balance-sheet page is headed `NGUỒN VỐN | Mã số |
+        # Thuyết minh` with no statement title, so the NOTES verdict took it and the sheet ended at
+        # code 339 — `TỔNG CỘNG NGUỒN VỐN 440 10.773.032.295.860` printed on the page nobody read.
+        BALANCE_SHEET: "nguonvon",
     }
+    # The closing evidence per statement. The cash flow's is its closing balance's date clause;
+    # the balance sheet's is its grand total — and, because a capital note may quote both words,
+    # the form's own code for that total printed as a figure on the page (`BST-1`).
+    TAIL_CLOSING_BY_RUN = {
+        BALANCE_SHEET: ("tongcongnguonvon",),
+    }
+    BALANCE_SHEET_TOTAL_CODE = "440"
     TAIL_CLOSING = ("taithoidiemcuoiky", "taithoidiemcuoinam", "taithoidiemcuoiquy")
 
     # How far below the last line that fed it a pending wrapped label survives a line that
@@ -2602,7 +2613,12 @@ class PdfParser:
             return False
         # The WHOLE page, not the header block — this evidence is printed in the table.
         ns = self.norm(page["text"]).replace(" ", "")
-        return section in ns and any(c in ns for c in self.TAIL_CLOSING)
+        closing = self.TAIL_CLOSING_BY_RUN.get(run, self.TAIL_CLOSING)
+        if not (section in ns and any(c in ns for c in closing)):
+            return False
+        if run == BALANCE_SHEET:
+            return any(w[4] == self.BALANCE_SHEET_TOTAL_CODE for w in page["words"])
+        return True
 
     def _is_supplement(self, page: dict) -> bool:
         """Does this page announce itself as an EXPLANATION rather than a statement?

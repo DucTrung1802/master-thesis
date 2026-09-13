@@ -132,15 +132,63 @@ def test_a_notes_page_that_follows_no_statement_is_never_admitted():
     assert _kinds(pages) == [NOTES, NOTES]
 
 
-def test_only_the_cash_flow_has_a_section_marker():
-    """⚠️ `SECTION_HEADING` covers the statement whose tail was MEASURED and no other. A balance
-    sheet's continuation page carrying the same words is not evidence about a balance sheet."""
+def test_only_the_measured_statements_have_a_section_marker():
+    """⚠️ `SECTION_HEADING` covers the statements whose tail was MEASURED and no other. A balance
+    sheet's continuation page carrying the CASH FLOW's words is not evidence about a balance sheet.
+    ⚠️ RESTATED 2026-09-13 (`BST-1`): the balance sheet was measured — VNM FY-2010's last page."""
     pages = _pages([(BALANCE_SHEET, "BANG CAN DOI KE TOAN"), (NOTES, TCB_TAIL)])
     _parser(True)._fill_continuations(pages)
 
     assert _kinds(pages) == [BALANCE_SHEET, NOTES]
-    assert set(PdfParser.SECTION_HEADING) == {CASH_FLOW}
+    assert set(PdfParser.SECTION_HEADING) == {CASH_FLOW, BALANCE_SHEET}
     assert INCOME_STATEMENT not in PdfParser.SECTION_HEADING
+
+
+# ── `BST-1` — the balance sheet's last page, headed like a note ─────────────────
+VNM_FY2010_EQUITY = """NGUON VON  Ma so  Thuyet minh  So cuoi nam  So dau nam
+B- VON CHU SO HUU (400=410+430) 400 7.964.436.590.282
+TONG CONG NGUON VON (300+400) 440 10.773.032.295.860
+"""
+
+
+def _with_code(pages, index, code="440"):
+    pages[index]["words"] = pages[index]["words"] + [(300.0, 200.0, 318.0, 210.0, code)]
+    return pages
+
+
+def test_the_balance_sheets_last_page_is_admitted():
+    pages = _with_code(_pages([(BALANCE_SHEET, "BANG CAN DOI KE TOAN HOP NHAT (tiep theo)"),
+                               (NOTES, VNM_FY2010_EQUITY)]), 1)
+    _parser(True)._fill_continuations(pages)
+
+    assert _kinds(pages) == [BALANCE_SHEET, BALANCE_SHEET]
+
+
+def test_the_same_words_without_the_totals_code_are_a_note():
+    """A capital note may quote both phrases; the form's code 440 printed as a figure may not."""
+    pages = _pages([(BALANCE_SHEET, "BANG CAN DOI KE TOAN HOP NHAT (tiep theo)"),
+                    (NOTES, VNM_FY2010_EQUITY)])
+    _parser(True)._fill_continuations(pages)
+
+    assert _kinds(pages) == [BALANCE_SHEET, NOTES]
+
+
+def test_the_heading_and_code_without_the_grand_total_are_a_note():
+    text = """NGUON VON  Ma so  Thuyet minh
+B- VON CHU SO HUU 400 7.964.436.590.282
+"""
+    pages = _with_code(_pages([(BALANCE_SHEET, "BANG CAN DOI KE TOAN"), (NOTES, text)]), 1)
+    _parser(True)._fill_continuations(pages)
+
+    assert _kinds(pages) == [BALANCE_SHEET, NOTES]
+
+
+def test_the_balance_sheet_rule_is_off_without_the_flag():
+    pages = _with_code(_pages([(BALANCE_SHEET, "BANG CAN DOI KE TOAN"),
+                               (NOTES, VNM_FY2010_EQUITY)]), 1)
+    _parser(False)._fill_continuations(pages)
+
+    assert _kinds(pages) == [BALANCE_SHEET, NOTES]
 
 
 def test_a_page_with_almost_no_figures_is_refused():
