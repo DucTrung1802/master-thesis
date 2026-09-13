@@ -174,15 +174,30 @@ def test_a_statement_that_already_maps_is_untouched(builder):
             == builder.map_to_schema(st, "corp", cash_wording=True))
 
 
-def test_the_aliases_name_no_account_on_any_of_the_twelve_charts(builder):
-    """`NST-1`'s safety test: an alias that IS an account puts two real lines in competition."""
-    charts = [(t, r) for t in ("bank", "corp", "securities", "insurance")
-              for r in fin.REPORTS]
-    every = {a.replace("_", "")
-             for t, r in charts for _, a in (builder.schema_of(t, r) or ())}
-    for aliases in builder.CASH_WORDING.values():
-        for alias in aliases:
-            assert alias not in every, alias
+def test_an_alias_names_no_OTHER_account_of_THE_SAME_chart(builder):
+    """`NST-1`'s safety test: an alias that IS an account puts two real lines in competition.
+
+    ⚠️ **THIS ASSERTED "NO ACCOUNT ON ANY OF THE TWELVE CHARTS" UNTIL 2026-09-13 AND THAT WAS
+    TOO WIDE** (`CCB-2`). The three charts spell ONE line three ways — corp
+    `tien_va_tuong_duong_tien_cuoi_ky`, bank `…tien_tai_thoi_diem_cuoi_ky`, securities
+    `tien_va_cac_khoan_tuong_duong_tien_cuoi_ky` — and a corp filing printing the securities
+    wording is exactly what the alias table is for. Under the old invariant offering it was
+    forbidden, because the string IS an account **somewhere else**, where it can never compete:
+    only one chart's columns are ever in play in a mapping.
+
+    ⚠️ **SO THE HAZARD IS PER CHART, AND THIS IS STRICTER THERE THAN THE OLD TEST WAS** — it
+    checks, for each chart, that no alias offered to one of that chart's accounts equals a
+    DIFFERENT account of the same chart. That is the competition `NST-1` measured.
+    """
+    for template in ("bank", "corp", "securities", "insurance"):
+        for report in fin.REPORTS:
+            accounts = {a.replace("_", ""): a
+                        for _, a in (builder.schema_of(template, report) or ())}
+            for bare, account in accounts.items():
+                for alias in builder.cash_wording_aliases(bare):
+                    rival = accounts.get(alias)
+                    assert rival is None or rival == account, (
+                        template, report, account, alias, rival)
 
 
 def test_the_flag_is_a_widening_and_no_strict_layer_runs_after_it():

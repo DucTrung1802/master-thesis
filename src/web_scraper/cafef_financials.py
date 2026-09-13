@@ -3204,14 +3204,65 @@ class FinancialsBuilder:
     # corp cash-flow chart, and an equality test cannot invent a name for a line that does not
     # have one (`NST-1`). Both spellings of the period word are carried because a QUARTERLY
     # filing under the same older form says "cuối kỳ" where an annual one says "cuối năm".
+    # ⚠️ **THE SCHEMA OMITS `các khoản` AND THE FILINGS PRINT IT** (`CCB-2`, 2026-09-13). VAS
+    # form B03-DN prints *"Tiền và các khoản tương đương tiền cuối kỳ"*; the corp column is
+    # `hdtc_tien_va_tuong_duong_tien_cuoi_ky_70_50_60_61`, which the scorer bares to
+    # `tienvatuongduongtiencuoiky` — **no `cackhoan`** — so the canonical spelling scores below
+    # the bar and `reconcile` answers `no closing cash balance`. Measured by replaying every
+    # refused cash flow's stored rows through `map_to_schema` under this very flag: **33 rows
+    # across 15 spellings carried a FIGURE and mapped to no column, and the top one is the
+    # canonical wording itself** (6 rows), then `…tuong_duong_cuoi_ky` (4, OCR dropped one
+    # `tiền`) and the line-code variants.
+    #
+    # ⚠️ **AND THE BANK CHART SAYS IT A THIRD WAY** — `hdtc_vii_tien_va_cac_khoan_tuong_duong_
+    # tien_tai_thoi_diem_cuoi_ky`, i.e. *"tại thời điểm cuối kỳ"* — so a filing printing the
+    # plain `cuối kỳ` misses there too. Both bare forms are keys below, with the same spellings.
+    #
+    # ⚠️ **THIS IS THE ALIAS ROUTE `replay_cash_close.py` ARGUED FOR AND THE `CASH_CLOSE` NEEDLE
+    # IS STILL NOT IT**: a needle satisfies `reconcile`'s GATE and fills NO COLUMN, which writes
+    # a `pdf` row whose closing-cash cell is blank — that is `CCB-1`, 100 rows of it. An entry
+    # here puts the printed figure IN the column, which is the whole difference.
+    #
+    # ⚠️ **`CASH_WORDING_PERIOD` BELOW IS WHAT KEEPS THE MIRRORS APART** and it is a HARD gate,
+    # not a score: an opening line can never answer for a closing one however well it scores.
+    _CASH_CLOSE_SPELLINGS = ("tientoncuoinam", "tientoncuoiky",
+                             "tienvacackhoantuongduongtiencuoiky",
+                             "tienvacackhoantuongduongcuoiky",
+                             "tienvacackhoantuongduongtiencuoinam",
+                             "tienvatuongduongtiencuoiky",
+                             "tienvacackhoantuongduongtientaithoidiemcuoiky")
+    _CASH_OPEN_SPELLINGS = ("tientondaunam", "tientondauky",
+                            "tienvacackhoantuongduongtiendauky",
+                            "tienvacackhoantuongduongdauky",
+                            "tienvacackhoantuongduongtiendaunam",
+                            "tienvatuongduongtiendauky",
+                            "tienvacackhoantuongduongtientaithoidiemdauky")
     CASH_WORDING = {
-        "tienvatuongduongtiencuoiky": ("tientoncuoinam", "tientoncuoiky"),
-        "tienvatuongduongtiendauky": ("tientondaunam", "tientondauky"),
+        "tienvatuongduongtiencuoiky": _CASH_CLOSE_SPELLINGS,
+        "tienvatuongduongtiendauky": _CASH_OPEN_SPELLINGS,
+        # ⚠️ **THE THREE CHARTS SPELL ONE LINE THREE WAYS AND EACH NEEDS ITS OWN KEY** — the
+        # lookup is exact on the account, so an entry under corp's bare form reaches no bank or
+        # securities statement. corp `tien_va_tuong_duong_tien_cuoi_ky` · bank
+        # `…tien_tai_thoi_diem_cuoi_ky` · securities `tien_va_cac_khoan_tuong_duong_tien_cuoi_ky`.
+        "tienvacackhoantuongduongtientaithoidiemcuoiky": _CASH_CLOSE_SPELLINGS,
+        "tienvacackhoantuongduongtientaithoidiemdauky": _CASH_OPEN_SPELLINGS,
+        "tienvacackhoantuongduongtiencuoiky": _CASH_CLOSE_SPELLINGS,
+        "tienvacackhoantuongduongtiendauky": _CASH_OPEN_SPELLINGS,
     }
     # The period word each side of the pair must carry, and the one it may not. Read as a
     # HARD gate, never as a score — the measurement above is why.
-    CASH_WORDING_PERIOD = {"tienvatuongduongtiencuoiky": ("cuoi", "dau"),
-                           "tienvatuongduongtiendauky": ("dau", "cuoi")}
+    CASH_WORDING_PERIOD = {
+        "tienvatuongduongtiencuoiky": ("cuoi", "dau"),
+        "tienvatuongduongtiendauky": ("dau", "cuoi"),
+        # ⚠️ **THE BANK KEYS NEED THE GATE TOO, AND ADDING AN ALIAS WITHOUT IT IS THE UNSAFE
+        # HALF OF THIS CHANGE** — the opening and closing lines are the same words apart from
+        # one, so a key with aliases and no period gate can hand the closing slot the opening
+        # figure, which nothing downstream can tell from a correct reading.
+        "tienvacackhoantuongduongtientaithoidiemcuoiky": ("cuoi", "dau"),
+        "tienvacackhoantuongduongtientaithoidiemdauky": ("dau", "cuoi"),
+        "tienvacackhoantuongduongtiencuoiky": ("cuoi", "dau"),
+        "tienvacackhoantuongduongtiendauky": ("dau", "cuoi"),
+    }
 
     def cash_wording_aliases(self, account: str):
         """The older spellings this cash-balance line answers to — see `CASH_WORDING`."""
