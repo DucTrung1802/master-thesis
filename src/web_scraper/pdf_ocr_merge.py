@@ -251,6 +251,65 @@ def _as_quarter(period: str) -> str:
     return f"{year}-{quarter}"
 
 
+# Lines that must prove it (`QCD-1`), so one coincidence on one line never licenses a statement.
+QUARTER_PROOF_MIN_LINES = 2
+
+
+def _quarter_column_proof(got: dict, priors: Dict[str, Dict[str, int]]) -> int:
+    """How many lines PROVE the accepted figures are already the standalone quarter — `QCD-1`.
+
+    ⚠️ **A HALF-YEAR FILING CAN PRINT `QUARTER | PRIOR QUARTER | YEAR-TO-DATE | PRIOR YTD`, AND
+    THE SPAN LABEL THE RUN RECORDED CAN BE WRONG ABOUT WHICH ONE IT READ.** VNM Q2-2020's reading
+    carries PBT `[3,711,380,577,468, 3,549,831,766,256, 7,069,639,580,446, 6,892,614,630,363]`,
+    accepted from column 0 — the QUARTER — under `months=6, quarter_column=False`, because the
+    heading test reads OCR'd header words. Trusting the label, this module subtracted Q1 from a
+    figure that never contained it and wrote 368,597,713,361 for a printed 3,711,380,577,468.
+    **Fourteen Q2 rows across VN30 were written that way** (ACB, VCB, VIB, VNM), each understated by
+    exactly its Q1, and every Q4 de-cumulated after one overstated by the same amount.
+
+    ⚠️ **THE PROOF IS THE FILING'S OWN ARITHMETIC, NOT A HEADING.** On such a row the year-to-date
+    column minus the accepted figure equals the quarters already on disk: 7,069,639,580,446 -
+    3,711,380,577,468 = 3,358,259,002,978 = Q1-2020. A genuinely cumulative reading cannot satisfy
+    that — its column 2 is a prior-year figure, not `itself + priors`. Nothing is computed into
+    the CSV: when this holds, the figure written is the one the filing PRINTS in its quarter column.
+
+    A line is tested only where the accepted figure is non-zero, every prior carries that column,
+    and the reading's own row for it — found by its first figure being the accepted one — prints
+    at least three columns. Returns the proving count, or 0 unless it reaches
+    `QUARTER_PROOF_MIN_LINES` and outnumbers the lines that contradict it.
+    """
+    values = got.get("values") or {}
+    dump = got.get("row_dump") or []
+    proving = contradicting = 0
+    for column, raw in values.items():
+        try:
+            accepted = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if not accepted:
+            continue
+        prior_sum = 0
+        for figures in priors.values():
+            if figures.get(column) is None:
+                break
+            prior_sum += int(figures[column])
+        else:
+            row = next((r for r in dump if len(r) > 3 and isinstance(r[3], list) and r[3]
+                        and r[3][0] == accepted), None)
+            numbers = [x for x in (row[3] if row else []) if isinstance(x, (int, float))]
+            if len(numbers) < 3:
+                continue
+            ytd = int(numbers[2])
+            # The filing rounds each printed figure once, to its own unit: the identity holds to
+            # `unit` per figure summed, or to a millionth of the year-to-date figure — never to a share.
+            tolerance = max(int(got.get("unit") or 1) * (len(priors) + 2), abs(ytd) // 1_000_000)
+            if abs((ytd - accepted) - prior_sum) <= tolerance:
+                proving += 1
+            else:
+                contradicting += 1
+    return proving if proving >= QUARTER_PROOF_MIN_LINES and proving > contradicting else 0
+
+
 def _quarter_priors(builder: FinancialsBuilder, exchange: str, symbol: str, template: str,
                     period: str,
                     pending: Dict[str, Dict[str, int]],
@@ -475,9 +534,16 @@ def plan_merge(folder: os.PathLike | str,
                             f"filed, so a full `build()` can still subtract them")
                         report.decisions.append(decision)
                         continue
-                    quarter_values, resigned, dropped_cols = _decumulate(
-                        builder, template,
-                        {k: int(v) for k, v in (got.get("values") or {}).items()}, priors)
+                    # ⚠️ `QCD-1`: before subtracting, ask the reading's own columns whether it
+                    # is already the quarter. The span label can be wrong; the arithmetic cannot.
+                    proof = _quarter_column_proof(got, priors)
+                    if proof:
+                        quarter_values = {k: int(v) for k, v in (got.get("values") or {}).items()}
+                        resigned, dropped_cols = set(), {}
+                    else:
+                        quarter_values, resigned, dropped_cols = _decumulate(
+                            builder, template,
+                            {k: int(v) for k, v in (got.get("values") or {}).items()}, priors)
                     if not quarter_values:
                         decision.action = "skip"
                         decision.reason = (
@@ -498,6 +564,11 @@ def plan_merge(folder: os.PathLike | str,
                             f"; ⚠️ {sum(1 for w in dropped_cols.values() if w == why)} "
                             f"column(s) DROPPED — {why}"
                             for why in sorted(set(dropped_cols.values()))))
+                    if proof:
+                        decision.note = (
+                            f"NOT de-cumulated — the reading is already the QUARTER: its own "
+                            f"year-to-date column minus it equals {', '.join(sorted(priors))} on "
+                            f"disk on {proof} line(s) (`QCD-1`)")
                     # The row now covers three months like any other, so the span-fill and
                     # DIFFERS checks below judge it exactly as they judge a quarterly filing.
                     # ⚠️ It becomes an OPERAND for a later quarter only if it survives them —

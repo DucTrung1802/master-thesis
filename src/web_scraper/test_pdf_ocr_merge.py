@@ -983,3 +983,72 @@ def test_a_de_cumulated_row_is_not_rewritten_on_every_later_merge(root, tmp_path
 
     assert not decision.writing, "a de-cumulated row already on disk must settle"
     assert decision.reason == "identical to the row already on disk"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `QCD-1` — a half-year reading that is already the QUARTER is never de-cumulated again
+# ──────────────────────────────────────────────────────────────────────────────
+# ⚠️ **FOURTEEN Q2 ROWS WERE WRITTEN AS `quarter - Q1`** (ACB, VCB, VIB, VNM; measured 2026-09-13).
+# The filing prints `quarter | prior quarter | year-to-date | prior year-to-date`, the reading took
+# column 0 — the quarter — under a span label of six months, and the merge subtracted Q1 from a
+# figure that never contained it. The proof is the filing's own arithmetic: year-to-date minus
+# the accepted figure equals the quarters already on disk.
+OPER = "ix_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh_truoc_chi_phi_du_phong_rui_ro_tin_dung"
+
+
+def _half_year(pbt_row, oper_row):
+    statement = _statement(months=6, **{PBT: pbt_row[0], OPER: oper_row[0]})
+    statement["row_dump"] = [[None, "tong_loi_nhuan_truoc_thue", "Tổng lợi nhuận trước thuế", pbt_row],
+                             [None, "loi_nhuan_thuan", "Lợi nhuận thuần", oper_row]]
+    return statement
+
+
+def test_a_quarter_column_proved_by_its_own_ytd_is_written_as_printed(root, tmp_path):
+    """VNM Q2-2020's shape: column 2 minus column 0 is Q1 on disk on every line tested."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400, OPER: 600})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _half_year([1_000, 900, 1_400, 1_300], [1_500, 1_400, 2_100, 2_000])})
+
+    decision = _reason(merge.merge_run(folder, apply=True, quiet=True), fin.INCOME_STATEMENT)
+
+    assert decision.writing
+    assert decision.values == {PBT: 1_000, OPER: 1_500}         # the printed quarter, not 600/900
+    assert decision.months == 3
+    assert "QCD-1" in decision.note
+    assert _rows(fin.INCOME_STATEMENT)["Q2-2014"][PBT] == "1000"
+
+
+def test_a_genuinely_cumulative_reading_is_still_de_cumulated(root, tmp_path):
+    """Two columns — this year's and last year's year-to-date — prove nothing, and the subtraction
+    runs exactly as before."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400, OPER: 600})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _half_year([1_000, 900], [1_500, 1_400])})
+
+    decision = _reason(merge.merge_run(folder, apply=True, quiet=True), fin.INCOME_STATEMENT)
+
+    assert decision.values == {PBT: 600, OPER: 900}
+    assert "de-cumulated" in decision.note and "QCD-1" not in decision.note
+
+
+def test_a_four_column_row_whose_third_column_is_not_quarter_plus_priors_proves_nothing(root, tmp_path):
+    """⚠️ The layout alone licenses nothing: a third column that is some other figure contradicts,
+    and the reading is de-cumulated as its label says."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400, OPER: 600})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _half_year([1_000, 900, 950, 850], [1_500, 1_400, 1_450, 1_350])})
+
+    decision = _reason(merge.merge_run(folder, apply=True, quiet=True), fin.INCOME_STATEMENT)
+
+    assert decision.values == {PBT: 600, OPER: 900}
+
+
+def test_one_proving_line_is_a_coincidence_not_a_proof(root, tmp_path):
+    """`QUARTER_PROOF_MIN_LINES`: one line agreeing and one contradicting de-cumulates."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400, OPER: 600})])
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _half_year([1_000, 900, 1_400, 1_300], [1_500, 1_400, 1_450, 1_350])})
+
+    decision = _reason(merge.merge_run(folder, apply=True, quiet=True), fin.INCOME_STATEMENT)
+
+    assert decision.values == {PBT: 600, OPER: 900}

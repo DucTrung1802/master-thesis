@@ -2012,3 +2012,26 @@ Diagnosing VNM Q1-2016's `operating profit does not close` on its text layer sho
 | cash flow equal to a year earlier | 0 |
 
 ⚠️ **The first audit read 17 of 20 on TPB because it counted `symbol`, `exchange` and `template` as shared figures** — `HOL-1`'s trap again. Replayed with the check off, VNM Q1-2020 and MSN Q1-2017 REPRODUCE the disk figure (one column); with it on, today's cascade accepts a different reading at `onnx@200+equity` — VNM net revenue 14,153,099,953,575, MSN 8,539,865,000,000 — equal to the prior year on 0 figures. GVR Q1-2021's page prints `4.854.675.960.019` under `Quý 1 năm 2021` and the disk's `2.752.481.844.194` under `Quý 1 năm 2020`. **Not yet repaired**: the route is §11 `REPAIR`.
+
+### ⚠️ 2026-09-13 — 27 WRONG ROWS REPAIRED: A QUARTER COLUMN DE-CUMULATED AGAIN (`QCD-1`), AND 51 ROWS OF NOTE NUMBERS (`NTC-1`)
+
+Re-deriving VNM Q2-2020 after its Q1 was repaired (`PYR-2`) planned a NEGATIVE quarterly admin expense. The Q2
+reading's own row is `[quarter, prior quarter, YTD, prior YTD]`, accepted from column 0 — the quarter — under
+`months=6`, so disk held `quarter - Q1`. The proof needs no heading: `YTD - quarter = Q1 on disk`
+(7,069,639,580,446 - 3,711,380,577,468 = 3,358,259,002,978).
+
+| step | rows |
+|---|---|
+| audit, every latest cumulative reading | **14 Q2 written as `quarter - Q1`** (ACB, VCB, VIB, VNM); 5 of the same layout written right |
+| `_quarter_column_proof` replayed on the real folders | fired on **12 of 14**, each planned PBT = column 0 |
+| Q2 repaired (gated before, checked after, one row per merge) | **13** — VCB Q2-2013's latest reading already carried the quarter span |
+| Q4 repaired, gated on `FY - (Q1+Q2+Q3)` | **12** — after VCB's Q3 spans were recorded with no figure moving |
+| left wrong | VNM Q2-2010 (proof on <2 lines, empty band), VCB Q4-2012 (Q3-2012 has no accepted reading) |
+
+⚠️ **The size of the error was not a rounding**: VCB Q2-2011 PBT -584,826 m for a printed +1,309,708 m, VNM
+Q2-2022 -188.3 bn for +2,576.1 bn, VNM Q4-2020 6,030.1 bn for 2,671.9 bn. Every such row passed every gate —
+the identities close on a quarter and on a quarter-minus-Q1 alike.
+
+`NTC-1`, same day: 51 `pdf` rows carry three or more line items under 1,000 in columns whose ticker median
+exceeds 1e9 — note references and item codes under correct grand totals (VNM Q1-2016 balance sheet cash `5`,
+GVR Q4-2023 26 items of `5`, VIC income statements with revenue `271`/`281`/`291`). NOT FIXED.
