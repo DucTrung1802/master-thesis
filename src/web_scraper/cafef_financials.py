@@ -898,6 +898,27 @@ class FinancialsBuilder:
     # BID's Q3-2011 income statement prints one.
     OP_IDENTITY_TOL = 4
 
+    # ⚠️ **A BANK INCOME STATEMENT PRINTS EACH NET LINE DIRECTLY UNDER ITS TWO COMPONENTS, AND NOTHING
+    # CHECKED THEM** (`BIS-1`, 2026-09-13). `OP_IDENTITY`'s bank entry is `XI = IX + X`, the PBT line, so
+    # a reading whose interest, service or other-activity lines came from the wrong row passed whole.
+    # TPB Q3-2019 was WRITTEN at `onnx@200+sandwich` with `ii_lai_lo_thuan_tu_hoat_dong_dich_vu`
+    # = -48,307 m — the foreign-exchange line under it — while its own row dump prints `3` 255,936,
+    # `4` -60,757 and `II` 195,179. ⚠️ **MEASURED OVER THE 808 NEWEST ACCEPTED BANK INCOME STATEMENTS
+    # IN `reports/pdf_ocr/`: 790 answer at least one of these, 154 fail one** (I 79 of 615, II 71 of
+    # 763, VI 51 of 721), and 187 of the 201 failing gaps exceed 10,000 printed units — misreads, not
+    # rounding (CTG Q2-2010 line 1 = 849; VCB Q1-2026 I = 17,651,083 for 24,574,904 - 14,440,907).
+    # The form defines `I = 1 - 2`, `II = 3 - 4`, `VI = 5 - 6` with no line between, so a failure is
+    # a wrong figure somewhere in the three. `{net: (income, expense)}`; it abstains on an unmapped
+    # term, tries both stored signs, and allows `TOTALS_TOL` printed units — the filing's rounding.
+    BANK_NET_LINES: Dict[str, Tuple[str, str]] = {
+        "i_thu_nhap_lai_thuan": ("1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu",
+                                 "2_chi_phi_lai_va_cac_chi_phi_tuong_tu"),
+        "ii_lai_lo_thuan_tu_hoat_dong_dich_vu": ("3_thu_nhap_tu_hoat_dong_dich_vu",
+                                                 "4_chi_phi_hoat_dong_dich_vu"),
+        "vi_lai_lo_thuan_tu_hoat_dong_khac": ("5_thu_nhap_tu_hoat_dong_khac",
+                                              "6_chi_phi_hoat_dong_khac"),
+    }
+
     # ⚠️ **THE SIGN CONVENTION IS ONE BIT PER STATEMENT, AND DE-CUMULATION CROSSES DOCUMENTS.**
     # `OP_IDENTITY_TOL` above records the measurement that a deduction's stored sign is a
     # property of the SCAN — the filing prints an expense in brackets or it does not, and the
@@ -2021,6 +2042,12 @@ class FinancialsBuilder:
         ParseLayer("onnx@200+sandwich+notes+seam", "onnx", 200, ocr_sandwich=True,
                    notes_boundary=True, relax_merged_seam=True),
         ParseLayer("onnx@300+sandwich+relax", "onnx", 300, ocr_sandwich=True, relax_totals=True),
+        # ⚠️ `BCC-1`: SHB's scans under invisible text carry the bank chart's `Mã số` column, so the
+        # sandwich reading needs the by-value code detector the default one never consults.
+        ParseLayer("onnx@200+sandwich+codecol", "onnx", 200, ocr_sandwich=True,
+                   code_column_by_value=True),
+        ParseLayer("onnx@300+sandwich+codecol", "onnx", 300, ocr_sandwich=True,
+                   code_column_by_value=True),
     ]
 
     def __init__(self, logger=None):
@@ -4563,6 +4590,10 @@ class FinancialsBuilder:
             bad = self._operating_profit_identity(mapped or {})
             if bad:
                 return bad
+            # ⚠️ `BIS-1`: and the net lines PBT is built from, on every layer, for the same reason.
+            bad = self._bank_net_lines(mapped or {}, st.unit)
+            if bad:
+                return bad
 
         if st.report == CASH_FLOW:
             close = get(self.C_CASH_CLOSE, *self.CASH_CLOSE,
@@ -5149,6 +5180,28 @@ class FinancialsBuilder:
                 if score > best:
                     best, hit = score, pair
         return hit if hit is not None and best >= self.SCHEMA_MATCH else ()
+
+    def _bank_net_lines(self, mapped: Dict[str, int], unit: int = 1) -> Optional[str]:
+        """A bank income statement's net lines against the two components printed above each — `BIS-1`.
+
+        ⚠️ **IT ABSTAINS RATHER THAN GUESSES**, exactly as `_operating_profit_identity` does: a net
+        line is judged only where it AND both components mapped, so a corp chart (no such columns)
+        and a reading that lost a component are judged as before. Both stored signs of the expense
+        are tried — the bracket survives OCR or not (`OP_IDENTITY_TOL`'s measurement) — and a wrong
+        digit shifts both branches alike, so it still fails. The bound is `TOTALS_TOL` units of the
+        statement's own `unit`, the rounding of three separately printed figures.
+        """
+        tol = self.TOTALS_TOL * max(1, int(unit or 1))
+        for net, (income, expense) in self.BANK_NET_LINES.items():
+            if any(mapped.get(c) is None for c in (net, income, expense)):
+                continue
+            as_stored = mapped[income] + mapped[expense]
+            as_expense = mapped[income] - abs(mapped[expense])
+            if min(abs(as_stored - mapped[net]), abs(as_expense - mapped[net])) > tol:
+                return (f"{net} does not close: {income} {mapped[income]:,} and {expense} "
+                        f"{mapped[expense]:,} give {as_stored:,} (or {as_expense:,}) against a "
+                        f"printed {mapped[net]:,}")
+        return None
 
     def _operating_profit_identity(self, mapped: Dict[str, int]) -> Optional[str]:
         """Operating profit must equal what the statement adds and deducts to reach it.

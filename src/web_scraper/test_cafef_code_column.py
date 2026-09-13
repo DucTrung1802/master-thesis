@@ -644,3 +644,35 @@ def test_a_real_code_column_under_a_real_heading_is_still_dropped():
     cols = PdfParser().value_columns(_page(), WIDTH)
     assert len(cols) == 2
     assert min(cols) == pytest.approx(X_NOW, abs=PdfParser.EDGE_TOL)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `BCC-1` — a bank sheet prints `VIII. Vốn và các quỹ 500` BEFORE its components 410 … 450
+# ──────────────────────────────────────────────────────────────────────────────
+SHB_CODES = ["110", "120", "130", "140", "160", "170", "300", "310", "320", "330",
+             "400", "500", "410", "411", "420", "450", "700", "800"]
+
+
+def _bank(codes):
+    return [(f"Chỉ tiêu {c}", c, f"{i + 1}.{(i * 7) % 1000:03d}.{(i * 13) % 1000:03d}",
+             f"{i + 2}.{(i * 11) % 1000:03d}.{(i * 17) % 1000:03d}") for i, c in enumerate(codes)]
+
+
+def test_a_bank_sheet_prints_its_capital_total_before_its_components(parser):
+    """SHB's own order: `400 → 500 → 410 … 450 → 700 → 800`, the only descent in the column."""
+    assert parser._code_column_by_value([X_CODE, X_NOW, X_PRIOR],
+                                        _page(header=False, rows=_bank(SHB_CODES))) == X_CODE
+
+
+def test_a_misread_code_inside_the_block_still_abstains(parser):
+    """SHB Q1-2012 reads `411` as `112`: the code descended FROM is no section total."""
+    codes = SHB_CODES[:13] + ["112"] + SHB_CODES[14:]
+    assert parser._code_column_by_value([X_CODE, X_NOW, X_PRIOR],
+                                        _page(header=False, rows=_bank(codes))) is None
+
+
+def test_a_section_total_descending_below_its_own_block_still_abstains(parser):
+    """`500 → 320` lands under `400`, so it is not `500`'s own block."""
+    codes = ["110", "120", "300", "310", "400", "500", "320", "700", "800"]
+    assert parser._code_column_by_value([X_CODE, X_NOW, X_PRIOR],
+                                        _page(header=False, rows=_bank(codes))) is None

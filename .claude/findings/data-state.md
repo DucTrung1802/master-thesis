@@ -2067,3 +2067,29 @@ text is a third-party OCR the parser read as the PDF's own (diacritic ratio 0.05
 both inside `_native_garbled`'s pass band). Over the 326 filings with an open cell: **29 such filings / 45
 cells**, 43 digital / 59, 251 with no native page / 306. The detector reads the page's construction
 (`get_image_info` cover ≥ 0.9, every `get_texttrace` span type 3), never its words.
+
+### ⚠️ 2026-09-13 — TWO GPU RUNS, AND WHAT THE BANKS' ARITHMETIC SAYS ABOUT ROWS ALREADY WRITTEN (`SDW-1`, `BCC-1`, `BIS-1`)
+
+| run | documents | GPU | cells | quarters | holes |
+|---|---|---|---|---|---|
+| image-page cash flows (VNM 8, MSN 1), full onnx cascade | 9 | 32.9 min | **+8** (VNM Q1-2017..Q2-2018 cash flows, VNM Q1/Q2-2016 income statements) | +6 | -6 |
+| `SDW-1`, eight `+sandwich` layers only | 29 | 39.1 min | **+23** | +10 | -10 |
+
+VN30 after both: **4,834/5,214 = 92.7 %**, quarters 1,430 = 82.3 %, holes 252, one band 5/30. The release sweep of
+the second run printed `re-writes a pdf row` 25 times; diffed against HEAD, **not one figure of a pre-existing `pdf`
+row moved** (the merge reaches that line only with identical line items and a different `method`).
+
+`BCC-1`, read off `absent_rows` of the refused SHB balance sheets (no OCR): column 0 holds the bank chart's item codes on
+22 of 26; the only descent is `500 → 410` (capital total printed before its components). Replayed:
+
+| stored code sequences | cells |
+|---|---|
+| pass `MSC-1`'s descent rule today (still open — never met a `+codecol` layer on today's parser) | SHB 5, VNM 4, GAS 1, VJC 1 |
+| pass only with the `BCC-1` rule | **SHB 12** |
+| abstain under both (a misread digit inside a code, POW `343 → 342`, PLX) | SHB 5, POW 2, MSN 1, PLX 1 |
+| reconcile with column 0 dropped, bank chart (a population: split boxes are invisible here) | SHB 10 of 26 |
+
+`BIS-1`, over the 808 newest accepted bank income statements in run folders, in printed units: 790 answer `I = 1 - 2`,
+`II = 3 - 4` or `VI = 5 - 6`; **154 fail one**, and 187 of the 201 failing gaps exceed 10,000 units. On disk the same
+identities fail 369 checks (CTG 112, BID 42, VIB 32, MBB 31, VCB 28, VPB 20, TPB 19, SHB 16, STB 15, ACB 14, SSB 13,
+TCB 11, HDB 10, LPB 6). A reading failing one is now refused on every layer; the rows on disk are unrepaired.

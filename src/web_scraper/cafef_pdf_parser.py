@@ -2985,10 +2985,23 @@ class PdfParser:
         # BACK to a code this column already printed, is passed. Any other descent still abstains,
         # and the all-three-digit rule above — the one a figures column cannot imitate — is
         # untouched.
+        # ⚠️ **AND A BANK SHEET PRINTS A SECTION TOTAL BEFORE ITS OWN COMPONENTS** (`BCC-1`,
+        # 2026-09-13). SHB's balance sheets number `TỔNG NỢ PHẢI TRẢ 400`, then `VIII. Vốn và các quỹ
+        # 500`, then that section's lines `410 … 450`, then `700`, `800` — `500 → 410`, the only
+        # descent in 60-80 codes, on **17 of the 22 open SHB balance sheets whose column 0 is the
+        # codes** (read off `absent_rows`, no OCR; `assets 300,000,000 != liabilities + equity
+        # 800,000,000` is SHB's `TỔNG TÀI SẢN CÓ` and `TỔNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU` codes). So
+        # a descent FROM a code that is a multiple of 100 INTO the block between the previous such
+        # code and it is passed. ⚠️ Nothing else moved: the five SHB sheets whose codes carry a
+        # misread digit (`411 → 112`, `414 → 115`, `120 → 111`) still abstain, because the code
+        # descended FROM is not a section total.
         seen: set = set()
         for a, b in zip(seq, seq[1:]):
             seen.add(a)
             if b < a and b not in self.CODE_GRAND_TOTALS and b not in seen:
+                below = [x for x in seen if x % 100 == 0 and x < a]
+                if a % 100 == 0 and below and max(below) < b:
+                    continue
                 return None
         return leftmost
 
