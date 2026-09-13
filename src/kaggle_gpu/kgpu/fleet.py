@@ -424,6 +424,136 @@ def alternate_quarters(names: Sequence[Tuple[str, str]], *,
     return {k: v for k, v in out.items() if v["quarters"]}
 
 
+def _fragment_floor(root: Path, exchange: str, symbol: str) -> Dict[Tuple[str, str], int]:
+    """`{(quarter, report): the SMALLEST fragment count any layer ever reported}` for one ticker.
+
+    ⚠️ **`split_figures` IS A WHOLE-STATEMENT REFUSAL TRIGGERED BY A PER-ROW DEFECT**, so the
+    count is how far the best reading was from acceptance — and measured over every VN30 run
+    folder on 2026-09-13, **117 of the 155 open cells it holds bottom out at 3 or fewer, 83 of
+    them at exactly ONE.** A cell at 1 is one box away, not unreadable.
+
+    ⚠️ **BOTH REASON MAPS ARE READ, AND THAT IS NOT REDUNDANT** (`RSN-1`): `absent_reasons`
+    keeps the FIRST layer per distinct reason and `absent_deepest` the LAST, so each holds a
+    different layer's count and the minimum needs both. Neither is the whole ladder — the
+    floor reported here is an UPPER BOUND on the true minimum, which is the conservative
+    direction: it can only leave a winnable cell out of the plan.
+    """
+    import json
+    import re
+
+    n_re = re.compile(r"^reconcile: (\d+) figure\(s\) split across two boxes")
+    prefix = f"{exchange}_{symbol}__"
+    floor: Dict[Tuple[str, str], int] = {}
+    for folder in sorted(root.glob(f"*__{exchange.lower()}_{symbol.lower()}__pdf_ocr")):
+        for path in sorted((folder / "documents").glob(f"{prefix}*.json")):
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            period = path.stem[len(prefix):]
+            for source in ("absent_deepest", "absent_reasons"):
+                for report, entries in (doc.get(source) or {}).items():
+                    for entry in entries or []:
+                        if not (isinstance(entry, (list, tuple)) and len(entry) >= 2):
+                            continue
+                        hit = n_re.match(str(entry[1]))
+                        if not hit:
+                            continue
+                        key = (period, report)
+                        n = int(hit.group(1))
+                        floor[key] = min(floor.get(key, 10 ** 9), n)
+    return floor
+
+
+def fragmented_quarters(names: Sequence[Tuple[str, str]], *,
+                        max_fragments: int = 3,
+                        reports_root: Optional[os.PathLike | str] = None,
+                        log: Optional[Callable[[str], None]] = None,
+                        ) -> Dict[str, Dict[str, object]]:
+    """`{ticker: {exchange, template, quarters, cells}}` — open cells the SPLIT GATE refuses and
+    that came within `max_fragments` boxes of acceptance.
+
+    ⚠️ **THIS IS THE ONE CENSUS `ASK-1` CANNOT BE ALLOWED TO FILTER, AND FOR A DIFFERENT REASON
+    THAN `alternate_quarters`' ONE.** Those cells were never asked; these were asked and lost,
+    and the reason they are worth asking again is that the PARSER has a question it did not have
+    — `onnx@*+dropdamaged` (`SPL-2`). `parser_digest()` changes with the parser bytes, so
+    `ASK-1`'s skip lifts by itself here; the census is still built whole so the plan states what
+    it intends rather than inheriting it.
+
+    ⚠️ **A SMALL FLOOR IS NOT A PROMISE.** The fragments may be real — HPG Q1-2012's two are
+    ONE printed figure OCR broke into pieces — in which case the honest outcome is still a
+    refusal, just for a reason that names the row. What the floor buys is a plan aimed at the
+    cells where a per-row defect is costing a whole statement.
+    """
+    anchor()
+    from web_scraper import cafef_financials as fin
+    from web_scraper import pdf_ocr_job as job
+    from web_scraper import pdf_ocr_merge
+
+    say = log or (lambda _line: None)
+    root = Path(reports_root) if reports_root else REPO_ROOT / "reports" / "pdf_ocr"
+    builder = fin.FinancialsBuilder(logger=None)
+    out: Dict[str, Dict[str, object]] = {}
+    for symbol, exchange in names:
+        template = job.resolve_template(builder, symbol)[0]
+        floor = _fragment_floor(root, exchange, symbol)
+        if not floor:
+            continue
+        quarters: List[str] = []
+        cells = blocked = deep = 0
+        for task in job.plan(builder, exchange, symbol, allow_parent=True, template=template):
+            done = set(job.parsed_reports(builder, task))
+            gap = [r for r in job.REPORTS if r not in done]
+            if not gap:
+                continue
+            # the run folders name a period `Q3-2011`; `plan` yields `2011-Q3`
+            quarter = job.as_quarter(task.period)
+            stamp = f"Q{quarter[-1]}-{quarter[:4]}"
+            near = [r for r in gap if floor.get((stamp, r), 10 ** 9) <= max_fragments]
+            if not near:
+                deep += sum(1 for r in gap if (stamp, r) in floor)
+                continue
+            # ⚠️ `OPB-1`, the same guard `alternate_quarters` carries and for the same reason:
+            # a quarter whose only open report is a cumulative income statement waits on its
+            # Q1..Q(q-1) operands, and a new PARSER question changes nothing about that.
+            if set(gap) == {fin.INCOME_STATEMENT} and task.cumulative:
+                _priors, why = pdf_ocr_merge._quarter_priors(
+                    builder, exchange, symbol, template, task.period, {})
+                if why:
+                    blocked += 1
+                    continue
+            quarters.append(quarter)
+            cells += len(near)
+        if quarters or blocked or deep:
+            out[symbol] = {"exchange": exchange, "template": template,
+                           "quarters": sorted(quarters), "cells": cells,
+                           "deep_cells": deep, "blocked": blocked}
+            say(f"   {symbol:5s} {len(quarters):3d} document(s), {cells:3d} cell(s) within "
+                f"{max_fragments} box(es) of acceptance"
+                + (f"   ({blocked} blocked on a de-cumulation operand, `OPB-1`)"
+                   if blocked else "")
+                + (f"   ({deep} more refused as fragmented but further out)" if deep else ""))
+    return {k: v for k, v in out.items() if v["quarters"]}
+
+
+def fragmented_plans(names: Sequence[Tuple[str, str]], *, max_fragments: int = 3,
+                     reports_root: Optional[os.PathLike | str] = None,
+                     log: Optional[Callable[[str], None]] = None) -> List["object"]:
+    """`fragmented_quarters` as `TickerPlan`s, richest first — what a lane consumes."""
+    anchor()
+    from web_scraper import pdf_ocr_batch as batch
+
+    census = fragmented_quarters(names, max_fragments=max_fragments,
+                                 reports_root=reports_root, log=log)
+    plans = []
+    for symbol, row in census.items():
+        plans.append(batch.TickerPlan(
+            exchange=str(row["exchange"]), symbol=symbol, template=str(row["template"]),
+            template_how="resolved", quarters=list(row["quarters"])))
+    plans.sort(key=lambda p: (-len(p.quarters), p.symbol))
+    return plans
+
+
 def _retried_periods(root: Path, exchange: str, symbol: str) -> set:
     """The periods some run folder of this ticker logged an alternate retry on."""
     import json
@@ -537,7 +667,8 @@ def run_local(tickers: Sequence[str], *, exchange: str = "HOSE",
     say = log or print
     root = Path(reports_root) if reports_root else REPO_ROOT / "reports" / "pdf_ocr"
     names = [(t, exchange) for t in tickers]
-    plans = (alternate_plans(names, reports_root=root, log=say) if mode == "alternates"
+    plans = (fragmented_plans(names, reports_root=root, log=say) if mode == "fragmented"
+             else alternate_plans(names, reports_root=root, log=say) if mode == "alternates"
              else winnable(tickers, exchange=exchange, reports_root=root, log=say))
     if not plans:
         say(f"nothing to parse on this lane (mode={mode}) — every ticker is done or exhausted")
@@ -590,7 +721,8 @@ def run_kaggle(tickers: Sequence[str], *, account: str, exchange: str = "HOSE",
     say = log or print
     root = Path(reports_root) if reports_root else REPO_ROOT / "reports" / "pdf_ocr"
     names = [(t, exchange) for t in tickers]
-    plans = (alternate_plans(names, reports_root=root, log=say) if mode == "alternates"
+    plans = (fragmented_plans(names, reports_root=root, log=say) if mode == "fragmented"
+             else alternate_plans(names, reports_root=root, log=say) if mode == "alternates"
              else winnable(tickers, exchange=exchange, reports_root=root, log=say))
     if not plans:
         say(f"nothing to ship on this lane (mode={mode}) — every ticker is done or exhausted")
@@ -813,7 +945,14 @@ def plan_fleet(tickers: Sequence[Tuple[str, str]], *, local_lanes: int = 1,
         by_exchange.setdefault(exchange, []).append(ticker)
     lanes: List[Lane] = []
     for exchange, group in sorted(by_exchange.items()):
-        if mode == "alternates":
+        if mode == "fragmented":
+            # ⚠️ A lane is told the MODE and re-derives its own census, because the plan is a
+            # list of quarters and the REASON they are on it is what `run_batch` must not have
+            # to guess (`FLT-3`'s lesson: a plan that over-promises is a plan built elsewhere).
+            say(f"{exchange}: {len(group)} ticker(s) — resolving the cells the SPLIT GATE "
+                f"refuses within 3 boxes of acceptance (`SPL-2`)")
+            plans = fragmented_plans([(t, exchange) for t in group], log=say)
+        elif mode == "alternates":
             say(f"{exchange}: {len(group)} ticker(s) — resolving the UNASKED ALTERNATES "
                 f"(`ALT-2`), the one block where GPU still buys cells")
             plans = alternate_plans([(t, exchange) for t in group], log=say)
@@ -864,7 +1003,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
                        help="name the cascade by engine, e.g. --engine easyocr")
         p.add_argument("--layer", action="append", default=[], help="an explicit layer list")
         p.add_argument("--vram-floor-mb", type=int, default=None)
-        p.add_argument("--mode", default="open", choices=("open", "alternates"),
+        p.add_argument("--mode", default="open",
+                       choices=("open", "alternates", "fragmented"),
                        help="open = every winnable document; alternates = only the periods "
                             "holding a filing NO run has read (`ALT-2`), which `ASK-1` "
                             "correctly retires and which is the one GPU-shaped block left")
@@ -885,7 +1025,8 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     lane.add_argument("--engine", action="append", default=[])
     lane.add_argument("--layer", action="append", default=[])
     lane.add_argument("--vram-floor-mb", type=int, default=None)
-    lane.add_argument("--mode", default="open", choices=("open", "alternates"))
+    lane.add_argument("--mode", default="open",
+                      choices=("open", "alternates", "fragmented"))
 
     args = ap.parse_args(argv)
 

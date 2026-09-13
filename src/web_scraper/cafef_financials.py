@@ -223,6 +223,7 @@ class ParseLayer:
     relax_split_tail: bool = False
     join_digits: bool = False
     join_lost_separator: bool = False
+    drop_damaged_runs: bool = False
     title_over_form: bool = False
     loose_form_code: bool = False
     realign_rows: bool = False
@@ -502,6 +503,10 @@ def parse_key(layer: ParseLayer) -> tuple:
             layer.red_channel,
             layer.join_digits,
             layer.join_lost_separator,
+            # ⚠️ `drop_damaged_runs` REMOVES BOXES, so it changes the parse — a layer
+            # differing only in it would otherwise be served the cached reading it
+            # exists to change (`SPL-2`).
+            layer.drop_damaged_runs,
             layer.title_over_form, layer.loose_form_code, layer.realign_rows,
             layer.notes_boundary, layer.tail_continuation, layer.label_wrap,
             # `notes_tail` moves which page belongs to which statement, exactly as
@@ -1905,6 +1910,33 @@ class FinancialsBuilder:
                    merged_tail=True, join_lost_separator=True, relax_totals=True),
         ParseLayer("onnx@300+trunctotal+relax", "onnx", 300, truncated_total=True,
                    merged_tail=True, join_lost_separator=True, relax_totals=True),
+
+        # ⚠️ **THE LAST QUESTION IN THE CASCADE: DROP A RUN NO GROUPING CAN READ, RATHER THAN
+        # REFUSE THE STATEMENT FOR IT** (`SPL-2`, 2026-09-13). `split_figures` is a
+        # WHOLE-STATEMENT refusal triggered by a PER-ROW defect, and measured over every VN30
+        # run folder **117 of the 155 open cells it holds bottom out at 3 suspected splits or
+        # fewer — 83 of them at exactly ONE** — so 83 statements are refused for one box.
+        # HPG Q1-2012's cash flow is the traced case: 31 lost-separator runs on the page, 30
+        # joined by `join_lost` and one (`'- 9 22 566 554'`) that no grouping can form into a
+        # figure without inventing a digit. `set_drop_damaged_runs` drops that box so the
+        # filing's own identities decide; see its docstring for why regrouping is forbidden.
+        #
+        # ⚠️ **THEY ARE LAST BECAUSE THEY MUST BE UNREACHABLE BY ANYTHING ELSE.** `SET-3` is a
+        # shallower gate raising the measured rate by retiring a winnable cell, and `DPC-2` is
+        # one wrong cell among 22 won — so a statement any earlier reading can settle never
+        # reaches these, and every cell they produce is new. `drop_damaged_runs` is meaningless
+        # without `join_lost_separator`: it drops precisely the runs that one declined.
+        ParseLayer("onnx@200+dropdamaged", "onnx", 200,
+                   join_lost_separator=True, drop_damaged_runs=True),
+        ParseLayer("onnx@300+dropdamaged", "onnx", 300,
+                   join_lost_separator=True, drop_damaged_runs=True),
+        ParseLayer("onnx@200+dropdamaged+relax", "onnx", 200,
+                   join_lost_separator=True, drop_damaged_runs=True, relax_totals=True),
+        ParseLayer("onnx@300+dropdamaged+relax", "onnx", 300,
+                   join_lost_separator=True, drop_damaged_runs=True, relax_totals=True),
+        ParseLayer("onnx@200+dropdamaged+trunctotal", "onnx", 200,
+                   join_lost_separator=True, drop_damaged_runs=True,
+                   truncated_total=True, merged_tail=True, relax_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -1965,6 +1997,7 @@ class FinancialsBuilder:
         parser.set_duplicate_period(layer.duplicate_period)
         parser.set_join_split(layer.join_digits)
         parser.set_join_lost_separator(layer.join_lost_separator)
+        parser.set_drop_damaged_runs(layer.drop_damaged_runs)
         parser.set_title_over_form(layer.title_over_form)
         parser.set_loose_form_code(layer.loose_form_code)
         parser.set_realign_rows(layer.realign_rows)

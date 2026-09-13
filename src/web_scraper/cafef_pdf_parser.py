@@ -687,6 +687,7 @@ class PdfParser:
         # set per PARSE LAYER; see _join_split_number
         self.join_split_digits = False
         self.join_lost_separator = False
+        self.drop_damaged_runs = False
         # set per PARSE LAYER; see _page_kind
         self.title_over_form = False
         # set per PARSE LAYER; see FORM_RE_LOOSE
@@ -794,6 +795,40 @@ class PdfParser:
         anywhere in the number (see `_split_number_runs`). Wider than `set_join_split`, which
         only covers a bare 1-3 digit head. Set per parse layer, off by default."""
         self.join_lost_separator = bool(on)
+
+    def set_drop_damaged_runs(self, on: bool) -> None:
+        """DROP a numeric run no grouping can turn into a figure, instead of apportioning it.
+
+        ⚠️ **`_split_number_runs`' LAST BRANCH CUTS A DAMAGED RUN INTO PLAUSIBLE NUMBERS THAT
+        ARE NOT FIGURES, AND `split_figures` THEN REFUSES THE WHOLE STATEMENT FOR IT** (`SPL-2`,
+        2026-09-13). HPG's Q1-2012 cash flow is the measured case: page 5 holds 31 numeric runs
+        whose separators OCR read as spaces, **30 of which `join_lost` joins into a well-formed
+        figure and ONE of which it cannot** — `'- 9 22 566 554'`, where the group `'22'` is two
+        digits, so `'9.22.566.554'` fails `MERGE_JOIN_RE`. Apportioned, that box becomes `'9'`,
+        `'22'`, `'566'`, `'554'`; the gate counts the two adjacencies between them and the cash
+        flow is refused **at every one of the 115 layers**, its minimum count 2.
+
+        ⚠️ **AND THE RUN CANNOT BE REPAIRED WITHOUT INVENTING A DIGIT.** Regrouping `'9' '22'`
+        right-to-left gives `922.566.554` and the print may equally say `9.922.566.554` — a
+        guess between two readings three orders apart, which is a transcription and is what
+        §5 rule 24 forbids as a source. **So the only honest treatments are to refuse the
+        statement or to drop the box**, and dropping it is the one that lets the FILING's own
+        identities decide: `reconcile` then sees a row with no value in that column and either
+        closes anyway — in which case the statement was never about that row — or fails on a
+        total it can name.
+
+        ⚠️ **IT NEVER MAKES A READING MORE BELIEVED THAN TODAY'S.** Today those pieces enter as
+        separate numbers and the gate refuses; dropped, nothing derived from the damaged box can
+        reach a column, so this can only turn a guaranteed refusal into a reconciled outcome.
+        The pieces it drops are the ones `join_lost` was OFFERED and declined, which is why the
+        flag is meaningless without it.
+
+        ⚠️ **AND IT IS ITS OWN FLAG ON ITS OWN LAYERS RATHER THAN A CHANGE TO `+joinlost`** —
+        `SET-3`'s hazard is a shallower gate raising the measured rate by retiring a winnable
+        cell, and `DPC-2` is one wrong cell out of 22 won. Confined to the END of the cascade,
+        it can only be reached by a statement every other reading has already refused.
+        """
+        self.drop_damaged_runs = bool(on)
 
     def set_loose_form_code(self, on: bool) -> None:
         """Tolerate junk characters OCR appends to a form code, so the page keeps its ANCHOR and
@@ -1582,7 +1617,8 @@ class PdfParser:
 
     @classmethod
     def _split_number_runs(cls, words: list, join_split: bool = False,
-                           join_lost: bool = False) -> list:
+                           join_lost: bool = False,
+                           drop_damaged: bool = False) -> list:
         """Split a box holding SEVERAL period figures into one box per figure.
 
         The onnx engine detects text LINES, not words, and on some rows it boxes both period
@@ -1678,6 +1714,22 @@ class PdfParser:
                     # keep the ORIGINAL box: its right edge is what the column clustering uses
                     # and it is already correct — only the text was wrong
                     out.append((w[0], w[1], w[2], w[3], joined) + tuple(w[5:]))
+                    continue
+            # ⚠️ **A RUN NO GROUPING CAN TURN INTO A FIGURE IS NOT APPORTIONED — IT IS
+            # DROPPED** (`SPL-2`, `set_drop_damaged_runs`). The branches above have each been
+            # offered this box and declined it, so cutting it here emits two or more plausible
+            # numbers that are NOT figures: HPG Q1-2012's `'- 9 22 566 554'` becomes `'9'`,
+            # `'22'`, `'566'`, `'554'`, `split_figures` counts the adjacencies between them and
+            # the cash flow is refused at every one of the 115 layers. Regrouping it would have
+            # to choose between `922.566.554` and `9.922.566.554` — three orders apart — which
+            # is inventing a digit, so the box is dropped and the filing's own identities
+            # decide whether the statement still closes. ⚠️ **Nothing is believed that was not
+            # believed before**: today the pieces enter the reading and the gate refuses.
+            if drop_damaged:
+                bare = [q for q in (p.strip("()-–—") for p in parts) if q]
+                if len(bare) > 1 and cls.JOIN_WIDE_HEAD_RE.match(bare[0]):
+                    bare = [cls._regroup_head(bare[0])] + bare[1:]
+                if len(bare) > 1 and not cls.MERGE_JOIN_RE.match(".".join(bare)):
                     continue
             x0, y0, x1, y1 = w[0], w[1], w[2], w[3]
             width, n = x1 - x0, len(txt)
@@ -1837,7 +1889,8 @@ class PdfParser:
         # that ran here before the cache existed. The native-text and Tesseract paths never
         # took it and still do not (`split` says which).
         return (text, self._split_number_runs(words, self.join_split_digits,
-                                             self.join_lost_separator) if split
+                                             self.join_lost_separator,
+                                             self.drop_damaged_runs) if split
                 else words)
 
     def _read_page(self, page, native: str):
@@ -2702,6 +2755,7 @@ class PdfParser:
     income_by_columns = False
     join_split_digits = False
     join_lost_separator = False
+    drop_damaged_runs = False
     title_over_form = False
     loose_form_code = False
     realign_rows = False

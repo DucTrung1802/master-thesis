@@ -145,7 +145,7 @@ def test_the_per_layer_split_is_replayed_on_every_hit_not_frozen_into_the_cache(
     _stub_read(p)
     seen = []
 
-    def split(words, join, join_lost=False):
+    def split(words, join, join_lost=False, drop_damaged=False):
         seen.append(join)
         return list(words)
 
@@ -164,7 +164,7 @@ def test_a_path_that_never_splits_is_not_split_on_a_hit_either():
     p = _parser()
     p._read_page = lambda page, native: ("native", [_WORD], False)
 
-    def split(words, join, join_lost=False):
+    def split(words, join, join_lost=False, drop_damaged=False):
         pytest.fail("a native/tesseract page must not be split")
 
     p._split_number_runs = split

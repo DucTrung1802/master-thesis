@@ -70,7 +70,10 @@ def test_ONNX_ONLY_still_selects_a_cascade_WITHOUT_them():
     `DIFFERS`. The filter is `engine == "onnx"` and must keep excluding every new engine."""
     kept = [layer.name for layer in _layers() if layer.engine == "onnx"]
 
-    assert len(kept) == 115
+    # ⚠️ **THIS NUMBER IS A PIN AND NOT A PROPERTY** — 115 until `SPL-2`'s five
+    # `+dropdamaged` layers were appended on 2026-09-13. Bump it with the cascade; what the
+    # test is for is the FILTER below, which must keep excluding every new engine.
+    assert len(kept) == 120
     assert not [name for name in kept if "easyocr" in name or "tesseract" in name]
 
 

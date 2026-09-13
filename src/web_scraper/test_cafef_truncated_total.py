@@ -186,9 +186,20 @@ def test_the_block_is_contiguous_and_past_every_strict_layer():
     pinned "last" and this block broke it the day it was added, on a change that broke
     nothing — a widening that follows another widening is fine, and a test that forbids it
     teaches the wrong lesson to whoever adds the next one.
+
+    ⚠️ **AND "EVERY LAYER CARRYING THE FLAG IS IN THE BLOCK" WAS ALSO THE WRONG INVARIANT** —
+    it broke on 2026-09-13 when `SPL-2`'s `onnx@200+dropdamaged+trunctotal` reused the flag at
+    the very END of the cascade, which is a second USER of a widening and not a hole in its
+    block. What has to hold is that the block itself is contiguous and that **no layer carrying
+    the flag at all is reachable before the strict layers are exhausted.**
     """
     layers = FinancialsBuilder.LAYERS
     at = [i for i, l in enumerate(layers) if l.truncated_total]
-    assert len(at) == 5
-    assert at == list(range(at[0], at[0] + 5)), "the block must stay contiguous"
-    assert max(i for i, l in enumerate(layers) if l.is_strict) < at[0]
+    strict = max(i for i, l in enumerate(layers) if l.is_strict)
+
+    assert len(at) >= 5
+    block = [i for i in at if i < at[0] + 5]
+    assert block == list(range(at[0], at[0] + 5)), "the block must stay contiguous"
+    assert strict < at[0]
+    # a later reuse is allowed, and must also sit past every strict layer
+    assert all(i > strict for i in at)
