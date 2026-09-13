@@ -46,11 +46,61 @@ from web_scraper import pdf_ocr_job as job
 from web_scraper import pdf_ocr_merge as merge
 
 CONDENSED_PAGES = 10
+
+#: Characters of extracted text per PAGE below which a filing is a SCAN WITH A COVER PAGE and
+#: not a text-layer document. ⚠️ **MEASURED 2026-09-13 AND IT MOVED 97 CELLS**: `with_text == 0`
+#: was the only scan test, so a filing whose title page carries a few words counted as text and
+#: its missing wording counted as evidence. **97 of the 157 cells in the `long filing, wording
+#: not found` bucket run at 3-8 chars/page**, i.e. a title and nothing else, against 1,700-3,000
+#: for a real text layer. Calling those "text" is `SET-2`'s mistake wearing a different hat.
+THIN_CHARS_PER_PAGE = 120
 WORDING = {
     fin.CASH_FLOW: ("lưu chuyển tiền tệ", "luu chuyen tien te"),
     fin.BALANCE_SHEET: ("cân đối kế toán", "can doi ke toan", "tình hình tài chính"),
     fin.INCOME_STATEMENT: ("kết quả hoạt động kinh doanh", "ket qua hoat dong kinh doanh"),
 }
+
+
+WIDER = {
+    fin.CASH_FLOW: ("lưu chuyển tiền tệ", "luru chuyen", "lim chuyen", "b03", "b 03",
+                    "tiền và tương đương tiền", "tiền thuần"),
+    fin.BALANCE_SHEET: ("bảng cân đối", "b01", "b 01", "tổng cộng tài sản",
+                        "tong cong tai san", "nguồn vốn"),
+    fin.INCOME_STATEMENT: ("b02", "b 02", "doanh thu thuần", "lợi nhuận sau thuế",
+                           "báo cáo thu nhập", "thu nhập lãi"),
+}
+
+
+def _period_has_it(path: str, report) -> bool:
+    """Does ANOTHER filing OF THE SAME PERIOD contain the statement's wording?
+
+    ⚠️ **`missing` IS ONLY CORRECT IF NO FILING OF THE PERIOD HAS IT** — a quarter usually has
+    several (parent and consolidated, reviewed and unaudited) and `ALT-2` is the finding that a
+    payload ships one of them. ⚠️ **THE FIRST VERSION OF THIS GLOBBED THE WHOLE DIRECTORY AND
+    ANSWERED `100 % winnable`**, which is what a broken test looks like (§5 rule 21): the folder
+    holds EVERY filing of the ticker, so GAS 2024-Q1 matched a `Q2-2022` document and HDB
+    2013-Q2 matched `FY-2006`. Over a 70-filing issuer some document always contains the words.
+    **The filename's period prefix is what makes an alternate an alternate**, and restricting to
+    it takes the answer from 100 % to 10.2 %.
+    """
+    import glob as _glob
+
+    here = os.path.basename(path)
+    prefix = here.split("_", 1)[0]
+    for sibling in _glob.glob(os.path.join(os.path.dirname(path), f"{prefix}_*.pdf")):
+        if os.path.basename(sibling) == here:
+            continue
+        try:
+            with fitz.open(sibling) as doc:
+                if not doc.page_count:
+                    continue
+                other = "\n".join((doc[i].get_text() or "")
+                                   for i in range(doc.page_count)).lower()
+        except Exception:                                      # noqa: BLE001
+            continue
+        if any(w in other for w in WORDING[report] + WIDER[report]):
+            return True
+    return False
 
 
 def main(universe: str = "VN30") -> None:
@@ -100,17 +150,25 @@ def main(universe: str = "VN30") -> None:
                 kinds["WINNABLE — truncated download, 0 pages (`TRC-1`, re-scrape)"] += len(gap)
                 continue
             for report in gap:
-                if any(w in text for w in WORDING[report]):
+                density = len(text) / max(pages, 1)
+                if any(w in text for w in WORDING[report] + WIDER[report]):
                     kinds["WINNABLE — the wording is in the text layer (parser)"] += 1
-                elif with_text == 0:
-                    # ⚠️ asymmetric: a scan can never be called permanent (`SET-2`)
+                elif with_text == 0 or density < THIN_CHARS_PER_PAGE:
+                    # ⚠️ asymmetric: a scan can never be called permanent (`SET-2`), and a
+                    # title page is not a text layer — see `THIN_CHARS_PER_PAGE`.
                     kinds["WINNABLE — a SCAN, absence of wording is not evidence"] += 1
                 elif pages <= CONDENSED_PAGES:
                     kinds[f"PERMANENT — <={CONDENSED_PAGES}-page filing, text layer, no "
                           f"wording (`BND-3`)"] += 1
                     per_ticker[symbol] += 1
+                elif _period_has_it(task.path, report):
+                    kinds["WINNABLE — ANOTHER filing of the period has it (`ALT-2`)"] += 1
                 else:
-                    kinds["WINNABLE — text layer, wording not found, long filing"] += 1
+                    # ⚠️ **RICH TEXT, LONG FILING, AND NO FILING OF THE PERIOD CARRIES THE
+                    # STATEMENT — THIS IS `missing` AND IT USED TO BE COUNTED AS WORK.**
+                    kinds["PERMANENT — long text-rich filing, no filing of the period has "
+                          "it"] += 1
+                    per_ticker[symbol] += 1
 
     snap = fleet.coverage(names)
     # ⚠️ **`cells` IS THE GRID TOTAL AND `open_cells` IS WHAT IS LEFT** — the first version of
