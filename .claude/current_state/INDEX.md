@@ -50,7 +50,7 @@
 
 | file | ~tokens | what it answers |
 |---|---|---|
-| [../CLAUDE.md](../../CLAUDE.md) | **11.9k** | *what is this project, and what has it PROVED?* **The map and the verdict, and nothing else** — §2 the headline negative, §6 the current state, **§7 the module→file routing you are meant to lazy-load from**. ⚠️ **Was 162.7k, then 2,549 lines, both on 2026-09-06**; the evidence is in Tier 1's `findings/` rows and the hub is capped at 300 lines by R2 |
+| [../CLAUDE.md](../../CLAUDE.md) | **14.3k** | *what is this project, and what has it PROVED?* **The map and the verdict, and nothing else** — §2 the headline negative, §6 the current state, **§7 the module→file routing you are meant to lazy-load from**. ⚠️ **Was 162.7k, then 2,549 lines, both on 2026-09-06**; the evidence is in Tier 1's `findings/` rows and the hub is capped at 300 lines by R2 |
 | **.claude/current_state/INDEX.md** *(this file)* | **4.0k** | *where is everything else, and what does it cost to open?* |
 | [../.claude/rules/common.md](../rules/common.md) | **1.4k** | *what rules hold in EVERY session, whatever the task?* Added 2026-09-06; auto-loaded via `@.claude/rules/common.md` in `CLAUDE.md`. **R1: everything written into a file is English** (the conversation stays Vietnamese; `*_VI.md` and Vietnamese DATA are the two named exceptions). **R2: `CLAUDE.md` is at most 300 lines**, checked by `state_check.py`, with the table saying where displaced prose goes. ⚠️ **A new file in `.claude/rules/` is loaded only if `CLAUDE.md` imports it** — add the `@` line in the same commit |
 
@@ -62,7 +62,7 @@ TODO item leaves its measurement in `CLAUDE.md` or a `.claude/context/` file and
 
 | file | ~tokens | open it when |
 |---|---|---|
-| [ISSUES.md](ISSUES.md) | **72.3k** | *what is BROKEN?* 97 open / 38 resolved, codes permanent. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`), `CFB-1` before quoting a BID cash flow, `CFV-1` before believing any cash flow accepted at a STRICT layer, and `TPL-1`/`CRP-1` before any non-bank financials parse |
+| [ISSUES.md](ISSUES.md) | **87.2k** | *what is BROKEN?* 97 open / 38 resolved, codes permanent. ⚠️ **Read before quoting any number — four entries change how a number may be READ** (`NUL-1`, `NUL-3`, `RPR-1`, `OUT-1`), `CFB-1` before quoting a BID cash flow, `CFV-1` before believing any cash flow accepted at a STRICT layer, and `TPL-1`/`CRP-1` before any non-bank financials parse |
 | [TODO.md](TODO.md) | **30.8k** | *what is NEXT?* ⚠️ **NUMBERS FROZEN 2026-08-23** — a `P<n>` is a permanent NAME and **PRIORITY IS THE ROW ORDER**, so read top-down and cite the number. Seven groups — ⭐ top rows are group **0 · PARSER** (`P54`, `P55`, `P51`, `P46`, `P47`(a), `P43`, `P48`, `P44`, `P45`), then **A data `P2`**, **B OCR `P37`/`P38`/`P6`/`P5`/`P4`**, C output `P7`-`P8`, D model `P9`-`P17`, E honesty `P18`-`P21`, F backlog `P22`-`P36`. ⚠️ A HYPHENATED code is RETIRED, and a bare `P<n>` written BEFORE 2026-08-23 means a different item — the crosswalks resolve it |
 | [pipeline.md](../docs/pipeline.md) | **4.8k** | *which ticker, on which date?* What the chain OUTPUTS — `(date, ticker, weight)`, 4,720 picks across 236 books. §6 is why there is no book for today; **§9d is the tradability gate that takes the CAGR from +181 % to +36.5 %** |
 | [PIPELINE_h10_CAGR74.md](../docs/PIPELINE_h10_CAGR74.md) | **7.2k** | *how does ONE number get made, end to end?* The h=10 chain returning CAGR +74.0 %/yr. **§12 is the caveat section and is why the file exists** |
