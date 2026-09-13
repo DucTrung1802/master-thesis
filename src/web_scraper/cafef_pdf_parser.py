@@ -715,6 +715,10 @@ class PdfParser:
         self.code_column_by_value = False
         # set per PARSE LAYER; see set_native_despite_garbled / _read_page
         self.native_despite_garbled = False
+        # set per PARSE LAYER; see set_ocr_sandwich / _is_sandwich
+        self.ocr_sandwich = False
+        # page number -> whether it is a scan under invisible text; scoped to one filing
+        self._sandwich: Dict[int, bool] = {}
         # set per PARSE LAYER; see CONDENSED_BS / _classify_condensed
         self.condensed_form = False
         # set per PARSE LAYER; see _classify_income_by_columns
@@ -779,6 +783,7 @@ class PdfParser:
         if self._ocr_cache_path != pdf_path:
             self._ocr_cache = {}
             self._page_rot = {}
+            self._sandwich = {}
             self._ocr_cache_path = pdf_path
 
     def set_dpi(self, dpi: int) -> None:
@@ -966,6 +971,63 @@ class PdfParser:
         reading of the pixels, and `reconcile` and `sane` decide — never the ratio.
         """
         self.native_despite_garbled = bool(on)
+
+    # How much of a page its images must cover before the page counts as a SCAN (`SDW-1`).
+    SANDWICH_COVER = 0.9
+
+    def set_ocr_sandwich(self, on: bool) -> None:
+        """OCR a page that is a SCAN UNDER INVISIBLE TEXT instead of reading that text — a LAYER (`SDW-1`).
+
+        ⚠️ **A SCANNED FILING CAN CARRY SOMEBODY ELSE'S OCR AS ITS TEXT LAYER, AND THE DEFAULT PATH
+        READS IT AS IF IT WERE THE PDF'S OWN TEXT** (2026-09-13). TPB Q1-2020 is 41 full-page images,
+        each under text in render mode 3 (invisible) — a "searchable PDF" — and that text is a poor
+        transcription: `Ngân hang Thtro'ng mti CE phAn Tiên Phong`, the profit-before-tax line
+        `tong_iqi_nhun_trirac_thu`. Its diacritic ratio is 0.05-0.10 and its short-token share
+        0.19-0.29, so `_native_garbled` (0.02 / 0.40, built for SUBSTITUTION and SHREDDING) passes
+        it, no layer of the cascade ever showed the page to the OCR, and the income statement was
+        refused `no profit before tax` with every figure present. §5 rule 24 calls a transcription
+        somebody else's parse of the document; this is one, embedded in the file.
+
+        ⚠️ **THE TEST IS THE PAGE'S CONSTRUCTION, NOT ITS WORDS**: images covering at least
+        `SANDWICH_COVER` of the page and every text span invisible. A digital filing prints its
+        text (render mode 0) and holds no page-sized image, so the flag reads no pixel there and
+        changes nothing; a plain scan has no text and is OCR'd already. Measured over the 326 VN30
+        filings with an open cell: **29 carry such pages, 45 open cells**, SHB 14 and TPB 11 of
+        them. A LAYER and not the default, because a good embedded OCR may be the better reading
+        and the gates, not the construction, decide.
+        """
+        self.ocr_sandwich = bool(on)
+
+    def _is_sandwich(self, page) -> bool:
+        """Whether one page is a scan under invisible text — see `set_ocr_sandwich`. Cached per filing."""
+        hit = self._sandwich.get(page.number)
+        if hit is None:
+            hit = False
+            try:
+                pw, ph = page.rect.width, page.rect.height
+                area = pw * ph
+                covered = 0.0
+                for info in page.get_image_info():
+                    x0, y0, x1, y1 = info["bbox"]
+                    covered += (max(0.0, min(x1, pw) - max(x0, 0.0))
+                                * max(0.0, min(y1, ph) - max(y0, 0.0)))
+                if area and covered / area >= self.SANDWICH_COVER:
+                    kinds = {span.get("type") for span in page.get_texttrace()}
+                    hit = kinds == {3}
+            except Exception:
+                hit = False                # a damaged page is not evidence either way
+            self._sandwich[page.number] = hit
+        return hit
+
+    def has_sandwich_page(self, pdf_path: str) -> bool:
+        """Whether ANY page of a filing is a scan under invisible text, so a `+sandwich` layer can be skipped."""
+        import fitz
+        self._use_document(pdf_path)
+        try:
+            with fitz.open(pdf_path) as doc:
+                return any(self._is_sandwich(doc[i]) for i in range(doc.page_count))
+        except Exception:
+            return False
 
     def set_unit_from_document(self, on: bool) -> None:
         """Let a statement that names no unit take the one the rest of the filing names.
@@ -1896,7 +1958,10 @@ class PdfParser:
         rot = self._page_rot.get(page.number)
         if rot is not None and page.rotation != rot:
             page.set_rotation(rot)
-        key = (page.number, page.rotation) + self._ocr_config()
+        # ⚠️ `ocr_sandwich` joins the key only on a page it actually turns into an OCR read, so a
+        # digital or already-scanned page is never read twice for it (`SDW-1`).
+        key = (page.number, page.rotation) + self._ocr_config() + (
+            bool(self.ocr_sandwich and self._is_sandwich(page)),)
         hit = self._ocr_cache.get(key)
         if hit is None:
             hit = self._read_page(page, native)
@@ -1923,7 +1988,8 @@ class PdfParser:
         native = self._page_content_text(page, native)
         need_ocr = self.ocr_ready and (
             len(native.strip()) < self.MIN_PAGE_TEXT
-            or (self._native_garbled(native) and not self.native_despite_garbled))
+            or (self._native_garbled(native) and not self.native_despite_garbled)
+            or (self.ocr_sandwich and self._is_sandwich(page)))
         if not need_ocr:
             # ⚠️ **A `/Rotate 90` PAGE HANDS ITS NATIVE WORDS BACK IN THE *UNROTATED* SPACE
             # WHILE `page.rect` IS THE ROTATED ONE — `ROT-2`, 2026-09-04.** Measured on FPT's
@@ -2805,6 +2871,7 @@ class PdfParser:
     column_header_blind = False
     code_column_by_value = False
     native_despite_garbled = False
+    ocr_sandwich = False
 
     # ⚠️ **A VAS BALANCE-SHEET ITEM CODE IS 3 DIGITS, AND 3 IS EXACTLY WHAT `NOTE_MAX_DIGITS`
     # LETS THROUGH** — which is why every `MSO` failure on record is a BALANCE SHEET and never

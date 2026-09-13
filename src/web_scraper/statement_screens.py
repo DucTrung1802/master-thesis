@@ -91,6 +91,56 @@ def _close(a: Optional[int], b: Optional[int], rel: float = REL_TOL) -> bool:
         and abs(a - b) <= rel * max(abs(a), abs(b), 1)
 
 
+# `CXT-1`: how many times the rounding bound a closing cash balance must be before a positional
+# span may close the identity — below it the bound, not the figures, decides.
+SPAN_MIN_RATIO = 10_000
+
+
+def _span_closes(acc: dict, opening: int, net: int, close: int) -> bool:
+    """Whether the reading's own rows BETWEEN its two cash balances close the identity — `CXT-1`.
+
+    ⚠️ **`reconcile` ACCEPTS A CASH FLOW ON `opening + movement + <every line printed between the
+    two balances>`, AND THIS SCREEN ASKED ONLY `opening + movement + fx`.** The fourth term is
+    counted and never written (`cash_extra_terms`, `_extra_cash_terms`), so the accepted `values`
+    cannot show it, and a sound statement that needed it was held by the release as failing an
+    identity. Measured 2026-09-13 on VJC, whose consolidated cash flow prints `Chênh lệch quy đổi
+    ngoại tệ các hoạt động ở nước ngoài` beside the FX line: **5 of 6 held cash flows had a gap
+    EXACTLY equal to that line** — Q4-2015 526,748,546,327 + 391,119,906,214 - 4,474,463,459
+    + 10,118,928,613 = 923,512,917,695 to the đồng — and the sixth (Q1-2021) closes on the span
+    because its FX line was read and not mapped.
+
+    ⚠️ **THE SAME POSITIONAL DEFINITION AS `_extra_cash_terms`, AND THE SAME TIGHT BOUND.** The
+    span is read off the stored `row_dump` (current-period cell only, already scaled), anchored on
+    the rows whose first figure IS the accepted opening and closing balance, and it must close to
+    the filing's own rounding — `unit` per figure summed, `OP_IDENTITY_TOL`'s precedent — and not
+    to this module's `REL_TOL` or even `_equal`'s 1e-5, because a span can sweep in any row and a
+    loose match over a free sum is arithmetic, not evidence. A reading with no row dump, or whose
+    balances cannot be found in it, is judged exactly as before.
+
+    ⚠️ **AND THE BOUND MUST BE NEGLIGIBLE BESIDE THE FIGURES, OR SINGLE-DIGIT CODES CLOSE IT BY
+    ACCIDENT.** The first version (on `_equal`, whose floor is 2) released PLX Q1-2013, a reading
+    of `Mã số` codes — opening `4`, movement `3`, closing `8` — because a few small integers
+    between two small integers sum to anything within two. `SPAN_MIN_RATIO`: the closing balance
+    must be that many times the tolerance, which no cash balance of a listed company fails.
+    """
+    firsts = []
+    for row in acc.get("row_dump") or []:
+        cells = row[3] if len(row) > 3 and isinstance(row[3], list) else []
+        first = cells[0] if cells else None
+        firsts.append(int(first) if isinstance(first, (int, float)) else None)
+    open_i = next((i for i, v in enumerate(firsts) if v == opening), None)
+    if open_i is None:
+        return False
+    close_i = next((i for i in range(len(firsts) - 1, open_i, -1) if firsts[i] == close), None)
+    if close_i is None:
+        return False
+    span = [v for v in firsts[open_i + 1:close_i] if v is not None]
+    tolerance = int(acc.get("unit") or 1) * (len(span) + 3)
+    if abs(close) < SPAN_MIN_RATIO * tolerance:
+        return False
+    return abs(opening + net + sum(span) - close) <= tolerance
+
+
 def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str]]:
     """`{report: [why it is suspect]}` for ONE document JSON of a run folder.
 
@@ -143,8 +193,9 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
             for name, v in (("closing", close), ("opening", opening)):
                 if v is not None and v < 0:
                     why.append("NEGATIVE {} cash {:,}".format(name, v))
-            if close is not None and opening is not None and net is not None \
-                    and not _close(opening + net + fx, close):
+            if (close is not None and opening is not None and net is not None
+                    and not _close(opening + net + fx, close)
+                    and not _span_closes(acc, opening, net, close)):
                 why.append("opening + net + fx {:,} != closing {:,}"
                            .format(opening + net + fx, close))
         if why:

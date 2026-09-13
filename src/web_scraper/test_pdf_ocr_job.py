@@ -687,7 +687,10 @@ def test_ocr_key_names_the_things_that_change_a_recognised_character():
     FIELD, not by length, for the same reason.
     """
     first = FinancialsBuilder.LAYERS[0]
-    assert fin.ocr_key(first) == (first.engine, first.dpi, first.crop_pad, first.red_channel)
+    # ⚠️ RESTATED 2026-09-13: `ocr_sandwich` (`SDW-1`) is the fifth — it sends a scan-under-text
+    # page to the recogniser that every other layer reads from its text layer.
+    assert fin.ocr_key(first) == (first.engine, first.dpi, first.crop_pad, first.red_channel,
+                                  first.ocr_sandwich)
     # crop_pad is part of it: ACB Q3-2023 reads 93.261.018 as 261.018 at the default crop
     # and correctly at 6, so the two must never share a cached page.
     by_name = {layer.name: layer for layer in FinancialsBuilder.LAYERS}

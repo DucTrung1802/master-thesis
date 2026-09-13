@@ -2035,3 +2035,35 @@ the identities close on a quarter and on a quarter-minus-Q1 alike.
 `NTC-1`, same day: 51 `pdf` rows carry three or more line items under 1,000 in columns whose ticker median
 exceeds 1e9 — note references and item codes under correct grand totals (VNM Q1-2016 balance sheet cash `5`,
 GVR Q4-2023 26 items of `5`, VIC income statements with revenue `271`/`281`/`291`). NOT FIXED.
+
+### ⚠️ 2026-09-13 — WHERE THE 419 OPEN VN30 CELLS STAND, AND TWO BLOCKS NOBODY HAD NAMED (`CXT-1`, `SDW-1`)
+
+Measured at VN30 **4,795/5,214 = 92.0 %**, quarters 81.0 %, holes 275, read-only (no OCR), newest run
+folder per quarter, page kind from the filing's own page tree:
+
+| page kind of the open cell's filing | cells |
+|---|---|
+| scan (fewer than half the pages carry usable text) | 299 |
+| text | 62 |
+| garbled (`_native_garbled` on half the text pages) | 54 |
+| 0-page / unreadable (`TRC-1`) | 4 |
+
+| newest verdict | cells |
+|---|---|
+| a run ACCEPTED the statement and the merge did not write it | **80** |
+| run folder predates `absent_deepest` (last asked before `RSN-1`) | 78 — 18 of them SSB Q4-2010..Q4-2015, whose FY files are the auditor's one-page letter of an 11-page summary: the statements are not in the file |
+| a deepest-layer refusal on record | the rest; `no such statement` 35, split boxes ~60 across buckets, `no total assets` 14 |
+
+**The 80 accepted-and-unwritten, classified off today's release in dry run**: 47 cumulative income statements
+waiting on a de-cumulation ROOT that is `missing`, 18 cash flows failing `opening + net + fx`, 6 balance
+sheets on `A != L + E`, 6 continuity steps, 1 section sum, 2 writable. Of the 18 cash flows **six were VJC
+and every gap was one printed line** — `CXT-1`, released after each closing matched the balance sheet on disk.
+Of the 6 continuity holds, BVH's three are correct convictions (220.8 tn -> 18.3 tn) and TPB's are a wrong
+NEIGHBOUR (Q4-2009 on disk reads 10,728,532,331, a thousandth of the bank; Q1-2010's 13.47 tn is convicted by
+it), the `BND-2` shape. VIB's 5 balance sheets drop a leading group (gap exactly 69,000,000 m, 319,000,000 m).
+
+**`SDW-1`, the same day**: TPB Q1-2020's statement pages are full-page images under render-mode-3 text, and the
+text is a third-party OCR the parser read as the PDF's own (diacritic ratio 0.05-0.10, short tokens 0.19-0.29,
+both inside `_native_garbled`'s pass band). Over the 326 filings with an open cell: **29 such filings / 45
+cells**, 43 digital / 59, 251 with no native page / 306. The detector reads the page's construction
+(`get_image_info` cover ≥ 0.9, every `get_texttrace` span type 3), never its words.

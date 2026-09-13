@@ -245,6 +245,9 @@ class ParseLayer:
     # whose figures are exact and whose labels still map (TPB, BVH). See
     # `PdfParser.set_native_despite_garbled`.
     native_despite_garbled: bool = False
+    # ⚠️ OCR a page that is a scan under INVISIBLE text rather than reading that text — somebody
+    # else's OCR embedded in the file (TPB, SHB). See `PdfParser.set_ocr_sandwich` (`SDW-1`).
+    ocr_sandwich: bool = False
     merged_tail: bool = False
     reseat_words: bool = False
     deskew_rows: bool = False
@@ -299,6 +302,9 @@ class ParseLayer:
                     # ⚠️ `native_despite_garbled` READS WORDS THE DEFAULT PATH REFUSES TO BELIEVE — a
                     # widening of what counts as the page, so nothing reading it as OCR may follow.
                     or self.native_despite_garbled
+                    # ⚠️ `ocr_sandwich` REPLACES the words of a page every earlier layer read, so
+                    # nothing reading the page's own text layer may follow it (`SDW-1`).
+                    or self.ocr_sandwich
                     or self.reseat_words or self.deskew_rows or self.equity_wording
                     # ⚠️ `cash_wording` OFFERS AN ACCOUNT A SECOND NAME, which is
                     # `equity_wording`'s class exactly — it changes what the matcher will
@@ -537,6 +543,9 @@ def parse_key(layer: ParseLayer) -> tuple:
             # ⚠️ `native_despite_garbled` CHANGES WHICH WORDS A GARBLED PAGE YIELDS, so it is a PARSE
             # key — and deliberately not an `ocr_key`: it reads no pixel, it declines to.
             layer.native_despite_garbled,
+            # ⚠️ `ocr_sandwich` changes which WORDS a scan-under-text page yields — a PARSE key, and
+            # an `ocr_key` too, since it decides whether pixels are read at all.
+            layer.ocr_sandwich,
             # ⚠️ **`reseat_words` REBUILDS THE ROWS, SO IT IS A PARSE KEY — and leaving it out
             # cost a run.** It changes which printed line each word belongs to, i.e. exactly
             # what `table_rows` returns. Omitted, `onnx@300+reseat` collided with
@@ -590,7 +599,9 @@ def ocr_key(layer: ParseLayer) -> tuple:
     recogniser are shown — which is exactly what this key is for. Everything else added to
     `ParseLayer` since has been a mapping or a row rule and is correctly absent from here.
     """
-    return (layer.engine, layer.dpi, layer.crop_pad, layer.red_channel)
+    # ⚠️ `ocr_sandwich` (`SDW-1`) is the fifth: it sends pages to the recogniser that every other
+    # layer reads from the text layer, so a pass under it is a pass that reads pixels.
+    return (layer.engine, layer.dpi, layer.crop_pad, layer.red_channel, layer.ocr_sandwich)
 
 
 # ⚠️ **THE ONE REFUSAL THAT IS NOT A FAILURE, AND IT IS A CONSTANT SO NOBODY RE-TYPES IT.**
@@ -1991,6 +2002,25 @@ class FinancialsBuilder:
         ParseLayer("onnx@200+dropdamaged+trunctotal", "onnx", 200,
                    join_lost_separator=True, drop_damaged_runs=True,
                    truncated_total=True, merged_tail=True, relax_totals=True),
+        # ── A SCAN UNDER SOMEBODY ELSE'S OCR, READ BY OURS (`ocr_sandwich`, `SDW-1`) ──
+        # ⚠️ **29 VN30 FILINGS WITH AN OPEN CELL ARE FULL-PAGE IMAGES UNDER INVISIBLE TEXT, AND
+        # EVERY LAYER ABOVE READ THAT TEXT** (2026-09-13) — TPB Q1-2020's profit before tax is
+        # `tong_iqi_nhun_trirac_thu`. These mirror the layers that bank most of the corpus
+        # (`onnx@200` 69 %, then @300, `+relax`, `+joinlost`, `+tail`, `+equity`, `+notes+seam`)
+        # with the page shown to the OCR, and are skipped outright on a filing with no such page.
+        # ⚠️ LAST, because they replace the words every earlier layer read.
+        ParseLayer("onnx@200+sandwich", "onnx", 200, ocr_sandwich=True),
+        ParseLayer("onnx@300+sandwich", "onnx", 300, ocr_sandwich=True),
+        ParseLayer("onnx@200+sandwich+relax", "onnx", 200, ocr_sandwich=True, relax_totals=True),
+        ParseLayer("onnx@200+sandwich+joinlost", "onnx", 200, ocr_sandwich=True,
+                   join_lost_separator=True),
+        ParseLayer("onnx@200+sandwich+tail", "onnx", 200, ocr_sandwich=True,
+                   tail_continuation=True, label_wrap=True),
+        ParseLayer("onnx@200+sandwich+equity", "onnx", 200, ocr_sandwich=True,
+                   equity_wording=True, column_header_blind=True, merged_tail=True),
+        ParseLayer("onnx@200+sandwich+notes+seam", "onnx", 200, ocr_sandwich=True,
+                   notes_boundary=True, relax_merged_seam=True),
+        ParseLayer("onnx@300+sandwich+relax", "onnx", 300, ocr_sandwich=True, relax_totals=True),
     ]
 
     def __init__(self, logger=None):
@@ -2064,6 +2094,7 @@ class FinancialsBuilder:
         parser.set_column_header_blind(layer.column_header_blind)
         parser.set_code_column_by_value(layer.code_column_by_value)
         parser.set_native_despite_garbled(layer.native_despite_garbled)
+        parser.set_ocr_sandwich(layer.ocr_sandwich)
         parser.set_reseat_words(layer.reseat_words)
         parser.set_deskew_rows(layer.deskew_rows)
 
@@ -2128,6 +2159,10 @@ class FinancialsBuilder:
             if not parser.ocr_ready and layer.engine != "onnx":
                 continue                                  # engine unavailable on this machine
             key = parse_key(layer)
+            # ⚠️ A `+sandwich` layer on a filing with no scan-under-text page would re-parse words
+            # an earlier layer already judged, for nothing (`SDW-1`).
+            if layer.ocr_sandwich and not parser.has_sandwich_page(path):
+                continue
             if self.on_layer is not None:
                 # ⚠️ `cached` MEANS "THIS LAYER READS NO PIXELS", which is a wider set than
                 # "this layer does no work". Three states collapse into two here: a repeated

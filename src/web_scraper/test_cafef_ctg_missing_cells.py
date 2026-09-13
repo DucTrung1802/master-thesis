@@ -277,9 +277,14 @@ def test_the_new_layers_are_last_and_reachable_by_nothing_on_disk():
     afterwards, and that a row already on disk cannot reach here.
     """
     layers = FinancialsBuilder.LAYERS
-    new = [i for i, l in enumerate(layers) if l.column_header_blind]
+    # ⚠️ RESTATED 2026-09-13 for the fifth such append: `onnx@200+sandwich+equity` (`SDW-1`)
+    # carries `column_header_blind` for `+equity`'s own reason, at the END of the cascade, so the
+    # block is contiguous among the layers that read a page's own text and not across the list.
+    new = [i for i, l in enumerate(layers) if l.column_header_blind and not l.ocr_sandwich]
     assert new, "no +merged layer in the cascade"
     assert new == list(range(new[0], new[-1] + 1)), "the block must be contiguous"
+    late = [i for i, l in enumerate(layers) if l.column_header_blind and l.ocr_sandwich]
+    assert all(i > new[-1] for i in late)
     # measured 2026-09-02: the latest position any `pdf` row on disk was won at is 53
     assert new[0] + 1 > 53
     assert new[0] > max(i for i, l in enumerate(layers) if l.is_strict)

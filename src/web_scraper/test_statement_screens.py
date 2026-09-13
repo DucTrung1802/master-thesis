@@ -196,3 +196,55 @@ def test_a_gap_the_extra_terms_do_not_explain_is_still_flagged(builder):
                                                       1_239_248_771_642))
     why = screen_document(doc, builder)["balance_sheet"]
     assert any("liabilities + equity" in w for w in why), why
+
+
+# -- `CXT-1`: the lines printed BETWEEN the two cash balances ------------------
+def _cf_dumped(opening, net, close, fx, between):
+    """VJC Q4-2015's shape: net, opening, FX, a translation line the chart has no column for, closing."""
+    doc = _doc("Q4-2015", cash_flow=_cf(opening, net, close, fx=fx))
+    doc["accepted"]["cash_flow"]["row_dump"] = (
+        [[None, "luu_chuyen_tien_thuan_trong_nam", "", [net, 1]],
+         [None, "tien_va_cac_khoan_tuong_duong_tien_dau_nam", "", [opening, 2]],
+         [None, "anh_huong_cua_thay_doi_ty_gia_hoi_doai", "", [fx, 3]]]
+        + [[None, "chenh_lech_quy_doi_ngoai_te_cac_hoat_dong_o_nuoc_ngoai", "", [x, 4]] for x in between]
+        + [[None, "tien_va_cac_khoan_tuong_duong_tien_cuoi_nam", "", [close, 5]]])
+    return doc
+
+
+def test_a_translation_line_between_the_balances_closes_the_identity(builder):
+    """VJC Q4-2015, to the đồng: 526,748,546,327 + 391,119,906,214 - 4,474,463,459
+    + 10,118,928,613 = 923,512,917,695. `reconcile` accepted it on its span; the screen held it."""
+    doc = _cf_dumped(526_748_546_327, 391_119_906_214, 923_512_917_695, -4_474_463_459,
+                     [10_118_928_613])
+    assert screen_document(doc, builder) == {}
+
+
+def test_a_span_that_does_not_close_is_still_flagged(builder):
+    """⚠️ The span is a fourth TERM, not a licence: a line that does not make the sum close
+    to `_equal` leaves the statement flagged."""
+    doc = _cf_dumped(526_748_546_327, 391_119_906_214, 923_512_917_695, -4_474_463_459,
+                     [10_000_000_000])
+    why = screen_document(doc, builder)["cash_flow"]
+    assert any("!= closing" in w for w in why), why
+
+
+def test_without_a_row_dump_the_identity_is_judged_as_before(builder):
+    why = screen_document(_doc("Q4-2015", cash_flow=_cf(526_748_546_327, 391_119_906_214,
+                                                        923_512_917_695, fx=-4_474_463_459)),
+                          builder)["cash_flow"]
+    assert any("!= closing" in w for w in why), why
+
+
+def test_the_span_is_anchored_on_the_accepted_balances(builder):
+    """A dump whose closing row carries some other figure has no span to sum."""
+    doc = _cf_dumped(526_748_546_327, 391_119_906_214, 923_512_917_695, -4_474_463_459,
+                     [10_118_928_613])
+    doc["accepted"]["cash_flow"]["row_dump"][-1][3][0] = 923_512_917_000
+    assert "cash_flow" in screen_document(doc, builder)
+
+
+def test_single_digit_codes_do_not_close_on_a_span(builder):
+    """⚠️ PLX Q1-2013's `Mã số` reading: opening 4, movement 3, closing 8 — released by a span
+    bound of two, which is the bound deciding and not the figures."""
+    doc = _cf_dumped(4, 3, 8, 3, [-2])
+    assert "cash_flow" in screen_document(doc, builder)
