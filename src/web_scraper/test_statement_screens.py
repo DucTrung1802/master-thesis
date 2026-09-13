@@ -293,3 +293,17 @@ def test_a_right_last_quarter_beside_a_wrong_one_is_not(builder, tmp_path):
 def test_two_readings_that_disagree_with_nothing_to_arbitrate_are_both_held(builder, tmp_path):
     folder = _run_folder(tmp_path, {"Q1-2025": 100, "Q2-2025": 1000})
     assert _continuity(screen_run([folder], builder)) == ["Q2-2025"]
+
+
+# -- `GTT-3`: a stored reading with the grand total in a line item is held --------
+def test_a_line_item_holding_the_grand_total_is_flagged(builder):
+    doc = _doc("Q1-2013", balance_sheet={"tong_tai_san": 112_611, "tong_no_phai_tra_va_von_chu_so_huu": 112_611,
+                                         "viii_von_chu_so_huu": 112_611, "tong_no_phai_tra": 105_000})
+    why = screen_document(doc, builder)["balance_sheet"]
+    assert any("holds the grand total" in w and "viii_von_chu_so_huu" in w for w in why), why
+
+
+def test_the_charts_section_header_total_is_not_a_line_item(builder):
+    doc = _doc("Q1-2020", balance_sheet={"tong_tai_san": 176_632, "tong_no_phai_tra_va_von_chu_so_huu": 176_632,
+                                         "b_no_phai_tra_va_von_chu_so_huu": 176_632})
+    assert "balance_sheet" not in screen_document(doc, builder)

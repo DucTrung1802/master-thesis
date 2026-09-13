@@ -2118,3 +2118,20 @@ Candidate gates measured on the 815 newest accepted bank balance sheets before s
 | liability provision positive / treasury shares positive | 100 % / 29 % (conventions, not errors) |
 
 No gate shipped: the parent-sum identities need both signs and a curated child list, `BIS-1`'s method.
+
+### ⚠️ 2026-09-14 — THE NIGHT'S QUEUE, AND WHAT A ROLL-BACK DOES NOT STOP (`GWL-1`, `BST-1`, `GTT-3`)
+
+| run | GPU | written | kept after the neighbour audit |
+|---|---|---|---|
+| `LNS-1` BVH 2009 | 0.9 min | +2 | 2 |
+| `GTT-1` twin totals | 17.2 min | +13 | 6 (`GTT-2`) |
+| `GWL-1` goodwill | 20.2 min | +5 | 5 (GAS Q2-2014 one fragment cell) |
+| `BST-1` notes-headed page | 0.2 min | +1 | 1 |
+| 36 old-cascade cells | 264.6 min | +9 | 3 — and it re-wrote 2 rows `GTT-2` had rolled back (`GTT-3`) |
+
+VN30 measured mid-queue (2026-09-14 00:05): **4,859/5,214 = 93.2 %**, quarters 83.5 %, holes 235.
+
+Mixed text/OCR statement, GPU probe at 200 dpi: VNM Q1-2011's balance sheet reads pages 2-4 from the text layer
+(figure columns at 456.6 / 553.9) and page 5 from OCR, whose columns sit at **438.9 / 534.7 — 21-22 pt left**,
+past `table_rows`' `EDGE_TOL * 2` = 18 pt, so every row of the OCR page carries `[None, None]`. VNM Q3-2015's OCR page
+instead became two extra columns (value_columns 424.3, 441.0, 525.6, 542.1).

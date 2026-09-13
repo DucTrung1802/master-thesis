@@ -155,6 +155,17 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
             r = _first(values, builder.C_RESOURCES)
             liab = _first(values, builder.C_LIABILITIES)
             eq = _first(values, builder.C_EQUITY)
+            # ⚠️ **`GTT-3` — A STORED READING THE RELEASE WOULD RE-WRITE AFTER THE PARSER LEARNED TO
+            # REFUSE IT** (2026-09-14). `GTT-2`'s lock lives in `_twin_totals`, which runs at PARSE
+            # time, while a run folder is immutable: the release sweep after the next GPU run re-wrote
+            # SHB Q1-2011 and SSI Q1-2016 from `GTT-1`'s stored readings, the grand total still sitting
+            # in a line item. So the same test is applied here, on the stored values: no column but the
+            # two totals and the chart's own section-header total may equal total assets.
+            if a:
+                exempt = set(builder.C_ASSETS) | set(builder.C_RESOURCES) | set(builder.TWIN_TOTAL_HEADERS)
+                carriers = sorted(k for k, x in values.items() if x == a and k not in exempt)
+                if carriers:
+                    why.append("a line item holds the grand total {:,}: {}".format(a, ", ".join(carriers)))
             # ⚠️ On `corp` this is the TRIVIAL identity and passes by construction on any
             # page that reads both totals (`CRP-1`); it is kept because on `bank` it is not.
             if a is not None and r is not None and not _close(a, r):
