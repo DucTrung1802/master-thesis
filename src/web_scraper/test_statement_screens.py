@@ -4,7 +4,8 @@ import json
 import pytest
 
 from web_scraper.cafef_financials import FinancialsBuilder
-from web_scraper.statement_screens import (MAX_STEP, screen_document, screen_run)
+from web_scraper.statement_screens import (MAX_STEP, income_statement_screens, screen_document,
+                                           screen_run)
 
 
 @pytest.fixture(scope="module")
@@ -307,3 +308,61 @@ def test_the_charts_section_header_total_is_not_a_line_item(builder):
     doc = _doc("Q1-2020", balance_sheet={"tong_tai_san": 176_632, "tong_no_phai_tra_va_von_chu_so_huu": 176_632,
                                          "b_no_phai_tra_va_von_chu_so_huu": 176_632})
     assert "balance_sheet" not in screen_document(doc, builder)
+
+
+# -- `ISR-1`: an income statement no filing can print ------------------------------------
+_M = 1_000_000
+
+
+def test_net_revenue_below_gross_profit_is_flagged(builder):
+    """GVR Q1-2023's stored reading: net revenue 167,499 đồng beside a gross profit of 1.0 tn."""
+    doc = _doc("Q1-2023", income_statement={
+        "1_doanh_thu_ban_hang_va_cung_cap_dich_vu": 446,
+        "3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu": 167_499,
+        "5_loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu": 1_005_877_717_111})
+    why = screen_document(doc, builder)["income_statement"]
+    assert sum("is below" in w for w in why) == 2
+
+
+def test_a_negative_printed_income_line_is_flagged(builder):
+    """BID Q2-2019 on disk: interest income -54,438,116 m between 23.5 tn and 25.5 tn."""
+    doc = _doc("Q2-2019", income_statement={
+        "1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu": -54_438_116 * _M})
+    assert screen_document(doc, builder)["income_statement"][0].startswith("NEGATIVE")
+
+
+def test_a_stored_reading_one_row_up_is_flagged_by_its_net_lines(builder):
+    """MBB Q3-2017 as the 2026-09-08 run read it: every figure one row up."""
+    doc = _doc("Q3-2017", income_statement={
+        "i_thu_nhap_lai_thuan": -2_262_098 * _M, "3_thu_nhap_tu_hoat_dong_dich_vu": 2_834_971 * _M,
+        "4_chi_phi_hoat_dong_dich_vu": 697_863 * _M,
+        "ii_lai_lo_thuan_tu_hoat_dong_dich_vu": -101_427 * _M})
+    why = screen_document(doc, builder)["income_statement"]
+    assert any("does not close" in w for w in why)
+
+
+def test_a_sound_bank_income_statement_is_not_flagged(builder):
+    """The same quarter as the 2026-09-14 run read it: both net lines close to the million."""
+    doc = _doc("Q3-2017", income_statement={
+        "1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu": 5_097_069 * _M,
+        "2_chi_phi_lai_va_cac_chi_phi_tuong_tu": -2_262_098 * _M,
+        "i_thu_nhap_lai_thuan": 2_834_971 * _M,
+        "3_thu_nhap_tu_hoat_dong_dich_vu": 936_355 * _M,
+        "4_chi_phi_hoat_dong_dich_vu": -561_531 * _M,
+        "ii_lai_lo_thuan_tu_hoat_dong_dich_vu": 374_824 * _M})
+    assert screen_document(doc, builder) == {}
+
+
+def test_an_absurd_figure_is_flagged_on_any_statement(builder):
+    """FPT Q2-2025 on disk: `12_thu_nhap_khac` -2,993,843,310,849,432,064 đồng."""
+    doc = _doc("Q2-2025", balance_sheet=_bs(100, 60, 40, resources=100),
+               cash_flow={"luu_chuyen_tien_thuan_trong_ky": 10 ** 17},
+               income_statement={"12_thu_nhap_khac": -2_993_843_310_849_432_064})
+    assert sorted(screen_document(doc, builder)) == ["cash_flow", "income_statement"]
+
+
+def test_other_income_is_judged_only_on_a_printed_statement(builder):
+    """A de-cumulated quarter of other income can go negative on a restated year-to-date."""
+    v = {"5_thu_nhap_tu_hoat_dong_khac": -26_440 * _M}
+    assert income_statement_screens(v, builder, derived=True) == []
+    assert income_statement_screens(v, builder) != []

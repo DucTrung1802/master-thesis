@@ -71,6 +71,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from web_scraper import cafef_financials as fin
 from web_scraper import pdf_ocr_job as job
+from web_scraper import statement_screens as screens
 from web_scraper.cafef_financials import FinancialsBuilder, REPORTS, statement_path
 
 # Where a pre-merge backup goes: under `raw_data/_backup/`, timestamped so a second merge
@@ -551,6 +552,25 @@ def plan_merge(folder: os.PathLike | str,
                             "subtraction (the priors on disk share none of its lines)")
                         report.decisions.append(decision)
                         continue
+                    # ⚠️ **`DCS-1` — A SUBTRACTION THAT FAILS THE FILING'S ARITHMETIC CONVICTS AN
+                    # OPERAND, AND WAS WRITTEN ANYWAY** (2026-09-14). The screens judged the
+                    # YEAR-TO-DATE reading and nothing judged the quarter made from it, so a wrong
+                    # prior on disk went straight into its dependent: MBB Q4-2017 read service
+                    # income -1,182,763 m off a sound FY-2017, because Q3-2017 on disk is one row
+                    # up. The quarter's rounding is one `unit` per document subtracted.
+                    if not proof:
+                        suspect = screens.income_statement_screens(
+                            quarter_values, builder, derived=True,
+                            unit=max(1_000_000, int(got.get("unit") or 1)) * int(period[1]))
+                        if suspect:
+                            decision.action = "skip"
+                            decision.reason = (
+                                "cumulative income statement — the quarter subtracted out of it "
+                                f"fails the filing's own arithmetic, so one of "
+                                f"{', '.join(sorted(priors))} on disk is wrong (`DCS-1`): "
+                                + "; ".join(suspect))
+                            report.decisions.append(decision)
+                            continue
                     decision.values = quarter_values
                     decision.months = 3
                     decision.items = len(quarter_values)

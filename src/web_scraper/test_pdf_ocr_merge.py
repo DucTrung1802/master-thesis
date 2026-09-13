@@ -1052,3 +1052,39 @@ def test_one_proving_line_is_a_coincidence_not_a_proof(root, tmp_path):
     decision = _reason(merge.merge_run(folder, apply=True, quiet=True), fin.INCOME_STATEMENT)
 
     assert decision.values == {PBT: 600, OPER: 900}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `DCS-1` — a de-cumulated quarter is judged by the filing's arithmetic too
+# ──────────────────────────────────────────────────────────────────────────────
+_SERVICE = "3_thu_nhap_tu_hoat_dong_dich_vu"
+_MN = 1_000_000
+
+
+def _mbb_2017(tmp_path, q3_service):
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2017", {_SERVICE: 615_559 * _MN, "months": 3}),
+                                      ("Q2-2017", {_SERVICE: 955_072 * _MN, "months": 3}),
+                                      ("Q3-2017", {_SERVICE: q3_service, "months": 3})])
+    return _run_folder(tmp_path, period="Q4-2017", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=12, **{_SERVICE: 3_222_839 * _MN})})
+
+
+def test_a_de_cumulated_quarter_off_a_wrong_prior_is_refused(root, tmp_path):
+    """⚠️ MBB Q4-2017: a sound FY-2017 minus a Q3-2017 read one row up (service income
+    2,834,971 m, the net interest income) is -1,182,763 m — and nothing judged the quarter."""
+    folder = _mbb_2017(tmp_path, 2_834_971 * _MN)
+
+    decision = _reason(merge.merge_run(folder, quiet=True), fin.INCOME_STATEMENT)
+
+    assert not decision.writing
+    assert "DCS-1" in decision.reason and "NEGATIVE" in decision.reason
+    assert "Q4-2017" not in _rows(fin.INCOME_STATEMENT)
+
+
+def test_the_same_quarter_off_a_sound_prior_is_written(root, tmp_path):
+    folder = _mbb_2017(tmp_path, 936_355 * _MN)
+
+    decision = _reason(merge.merge_run(folder, quiet=True), fin.INCOME_STATEMENT)
+
+    assert decision.writing
+    assert decision.values == {_SERVICE: 715_853 * _MN}

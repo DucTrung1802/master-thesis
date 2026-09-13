@@ -2135,3 +2135,29 @@ Mixed text/OCR statement, GPU probe at 200 dpi: VNM Q1-2011's balance sheet read
 (figure columns at 456.6 / 553.9) and page 5 from OCR, whose columns sit at **438.9 / 534.7 — 21-22 pt left**,
 past `table_rows`' `EDGE_TOL * 2` = 18 pt, so every row of the OCR page carries `[None, None]`. VNM Q3-2015's OCR page
 instead became two extra columns (value_columns 424.3, 441.0, 525.6, 542.1).
+
+### ⚠️ 2026-09-14 — THE INCOME STATEMENT HAD NO RELEASE SCREEN, AND 33 DE-CUMULATED ROWS PREDATED `SGN-1` (`ISR-1`, `DCS-1`)
+
+Audit of the 1,723 `pdf` income statements on disk — read-only, each check one no correct statement fails:
+
+| check | before the repairs | after |
+|---|---|---|
+| `BIS-1` net line does not close (both signs) | 166 | 152 |
+| a bank income line below its net line | 61 | 61 |
+| a negative printed gross income line | 59 | 58 |
+| revenue below net revenue | 8 | 8 |
+| net revenue below gross profit | 7 | 7 |
+| a figure of 1e16 đồng or more | 7 (+3 balance sheets, +1 cash flow) | 7 (+3, +1) |
+
+De-cumulation replay — `_subtract_priors` over each stored year-to-date reading and today's disk priors, no OCR, rows
+with `months = 3` whose run-folder document matches the row's: **599 identical**; the gross/service identity fails
+on disk and closes on replay for **18** (CTG 13, VIC 5) plus MBB Q4-2018. Repaired by scoped `force_differs` merges,
+20 rows (with MBB Q3-2017 from the 2026-09-14 re-read), then **13 dependents** the first pass had made stale
+(CTG Q4 x8, VIC Q4 x5); a third replay leaves only CTG Q4-2011, refused by `DCS-1`. ⚠️ The replay's disagreements
+with the Q2 rows `QCD-1` wrote (VNM, VCB, ACB, TPB) are the replay's own: it does not apply `_quarter_column_proof`.
+
+Held census with the new screens (the `open_census2` cells): GVR Q1-2023/Q2-2023, GAS Q4-2022, SHB Q4-2012 and
+MBB Q4-2017 are held; 99 cumulative cells still wait on an operand that is `missing` on disk.
+
+VN30 (2026-09-14, after): **4,863/5,214 = 93.3 %**, quarters 1,456/1,738 = 83.8 %, holes 231, one band 5/30 —
+repairs move no cell.

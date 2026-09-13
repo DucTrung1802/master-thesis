@@ -141,6 +141,75 @@ def _span_closes(acc: dict, opening: int, net: int, close: int) -> bool:
     return abs(opening + net + sum(span) - close) <= tolerance
 
 
+# ⚠️ **`ISR-1` — FIGURES NO FILING OF A LISTED COMPANY CAN PRINT** (2026-09-14). The largest balance
+# sheet in the corpus is BID's ~2.7e15 đồng, so a line of 1e16 or more is a glued or mis-scaled
+# reading and never a figure: FPT's four 2025 income statements carried `12_thu_nhap_khac`
+# -2,993,843,310,849,432,064 on disk. Per-share lines are exempt only because they are not money.
+ABSURD_MAGNITUDE = 10 ** 16
+# Gross income lines — a printed one is never negative, and a standalone quarter subtracted out
+# of a year-to-date one is not either. `5_thu_nhap_tu_hoat_dong_khac` is judged on a PRINTED
+# statement only: a de-cumulated quarter of "other income" can go negative when the year-to-date
+# figure is restated, and one sound cell held is the wrong trade for a line that rare.
+GROSS_INCOME = ("1_doanh_thu_ban_hang_va_cung_cap_dich_vu",
+                "3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu",
+                "1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu",
+                "3_thu_nhap_tu_hoat_dong_dich_vu")
+GROSS_INCOME_PRINTED = GROSS_INCOME + ("5_thu_nhap_tu_hoat_dong_khac",)
+# `(whole, part)`: revenue before deductions, net revenue, gross profit — each at least the next.
+REVENUE_ORDER = (("1_doanh_thu_ban_hang_va_cung_cap_dich_vu",
+                  "3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu"),
+                 ("3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu",
+                  "5_loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu"))
+
+
+def absurd_figures(values: Dict[str, int]) -> List[str]:
+    """The columns holding a figure of `ABSURD_MAGNITUDE` or more — `ISR-1`."""
+    return sorted(k for k, x in values.items()
+                  if isinstance(x, (int, float)) and abs(x) >= ABSURD_MAGNITUDE and "co_phieu" not in k)
+
+
+def income_statement_screens(values: Dict[str, int], builder: FinancialsBuilder,
+                             unit: int = 1, derived: bool = False) -> List[str]:
+    """Why an income statement's figures cannot all be right — `ISR-1` / `DCS-1`.
+
+    ⚠️ **A STORED READING IS RE-JUDGED BY WHAT THE PARSER HAS LEARNED SINCE, OR THE RELEASE WRITES
+    IT** — `GTT-3`'s lesson on the third statement. Run folders are immutable, and a reading taken
+    before `BIS-1` was never asked whether its net lines close: MBB Q3-2017's 2026-09-08 reading,
+    one row up, holds `i_thu_nhap_lai_thuan` -2,262,098 m (the interest EXPENSE) and service income
+    2,834,971 m (the net interest income), and GVR Q1-2023's holds net revenue 167,499 đồng beside a
+    gross profit of 1,005,877,717,111 — held by nothing, and marked writable by the census.
+
+    ⚠️ **AND A DE-CUMULATED QUARTER IS JUDGED TOO (`derived`), BECAUSE ITS ERRORS ARE THE PRIORS'.**
+    `Q4 = FY - (Q1+Q2+Q3)` is linear, so a quarter whose net lines fail or whose gross income is
+    negative proves an operand on disk is wrong even when the year-to-date reading is sound: MBB
+    Q4-2017 came out at service income -1,182,763 m from a sound FY-2017 minus that Q3 reading.
+    Its rounding is up to one `unit` per document, which the caller folds into `unit`.
+
+    Only inequalities no correct statement breaks and the `BIS-1` identity; each abstains when a
+    term is unmapped, so a sparse reading is judged on what it has.
+    """
+    why: List[str] = []
+    lines = GROSS_INCOME if derived else GROSS_INCOME_PRINTED
+    negative = [c for c in lines if values.get(c) is not None and values[c] < 0]
+    if negative:
+        why.append("NEGATIVE gross income: " + ", ".join(
+            "{} {:,}".format(c, values[c]) for c in negative))
+    pairs = REVENUE_ORDER + tuple((income, net) for net, (income, _) in builder.BANK_NET_LINES.items())
+    for whole, part in pairs:
+        big, small = values.get(whole), values.get(part)
+        if (big is not None and small is not None and big > 0 and small > 0
+                and big < small and not _close(big, small)):
+            why.append("{} {:,} is below {} {:,}, which is a part of it".format(whole, big, part, small))
+    net_lines = builder._bank_net_lines(values, unit)
+    if net_lines:
+        why.append(net_lines)
+    absurd = absurd_figures(values)
+    if absurd:
+        why.append("a figure no listed company prints: " + ", ".join(
+            "{} {:,}".format(c, values[c]) for c in absurd))
+    return why
+
+
 def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str]]:
     """`{report: [why it is suspect]}` for ONE document JSON of a run folder.
 
@@ -209,6 +278,13 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
                     and not _span_closes(acc, opening, net, close)):
                 why.append("opening + net + fx {:,} != closing {:,}"
                            .format(opening + net + fx, close))
+        if report == "income_statement":
+            why += income_statement_screens(values, builder, unit=int(acc.get("unit") or 1))
+        else:
+            absurd = absurd_figures(values)
+            if absurd:
+                why.append("a figure no listed company prints: " + ", ".join(
+                    "{} {:,}".format(c, values[c]) for c in absurd))
         if why:
             out[report] = why
     return out
