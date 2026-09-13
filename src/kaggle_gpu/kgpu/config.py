@@ -206,8 +206,26 @@ class JobConfig:
         return REPO_ROOT / self.notebook
 
     @property
+    def build_dir(self) -> Path:
+        """One BUILD folder per job — `runner.build` rmtree's it, and lanes run at once.
+
+        ⚠️ **`payload_dir` BELOW WAS MADE PER-JOB AND THIS WAS NOT, AND ONLY ONE OF THE TWO
+        SHOWS UP AS A DEFECT YOU CAN SEE** (`BLD-1`, 2026-09-13). `runner.build` opens with
+        `shutil.rmtree(BUILD_DIR)` and then writes `kernel-metadata.json`, so with five fleet
+        lanes in five subprocesses one lane deletes another lane's staged build mid-push and
+        the metadata on disk at push time belongs to whoever wrote last. Measured on the
+        `--mode fragmented` fleet: lane `ductrung180200#1` pushed SHB's kernel carrying
+        `lyductrung/mt-cafef-filings-pow-...` — **another ACCOUNT's dataset** — and Kaggle
+        answered `rejected dataset source(s) ... and pushed the kernel anyway`, costing SHB's
+        17 documents. ⚠️ **The rejection is the lucky half**: had the source been readable,
+        the kernel would have run to completion against the WRONG TICKER'S FILINGS and
+        returned a well-formed parse that no artefact distinguishes from a real one.
+        """
+        return BUILD_DIR / self.name
+
+    @property
     def built_notebook(self) -> Path:
-        return BUILD_DIR / Path(self.notebook).name
+        return self.build_dir / Path(self.notebook).name
 
     @property
     def payload_dir(self) -> Path:

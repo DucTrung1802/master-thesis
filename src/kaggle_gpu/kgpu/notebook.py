@@ -37,7 +37,7 @@ from typing import Any, Dict, List, Tuple
 
 import nbformat
 
-from .config import BUILD_DIR, JobConfig
+from .config import JobConfig
 
 BOOTSTRAP_TEMPLATE = '''\
 # ─── injected by kgpu — do not edit here; edit src/kaggle_gpu/kaggle_config.json ───
@@ -258,8 +258,8 @@ def build_notebook(cfg: JobConfig, git_commit: str | None = None) -> Path:
         "language": "python",
     }
 
-    BUILD_DIR.mkdir(parents=True, exist_ok=True)
     out = cfg.built_notebook
+    out.parent.mkdir(parents=True, exist_ok=True)
     nbformat.write(nb, str(out))
 
     # Fail here rather than after a slow upload.

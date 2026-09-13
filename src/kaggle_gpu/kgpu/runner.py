@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from .config import (
-    BUILD_DIR,
     PKG_ROOT,
     REPO_ROOT,
     RESULTS_DIR,
@@ -79,26 +78,54 @@ POLL_RETRY_MINUTES = 30.0
 POLL_RETRY_SECONDS = 30.0
 
 
-def _fetch_status(api, cfg: JobConfig, retry_minutes: float = 0.0):
+#: How long a `denied` answer is treated as Kaggle's read-after-write lag rather than as a
+#: verdict, when the caller knows the kernel was just pushed. ⚠️ **Measured 2026-09-13 on the
+#: `--mode fragmented` fleet** (`SES-1`): lane `lyductrung#2` logged `pushed version 2` for
+#: POW and `kernels_status` answered `denied` on the very next call. The docstring below says
+#: an answer is never retried, and for a kernel that was never pushed that is right — but here
+#: **the kernel existed and was consuming a GPU session**, which the next five tickers proved
+#: by coming back `Maximum batch GPU session count of 2 reached`. The lane raised, moved on,
+#: and left a session it no longer watched, so **one lost read cost five tickers** (GVR, SSB,
+#: VJC, HDB, VRE) and 19 documents of the plan. Two minutes of polling is cheaper than that
+#: by three orders of magnitude, and on a genuinely missing kernel it costs exactly two.
+DENIED_GRACE_MINUTES = 2.0
+
+
+def _fetch_status(api, cfg: JobConfig, retry_minutes: float = 0.0,
+                  denied_grace_minutes: float = 0.0):
     """kernels_status(), with Kaggle's 403-for-everything error made actionable.
 
     ⚠️ **A NETWORK failure is retried; an ANSWER is not.** A `ConnectionError` says
     nothing about the kernel, so giving up on one throws away a running job's result.
     A `ValueError` from Kaggle IS an answer — the kernel is missing or unreadable — and
     retrying it would only repeat a wrong request for half an hour.
+
+    ⚠️ **WITH ONE EXCEPTION, AND IT WAS MEASURED THE EXPENSIVE WAY** (`SES-1`): right
+    after a push by this same process, `denied` is Kaggle's read-after-write lag and NOT an
+    answer — see `DENIED_GRACE_MINUTES`. A caller that knows it just pushed passes a grace
+    window; every other caller passes none and keeps the old behaviour exactly.
     """
     deadline = time.perf_counter() + retry_minutes * 60
+    denied_deadline = time.perf_counter() + denied_grace_minutes * 60
     attempt = 0
     while True:
         try:
             return api.kernels_status(cfg.id)
         except ValueError as exc:
             if "denied" in str(exc).lower():
+                if time.perf_counter() < denied_deadline:
+                    print(f"  kernel not readable yet; retrying in "
+                          f"{POLL_RETRY_SECONDS:.0f}s — a push takes a moment to settle, "
+                          f"and giving up here LEAKS the session (`SES-1`)", flush=True)
+                    time.sleep(POLL_RETRY_SECONDS)
+                    continue
                 raise RuntimeError(
                     f"Kaggle has no kernel '{cfg.id}' you can read.\n"
                     f"  If you have not pushed it yet, run: python -m kgpu push {cfg.name}\n"
                     "  Otherwise check the job's 'id' in kaggle_config.json is "
-                    "<your-kaggle-username>/<kernel-slug>."
+                    "<your-kaggle-username>/<kernel-slug>.\n"
+                    "  ⚠️ IF IT WAS JUST PUSHED, A SESSION MAY BE RUNNING UNWATCHED "
+                    "and it holds one of this account's 2 slots until it ends (`SES-1`)."
                 ) from exc
             raise
         except Exception as exc:  # noqa: BLE001 — network, DNS, TLS, proxy, 5xx
@@ -123,20 +150,21 @@ def build(cfg: JobConfig, quiet: bool = False) -> Path:
     from . import notebook as nbbuild
     from .export import git_commit
 
-    if BUILD_DIR.exists():
-        shutil.rmtree(BUILD_DIR)
-    BUILD_DIR.mkdir(parents=True)
+    build_dir = cfg.build_dir
+    if build_dir.exists():
+        shutil.rmtree(build_dir)
+    build_dir.mkdir(parents=True)
 
     path = nbbuild.build_notebook(cfg, git_commit=git_commit())
 
-    (BUILD_DIR / "kernel-metadata.json").write_text(
+    (build_dir / "kernel-metadata.json").write_text(
         json.dumps(cfg.kernel_metadata(), indent=2) + "\n", encoding="utf-8"
     )
 
     if not quiet:
         size = path.stat().st_size / 1024
-        print(f"staged {path.name} ({size:.0f} KiB) -> {BUILD_DIR}")
-    return BUILD_DIR
+        print(f"staged {path.name} ({size:.0f} KiB) -> {build_dir}")
+    return build_dir
 
 
 def push(cfg: JobConfig) -> None:
@@ -254,7 +282,12 @@ def wait(cfg: JobConfig, on_poll=None) -> str:
         print("baseline: none yet — no percentage until this job completes once")
 
     while True:
-        response = _fetch_status(api, cfg, retry_minutes=POLL_RETRY_MINUTES)
+        # ⚠️ The grace applies to the FIRST poll only, the one that races the push
+        # (`SES-1`). Once a status has been read, a later `denied` is a real change — the
+        # kernel was deleted or made private — and must not be slept through.
+        response = _fetch_status(api, cfg, retry_minutes=POLL_RETRY_MINUTES,
+                                 denied_grace_minutes=(DENIED_GRACE_MINUTES
+                                                       if last_state is None else 0.0))
         name = _status_name(response.status)
         elapsed = time.perf_counter() - start
         # ⚠️ The hook MOVES A NUMBER; it does not print. The poll's own line is already the
