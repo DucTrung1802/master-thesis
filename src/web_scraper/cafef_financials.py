@@ -3162,7 +3162,12 @@ class FinancialsBuilder:
         # `Cho vay và ứng trước cho khách hàng` OUTSIDE both sections — Q2-2009 A + B =
         # 28,660,961,892,629 and the line 751,592,039,596 make the printed 29,412,553,932,225 to
         # the đồng. Optional and tried in every subset, like the resources side's two terms.
-        (("a_tai_san_ngan_han", "b_tai_san_dai_han"), ("cho_vay_va_ung_truoc_cho_khach_hang",),
+        # ⚠️ `GWL-1` (2026-09-13): and the pre-2015 CONSOLIDATED form prints `Lợi thế thương mại`
+        # (code 269) outside both — GAS Q4-2011's own total reads `270 = 100 + 200 + 269`, and A + B
+        # falls short by exactly its 692,064,922,695. Under Circular 200 goodwill sits inside B, and
+        # the subset without it is the one that closes.
+        (("a_tai_san_ngan_han", "b_tai_san_dai_han"),
+         ("cho_vay_va_ung_truoc_cho_khach_hang", "loi_the_thuong_mai_269"),
          "tong_cong_tai_san"),
         (("c_no_phai_tra", "d_von_chu_so_huu"),
          ("ii_nguon_kinh_phi_va_quy_khac_430", "i_11_loi_ich_co_dong_khong_kiem_soat"),
@@ -3195,8 +3200,13 @@ class FinancialsBuilder:
         "c_no_phai_tra": ("no phai tra",),
     }
 
+    # A section total below this many of the statement's own units is a code or a fragment, and no
+    # optional term is tried against it — the bound deciding, not the figures (`GWL-1`, `CXT-1`).
+    SECTION_OPTIONAL_MIN_UNITS = 1_000_000
+
     SECTION_EXTRA_TEXT = {
         "cho_vay_va_ung_truoc_cho_khach_hang": ("cho vay va ung truoc cho khach hang",),
+        "loi_the_thuong_mai_269": ("loi the thuong mai",),
         "ii_nguon_kinh_phi_va_quy_khac_430": ("nguon kinh phi va quy khac",),
         "i_11_loi_ich_co_dong_khong_kiem_soat": ("loi ich cua co dong thieu so",
                                                  "loi ich co dong khong kiem soat"),
@@ -4596,8 +4606,13 @@ class FinancialsBuilder:
                 # ⚠️ THE OPTIONAL TERMS ARE TRIED BOTH WAYS — see `SECTION_SUMS`.
                 # ⚠️ EVERY SUBSET of the optional terms, not "all or none" — see
                 # `_section_candidates`, which is where the measurement that forced it lives.
-                cands = self._section_candidates(
-                    x + y, [get((c,), *self.SECTION_EXTRA_TEXT.get(c, ())) for c in optional])
+                # ⚠️ `GWL-1`: the optional terms only for a total that is a FIGURE. Replayed on PLX
+                # Q1-2015's shredded layer-1 reading (`123 + 765 + 9 = 897` against a printed `898`),
+                # the goodwill term closed a sum of fragments on `_equal`'s two-unit floor.
+                extras = ([get((c,), *self.SECTION_EXTRA_TEXT.get(c, ())) for c in optional]
+                          if abs(total) >= self.SECTION_OPTIONAL_MIN_UNITS * max(1, st.unit)
+                          else [])
+                cands = self._section_candidates(x + y, extras)
                 if not any(self._equal(c, total) for c in cands):
                     return (f"section sum does not close: {lo} + {hi} = {x + y:,} "
                             f"against a printed {total:,}")

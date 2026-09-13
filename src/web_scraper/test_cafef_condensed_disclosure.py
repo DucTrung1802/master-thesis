@@ -212,7 +212,8 @@ def test_the_section_sum_carries_the_pre_2015_lines_as_OPTIONAL_terms(b):
     # …and the assets side carries ONE, and not for either circular: `A + B` is the whole of a
     # company's sheet, while BVH's 2009 consolidated sheets print their banking subsidiary's
     # `Cho vay và ứng trước cho khách hàng` outside both sections (`LNS-1`, restated 2026-09-13).
-    assert b.SECTION_SUMS[0][1] == ("cho_vay_va_ung_truoc_cho_khach_hang",)
+    # And the pre-2015 consolidated form's goodwill, code 269, outside both sections (`GWL-1`).
+    assert b.SECTION_SUMS[0][1] == ("cho_vay_va_ung_truoc_cho_khach_hang", "loi_the_thuong_mai_269")
 
 
 def test_every_optional_term_carries_a_TEXT_needle(b):
