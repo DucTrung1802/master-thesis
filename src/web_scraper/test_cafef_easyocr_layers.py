@@ -75,7 +75,7 @@ def test_ONNX_ONLY_still_selects_a_cascade_WITHOUT_them():
     # `+codecol+notes` layers the same day, and 122 until the four
     # `+native` layers after them. Bump it with the cascade; what the test is for is
     # the FILTER below, which must keep excluding every new engine.
-    assert len(kept) == 140
+    assert len(kept) == 146
     assert not [name for name in kept if "easyocr" in name or "tesseract" in name]
 
 

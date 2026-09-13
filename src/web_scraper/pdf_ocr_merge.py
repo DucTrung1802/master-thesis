@@ -535,6 +535,16 @@ def plan_merge(folder: os.PathLike | str,
                             f"filed, so a full `build()` can still subtract them")
                         report.decisions.append(decision)
                         continue
+                    # ⚠️ **`DCS-2` — AN OPERAND'S FIGURES THE SCREENS CONVICT ARE NOT SUBTRACTED.** A
+                    # column a prior lacks is dropped from the quarter (`_subtract_priors` rule 1), so
+                    # removing the convicted terms drops exactly those columns and keeps the rest.
+                    convicted: Dict[str, List[str]] = {}
+                    for prior_period, prior_values in list(priors.items()):
+                        bad = screens.suspect_columns(prior_values, builder, unit=1_000_000)
+                        if bad:
+                            convicted[prior_period] = sorted(bad)
+                            priors[prior_period] = {k: v for k, v in prior_values.items()
+                                                    if k not in bad}
                     # ⚠️ `QCD-1`: before subtracting, ask the reading's own columns whether it
                     # is already the quarter. The span label can be wrong; the arithmetic cannot.
                     proof = _quarter_column_proof(got, priors)
@@ -589,6 +599,11 @@ def plan_merge(folder: os.PathLike | str,
                             f"NOT de-cumulated — the reading is already the QUARTER: its own "
                             f"year-to-date column minus it equals {', '.join(sorted(priors))} on "
                             f"disk on {proof} line(s) (`QCD-1`)")
+                    if convicted:
+                        decision.note += "".join(
+                            f"; ⚠️ {prior_period} on disk fails the screens, so "
+                            f"{', '.join(columns)} were not subtracted (`DCS-2`)"
+                            for prior_period, columns in sorted(convicted.items()))
                     # The row now covers three months like any other, so the span-fill and
                     # DIFFERS checks below judge it exactly as they judge a quarterly filing.
                     # ⚠️ It becomes an OPERAND for a later quarter only if it survives them —

@@ -210,6 +210,36 @@ def income_statement_screens(values: Dict[str, int], builder: FinancialsBuilder,
     return why
 
 
+def suspect_columns(values: Dict[str, int], builder: FinancialsBuilder, unit: int = 1) -> set:
+    """Every column a failing `income_statement_screens` check names — `DCS-2`.
+
+    ⚠️ **A WRONG PRIOR CORRUPTS ITS DEPENDENT COLUMN BY COLUMN, AND THE QUARTER'S OWN SCREENS CANNOT
+    SEE IT.** MBB Q1-2017 on disk reads interest income 1,455,144 m beside a net interest income of
+    2,406,612 m, so `Q4-2017 = FY - (Q1+Q2+Q3)` wrote interest income 8,519,667 m for a quarter whose
+    neighbours print 5.1-5.6 tn — and every check on the quarter passed, because the expense line
+    that could have contradicted it had already been dropped. `_subtract_priors` rule 4's answer,
+    one statement over: a broken identity cannot say which of its terms is misread, so all go.
+    """
+    out = set()
+    out.update(c for c in GROSS_INCOME_PRINTED if values.get(c) is not None and values[c] < 0)
+    pairs = REVENUE_ORDER + tuple((income, net) for net, (income, _) in builder.BANK_NET_LINES.items())
+    for whole, part in pairs:
+        big, small = values.get(whole), values.get(part)
+        if (big is not None and small is not None and big > 0 and small > 0
+                and big < small and not _close(big, small)):
+            out.update((whole, part))
+    tol = builder.TOTALS_TOL * max(1, int(unit or 1))
+    for net, (income, expense) in builder.BANK_NET_LINES.items():
+        if any(values.get(c) is None for c in (net, income, expense)):
+            continue
+        as_stored = values[income] + values[expense]
+        as_expense = values[income] - abs(values[expense])
+        if min(abs(as_stored - values[net]), abs(as_expense - values[net])) > tol:
+            out.update((net, income, expense))
+    out.update(absurd_figures(values))
+    return out
+
+
 def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str]]:
     """`{report: [why it is suspect]}` for ONE document JSON of a run folder.
 

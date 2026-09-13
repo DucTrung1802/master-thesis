@@ -728,6 +728,10 @@ class PdfParser:
         self.native_despite_garbled = False
         # set per PARSE LAYER; see set_ocr_sandwich / _is_sandwich
         self.ocr_sandwich = False
+        # set per PARSE LAYER; see set_align_pages / _align_pages
+        self.align_pages = False
+        # set per PARSE LAYER; see set_poster_split / _split_poster
+        self.poster_split = False
         # page number -> whether it is a scan under invisible text; scoped to one filing
         self._sandwich: Dict[int, bool] = {}
         # set per PARSE LAYER; see CONDENSED_BS / _classify_condensed
@@ -986,6 +990,32 @@ class PdfParser:
     # How much of a page its images must cover before the page counts as a SCAN (`SDW-1`).
     SANDWICH_COVER = 0.9
 
+    def set_poster_split(self, on: bool) -> None:
+        """Read a ONE-PAGE poster as the panels and statements it prints side by side — `PST-1`.
+
+        ⚠️ **A PAGE HAS ONE KIND, AND A POSTER PRINTS THREE THINGS ON IT.** SSB filed its 2008-2015
+        annual reports as a single summary sheet (`Báo cáo tài chính hợp nhất tóm tắt`): the
+        auditor's report in the left panel, the balance sheet down the middle, its equity section
+        and the income statement stacked on the right. The classifier named the whole page one kind
+        or none, so the income statement was `no such statement on any page of this filing` in every
+        year. Off by default, reached only on a one-page filing, and a late layer: it decides which
+        words form a page.
+        """
+        self.poster_split = bool(on)
+
+    def set_align_pages(self, on: bool) -> None:
+        """Shift a page whose period columns sit at a constant offset from the statement's — `MXP-1`.
+
+        ⚠️ **A STATEMENT CAN SPAN A DIGITAL PAGE AND A SCANNED ONE, AND THEIR COLUMNS DO NOT LINE UP.**
+        VNM's Q1-2011 balance sheet reads pages 2-4 from the text layer (Letter, 612 pt, figure
+        columns at 456.6 / 553.9) and page 5 from OCR (an A4 scan, 595 pt, 438.9 / 534.7) — 18-19 pt
+        left, past `table_rows`' `EDGE_TOL * 2`, so the page's figures land on no column and every
+        row of it reads `[None, None]` (GPU probe, 2026-09-14). Q3-2015's scanned page sits 16 pt
+        RIGHT and became two extra columns instead. Off by default and a late layer: it moves which
+        column a page's figures are read into, which no strict read may follow.
+        """
+        self.align_pages = bool(on)
+
     def set_ocr_sandwich(self, on: bool) -> None:
         """OCR a page that is a SCAN UNDER INVISIBLE TEXT instead of reading that text — a LAYER (`SDW-1`).
 
@@ -1029,6 +1059,16 @@ class PdfParser:
                 hit = False                # a damaged page is not evidence either way
             self._sandwich[page.number] = hit
         return hit
+
+    @staticmethod
+    def is_one_page(pdf_path: str) -> bool:
+        """Whether the filing is a single page — the only kind `poster_split` reads (`PST-1`)."""
+        import fitz
+        try:
+            with fitz.open(pdf_path) as doc:
+                return doc.page_count == 1
+        except Exception:
+            return False
 
     def has_sandwich_page(self, pdf_path: str) -> bool:
         """Whether ANY page of a filing is a scan under invisible text, so a `+sandwich` layer can be skipped."""
@@ -2244,6 +2284,12 @@ class PdfParser:
             elif kind == NOTES and from_form and len(seen) == len(REPORTS):
                 break            # the statements are behind us; the rest is notes
 
+        # ⚠️ `PST-1`: a one-page poster is read as the panels and statements it prints.
+        if self.poster_split and doc.page_count == 1 and 0 in pages:
+            virtual = self._split_poster(pages[0])
+            if virtual:
+                pages = dict(enumerate(virtual))
+                seen = {p["kind"] for p in pages.values() if p["kind"] in REPORTS}
         if self.condensed_form and not seen:
             self._classify_condensed(pages)
         if self.income_by_columns and INCOME_STATEMENT not in seen:
@@ -2670,6 +2716,162 @@ class PdfParser:
         return [w for w in words
                 if self.NUM_RE.match(w[4]) and self.parse_num(w[4]) is not None]
 
+    # ⚠️ `PST-1`'s geometry, measured on SSB's posters (2026-09-14): panels are separated by 10-13 pt
+    # gutters; inside a table the gap between the labels and a figure column, or between two figure
+    # columns, can be as wide, which is why a panel of figures alone joins the panel to its left.
+    POSTER_GUTTER = 6.0          # pt of zero word coverage that may separate two panels
+    POSTER_BANNER = 0.12         # the top share of the text whose words do not count for gutters
+    POSTER_NARROW = 0.08         # a panel narrower than this share of the page joins its right neighbour
+    POSTER_MIN_LABELS = 15       # a panel with fewer non-figure words joins its left neighbour
+    POSTER_TITLES = ("bangcandoiketoan", "baocaoketquahoatdongkinhdoanh", "ketquahoatdongkinhdoanh",
+                     "baocaoluuchuyentiente", "luuchuyentiente")
+
+    def _poster_lines(self, words: list) -> List[list]:
+        """Words grouped into printed lines, top to bottom, each line left to right."""
+        out: List[Tuple[float, list]] = []
+        for w in sorted(words, key=lambda w: (w[1], w[0])):
+            if out and abs(out[-1][0] - w[1]) <= self.Y_TOL:
+                out[-1][1].append(w)
+            else:
+                out.append((w[1], [w]))
+        return [sorted(ws, key=lambda w: w[0]) for _, ws in out]
+
+    def _is_poster_title(self, line: list) -> bool:
+        """A statement's own title line: upper case, and OPENING with the statement's name.
+
+        ⚠️ The auditor's report beside it names all three statements in running text — `…bao gồm
+        Bảng cân đối kế toán hợp nhất tại ngày 31 tháng 12 năm 2013, Báo cáo kết quả…` — so a
+        needle anywhere in a line would cut the report into a balance sheet.
+        """
+        text = " ".join(w[4] for w in line)
+        letters = [c for c in text if c.isalpha()]
+        if not letters or sum(c.isupper() for c in letters) < 0.7 * len(letters):
+            return False
+        return self.norm(text).replace(" ", "").startswith(self.POSTER_TITLES)
+
+    def _split_poster(self, page: dict) -> Optional[List[dict]]:
+        """A one-page poster as virtual pages, left panel to right and top to bottom — `PST-1`.
+
+        Panels are cut at vertical gutters with no word over them below the banner; a panel too
+        narrow to be one (the `TT` numerals) joins its right neighbour and a panel of figures
+        without labels (a table's own second column) joins its left. Each panel is then cut at its
+        statement titles, its words moved into the panel's own coordinates and its kind read from
+        its own text, so the equity section printed above the income statement becomes an
+        untitled page `_fill_continuations` hands to the balance sheet before it. `None` when the
+        page is not a poster: fewer than two panels, or no panel carrying a statement.
+        """
+        words, width = page["words"], float(page["width"])
+        if not words:
+            return None
+        top = min(w[1] for w in words)
+        band = top + self.POSTER_BANNER * (max(w[3] for w in words) - top)
+        n = int(width) + 2
+        cover = [0] * n
+        for w in words:
+            if w[1] < band:
+                continue
+            for x in range(max(0, int(w[0])), min(n, int(w[2]) + 1)):
+                cover[x] += 1
+        cuts, x = [], 0
+        while x < n:
+            if cover[x]:
+                x += 1
+                continue
+            start = x
+            while x < n and not cover[x]:
+                x += 1
+            if start > 0 and x < n and x - start >= self.POSTER_GUTTER:
+                cuts.append((start + x) / 2.0)
+        edges = [0.0] + cuts + [width]
+        panels = [[edges[i], edges[i + 1]] for i in range(len(edges) - 1)]
+
+        def members(panel):
+            return [w for w in words if panel[0] <= (w[0] + w[2]) / 2.0 < panel[1]]
+
+        merged = True
+        while merged and len(panels) > 1:
+            merged = False
+            for i, panel in enumerate(panels):
+                # ⚠️ FIGURES BEFORE WIDTH: a table's own figure column is narrow too, and taken by the
+                # width rule first it carried the balance sheet's figures into the income statement's
+                # panel (SSB FY-2014, whose middle and right panels then read as one).
+                if i > 0 and sum(1 for w in members(panel)
+                                 if not self.NUM_RE.match(w[4])) < self.POSTER_MIN_LABELS:
+                    panels[i - 1][1] = panel[1]
+                elif panel[1] - panel[0] < self.POSTER_NARROW * width and i + 1 < len(panels):
+                    panels[i + 1][0] = panel[0]
+                else:
+                    continue
+                del panels[i]
+                merged = True
+                break
+        if len(panels) < 2:
+            return None
+        virtual: List[dict] = []
+        for panel in panels:
+            segments: List[list] = [[]]
+            for line in self._poster_lines(members(panel)):
+                if segments[-1] and self._is_poster_title(line):
+                    segments.append([])
+                segments[-1].append(line)
+            for segment in segments:
+                if not segment:
+                    continue
+                moved = [tuple([w[0] - panel[0], w[1], w[2] - panel[0], w[3]] + list(w[4:]))
+                         for line in segment for w in line]
+                text = "\n".join(" ".join(w[4] for w in line) for line in segment)
+                kind, from_form = self._page_kind(text)
+                virtual.append({"text": text, "words": moved, "kind": kind,
+                                "from_form": from_form, "width": panel[1] - panel[0]})
+        if not any(v["kind"] in REPORTS for v in virtual):
+            return None
+        return virtual
+
+    # How far `_align_pages` may move a page. Measured offsets are 12.7-19.2 pt; a period column's
+    # neighbour sits ~100 pt away, so a shift this size can never carry one column onto the next.
+    PAGE_SHIFT_MAX = 36.0
+
+    def _align_pages(self, words_by_page: Dict[int, list], width: float) -> Dict[int, list]:
+        """Each page's words shifted so its period columns sit on the statement's — `MXP-1`.
+
+        ⚠️ **THE OFFSET IS A PROPERTY OF THE PAGE, NOT OF THE STATEMENT.** A scanned page carries its
+        own placement on the paper, and a digital page its own table width: VNM Q1-2011 reads page 2
+        at 469.3 / 566.2, pages 3-4 at 456.6 / 553.9 and the scanned page 5 at 438.9 / 534.7, so the
+        statement-wide clusters blur into 459.7 / 556.9 and the scan falls outside every one.
+
+        ⚠️ **GEOMETRY ONLY, AND EACH LOCK FAILS SAFE.** The reference is the page with the most
+        figures among those with two or more columns of their own; a page is moved only when its
+        rightmost columns differ from the reference's by ONE shift — every column's offset within
+        `EDGE_TOL` of the others, larger than `EDGE_TOL / 2` (below that `table_rows` already
+        tolerates it), and at most `PAGE_SHIFT_MAX`. A page with one column, a different layout, or
+        columns that disagree about the shift is left exactly as read. Words are copied, never
+        edited: `scan` caches them across layers.
+        """
+        cols = {i: self.value_columns({i: ws}, width) for i, ws in words_by_page.items()}
+        candidates = [i for i in cols if len(cols[i]) >= 2]
+        if len(candidates) < 2:
+            return words_by_page
+        ref_page = max(candidates, key=lambda i: (len(self._numbers(words_by_page[i])), -i))
+        ref = cols[ref_page]
+        out = dict(words_by_page)
+        for i in candidates:
+            if i == ref_page:
+                continue
+            k = min(len(cols[i]), len(ref))
+            diffs = [r - c for r, c in zip(ref[-k:], cols[i][-k:])]
+            shift = sum(diffs) / k
+            if (max(diffs) - min(diffs) > self.EDGE_TOL or abs(shift) <= self.EDGE_TOL / 2
+                    or abs(shift) > self.PAGE_SHIFT_MAX):
+                continue
+            moved = []
+            for w in words_by_page[i]:
+                nw = list(w)
+                nw[0] += shift
+                nw[2] += shift
+                moved.append(tuple(nw) if isinstance(w, tuple) else nw)
+            out[i] = moved
+        return out
+
     def value_columns(self, words_by_page: Dict[int, list], width: float) -> List[float]:
         """The right edge of each period column, left to right.
 
@@ -2888,6 +3090,8 @@ class PdfParser:
     code_column_by_value = False
     native_despite_garbled = False
     ocr_sandwich = False
+    align_pages = False
+    poster_split = False
 
     # ⚠️ **A VAS BALANCE-SHEET ITEM CODE IS 3 DIGITS, AND 3 IS EXACTLY WHAT `NOTE_MAX_DIGITS`
     # LETS THROUGH** — which is why every `MSO` failure on record is a BALANCE SHEET and never
@@ -3878,6 +4082,8 @@ class PdfParser:
                     continue
                 words_by_page = {i: pages[i]["words"] for i in on}
                 width = pages[on[0]]["width"]
+                if self.align_pages and len(on) > 1:
+                    words_by_page = self._align_pages(words_by_page, width)
                 columns = self.value_columns(words_by_page, width)
                 if not columns:
                     continue

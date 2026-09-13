@@ -248,6 +248,12 @@ class ParseLayer:
     # ⚠️ OCR a page that is a scan under INVISIBLE text rather than reading that text — somebody
     # else's OCR embedded in the file (TPB, SHB). See `PdfParser.set_ocr_sandwich` (`SDW-1`).
     ocr_sandwich: bool = False
+    # ⚠️ Shift a page whose period columns sit at a constant offset from the statement's — a scanned
+    # page inside a digital statement (VNM). See `PdfParser.set_align_pages` (`MXP-1`).
+    align_pages: bool = False
+    # ⚠️ Read a ONE-PAGE poster as its panels and statements (SSB's annual summaries). See
+    # `PdfParser.set_poster_split` (`PST-1`).
+    poster_split: bool = False
     merged_tail: bool = False
     reseat_words: bool = False
     deskew_rows: bool = False
@@ -308,6 +314,10 @@ class ParseLayer:
                     # ⚠️ `ocr_sandwich` REPLACES the words of a page every earlier layer read, so
                     # nothing reading the page's own text layer may follow it (`SDW-1`).
                     or self.ocr_sandwich
+                    # ⚠️ `align_pages` MOVES a page's figures into other columns (`MXP-1`).
+                    or self.align_pages
+                    # ⚠️ `poster_split` decides which words form a page (`PST-1`).
+                    or self.poster_split
                     or self.reseat_words or self.deskew_rows or self.equity_wording
                     # ⚠️ `cash_wording` OFFERS AN ACCOUNT A SECOND NAME, which is
                     # `equity_wording`'s class exactly — it changes what the matcher will
@@ -551,6 +561,11 @@ def parse_key(layer: ParseLayer) -> tuple:
             # ⚠️ `ocr_sandwich` changes which WORDS a scan-under-text page yields — a PARSE key, and
             # an `ocr_key` too, since it decides whether pixels are read at all.
             layer.ocr_sandwich,
+            # ⚠️ `align_pages` moves which column a page's figures land in — a PARSE key, and not an
+            # `ocr_key`: it reads no pixel (`MXP-1`).
+            layer.align_pages,
+            # ⚠️ `poster_split` decides which words form a page — a PARSE key, not an `ocr_key` (`PST-1`).
+            layer.poster_split,
             # ⚠️ **`reseat_words` REBUILDS THE ROWS, SO IT IS A PARSE KEY — and leaving it out
             # cost a run.** It changes which printed line each word belongs to, i.e. exactly
             # what `table_rows` returns. Omitted, `onnx@300+reseat` collided with
@@ -2036,6 +2051,21 @@ class FinancialsBuilder:
         ParseLayer("onnx@300+twintotal", "onnx", 300, twin_totals=True),
         ParseLayer("onnx@200+codecol+twintotal", "onnx", 200, twin_totals=True,
                    code_column_by_value=True),
+        # ── A SCANNED PAGE INSIDE A DIGITAL STATEMENT (`align_pages`, `MXP-1`) ──
+        # ⚠️ VNM Q1-2011's balance sheet: three text pages and an A4 scan whose columns sit 18 pt
+        # left of theirs, so the scan's rows read `[None, None]`. Late, because it moves figures
+        # between columns, and before the sandwich block, which replaces the text layer these read; the OCR it reads is cached under the same `ocr_key`, so each costs a
+        # re-parse and no pixel.
+        ParseLayer("onnx@200+alignpages", "onnx", 200, align_pages=True),
+        ParseLayer("onnx@300+alignpages", "onnx", 300, align_pages=True),
+        ParseLayer("onnx@200+codecol+alignpages", "onnx", 200, align_pages=True,
+                   code_column_by_value=True),
+        # ── A ONE-PAGE POSTER, ITS STATEMENTS SIDE BY SIDE (`poster_split`, `PST-1`) ──
+        # ⚠️ SSB's 2008-2015 annual summaries: auditor, balance sheet and income statement on one
+        # sheet. Skipped on any filing of more than one page.
+        ParseLayer("onnx@200+poster", "onnx", 200, poster_split=True),
+        ParseLayer("onnx@300+poster", "onnx", 300, poster_split=True),
+        ParseLayer("onnx@400+poster", "onnx", 400, poster_split=True),
         # ── A SCAN UNDER SOMEBODY ELSE'S OCR, READ BY OURS (`ocr_sandwich`, `SDW-1`) ──
         # ⚠️ **29 VN30 FILINGS WITH AN OPEN CELL ARE FULL-PAGE IMAGES UNDER INVISIBLE TEXT, AND
         # EVERY LAYER ABOVE READ THAT TEXT** (2026-09-13) — TPB Q1-2020's profit before tax is
@@ -2137,6 +2167,8 @@ class FinancialsBuilder:
         parser.set_code_column_by_value(layer.code_column_by_value)
         parser.set_native_despite_garbled(layer.native_despite_garbled)
         parser.set_ocr_sandwich(layer.ocr_sandwich)
+        parser.set_align_pages(layer.align_pages)
+        parser.set_poster_split(layer.poster_split)
         parser.set_reseat_words(layer.reseat_words)
         parser.set_deskew_rows(layer.deskew_rows)
 
@@ -2204,6 +2236,8 @@ class FinancialsBuilder:
             # ⚠️ A `+sandwich` layer on a filing with no scan-under-text page would re-parse words
             # an earlier layer already judged, for nothing (`SDW-1`).
             if layer.ocr_sandwich and not parser.has_sandwich_page(path):
+                continue
+            if layer.poster_split and not parser.is_one_page(path):
                 continue
             if self.on_layer is not None:
                 # ⚠️ `cached` MEANS "THIS LAYER READS NO PIXELS", which is a wider set than

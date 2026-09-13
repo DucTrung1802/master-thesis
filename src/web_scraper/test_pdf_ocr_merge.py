@@ -1088,3 +1088,23 @@ def test_the_same_quarter_off_a_sound_prior_is_written(root, tmp_path):
 
     assert decision.writing
     assert decision.values == {_SERVICE: 715_853 * _MN}
+
+
+def test_a_prior_column_the_screens_convict_is_not_subtracted(root, tmp_path):
+    """⚠️ `DCS-2`: MBB Q1-2017 on disk reads interest income 1,455,144 m below its net interest
+    income of 2,406,612 m, and `Q4-2017 = FY - (Q1+Q2+Q3)` wrote 8,519,667 m for it."""
+    inc, net = "1_thu_nhap_lai_va_cac_khoan_thu_nhap_tuong_tu", "i_thu_nhap_lai_thuan"
+    _disk_rows(fin.INCOME_STATEMENT, [
+        ("Q1-2017", {inc: 1_455_144 * _MN, net: 2_406_612 * _MN, PBT: 1_100_000 * _MN, "months": 3}),
+        ("Q2-2017", {inc: 4_804_146 * _MN, net: 2_700_000 * _MN, PBT: 1_200_000 * _MN, "months": 3}),
+        ("Q3-2017", {inc: 5_097_069 * _MN, net: 2_834_971 * _MN, PBT: 1_477_757 * _MN, "months": 3})])
+    folder = _run_folder(tmp_path, period="Q4-2017", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=12, **{inc: 19_876_026 * _MN, net: 11_218_952 * _MN,
+                                                       PBT: 4_615_726 * _MN})})
+
+    decision = _reason(merge.merge_run(folder, quiet=True), fin.INCOME_STATEMENT)
+
+    assert decision.writing
+    assert inc not in decision.values and net not in decision.values
+    assert decision.values[PBT] == (4_615_726 - 1_100_000 - 1_200_000 - 1_477_757) * _MN
+    assert "DCS-2" in decision.note

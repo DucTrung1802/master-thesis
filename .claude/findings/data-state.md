@@ -2161,3 +2161,24 @@ MBB Q4-2017 are held; 99 cumulative cells still wait on an operand that is `miss
 
 VN30 (2026-09-14, after): **4,863/5,214 = 93.3 %**, quarters 1,456/1,738 = 83.8 %, holes 231, one band 5/30 —
 repairs move no cell.
+
+### ⚠️ 2026-09-14 — A POSTER, A SCANNED PAGE AMONG TEXT PAGES, AND A PRIOR THE QUARTER'S SCREENS COULD NOT SEE (`PST-1`, `MXP-1`, `DCS-2`)
+
+Where the 351 open VN30 cells' statements sit (`absent_rows` pages of the latest run folder, native text per page):
+**189 all image, 45 all text, 10 mixed text and image, 107 with no pages recorded**. One-page filings among the
+open cells: SSB's nine annual posters (FY-2008 to FY-2015, FY-2017) and nothing else.
+
+| run | documents | GPU | cells written | what refuses the rest |
+|---|---|---|---|---|
+| `align_pages` on the 10 mixed statements | 10 | 9.2 min | +2 (MSN Q2-2011 IS, Q1-2013 BS) | label glued to a total on the scan, a glued total, closing cash label, an OP residual, a fund outside C+D, an empty current column |
+| `poster_split` on SSB's posters | 9 | 1.5 min | +12 | BS Q4-2008/2009/2012, IS Q4-2015/Q4-2017; no poster prints a cash flow |
+
+The poster prototype ran first on the four text-layer posters with OCR off (FY-2009 IS, FY-2010 BS+IS, FY-2013 BS+IS,
+FY-2014 BS after the figures-before-width fix, all at `onnx@200`), and the GPU run then read the five scans as well.
+Text-layer replays of 12 cells no deepest reason had been recorded for (SAB Q4-2008, STB Q3-2008/Q3-2009, ACB Q1-2008,
+MSN Q1-2011, HDB Q4-2013) won no open cell: each is refused by today's cascade for a named reason.
+
+MBB Q4-2017 (`DCS-2`): written by the release with interest income 8,519,667 m off a Q1-2017 prior that fails its own
+net-line inequality, then re-derived with that prior's convicted columns removed — 4 columns kept.
+
+VN30 (2026-09-14, after): **4,878/5,214 = 93.6 %**, quarters 1,459/1,738 = 83.9 %, holes 228, one band 5/30.
