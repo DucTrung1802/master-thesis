@@ -71,9 +71,11 @@ def test_ONNX_ONLY_still_selects_a_cascade_WITHOUT_them():
     kept = [layer.name for layer in _layers() if layer.engine == "onnx"]
 
     # ⚠️ **THIS NUMBER IS A PIN AND NOT A PROPERTY** — 115 until `SPL-2`'s five
-    # `+dropdamaged` layers were appended on 2026-09-13. Bump it with the cascade; what the
-    # test is for is the FILTER below, which must keep excluding every new engine.
-    assert len(kept) == 120
+    # `+dropdamaged` layers were appended on 2026-09-13, and 120 until `MSC-1`'s two
+    # `+codecol+notes` layers the same day, and 122 until the four
+    # `+native` layers after them. Bump it with the cascade; what the test is for is
+    # the FILTER below, which must keep excluding every new engine.
+    assert len(kept) == 126
     assert not [name for name in kept if "easyocr" in name or "tesseract" in name]
 
 

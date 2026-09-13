@@ -241,6 +241,10 @@ class ParseLayer:
     # ⚠️ Recognise the `Mã số` item-code column by its own FIGURES where the filing gives no
     # readable heading — `MSO` a fifth time, on MSN. See `PdfParser._code_column_by_value`.
     code_column_by_value: bool = False
+    # ⚠️ Read a page's TEXT LAYER even where `_native_garbled` distrusts it — a substitution layer
+    # whose figures are exact and whose labels still map (TPB, BVH). See
+    # `PdfParser.set_native_despite_garbled`.
+    native_despite_garbled: bool = False
     merged_tail: bool = False
     reseat_words: bool = False
     deskew_rows: bool = False
@@ -292,6 +296,9 @@ class ParseLayer:
                     # the statement carries — so no layer reading the columns as detected may
                     # run after it.
                     or self.code_column_by_value
+                    # ⚠️ `native_despite_garbled` READS WORDS THE DEFAULT PATH REFUSES TO BELIEVE — a
+                    # widening of what counts as the page, so nothing reading it as OCR may follow.
+                    or self.native_despite_garbled
                     or self.reseat_words or self.deskew_rows or self.equity_wording
                     # ⚠️ `cash_wording` OFFERS AN ACCOUNT A SECOND NAME, which is
                     # `equity_wording`'s class exactly — it changes what the matcher will
@@ -527,6 +534,9 @@ def parse_key(layer: ParseLayer) -> tuple:
             # written for it. ⚠️ Deliberately NOT in `ocr_key`: it chooses among columns `scan`
             # has already returned and cannot change a recognised character.
             layer.code_column_by_value,
+            # ⚠️ `native_despite_garbled` CHANGES WHICH WORDS A GARBLED PAGE YIELDS, so it is a PARSE
+            # key — and deliberately not an `ocr_key`: it reads no pixel, it declines to.
+            layer.native_despite_garbled,
             # ⚠️ **`reseat_words` REBUILDS THE ROWS, SO IT IS A PARSE KEY — and leaving it out
             # cost a run.** It changes which printed line each word belongs to, i.e. exactly
             # what `table_rows` returns. Omitted, `onnx@300+reseat` collided with
@@ -1866,6 +1876,33 @@ class FinancialsBuilder:
                    relax_totals=True),
         ParseLayer("onnx@300+codecol+relax", "onnx", 300, code_column_by_value=True,
                    relax_totals=True),
+        # ⚠️ **AND A CODE COLUMN CAN SIT ON A FILING THAT ALSO APPENDS A SUMMARY FORM** (`MSC-1`,
+        # 2026-09-13). VIC Q1-2009, Q3-2009 and Q1-2010 need BOTH repairs on ONE reading: the
+        # code column dropped (the five layers above) AND the Mẫu CBTT-03 summary printed after
+        # the signatures kept out of the full balance sheet (`notes_boundary`, whose boundary a
+        # leading CONTENTS page had switched off). Either flag alone leaves the sheet refused —
+        # measured on the filings' own words, no OCR: all three statements of all three quarters
+        # reconcile with both, and none of the three balance sheets with one.
+        ParseLayer("onnx@200+codecol+notes", "onnx", 200, code_column_by_value=True,
+                   notes_boundary=True),
+        ParseLayer("onnx@300+codecol+notes", "onnx", 300, code_column_by_value=True,
+                   notes_boundary=True),
+        # ── A TEXT LAYER `_native_garbled` DISTRUSTS, READ AS PRINTED (`native_despite_garbled`) ──
+        # ⚠️ **THE OCR OF A PAGE WHOSE PDF ALREADY HOLDS THE FIGURES IS THE WORSE READING WHEN THE
+        # TEXT LOST ONLY ITS ACCENTS** (2026-09-13). 68 open VN30 cells sit on filings whose text
+        # pages trip the substitution test, so every one of the cascade's layers read them through
+        # the OCR; replayed on their own words with no OCR at all, TPB Q4-2013, Q3-2016 and Q1-2018
+        # and BVH Q1-2009 balance sheets reconcile at `+notes+seam`, which no real run could reach.
+        # SHB's layers trip the same test and are shredded past use, which is why this is a LAYER:
+        # the gates decide, not the ratio. ⚠️ **LAST AMONG THE WIDENINGS THAT READ A PAGE**, and
+        # mirroring the `+notes+seam` block that won, SEAM FIRST for the reason that block states.
+        ParseLayer("onnx@200+native", "onnx", 200, native_despite_garbled=True),
+        ParseLayer("onnx@200+native+notes+seam", "onnx", 200, native_despite_garbled=True,
+                   notes_boundary=True, relax_merged_seam=True),
+        ParseLayer("onnx@200+native+notes+seam+relax", "onnx", 200, native_despite_garbled=True,
+                   notes_boundary=True, relax_merged_seam=True, relax_totals=True),
+        ParseLayer("onnx@200+native+relax", "onnx", 200, native_despite_garbled=True,
+                   relax_totals=True),
         # ── THE CASH BALANCES UNDER THE "TIỀN TỒN" WORDING (`cash_wording`, `GCW-1`)
         # ⚠️ **A FALSE REFUSAL THAT COST A WHOLE TICKER'S CASH FLOWS, measured on HOSE_GAS
         # 2026-09-07.** The corp chart names the two dated balances "Tiền và tương đương tiền
@@ -2026,6 +2063,7 @@ class FinancialsBuilder:
         parser.set_unit_from_document(layer.unit_from_document)
         parser.set_column_header_blind(layer.column_header_blind)
         parser.set_code_column_by_value(layer.code_column_by_value)
+        parser.set_native_despite_garbled(layer.native_despite_garbled)
         parser.set_reseat_words(layer.reseat_words)
         parser.set_deskew_rows(layer.deskew_rows)
 

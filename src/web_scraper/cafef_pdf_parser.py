@@ -713,6 +713,8 @@ class PdfParser:
         self.column_header_blind = False
         # set per PARSE LAYER; see _code_column_by_value / value_columns
         self.code_column_by_value = False
+        # set per PARSE LAYER; see set_native_despite_garbled / _read_page
+        self.native_despite_garbled = False
         # set per PARSE LAYER; see CONDENSED_BS / _classify_condensed
         self.condensed_form = False
         # set per PARSE LAYER; see _classify_income_by_columns
@@ -768,7 +770,9 @@ class PdfParser:
         # without onnxruntime — and because a flag absent from a stub must read as OFF rather
         # than raise, which is what `set_red_channel` leaves an un-flagged parser at anyway.
         red = bool(getattr(onnx, "red_channel", False)) if onnx is not None else False
-        return (self.engine, self.dpi, pad, red)
+        # ⚠️ `native_despite_garbled` changes which WORDS a garbled page yields (its text layer instead
+        # of the OCR), so a layer carrying it must never be served a page read without it.
+        return (self.engine, self.dpi, pad, red, self.native_despite_garbled)
 
     def _use_document(self, pdf_path: str) -> None:
         """Point the page cache at one filing, discarding the previous one's pages."""
@@ -947,6 +951,21 @@ class PdfParser:
         statement every strict read and every `MSO` widening already refused.
         """
         self.code_column_by_value = bool(on)
+
+    def set_native_despite_garbled(self, on: bool) -> None:
+        """Read a page's TEXT LAYER even where `_native_garbled` calls it mojibake — a LAYER, never a default.
+
+        ⚠️ **THE DEFAULT IS RIGHT FOR SHB AND WRONG FOR TPB, AND ONLY THE GATES CAN TELL THEM APART**
+        (2026-09-13). Both text layers trip the SUBSTITUTION test (diacritic ratio 0.000). SHB
+        Q3-2015's is shredded past use (`Mn chi Thuydt | Sd dlu nrm`, then a page of symbols) and
+        replayed natively it maps nothing. TPB Q3-2016's lost only its accents (`Tien mat, yang bac,
+        da quy 5 684.695 621.500`): its figures are the PDF's own and exact, and replayed on that text
+        its balance sheet RECONCILES, while every real run OCR'd the page and was refused `no total
+        assets`. `norm` strips diacritics before a label is scored, so an accent-less layer costs the
+        matcher little; what the OCR costs is split boxes. So this is offered late, after every
+        reading of the pixels, and `reconcile` and `sane` decide — never the ratio.
+        """
+        self.native_despite_garbled = bool(on)
 
     def set_unit_from_document(self, on: bool) -> None:
         """Let a statement that names no unit take the one the rest of the filing names.
@@ -1903,7 +1922,8 @@ class PdfParser:
         """
         native = self._page_content_text(page, native)
         need_ocr = self.ocr_ready and (
-            len(native.strip()) < self.MIN_PAGE_TEXT or self._native_garbled(native))
+            len(native.strip()) < self.MIN_PAGE_TEXT
+            or (self._native_garbled(native) and not self.native_despite_garbled))
         if not need_ocr:
             # ⚠️ **A `/Rotate 90` PAGE HANDS ITS NATIVE WORDS BACK IN THE *UNROTATED* SPACE
             # WHILE `page.rect` IS THE ROTATED ONE — `ROT-2`, 2026-09-04.** Measured on FPT's
@@ -2304,7 +2324,22 @@ class PdfParser:
 
         A layer, not a default: it re-reads pages that parse today. See `set_notes_boundary`.
         """
-        notes_at = next((i for i in sorted(pages) if pages[i]["kind"] == NOTES), None)
+        # ⚠️ **THE BOUNDARY IS THE FIRST NOTES PAGE AFTER A STATEMENT, NOT THE FIRST NOTES PAGE**
+        # (`MSC-1`, VIC Q1-2009, Q3-2009 and Q1-2010, 2026-09-13). VIC's filings open with a
+        # CONTENTS page classified `notes` at index 1, so the first notes page came before every
+        # statement, `established` was empty and the rule pruned NOTHING — which let the Mẫu
+        # CBTT-03 SUMMARY appended after the signatures (index 23, a condensed balance sheet that
+        # prints its OPENING column first) merge into the full balance sheet. `tong_cong_tai_san`
+        # then came from the summary's opening column and A and B from the face, so a sheet that
+        # closes to the đồng was refused `section sum does not close: … = 6,225,540,228,245
+        # against a printed 6,021,566,399,923`. Measuring from the first statement keeps the
+        # contents-page protection below exactly as it was: a notes page with no statement
+        # before it still establishes nothing.
+        first = next((i for i in sorted(pages) if pages[i]["kind"] in REPORTS), None)
+        if first is None:
+            return
+        notes_at = next((i for i in sorted(pages)
+                         if i > first and pages[i]["kind"] == NOTES), None)
         if notes_at is None:
             return
         established = {pages[i]["kind"] for i in sorted(pages)
@@ -2769,6 +2804,7 @@ class PdfParser:
     unit_from_document = False
     column_header_blind = False
     code_column_by_value = False
+    native_despite_garbled = False
 
     # ⚠️ **A VAS BALANCE-SHEET ITEM CODE IS 3 DIGITS, AND 3 IS EXACTLY WHAT `NOTE_MAX_DIGITS`
     # LETS THROUGH** — which is why every `MSO` failure on record is a BALANCE SHEET and never
@@ -2779,6 +2815,16 @@ class PdfParser:
     # Below this many codes the ascending test is not evidence — three ascending 3-digit numbers
     # are a coincidence a real column can produce.
     CODE_COLUMN_MIN_ROWS = 8
+    # ⚠️ How many non-code numbers may sit ABOVE a page's first code before the column is judged
+    # (`MSC-1`): a page header carries a date's day and at most one more figure (a year). A
+    # figures column opens with its grand total, so its body exceeds this on its first page.
+    CODE_HEADER_BAND = 2
+    # The first VAS balance-sheet line code (A. TÀI SẢN NGẮN HẠN). A three-digit number below it is
+    # the zero-padded numbering of the off-balance-sheet appendix, never a line of the table.
+    CODE_COLUMN_FIRST = 100
+    # TỔNG CỘNG TÀI SẢN and TỔNG CỘNG NGUỒN VỐN: each closes its side of the sheet wherever its
+    # number falls, so a descent INTO one of them is the form (`MSC-1`).
+    CODE_GRAND_TOTALS = (270, 440)
 
     def _code_column_by_value(self, cols: List[float],
                               words_by_page: Dict[int, list]) -> Optional[float]:
@@ -2818,18 +2864,65 @@ class PdfParser:
             return None                      # dropping the only column helps nobody
         leftmost = min(cols)
         seq: List[int] = []
+        ended = False
         for page in sorted(words_by_page):
+            # ⚠️ **THE PAGE HEADER PRINTS A DATE, AND ON VNM ITS DAY SITS EXACTLY OVER THE CODE
+            # COLUMN** (`MSC-1`, 2026-09-13). VNM's balance sheets repeat `Tại ngày 31 tháng 3 năm
+            # 2011` at the top of EVERY page and the `31` lands within `EDGE_TOL` of the codes, so
+            # the strict rule abstained on each page's first number — column 0 read `[31, 100,
+            # 110, … 158, 31, 200, … 270, 31, 300, …]`, every entry a code but the three `31`s —
+            # and seven balance sheets were refused as `assets 270 != liabilities + equity 440`
+            # through all five `+codecol` layers, six of them with grand totals that agree to the
+            # đồng (Q3-2012: 17,085,744,691,352 on both sides). A number ABOVE the page's first
+            # code is the header band, not the table, so up to `CODE_HEADER_BAND` of them are
+            # passed over. Everything from the first code down is judged exactly as before, and a
+            # figures column — whose body is all non-code numbers — exceeds the cap and abstains.
+            skipped, opened = 0, False
             for w in sorted(self._numbers(words_by_page[page]), key=lambda b: b[1]):
                 if abs(w[2] - leftmost) > self.EDGE_TOL:
                     continue
                 digits = re.sub(r"\D", "", w[4])
-                if len(digits) != self.CODE_COLUMN_DIGITS:
-                    return None
+                code = (len(digits) == self.CODE_COLUMN_DIGITS
+                        and int(digits) >= self.CODE_COLUMN_FIRST)
+                # ⚠️ **AND THE TABLE ENDS WHERE THE OFF-BALANCE-SHEET APPENDIX BEGINS** (`MSC-1`,
+                # read off VIC Q1-2009's own words, 2026-09-13). A QĐ 15 balance sheet is followed
+                # by `CÁC CHỈ TIÊU NGOÀI BẢNG CÂN ĐỐI KẾ TOÁN`, whose items are numbered `001` …
+                # `008` in the SAME column: three digits, so they pass the length rule, and `440 →
+                # 001` is a descent — the detector abstained on a column whose 98 codes from 100 to
+                # 440 were perfect, and the statement was refused as `a_tai_san_ngan_han +
+                # b_tai_san_dai_han = 300`, i.e. on the codes. No balance-sheet line is numbered
+                # below 100, so such a number after the codes began is the appendix and nothing
+                # after it is evidence about the table. The codes before it still have to clear
+                # `CODE_COLUMN_MIN_ROWS` and never descend.
+                if not code and seq and len(digits) == self.CODE_COLUMN_DIGITS:
+                    ended = True
+                    break
+                if not code:
+                    if opened or skipped >= self.CODE_HEADER_BAND:
+                        return None
+                    skipped += 1
+                    continue
+                opened = True
                 seq.append(int(digits))
+            if ended:
+                break
         if len(seq) < self.CODE_COLUMN_MIN_ROWS:
             return None
-        if any(b < a for a, b in zip(seq, seq[1:])):
-            return None
+        # ⚠️ **TWO DESCENTS ARE THE FORM, AND BOTH WERE READ OFF THE FILINGS' OWN WORDS** (`MSC-1`,
+        # 2026-09-13). (1) A CONSOLIDATED sheet closes its side with the grand total wherever that
+        # total's number falls: VIC Q1-2009, Q3-2009 and Q1-2010 print `C. LỢI ÍCH CỦA CỔ ĐÔNG THIỂU
+        # SỐ 490` between the 430s and `TỔNG CỘNG NGUỒN VỐN 440` — `490 → 440`, the only descent in
+        # 92 codes. (2) A filing can print a section's number TWICE: VNM Q1-2015 numbers `III. Bất
+        # động sản đầu tư` 240/241/242 and then `IV. Tài sản dở dang dài hạn` 240/241 — `242 → 240`,
+        # a misprint on the page and not a column of figures. So a descent INTO a grand total, or
+        # BACK to a code this column already printed, is passed. Any other descent still abstains,
+        # and the all-three-digit rule above — the one a figures column cannot imitate — is
+        # untouched.
+        seen: set = set()
+        for a, b in zip(seq, seq[1:]):
+            seen.add(a)
+            if b < a and b not in self.CODE_GRAND_TOTALS and b not in seen:
+                return None
         return leftmost
 
     def _code_column(self, cols: List[float],

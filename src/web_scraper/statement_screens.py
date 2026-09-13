@@ -52,12 +52,24 @@ MAX_STEP = 1.7
 # ⚠️ Tried BOTH ways for the same reason `reconcile` does: on a modern form they are already
 # inside `D` and adding them would double-count. A screen that cries wolf on a whole era of
 # filings is a screen nobody reads.
+# ⚠️ **AND `A != L + E` NEEDS THE SAME TERMS, CHART BY CHART** (2026-09-13). The identity below summed
+# only `C_LIABILITIES` and `C_EQUITY`, so a Decision-15 sheet printing `II. Nguồn kinh phí và quỹ khác`
+# and `C. LỢI ÍCH CỦA CỔ ĐÔNG THIỂU SỐ` beside `D. VỐN CHỦ SỞ HỮU` was held with both grand totals equal
+# to the đồng: BVH Q1-2009 `assets 28,114,653,581,831 != liabilities + equity 26,839,644,337,063`, the
+# gap exactly 35,760,473,126 + 1,239,248,771,642, and Q4-2008 exactly 36,500,034,959 + 489,359,121,900.
+# Tried in every subset (`_section_candidates`) for the reason `SECTION_SUMS` gives below: a
+# Circular-200 sheet folds them into equity, and adding them there would double-count.
+RESOURCE_EXTRAS = (
+    "ii_nguon_kinh_phi_va_quy_khac_430", "i_11_loi_ich_co_dong_khong_kiem_soat",   # corp
+    "ii_nguon_kinh_phi_va_quy_khac", "c_loi_ich_co_dong_thieu_so",                 # insurance, securities
+    "ix_loi_ich_cua_co_dong_thieu_so",                                             # bank
+)
+
 SECTION_SUMS = {
     "assets A+B": (("a_tai_san_ngan_han", "b_tai_san_dai_han"), (), "tong_cong_tai_san"),
-    "sources C+D": (("c_no_phai_tra", "d_von_chu_so_huu"),
-                    ("ii_nguon_kinh_phi_va_quy_khac_430",
-                     "i_11_loi_ich_co_dong_khong_kiem_soat"),
-                    "tong_cong_nguon_von"),
+    # ⚠️ The optional terms were the CORP chart's names only, so an insurance or securities sheet
+    # printing the same two lines under its own names (BVH, above `RESOURCE_EXTRAS`) failed here too.
+    "sources C+D": (("c_no_phai_tra", "d_von_chu_so_huu"), RESOURCE_EXTRAS, "tong_cong_nguon_von"),
 }
 
 
@@ -97,8 +109,9 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
             # page that reads both totals (`CRP-1`); it is kept because on `bank` it is not.
             if a is not None and r is not None and not _close(a, r):
                 why.append("assets {:,} != resources {:,}".format(a, r))
-            if a is not None and liab is not None and eq is not None \
-                    and not _close(a, liab + eq):
+            if a is not None and liab is not None and eq is not None and not any(
+                    _close(a, c) for c in FinancialsBuilder._section_candidates(
+                        liab + eq, [values.get(x) for x in RESOURCE_EXTRAS])):
                 why.append("assets {:,} != liabilities + equity {:,} (gap {:,})"
                            .format(a, liab + eq, a - liab - eq))
             # ⚠️ **THE SECTION SUMS ARE THE ONLY REAL CHECK A `corp` BALANCE SHEET HAS, and
@@ -114,8 +127,10 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
                 whole = values.get(total)
                 if any(v is None for v in got) or whole is None:
                     continue
-                extra = sum(v for v in (values.get(c) for c in optional) if v is not None)
-                if _close(sum(got), whole) or (extra and _close(sum(got) + extra, whole)):
+                # ⚠️ EVERY SUBSET, not all-or-none — `_section_candidates` is `reconcile`'s own
+                # rule, and FPT Q1-2016 is why: its two optional lines sit in different places.
+                if any(_close(c, whole) for c in FinancialsBuilder._section_candidates(
+                        sum(got), [values.get(c) for c in optional])):
                     continue
                 why.append("{} {:,} + {:,} = {:,} != {:,} (gap {:,})"
                            .format(label, got[0], got[1], sum(got), whole,

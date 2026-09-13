@@ -1938,3 +1938,65 @@ the day, and it came from a REPLAY that cost no GPU at all.**
 ⚠️ **CONTIGUITY BARELY MOVED AND THAT IS THE HARD PART.** **31 holes closed out of 310**, and
 **not one more ticker became a single band** — and a final free `release_and_fill` over all 30
 tickers added **0 cells and 0 grid rows**, so nothing winnable is left unwritten. The 5 are still ACB, BID, CTG, TCB, VCB.
+
+### ⚠️ 2026-09-13 — THE CODE COLUMN WAS DEFEATED BY FOUR THINGS ON THE PAGE, AND ONLY THE FILING'S OWN WORDS COULD SHOW THEM (`MSC-1`)
+
+The refusal `assets 270 != liabilities + equity 440` named 8 of the 92 confidently-winnable open VN30
+cells, and `270`/`440` are form B01's `Mã số`. `code_column_by_value` had existed on five layers since
+MSN (above) and was not reaching them. ⚠️ **THIS FILE ALREADY SAYS WHY A STORED-ROW REPLAY COULD NOT
+ANSWER THAT** — *a replay over recorded rows can verify a figure and can never verify a detector* — so
+the detector was driven on the words themselves: these filings are TEXT LAYERS, `_read_page` hands the
+parser the PDF's own words for them, and with every OCR engine switched off `_parse_cascaded` runs
+unchanged on CPU (`.claude/tools/replay_text_layer.py`). Each shape below was measured with a NULL — the
+changed class attribute set back in a second process on the same cells.
+
+| filings | what the detector met on the page | the rule now | with the rule | null |
+|---|---|---|---|---|
+| VNM Q3-2012, Q1-2013, Q3-2013, Q1-2014, Q3-2014 | `Tại ngày 31 tháng 3 năm …` repeated at the top of every page, its day `31` inside `EDGE_TOL` of the codes | up to `CODE_HEADER_BAND = 2` non-codes ABOVE a page's first code are its header | balance sheet accepted at `onnx@200+codecol`, 5 of 5 | `CODE_HEADER_BAND = 0`: 5 of 5 refused `270 != 440` |
+| VNM Q1-2015 | `III. Bất động sản đầu tư` numbered 240/241/242, then `IV. Tài sản dở dang dài hạn` 240/241 — the filing's misprint | a descent BACK to a code the column already printed passes | accepted, 97 items | refused `270 != 440` |
+| VIC Q1-2009, Q3-2009, Q1-2010 | the off-balance appendix `001`…`008` after 440, AND `C. LỢI ÍCH CỦA CỔ ĐÔNG THIỂU SỐ 490` printed before `TỔNG CỘNG NGUỒN VỐN 440` | a zero-padded number after the codes ENDS the table; a descent INTO 270 or 440 passes | the column drops — and the sheet is refused on its NEXT defect (row below) | `CODE_COLUMN_FIRST = 0`: refused on the codes, `a + b = 300` |
+| the same three + VIC Q2-2008 | the Mẫu CBTT-03 SUMMARY appended after the signatures (index 23, columns OPENING-first) merged into the full balance sheet, because a leading CONTENTS page classified `notes` switched `_drop_after_notes` off | the boundary is the first notes page AFTER a statement; two `+codecol+notes` layers | accepted at `onnx@200+codecol+notes`, 4 of 4, IS and CF reconciling on the same reading | the old boundary prunes nothing and the sheet reads `6,225,540,228,245 against a printed 6,021,566,399,923` |
+
+⚠️ **EVERY ROW OF THAT TABLE WAS INVISIBLE IN `absent_rows`**: the stored rows of VIC Q1-2009 show a
+clean code column and a `section sum` refusal, which reads like a parser error on the figures — the
+appendix, the minority line and the summary page are all outside the rows a run folder keeps.
+⚠️ **VNM Q1-2011 IS NOT THIS DEFECT**: its first balance-sheet page puts the codes at another x, the
+detector fires on the other pages and the sheet is refused `no total to balance against`.
+
+#### ✅ BANKED: 10 CELLS FROM 10 DOCUMENTS, 56.1 min of RTX 3050, EVERY ONE AT THE LAYER WRITTEN FOR IT
+
+| document | written |
+|---|---|
+| VNM Q3-2012, Q1-2013, Q3-2013, Q1-2014, Q3-2014 | `balance_sheet` [onnx@200+codecol] 71 items each |
+| VNM Q1-2015 | `balance_sheet` [onnx@200+codecol] 97 items |
+| VIC Q2-2008, Q1-2009, Q3-2009, Q1-2010 | `balance_sheet` [onnx@200+codecol+notes] 69 · 67 · 66 · 63 items |
+
+VNM + VIC went **390 -> 400 of 432 cells, quarters 105 -> 115, holes 34 -> 25**: each banked sheet completed a quarter whose income statement and cash flow were already `pdf`. ⚠️ **The plan had 10 documents and not the 8 cells the refusal named**: the text-layer replay ran BEFORE any GPU was spent and said which would land, and it was right on all ten — the replay-first order `JVW-2` recommends, with a detector this time rather than a mapping.
+
+#### The same harness over every open VN30 cell on a text layer
+
+Driving only the changed layers (`code_column_by_value` or `notes_boundary`) over every open cell
+whose filing has a text layer, 10 wins came back and **a null split them**: VIC 4 and VNM 5 are this
+fix; **TPB Q1-2010 and Q1-2011 won under the OLD rule too**, and a dry release names why they are open
+— both balance sheets were ACCEPTED in their run folder and are HELD by the continuity screen,
+convicted by neighbours read ×10³ short off scanned annual filings (`UNT-1`). ⚠️ **A harness WON on a
+cell the latest run already accepted is a release question and not a parser one**, and it is filtered
+out by reading that run's `accepted` before planning anything.
+
+#### ⚠️ And the release screen convicted two sound BVH sheets on a term its identity did not know (`SCX-1`)
+
+A dry release over VN30 (VNM/VIC excluded, a live run was merging them) holds **120** statements, and
+BVH Q1-2009 was among them: accepted at `onnx@200`, both grand totals **28,114,653,581,831**, held as
+`assets != liabilities + equity 26,839,644,337,063`. Its own accepted values close the gap to the đồng:
+
+| quarter | L | D. equity | II. funds | C. minority | L + D + II + C | printed total |
+|---|---|---|---|---|---|---|
+| Q1-2009 | 18,946,609,050,313 | 7,893,035,286,750 | 35,760,473,126 | 1,239,248,771,642 | 28,114,653,581,831 | 28,114,653,581,831 |
+| Q4-2008 | 16,526,705,083,134 | 8,265,011,167,953 | 36,500,034,959 | 489,359,121,900 | 25,317,575,407,946 | 25,317,575,407,946 |
+
+`SECTION_SUMS` already tried the two Decision-15 lines as optional terms — under the CORP chart's
+names only — and `A = L + E` tried none. Both now try every subset of `RESOURCE_EXTRAS` through
+`_section_candidates`; a real release wrote both cells with no GPU. ⚠️ **The class is 2 of the 47
+`A != L + E` holds**: 21 others have equal grand totals and a gap that is no printed line (VIB Q2-2015
+6.9 tn, MBB Q3-2017 exactly 10 bn), a wrong figure in a mapped column, which the screen convicts
+correctly and nothing here forces.

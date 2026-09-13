@@ -459,3 +459,142 @@ def test_the_plain_code_column_still_behaves_exactly_as_before(parser):
     """VIC's three-digit codes carry no decimal tail, so the parsed magnitude and the strip
     agree and `NOTE_MAX_DIGITS` still cannot reach them — which is why `_code_column` exists."""
     assert X_CODE in parser.value_columns(_page(header=False), WIDTH)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `MSC-1` — the PAGE HEADER's date sits over the code column
+# ──────────────────────────────────────────────────────────────────────────────
+# ⚠️ **VNM REPEATS `Tại ngày 31 tháng 3 năm 2011` AT THE TOP OF EVERY BALANCE-SHEET PAGE, AND THE
+# DAY LANDS ON THE CODE COLUMN** (2026-09-13). Off `absent_rows` for Q1-2011, Q3-2012, Q1-2013,
+# Q3-2013, Q1-2014, Q3-2014 and Q1-2015 — every one `missing` on disk with its income statement
+# and cash flow already `pdf` — column 0 reads `[31, 100, 110, … 158, 31, 200, … 270, 31, 300, …]`,
+# every entry a code but the three `31`s, and six of the seven carry grand totals that agree to
+# the đồng. The strict rule abstained on each page's first number, so all five `+codecol` layers
+# left them refused as `assets 270 != liabilities + equity 440`.
+
+
+def _vnm_pages(day="31", band=1, stray_inside=False):
+    """ROWS split over three pages the way VNM's filings split them, each page opening with
+    `band` copies of the header's day printed over the code column."""
+    pages = {}
+    for p, rows in enumerate((ROWS[:7], ROWS[7:11], ROWS[11:])):
+        words = _page(header=False, rows=rows)[0]
+        for k in range(band):
+            words.append(_box(250.0, 60.0 + k * 12.0, "Tại ngày", 60.0))
+            words.append(_box(X_CODE, 60.0 + k * 12.0, day, 16.0))
+        pages[p] = words
+    if stray_inside:
+        # between the second page's first and second rows — INSIDE the table, not above it
+        pages[1].append(_box(X_CODE, 124.0, day, 16.0))
+    return pages
+
+
+def test_a_date_in_every_page_header_no_longer_defeats_the_detector():
+    pages = _vnm_pages()
+    assert len(PdfParser().value_columns(pages, WIDTH)) == 3     # the defect, unflagged
+    cols = _flagged().value_columns(pages, WIDTH)
+    assert len(cols) == 2
+    assert min(cols) == pytest.approx(X_NOW, abs=PdfParser.EDGE_TOL)
+    rows = {r.key: r.values for r in _flagged().table_rows(pages, cols)}
+    assert rows["tong_cong_tai_san"][0] == 82_791_938_275_549
+    assert rows["tong_cong_nguon_von"][0] == 82_791_938_275_549
+
+
+def test_the_header_band_is_CAPPED_so_a_long_run_of_non_codes_still_abstains():
+    """⚠️ A page header carries a date's day and at most a year. More numbers than that above the
+    first code is not a header, and the detector goes back to abstaining."""
+    pages = _vnm_pages(band=PdfParser.CODE_HEADER_BAND + 1)
+    assert len(_flagged().value_columns(pages, WIDTH)) == 3
+
+
+def test_a_stray_INSIDE_the_table_still_abstains():
+    """⚠️ ONLY THE BAND ABOVE A PAGE'S FIRST CODE IS PASSED OVER. From the first code down the
+    first disagreement still wins, which is the fail-safe `test_it_abstains_on_one_damaged_code…`
+    pins — a damaged code mid-table must never be read as permission to drop the column."""
+    pages = _vnm_pages(stray_inside=True)
+    assert len(_flagged().value_columns(pages, WIDTH)) == 3
+
+
+def test_a_figures_column_under_a_header_date_is_never_dropped():
+    """⚠️ THE CASE THE CAP EXISTS FOR. With no code column the leftmost column is a PERIOD column;
+    its grand total and first detail are two non-code numbers, and the header's day makes three,
+    so the band overflows on the first page and nothing is dropped."""
+    words = _page(header=False, codes=False)[0]
+    words.append(_box(X_NOW, 60.0, "31", 16.0))
+    cols = _flagged().value_columns({0: words}, WIDTH)
+    assert len(cols) == 2
+    assert cols == PdfParser().value_columns({0: words}, WIDTH)
+
+
+# ⚠️ **AND THE OFF-BALANCE-SHEET APPENDIX NUMBERS ITS OWN ITEMS IN THE SAME COLUMN** (VIC Q1-2009,
+# read off the filing's own words 2026-09-13): pages 4-6 carry the codes 100 → 440 without one
+# stray, and page 7 carries `CÁC CHỈ TIÊU NGOÀI BẢNG` numbered `001` … `008`. Three digits pass
+# the length rule and `440 → 001` is a descent, so the detector abstained and the statement was
+# refused as `a_tai_san_ngan_han + b_tai_san_dai_han = 300` — the section sum taken on the codes.
+APPENDIX = [("Tài sản thuê ngoài", "001", "1.200.000.000", "1.200.000.000"),
+            ("Vật tư, hàng hóa nhận giữ hộ", "002", "35.000.000", "35.000.000"),
+            ("Nợ khó đòi đã xử lý", "004", "812.000.000", "812.000.000"),
+            ("Ngoại tệ các loại", "007", "1.234", "5.678")]
+
+
+def test_the_off_balance_sheet_appendix_ends_the_table():
+    pages = {0: _page(header=False)[0], 1: _page(header=False, rows=APPENDIX)[0]}
+    assert len(PdfParser().value_columns(pages, WIDTH)) == 3     # the defect, unflagged
+    cols = _flagged().value_columns(pages, WIDTH)
+    assert len(cols) == 2
+    assert min(cols) == pytest.approx(X_NOW, abs=PdfParser.EDGE_TOL)
+    rows = {r.key: r.values for r in _flagged().table_rows(pages, cols)}
+    assert rows["tong_cong_tai_san"][0] == 82_791_938_275_549
+
+
+def test_an_appendix_on_the_same_page_as_the_grand_total_ends_it_too():
+    pages = {0: _page(header=False, rows=ROWS + APPENDIX)[0]}
+    assert len(_flagged().value_columns(pages, WIDTH)) == 2
+
+
+def test_the_codes_before_the_appendix_must_still_clear_the_row_floor():
+    """⚠️ Ending the table early only ever REMOVES evidence: seven codes and then an appendix is
+    seven codes, under `CODE_COLUMN_MIN_ROWS`, and the detector abstains. (Seven and not three: with
+    fewer codes than zero-padded items the column's MEDIAN digit count falls to 1 and the
+    note-reference filter drops it before the detector is ever asked, which tests nothing here.)"""
+    pages = {0: _page(header=False, rows=ROWS[:PdfParser.CODE_COLUMN_MIN_ROWS - 1] + APPENDIX)[0]}
+    assert len(PdfParser().value_columns(pages, WIDTH)) == 3     # the column reaches the detector
+    assert len(_flagged().value_columns(pages, WIDTH)) == 3
+
+
+def test_a_descent_INSIDE_the_table_still_abstains_with_the_appendix_rule_in_place():
+    # 120 then 105: a descent to a code the column never printed — neither a grand total nor a
+    # repeated number — so neither of the two passed shapes
+    rows = ROWS[:5] + [("Mục chen giữa", "105", "1.234.567.890", "1.234.567.890")] + ROWS[5:]
+    pages = {0: _page(header=False, rows=rows + APPENDIX)[0]}
+    assert len(_flagged().value_columns(pages, WIDTH)) == 3
+
+
+# ⚠️ **AND TWO DESCENTS ARE THE FORM** (`MSC-1`, both read off the filings' own words 2026-09-13).
+MINORITY = ("C. LỢI ÍCH CỦA CỔ ĐÔNG THIỂU SỐ", "490", "1.130.000.000.000", "1.020.000.000.000")
+
+
+def test_a_minority_interest_line_numbered_above_the_grand_total_is_the_form():
+    """VIC Q1-2009, Q3-2009, Q1-2010: `490` printed between the 430s and `TỔNG CỘNG NGUỒN VỐN 440`."""
+    pages = {0: _page(header=False, rows=ROWS[:-1] + [MINORITY] + ROWS[-1:])[0]}
+    assert len(PdfParser().value_columns(pages, WIDTH)) == 3     # the defect, unflagged
+    assert len(_flagged().value_columns(pages, WIDTH)) == 2
+
+
+def test_a_section_number_printed_twice_is_the_filing_s_misprint():
+    """VNM Q1-2015 numbers `III. Bất động sản đầu tư` 240/241/242 and then `IV.` 240/241 again."""
+    twice = [("III. Bất động sản đầu tư", "240", "146.446.481.929", "147.725.868.615"),
+             ("- Nguyên giá", "241", "179.678.050.557", "179.594.679.077"),
+             ("- Giá trị hao mòn lũy kế", "242", "(33.231.568.628)", "(31.868.810.462)"),
+             ("IV. Tài sản dở dang dài hạn", "240", "932.277.481.348", "868.971.492.694"),
+             ("1. Chi phí SXKD dở dang dài hạn", "241", "50.630.989.593", "65.283.282.436")]
+    pages = {0: _page(header=False, rows=ROWS[:9] + twice + ROWS[10:])[0]}
+    assert len(_flagged().value_columns(pages, WIDTH)) == 2
+
+
+def test_a_descent_into_a_code_that_is_neither_still_abstains():
+    """`440 → 350` is neither a grand total nor a number already printed. (Not `400`: `B. VỐN CHỦ
+    SỞ HỮU` is printed as 400 above, so a later 400 is the repeated-number shape and passes.)"""
+    rows = ROWS[:-1] + [ROWS[-1], ("Dòng sau tổng", "350", "1.000.000.000", "1.000.000.000")]
+    pages = {0: _page(header=False, rows=rows)[0]}
+    assert len(_flagged().value_columns(pages, WIDTH)) == 3

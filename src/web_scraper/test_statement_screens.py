@@ -165,3 +165,34 @@ def test_a_magnitude_slip_is_caught_even_spread_over_a_year(builder, tmp_path):
         (folder / "documents" / (period + ".json")).write_text(
             json.dumps(_doc(period, balance_sheet=_bs(total))), encoding="utf-8")
     assert ("Q2-2010", "balance_sheet") in screen_run([folder], builder)
+
+
+# -- `A != L + E` and the terms a Decision-15 sheet prints outside equity -------------------------
+# ⚠️ BVH Q1-2009 and Q4-2008, off their own run folder (2026-09-13): both grand totals equal to the
+# đồng, and the gap is EXACTLY `II. Nguồn kinh phí và quỹ khác` + `C. LỢI ÍCH CỦA CỔ ĐÔNG THIỂU SỐ`.
+def _insurance_bs(assets, liabilities, equity, other_funds, minority):
+    return {"tong_cong_tai_san": assets, "tong_cong_nguon_von": assets,
+            "c_no_phai_tra": liabilities, "d_von_chu_so_huu": equity,
+            "ii_nguon_kinh_phi_va_quy_khac": other_funds, "c_loi_ich_co_dong_thieu_so": minority}
+
+
+@pytest.mark.parametrize("period, a, l, e, funds, minority", [
+    ("Q1-2009", 28_114_653_581_831, 18_946_609_050_313, 7_893_035_286_750, 35_760_473_126,
+     1_239_248_771_642),
+    ("Q4-2008", 25_317_575_407_946, 16_526_705_083_134, 8_265_011_167_953, 36_500_034_959,
+     489_359_121_900),
+])
+def test_a_sheet_whose_resources_include_funds_and_minority_is_not_flagged(builder, period, a, l, e,
+                                                                           funds, minority):
+    doc = _doc(period, balance_sheet=_insurance_bs(a, l, e, funds, minority))
+    assert "balance_sheet" not in screen_document(doc, builder)
+
+
+def test_a_gap_the_extra_terms_do_not_explain_is_still_flagged(builder):
+    """The extras widen the candidates and nothing else: a gap of 1 tn beside a 1.24 tn minority
+    line and a 35.8 bn fund is no subset of them."""
+    doc = _doc("Q1-2009", balance_sheet=_insurance_bs(28_114_653_581_831, 18_946_609_050_313,
+                                                      6_893_035_286_750, 35_760_473_126,
+                                                      1_239_248_771_642))
+    why = screen_document(doc, builder)["balance_sheet"]
+    assert any("liabilities + equity" in w for w in why), why

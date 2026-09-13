@@ -138,3 +138,51 @@ def test_the_unit_block_offers_both_resolutions():
     for dpi in (200, 300):
         names = [l.name for l in unit_layers if l.dpi == dpi]
         assert names.index(f"onnx@{dpi}+unit+tail") < names.index(f"onnx@{dpi}+unit")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `_drop_after_notes` — the boundary is the first notes page AFTER a statement (`MSC-1`)
+# ──────────────────────────────────────────────────────────────────────────────
+# ⚠️ **A LEADING CONTENTS PAGE SWITCHED THE RULE OFF** (VIC Q1-2009, Q3-2009, Q1-2010, measured on
+# the filings' own words 2026-09-13). Index 1 is a contents page classified `notes`, so the first
+# notes page preceded every statement, nothing was `established`, and the Mẫu CBTT-03 SUMMARY the
+# filing appends after its signatures — a condensed balance sheet printing its OPENING column
+# first — merged into the full one and was refused `section sum does not close`.
+from web_scraper.cafef_pdf_parser import NOTES  # noqa: E402
+
+
+def test_a_contents_page_ahead_of_every_statement_no_longer_switches_the_boundary_off():
+    pages = _pages([
+        (NOTES, False),                      # 1  — the contents page
+        (None, False),
+        (BALANCE_SHEET, False),              # the full statements, no form code surviving
+        (BALANCE_SHEET, False),
+        (INCOME_STATEMENT, False),
+        (CASH_FLOW, False),
+        (NOTES, False),                      # the notes begin
+        (NOTES, False),
+        (BALANCE_SHEET, False),              # the CBTT-03 summary's balance sheet
+        (INCOME_STATEMENT, False),           # …and its P&L
+    ])
+    PdfParser._drop_after_notes(pages)
+
+    assert _kinds(pages) == [NOTES, None, BALANCE_SHEET, BALANCE_SHEET, INCOME_STATEMENT,
+                             CASH_FLOW, NOTES, NOTES, None, None]
+
+
+def test_a_notes_page_with_no_statement_before_it_still_establishes_nothing():
+    """The protection the rule's docstring names: a contents page first and no notes after the
+    statements must prune nothing, or the whole filing goes."""
+    pages = _pages([(NOTES, False), (BALANCE_SHEET, False), (INCOME_STATEMENT, False)])
+    PdfParser._drop_after_notes(pages)
+
+    assert _kinds(pages) == [NOTES, BALANCE_SHEET, INCOME_STATEMENT]
+
+
+def test_a_form_coded_page_after_the_notes_is_still_kept():
+    """A form code is definitive and always wins — unchanged by where the boundary is taken."""
+    pages = _pages([(NOTES, False), (BALANCE_SHEET, False), (NOTES, False),
+                    (BALANCE_SHEET, True)])
+    PdfParser._drop_after_notes(pages)
+
+    assert _kinds(pages) == [NOTES, BALANCE_SHEET, NOTES, BALANCE_SHEET]
