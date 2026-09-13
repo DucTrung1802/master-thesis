@@ -101,7 +101,10 @@ def test_a_magnitude_error_is_only_visible_beside_its_neighbours(builder, tmp_pa
         assert screen_document(doc, builder) == {}
     flagged = screen_run([folder], builder)
     assert ("Q3-2024", "balance_sheet") in flagged
-    assert ("Q4-2024", "balance_sheet") in flagged      # and the step back up
+    # ⚠️ RESTATED 2026-09-13 (`NBR-1`): this asserted that the step BACK UP convicts Q4-2024 too —
+    # a right figure held because its neighbour is wrong, which is how TPB Q1-2010 and Q1-2011 and
+    # BVH Q4-2025 were held. Q3 breaks with both neighbours; Q4 agrees with Q2.
+    assert ("Q4-2024", "balance_sheet") not in flagged
     assert ("Q2-2024", "balance_sheet") not in flagged
 
 
@@ -248,3 +251,45 @@ def test_single_digit_codes_do_not_close_on_a_span(builder):
     bound of two, which is the bound deciding and not the figures."""
     doc = _cf_dumped(4, 3, 8, 3, [-2])
     assert "cash_flow" in screen_document(doc, builder)
+
+
+
+# -- `NBR-1`: the outlier is convicted, not its right neighbour ---------------------
+def _run_folder(tmp_path, totals):
+    folder = tmp_path / "run_nbr"
+    (folder / "documents").mkdir(parents=True, exist_ok=True)
+    for period, total in totals.items():
+        doc = {"period": period, "accepted": {"balance_sheet": {"values": {"tong_tai_san": total}}}}
+        (folder / "documents" / f"HOSE_TPB__{period}.json").write_text(json.dumps(doc), encoding="utf-8")
+    return folder
+
+
+def _continuity(flagged):
+    return sorted(p for (p, r), why in flagged.items()
+                  if r == "balance_sheet" and any("total assets" in w for w in why))
+
+
+def test_a_sound_quarter_after_a_wrong_one_is_not_convicted(builder, tmp_path):
+    """TPB: Q4-2009 on disk reads a thousandth of the bank, Q4-2010's reading 20.9 bn."""
+    M = 1_000_000
+    folder = _run_folder(tmp_path, {"Q4-2009": 10_728_532_331, "Q1-2010": 13_465_108 * M,
+                                    "Q2-2010": 12_399_950 * M, "Q3-2010": 14_656_764 * M,
+                                    "Q4-2010": 20_889_254_217, "Q1-2011": 25_570_040 * M,
+                                    "Q2-2011": 27_050_271 * M})
+    assert _continuity(screen_run([folder], builder)) == ["Q4-2009", "Q4-2010"]
+
+
+def test_a_wrong_last_quarter_is_still_convicted(builder, tmp_path):
+    folder = _run_folder(tmp_path, {"Q1-2025": 100, "Q2-2025": 105, "Q3-2025": 110, "Q4-2025": 5})
+    assert _continuity(screen_run([folder], builder)) == ["Q4-2025"]
+
+
+def test_a_right_last_quarter_beside_a_wrong_one_is_not(builder, tmp_path):
+    """BVH: Q2-2025 read 18.8 tn between 255.8 tn and 291.9 tn."""
+    folder = _run_folder(tmp_path, {"Q4-2024": 250, "Q1-2025": 256, "Q2-2025": 19, "Q4-2025": 292})
+    assert _continuity(screen_run([folder], builder)) == ["Q2-2025"]
+
+
+def test_two_readings_that_disagree_with_nothing_to_arbitrate_are_both_held(builder, tmp_path):
+    folder = _run_folder(tmp_path, {"Q1-2025": 100, "Q2-2025": 1000})
+    assert _continuity(screen_run([folder], builder)) == ["Q2-2025"]

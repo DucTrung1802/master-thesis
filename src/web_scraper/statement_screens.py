@@ -227,7 +227,44 @@ def screen_run(folders: Iterable[os.PathLike | str],
             if total:
                 assets[period] = total
     order = sorted(assets, key=_q)
-    for before, after in zip(order, order[1:]):
+
+    def _breaks(a: str, b: str) -> bool:
+        gap = max(1, (_q(b)[0] - _q(a)[0]) * 4 + _q(b)[1] - _q(a)[1])
+        rate = (assets[b] / assets[a]) ** (1.0 / gap)
+        return rate > MAX_STEP or rate < 1 / MAX_STEP
+
+    # ⚠️ **ONE WRONG FIGURE CONVICTED ITS RIGHT NEIGHBOUR** (`NBR-1`, 2026-09-13 — `BND-2`'s lesson,
+    # made mechanical). Flagging the LATER period of every broken step held TPB Q1-2010 (13.47 tn,
+    # sound) because Q4-2009 reads 10,728,532,331 — a thousandth of the bank — and Q1-2011 (25.57 tn)
+    # because the Q4-2010 reading beside it is 20.9 bn; BVH Q4-2025 was held on Q2-2025's 18.8 tn. So
+    # the OUTLIER is found first — a period breaking with BOTH neighbours, or at an end breaking with
+    # its one neighbour while that neighbour agrees with the next — and every other period is judged
+    # against the nearest period that is NOT an outlier. A step nobody can resolve is still flagged.
+    n = len(order)
+    outliers = set()
+    for i, period in enumerate(order):
+        if 0 < i < n - 1:
+            if _breaks(order[i - 1], period) and _breaks(period, order[i + 1]):
+                outliers.add(period)
+        elif i == 0 and n >= 3:
+            if _breaks(period, order[1]) and not _breaks(order[1], order[2]):
+                outliers.add(period)
+        elif i == n - 1 and n >= 3:
+            if _breaks(order[i - 1], period) and not _breaks(order[i - 2], order[i - 1]):
+                outliers.add(period)
+    judged = []
+    for i, after in enumerate(order):
+        if i == 0:
+            if after in outliers:
+                judged.append((order[1], after))
+            continue
+        if after in outliers:
+            judged.append((order[i - 1], after))
+            continue
+        before = next((order[j] for j in range(i - 1, -1, -1) if order[j] not in outliers), None)
+        if before is not None:
+            judged.append((before, after))
+    for before, after in judged:
         # ⚠️ **PER QUARTER, NOT PER PAIR — two periods a YEAR apart legitimately move
         # further.** A batch parses the quarters that were OUTSTANDING, so consecutive HERE is
         # not consecutive on the calendar: FPT's run held Q2-2009 and then Q2-2010, four
