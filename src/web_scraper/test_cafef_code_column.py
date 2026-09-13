@@ -598,3 +598,49 @@ def test_a_descent_into_a_code_that_is_neither_still_abstains():
     rows = ROWS[:-1] + [ROWS[-1], ("Dòng sau tổng", "350", "1.000.000.000", "1.000.000.000")]
     pages = {0: _page(header=False, rows=rows)[0]}
     assert len(_flagged().value_columns(pages, WIDTH)) == 3
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `PYR-2` — a `Mẫu … số` impostor over the CURRENT-PERIOD column
+# ──────────────────────────────────────────────────────────────────────────────
+# ⚠️ **THE HEADING WAS AN IMPOSTOR AND THE COLUMN UNDER IT HELD THIRTEEN-DIGIT FIGURES** (VNM Q1-2016,
+# its own text layer, 2026-09-13). The form code `Mẫu B 02a–DN/HN` sits over the current-period
+# column and `Thông tư số 202/2014` on the line below; the stacked join glued `Mẫu` to that `số` as
+# `mauso` (0.889 against `maso`), the current column was dropped as the item codes, and the
+# statement read the PRIOR year's figures as its own. Six `pdf` rows on disk equal the same quarter
+# a year earlier on every line item — the dangerous direction, because every identity closes on the
+# wrong column too.
+
+
+def _impostor_page():
+    """No code column; `Mẫu` over the current-period column with `số` stacked directly beneath it."""
+    words = _page(header=False, codes=False)[0]
+    words.append(_box(X_NOW + 1.5 + 22.1, 60.0, "Mẫu", 22.1))       # x 438.0 - 460.1, as measured
+    words.append(_box(X_NOW + 1.5 + 14.3, 72.0, "số", 9.8))         # x 442.7 - 452.5, one line lower
+    return {0: words}
+
+
+def test_the_impostor_reproduces_as_a_heading_match():
+    """The fixture must reproduce the join, or the test below proves nothing: `mauso` sits over the
+    current-period column and scores as the `Mã số` heading."""
+    page = _impostor_page()
+    joined = [(ns, x0, x1) for ns, x0, x1 in PdfParser()._header_candidates(page[0], 4) if ns == "mauso"]
+    assert joined, "the stacked join did not produce `mauso` - the fixture no longer matches the filing"
+    assert joined[0][1] - PdfParser.EDGE_TOL <= X_NOW <= joined[0][2] + PdfParser.EDGE_TOL
+
+
+def test_a_figures_column_is_never_dropped_as_the_item_codes():
+    """⚠️ Both period columns survive whatever the heading reads, and the current-period figures stay."""
+    page = _impostor_page()
+    cols = PdfParser().value_columns(page, WIDTH)
+    assert len(cols) == 2
+    assert min(cols) == pytest.approx(X_NOW, abs=PdfParser.EDGE_TOL)
+    rows = {r.key: r.values for r in PdfParser().table_rows(page, cols)}
+    assert rows["tong_cong_tai_san"][0] == 82_791_938_275_549          # the CURRENT column's figure
+
+
+def test_a_real_code_column_under_a_real_heading_is_still_dropped():
+    """The veto reads the column's CONTENTS: three-digit codes are still codes."""
+    cols = PdfParser().value_columns(_page(), WIDTH)
+    assert len(cols) == 2
+    assert min(cols) == pytest.approx(X_NOW, abs=PdfParser.EDGE_TOL)

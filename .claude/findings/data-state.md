@@ -2000,3 +2000,15 @@ names only — and `A = L + E` tried none. Both now try every subset of `RESOURC
 `A != L + E` holds**: 21 others have equal grand totals and a gap that is no printed line (VIB Q2-2015
 6.9 tn, MBB Q3-2017 exactly 10 bn), a wrong figure in a mapped column, which the screen convicts
 correctly and nothing here forces.
+
+### ⚠️ 2026-09-13 — WRONG FIGURES ON DISK: THE CURRENT COLUMN DROPPED UNDER AN IMPOSTOR HEADING (`PYR-2`)
+
+Diagnosing VNM Q1-2016's `operating profit does not close` on its text layer showed the reading was Q1-2015's: revenue 8,771,338,508,049, operating profit 1,866,598,526,066 and associates -5,572,888,422 are Q1-2015's row on disk, and the identity closed on them once the lost bracket was restored. `value_columns` returned `[536.1]` — the prior-year column — because `_header_candidates` joined the form code's `Mẫu` (y=112) to `Thông tư số`'s `số` (y=124) as `mauso`, which scores 0.889 against `maso`, over the current column at x≈436; the real `Mã số` column had gone to the note-digit filter. `_code_column` now never drops a column whose median figure is longer than a code.
+
+| audit, line items only | rows |
+|---|---|
+| income statement equal to the same quarter a year earlier | **6** — VNM Q1-2020 (17/17), VNM Q1-2012 (14/14), MSN Q1-2017 (11/11), VIC Q3-2014 (15/16), GVR Q1-2021 (14/15), TPB Q1-2019 (13/15) |
+| balance sheet equal to the prior year-end | 0 |
+| cash flow equal to a year earlier | 0 |
+
+⚠️ **The first audit read 17 of 20 on TPB because it counted `symbol`, `exchange` and `template` as shared figures** — `HOL-1`'s trap again. Replayed with the check off, VNM Q1-2020 and MSN Q1-2017 REPRODUCE the disk figure (one column); with it on, today's cascade accepts a different reading at `onnx@200+equity` — VNM net revenue 14,153,099,953,575, MSN 8,539,865,000,000 — equal to the prior year on 0 figures. GVR Q1-2021's page prints `4.854.675.960.019` under `Quý 1 năm 2021` and the disk's `2.752.481.844.194` under `Quý 1 năm 2020`. **Not yet repaired**: the route is §11 `REPAIR`.

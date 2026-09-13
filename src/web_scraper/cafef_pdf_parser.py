@@ -2952,6 +2952,22 @@ class PdfParser:
             return None                      # dropping the only column helps nobody
         leftmost = min(cols)
         want = self.CODE_HEADER_NS
+        # ⚠️ **A HEADING CAN BE AN IMPOSTOR; A COLUMN OF THIRTEEN-DIGIT FIGURES CANNOT BE THE ITEM
+        # CODES** (`PYR-2`, 2026-09-13). VNM Q1-2016's income statement prints its form code `Mẫu B
+        # 02a–DN/HN` over the current-period column and `Thông tư số 202/2014` on the line below, and
+        # `_header_candidates`' stacked join (`MSO-3`) glued `Mẫu` to that `số` as `mauso`, 0.889
+        # against `maso` — so this dropped the CURRENT column, `value_columns` returned only the
+        # prior year's, and the statement read Q1-2015's revenue 8,771,338,508,049 as Q1-2016's. It
+        # was refused only because the text layer lost one closing bracket. The real `Mã số` column
+        # had already gone to the note-digit filter, so the impostor met a figures column. Codes are
+        # two or three digits; a column whose median figure is longer is never dropped, whatever
+        # its heading reads.
+        digits = sorted(len(str(abs(self.parse_num(w[4]) or 0)))
+                        for page_words in words_by_page.values()
+                        for w in self._numbers(page_words)
+                        if abs(w[2] - leftmost) <= self.EDGE_TOL)
+        if digits and digits[len(digits) // 2] > self.CODE_COLUMN_DIGITS:
+            return None
         for words in words_by_page.values():
             for ns, wx0, wx1 in self._header_candidates(words, len(want)):
                 # ⚠️ **THE WHOLE BOX, OR THE TEXT IT BEGINS WITH — because the recogniser
