@@ -1253,3 +1253,17 @@ def test_a_deductions_figure_the_gross_profit_identity_proves_is_net_revenue_mov
     decision = _reason(merge.plan_merge(folder, reports=[fin.INCOME_STATEMENT]), fin.INCOME_STATEMENT)
     assert decision.values[net] == 8_355_616_147_645 and ded not in decision.values
     assert "MOVED" in decision.note and "DED-1" in decision.note
+
+
+def test_an_equity_section_read_off_a_later_equity_line_is_dropped(root, tmp_path):
+    """`EQS-3`: GVR Q1-2022 wrote the 40 tn charter capital as its equity section."""
+    sheet = _statement(**{ASSETS: 79_340_163_228_622, "d_von_chu_so_huu": 40_000_000_000_000,
+                          "i_tien_mat_vang_bac_da_quy": 2_000_000})
+    sheet["row_dump"] = [["", "von_chu_so_huu", "D. VỐN CHỦ SỞ HỮU", [53_826_596_542_377]],
+                         ["", "von_gop_cua_chu_so_huu", "1. Vốn góp", [40_000_000_000_000]],
+                         ["", "von_chu_so_huu", "Vốn chủ sở hữu", [40_000_000_000_000]]]
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: sheet})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]), fin.BALANCE_SHEET)
+    assert "d_von_chu_so_huu" not in decision.values
+    assert decision.values["i_tien_mat_vang_bac_da_quy"] == 2_000_000
+

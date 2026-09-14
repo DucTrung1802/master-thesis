@@ -2337,3 +2337,15 @@ WON `[onnx@200+codecol+notes]` 29 items, STB Q3-2008 cash flow WON `[onnx@200]` 
 `[onnx@200+relax]` 15 items; HDB Q4-2013 cash flow, STB Q3-2009, VNM Q4-2010/Q1-2011/Q3-2015 still refused.
 
 VN30 (2026-09-14, after): **4,904/5,214 = 94.1 %**, quarters 1,476/1,738 = 84.9 %, holes 215, one band 5/30.
+
+### ⚠️ 2026-09-14 — BVH'S EQUITY SECTION AND THE LOANS OUTSIDE ITS ASSETS (`EQS-2`, `EQS-3`, `LNS-2`, `MES-2`)
+
+| run | documents | GPU | written | kept after checking each row |
+|---|---|---|---|---|
+| `EQS-2`: BVH 2010-Q1..2015-Q3, 2023-Q3, 2025-Q2; SHB 2020-Q1, STB 2008-Q3, VJC 2021-Q3 | 28 | 185.0 min | 18 (run + release) | 12 — BVH Q2-2011/Q3-2012/Q1-2013 carry the capital as the equity section (`EQS-3`), Q3-2023/Q2-2025 are parent-only (`MES-2`), VJC Q3-2021's cash flow is three figures |
+| release with `LNS-2`/`EQS-3`, and BVH Q2-2013's sound reading merged from its folder | — | — | 2 (BVH Q4-2013, Q2-2013 balance sheets) | 2 — A + B + loans and C + D + minority close to the đồng on both |
+
+The stored balance sheets (1,749, newest reading per document) re-screened: `LNS-2` with optional lines only
+releases 13 and convicts none; with parts read by text as well it convicted 129 (rejected). `EQS-3` flags 10.
+
+VN30 (2026-09-14, after): **4,918/5,214 = 94.3 %**, quarters 1,484/1,738 = 85.4 %, holes 207, one band 5/30.

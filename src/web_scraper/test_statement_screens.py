@@ -481,3 +481,91 @@ def test_a_printed_deduction_stays_a_deduction(builder):
     out = builder.map_to_schema(st, "corp")
     assert out.get("2_cac_khoan_giam_tru_doanh_thu") == 49_238_000_000
     assert out.get("3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu") == 28_742_356_000_000
+
+
+# -- `EQS-2`: the equity section read as its charter capital, repaired by the section sum --------
+def _bvh_sheet(capital_row=True):
+    from web_scraper.cafef_pdf_parser import BALANCE_SHEET, Row, Statement
+    rows = [Row(label="C. NỢ PHẢI TRẢ", key="no_phai_tra", number=None, values=[33_378_802_546_200]),
+            Row(label="Mã NGUỒN VỐN Thuyết minh B. VỐN CHỦ SỞ HỮU", key="ma_nguon_von_thuyet_minh_b_von_chu_so_huu",
+                number=None, values=[12_394_370_525_030]),
+            Row(label="I. Vốn chủ sở hữu", key="von_chu_so_huu", number=None, values=[12_394_370_525_030]),
+            Row(label="1. Vốn chủ sở hữu", key="von_chu_so_huu", number=None, values=[6_804_714_340_000]),
+            Row(label="Lợi ích của cổ đông thiểu số", key="loi_ich_cua_co_dong_thieu_so", number=None,
+                values=[2_078_251_827_786]),
+            Row(label="TỔNG CỘNG NGUỒN VỐN", key="tong_cong_nguon_von", number=None, values=[47_851_424_899_016])]
+    if not capital_row:
+        rows = [r for r in rows if r.key != "ma_nguon_von_thuyet_minh_b_von_chu_so_huu" and r.values != [12_394_370_525_030]]
+    st = Statement(report=BALANCE_SHEET, pages=[1], unit=1, n_columns=1, rows=rows)
+    row = {"c_no_phai_tra": 33_378_802_546_200, "d_von_chu_so_huu": 6_804_714_340_000,
+           "i_von_chu_so_huu": 12_394_370_525_030, "tong_cong_nguon_von": 47_851_424_899_016}
+    return st, row
+
+
+def test_a_section_total_below_its_part_is_taken_from_the_printed_figure_the_sum_names(builder):
+    """BVH Q1-2013: D read 6,804,714,340,000 (capital) under I 12,394,370,525,030."""
+    st, row = _bvh_sheet()
+    builder._equity_section_from_sum(st, row)
+    assert row["d_von_chu_so_huu"] == 12_394_370_525_030
+
+
+def test_a_section_the_page_never_printed_is_not_computed(builder):
+    st, row = _bvh_sheet()
+    row["i_von_chu_so_huu"] = 12_000_000_000_000
+    st.rows = [r for r in st.rows if r.values != [12_394_370_525_030]]
+    builder._equity_section_from_sum(st, row)
+    assert row["d_von_chu_so_huu"] == 6_804_714_340_000
+
+
+def test_a_section_above_its_part_is_left_alone(builder):
+    st, row = _bvh_sheet()
+    row["d_von_chu_so_huu"] = 12_394_370_525_030
+    builder._equity_section_from_sum(st, row)
+    assert row["d_von_chu_so_huu"] == 12_394_370_525_030
+
+
+# -- `LNS-2`: the screen's section sums read the row dump for lines the mapping missed -----------
+def _bvh_doc(values, dump):
+    return {"period": "Q2-2013", "accepted": {"balance_sheet": {"values": values, "row_dump": dump}}}
+
+
+def test_loans_printed_outside_both_asset_sections_close_the_sum_from_the_dump(builder):
+    """BVH Q2-2013: A + B + the banking subsidiary's loans is the total to the đồng."""
+    values = {"a_tai_san_ngan_han": 18_476_896_092_843, "b_tai_san_dai_han": 22_610_961_839_993,
+              "tong_cong_tai_san": 48_919_721_986_295, "tong_cong_nguon_von": 48_919_721_986_295}
+    dump = [["", "cho_vay_va_ung_truoc_cho_khach_hang", "Cho vay", [7_831_864_053_459, 7_042_879_686_335]]]
+    assert screen_document(_bvh_doc(values, dump), builder) == {}
+    assert "balance_sheet" in screen_document(_bvh_doc(values, []), builder)
+
+
+def test_a_part_the_mapping_missed_is_not_read_off_the_dump(builder):
+    """⚠️ Only OPTIONAL lines come from the dump: a part found by text convicted 129 of 1,749 stored sheets.
+    BVH Q3-2013's wrong equity section is `EQS-3`'s to convict, off the order of its equity lines."""
+    values = {"d_von_chu_so_huu": 3_184_332_381_197, "c_loi_ich_co_dong_thieu_so": 2_105_017_505_611,
+              "tong_cong_tai_san": 51_632_619_720_099, "tong_cong_nguon_von": 51_632_619_720_099}
+    dump = [["", "ma_nguon_von_thuyet_so_minh_a_no_phai_tra", "A. NỢ PHẢI TRẢ", [37_692_471_213_786, 32_045_837_112_707]],
+            ["", "von_chu_so_huu_b", "B. VỐN CHỦ SỞ HỮU", [11_835_131_000_702, 12_113_876_041_877]],
+            ["", "von_chu_so_huu_l", "1. Vốn chủ sở hữu", [6_804_714_340_000, 6_804_714_340_000]],
+            ["", "von_chu_so_huu", "Thặng dư vốn", [3_184_332_381_197, 3_184_332_381_197]]]
+    why = screen_document(_bvh_doc(values, dump), builder)["balance_sheet"]
+    assert not any("sources C+D" in w for w in why), why
+    assert any("EQS-3" in w for w in why), why
+
+
+# -- `EQS-3`: the equity section taken from a later `vốn chủ sở hữu` line ------------------------
+def test_an_equity_section_equal_to_a_later_equity_line_far_below_the_first_is_flagged(builder):
+    values = {"d_von_chu_so_huu": 6_804_714_340_000, "tong_cong_tai_san": 43_329_976_794_364,
+              "tong_cong_nguon_von": 43_329_976_794_364}
+    dump = [["", "von_chu_so_huu", "B. VỐN CHỦ SỞ HỮU", [11_605_564_579_743]],
+            ["", "von_chu_so_huu", "1. Vốn chủ sở hữu", [6_804_714_340_000]]]
+    why = screen_document(_bvh_doc(values, dump), builder)["balance_sheet"]
+    assert any("EQS-3" in w for w in why), why
+
+
+def test_a_section_read_as_its_sub_section_is_not_this_defect(builder):
+    """GVR Q2-2019: the section 49,757,899,155,567 read as its sub-section 49,665,142,878,789."""
+    values = {"d_von_chu_so_huu": 49_665_142_878_789, "tong_cong_tai_san": 60_000_000_000_000,
+              "tong_cong_nguon_von": 60_000_000_000_000}
+    dump = [["", "d_von_chu_so_huu", "D. VỐN CHỦ SỞ HỮU", [49_757_899_155_567]],
+            ["", "i_von_chu_so_huu", "I. Vốn chủ sở hữu", [49_665_142_878_789]]]
+    assert not any("EQS-3" in w for w in screen_document(_bvh_doc(values, dump), builder).get("balance_sheet", []))

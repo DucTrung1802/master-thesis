@@ -67,7 +67,9 @@ RESOURCE_EXTRAS = (
 )
 
 SECTION_SUMS = {
-    "assets A+B": (("a_tai_san_ngan_han", "b_tai_san_dai_han"), (), "tong_cong_tai_san"),
+    # ⚠️ `LNS-2`: the assets side's optional lines are `reconcile`'s own (`LNS-1`, `GWL-1`).
+    "assets A+B": (("a_tai_san_ngan_han", "b_tai_san_dai_han"),
+                   ("cho_vay_va_ung_truoc_cho_khach_hang", "loi_the_thuong_mai_269"), "tong_cong_tai_san"),
     # ⚠️ The optional terms were the CORP chart's names only, so an insurance or securities sheet
     # printing the same two lines under its own names (BVH, above `RESOURCE_EXTRAS`) failed here too.
     "sources C+D": (("c_no_phai_tra", "d_von_chu_so_huu"), RESOURCE_EXTRAS, "tong_cong_nguon_von"),
@@ -342,6 +344,63 @@ def deduction_carriers(values: Dict[str, int]) -> List[str]:
     return sorted(set(moves) | set(drops))
 
 
+def _dump_first(acc: dict, needles: Sequence[str]) -> Optional[int]:
+    """The current-period figure of the first STORED row whose key contains one of `needles` — `LNS-2`.
+
+    ⚠️ **`reconcile` FINDS AN UNMAPPED SECTION LINE BY ITS TEXT, AND THE RELEASE SCREEN COULD NOT.** BVH
+    Q2-2013's balance sheet was accepted because A + B + the banking subsidiary's loans, printed outside
+    both sections and mapped to no column, close its total to the đồng (18,476,896,092,843 +
+    22,610,961,839,993 + 7,831,864,053,459); the screen summed only the mapped `values`, so it held a sheet
+    that is right. And it passed one that is wrong: BVH Q3-2013 carries the share premium
+    3,184,332,381,197 as `d_von_chu_so_huu` with `c_no_phai_tra` unmapped, so `C + D` abstained. The
+    stored row dump holds both lines, so the screen asks it, by containment of the same text `reconcile`
+    uses — stricter than `Statement.find`'s fuzzy match, because a screen that finds the wrong row
+    convicts a right sheet.
+    """
+    slugs = [n.replace(" ", "_") for n in needles]
+    if not slugs:
+        return None
+    for row in acc.get("row_dump") or []:
+        if len(row) < 4 or not isinstance(row[3], list):
+            continue
+        if any(slug in str(row[1] or "") for slug in slugs):
+            first = next((x for x in row[3] if isinstance(x, (int, float))), None)
+            return None if first is None else int(first)
+    return None
+
+
+# ⚠️ **`EQS-3` — THE EQUITY SECTION TAKEN FROM A LATER `VỐN CHỦ SỞ HỮU` LINE, WITH ITS SUB-SECTION UNMAPPED**
+# (2026-09-14). `EQS-1` needs `i_von_chu_so_huu` mapped, and BVH's forms print three lines worded `vốn chủ sở
+# hữu` — the section, its first sub-section and the charter capital — so a reading can put the capital or the
+# share premium in `d_von_chu_so_huu` and map neither of the others: BVH Q3-2013 carries 3,184,332,381,197
+# where the first such line prints 11,835,131,000,702, and a GPU run wrote Q2-2011 and Q3-2012 with the
+# capital 6,804,714,340,000 there. Over the 1,749 stored balance sheets the section below its first `vốn chủ
+# sở hữu` line and equal to a later one occurs 34 times; below it by more than `EQUITY_LINE_SHORT` only on
+# BVH's capital and premium readings, GVR's 40 tn charter capital, FPT Q4-2008 and MCH's item codes — the
+# rest are the section read as its sub-section, a gap of 0.1-2 % that is the funds line.
+EQUITY_LINE_SHORT = 0.10
+
+
+def equity_section_from_a_later_line(values: Dict[str, int], acc: dict) -> Optional[str]:
+    """Why `d_von_chu_so_huu` is a later equity line and not the section — `EQS-3` — or None."""
+    d = values.get("d_von_chu_so_huu")
+    if not d or d <= 0:
+        return None
+    lines = []
+    for row in acc.get("row_dump") or []:
+        key = str(row[1] or "") if len(row) > 1 else ""
+        if (len(row) < 4 or not isinstance(row[3], list) or "von_chu_so_huu" not in key
+                or "no_phai_tra" in key or "tong" in key):
+            continue
+        first = next((x for x in row[3] if isinstance(x, (int, float))), None)
+        if first is not None:
+            lines.append(int(first))
+    if len(lines) < 2 or d not in lines[1:] or d >= (1 - EQUITY_LINE_SHORT) * lines[0]:
+        return None
+    return ("d_von_chu_so_huu {:,} is a later equity line, below the section's own {:,} (`EQS-3`)"
+            .format(d, lines[0]))
+
+
 def grand_total_carriers(values: Dict[str, int], builder: FinancialsBuilder) -> List[str]:
     """The balance-sheet columns, other than the two grand totals and the chart's own section-header
     total, that hold the figure total assets holds — `GTT-3`'s test, shared with the merge (`GTT-4`)."""
@@ -376,6 +435,9 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
                 carriers = grand_total_carriers(values, builder)
                 if carriers:
                     why.append("a line item holds the grand total {:,}: {}".format(a, ", ".join(carriers)))
+            later = equity_section_from_a_later_line(values, acc)
+            if later:
+                why.append(later)
             for whole_col, part_col in SECTION_PARTS:
                 whole, part = values.get(whole_col), values.get(part_col)
                 if (whole is not None and part is not None and whole > 0 and part > 0
@@ -400,14 +462,20 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
             # holding 55 tn - and the screen as first written could not see it. Both sides are
             # checked, because the sources side fails the same way.
             for label, (parts, optional, total) in SECTION_SUMS.items():
+                # ⚠️ `LNS-2`: a part or an optional line the mapping missed is read off the row dump by the
+                # text `reconcile` itself falls back to.
+                # ⚠️ ONLY THE OPTIONAL LINES: a part found by text convicted 129 of 1,749 stored sheets the
+                # gate had accepted (`tai_san_ngan_han` is contained in `tai_san_ngan_han_khac`), and an
+                # extra candidate can only ever release.
                 got = [values.get(c) for c in parts]
                 whole = values.get(total)
                 if any(v is None for v in got) or whole is None:
                     continue
+                extras = [values.get(c) if values.get(c) is not None
+                          else _dump_first(acc, builder.SECTION_EXTRA_TEXT.get(c, ())) for c in optional]
                 # ⚠️ EVERY SUBSET, not all-or-none — `_section_candidates` is `reconcile`'s own
                 # rule, and FPT Q1-2016 is why: its two optional lines sit in different places.
-                if any(_close(c, whole) for c in FinancialsBuilder._section_candidates(
-                        sum(got), [values.get(c) for c in optional])):
+                if any(_close(c, whole) for c in FinancialsBuilder._section_candidates(sum(got), extras)):
                     continue
                 why.append("{} {:,} + {:,} = {:,} != {:,} (gap {:,})"
                            .format(label, got[0], got[1], sum(got), whole,

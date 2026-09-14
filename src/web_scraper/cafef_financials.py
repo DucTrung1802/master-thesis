@@ -2379,6 +2379,10 @@ class FinancialsBuilder:
                     self._total_from_counterpart(st, row)
                 if layer.twin_totals and report == BALANCE_SHEET:
                     self._twin_totals(st, row, template)
+                # ⚠️ `EQS-2`: on every layer — it can only turn a section-sum refusal into a sheet whose
+                # own sum closes on a figure the page printed, and `EQS-1` holds what it cannot repair.
+                if report == BALANCE_SHEET:
+                    self._equity_section_from_sum(st, row)
                 bs_cash, bs_firm = (None, False)
                 if report == CASH_FLOW and BALANCE_SHEET in accepted:
                     bs_cash, bs_firm = self.balance_sheet_cash(
@@ -3798,6 +3802,46 @@ class FinancialsBuilder:
 
     DEDUCTIONS_COL = "2_cac_khoan_giam_tru_doanh_thu"
     NET_REVENUE_COL = "3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu"
+
+    EQUITY_SECTION, EQUITY_PART = "d_von_chu_so_huu", "i_von_chu_so_huu"
+
+    def _equity_section_from_sum(self, st: Statement, row: Dict[str, int]) -> None:
+        """The equity SECTION total read below its own sub-section; the section sum names the printed one — `EQS-2`.
+
+        ⚠️ **`EQS-1`'s DEFECT AT PARSE TIME, AND IT KEPT A RUN OF BVH BALANCE SHEETS OUT.** BVH prints
+        `B. VỐN CHỦ SỞ HỮU`, `I. Vốn chủ sở hữu` and `1. Vốn chủ sở hữu` one under the other; the first
+        arrives with the column headings glued on, and `d_von_chu_so_huu` takes the THIRD line, the charter
+        capital. Q1-2013 at `onnx@200+joinlost` (rows dumped on the GPU): D 6,804,714,340,000 under I
+        12,394,370,525,030, so `C + D` = 40,183,516,886,200 against a printed 47,851,424,899,016 and the sheet
+        is refused — while C 33,378,802,546,200 + 12,394,370,525,030 + minority 2,078,251,827,786 is the
+        total to the đồng. The same capital-in-the-total reading is what `EQS-1` holds at the release.
+
+        A section can never be below its own part, so when it is, the section sum is asked: for each subset
+        of the optional terms `reconcile` itself tries, `total - (C + subset)` is a candidate, and it is
+        taken only when it is at least the part, a row of this statement PRINTS it, and exactly one
+        candidate qualifies. Nothing is computed into the row that the page did not print.
+        """
+        d, part = row.get(self.EQUITY_SECTION), row.get(self.EQUITY_PART)
+        if d is None or part is None or d <= 0 or part <= d:
+            return
+        _parts, optional, col = self.SECTION_SUMS[1]
+        total = row.get(col)
+        c = row.get("c_no_phai_tra")
+        if c is None:
+            c = st.find(*self.SECTION_PART_TEXT.get("c_no_phai_tra", ()))
+        if total is None or c is None or c <= 0:
+            return
+        extras = [row.get(x) if row.get(x) is not None else st.find(*self.SECTION_EXTRA_TEXT.get(x, ()))
+                  for x in optional]
+        printed = {st._first_value(r.values) for r in st.rows}
+        qualifying = {total - s for s in self._section_candidates(c, extras)
+                      if total - s >= part and (total - s) in printed}
+        if len(qualifying) != 1:
+            return
+        section = qualifying.pop()
+        self._warn(f"    balance sheet: the equity section read {d:,}, below its own part {part:,} — the "
+                   f"section sum closes on the printed {section:,} (`EQS-2`)")
+        row[self.EQUITY_SECTION] = section
 
     def _split_deductions_from_net_revenue(self, out: Dict[str, int], src: Dict[str, int],
                                            st: Statement, schema: List[Tuple[str, str]]) -> None:

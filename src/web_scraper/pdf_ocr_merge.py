@@ -776,11 +776,15 @@ def plan_merge(folder: os.PathLike | str,
                 read = (decision.values if decision.values is not None
                         else {k: int(v) for k, v in (got.get("values") or {}).items()})
                 carriers = screens.grand_total_carriers(read, builder)
+                # ⚠️ `EQS-3`: an equity section read off a later `vốn chủ sở hữu` line goes the same way.
+                if screens.equity_section_from_a_later_line(read, got):
+                    carriers = sorted(set(carriers) | {"d_von_chu_so_huu"})
                 if carriers:
                     decision.values = {k: v for k, v in read.items() if k not in carriers}
                     decision.note = "; ".join(filter(None, [
                         decision.note,
-                        f"⚠️ {len(carriers)} column(s) DROPPED — a line item holds the grand total: "
+                        f"⚠️ {len(carriers)} column(s) DROPPED — a line item holds the grand total or the equity "
+                        f"section holds a later equity line: "
                         f"{', '.join(carriers)} (`GTT-4`)"]))
 
             # ── refusal 3: two runs disagree about a figure already on disk ───────────
