@@ -117,7 +117,7 @@ def test_the_cascade_offers_a_native_reading_only_after_every_strict_one():
     assert any(layers[i].notes_boundary and layers[i].relax_merged_seam for i in native)
 
 
-# -- `ENC-1`: two flavours a fold-first test cannot see ---------------------------------------
+# -- `ENC-4`: two flavours a fold-first test cannot see ---------------------------------------
 # SHB Q3-2016 page 3 as `get_text()` returns it: a Japanese OCR layer over a Vietnamese scan.
 SHB_CJK = "ヽ ヽ ０ ヽ ヽ ミ ヽ ミ ュ ミ ヽ ミ ヽ ％ ミ ヽ ミ ヽ ミ ヽ ミ ¨ ヽ ら ヽ ヽ ヽ ヽ ヽ ミ ヽ ミ し 、 一 卜 ゛ Ｎ ． 一 卜 り （ い 一 ， 一 一 し （ ヽ い い い い 一 " * 20
 # SAB FY-2008's balance sheet: VNI-encoded Vietnamese read as Latin-1.

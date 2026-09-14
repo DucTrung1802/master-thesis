@@ -1628,7 +1628,7 @@ class PdfParser:
     # under genuine Vietnamese (~0.10) and far over the mojibake floor (0.00).
     MIN_DIACRITIC_RATIO = 0.02
 
-    # `ENC-1`: a page whose raw text is at least this share CJK/kana is not a Vietnamese text layer,
+    # `ENC-4`: a page whose raw text is at least this share CJK/kana is not a Vietnamese text layer,
     # and one whose letters are at least this share Latin-1 letters Vietnamese never uses is a
     # legacy 8-bit encoding read as Latin-1. See `_native_garbled` for the measurement.
     FOREIGN_SCRIPT_SHARE = 0.5
@@ -1648,7 +1648,7 @@ class PdfParser:
         Either one means the page classifier would match nothing and the statement would be lost,
         so the page must be OCR'd. Genuine Vietnamese text trips neither.
         """
-        # ⚠️ **`ENC-1` — TWO FLAVOURS BOTH TESTS BELOW ARE BLIND TO, BECAUSE `norm` FOLDS THE TEXT
+        # ⚠️ **`ENC-4` — TWO FLAVOURS BOTH TESTS BELOW ARE BLIND TO, BECAUSE `norm` FOLDS THE TEXT
         # BEFORE EITHER IS MEASURED** (2026-09-14). Measured on the RAW text instead:
         #   * FOREIGN SCRIPT — SHB Q3-2016's scanned pages carry a Japanese OCR layer (`ヽ ヽ ０ ミ`,
         #     3,311 characters on the income statement's page) that folds to 10 characters, so

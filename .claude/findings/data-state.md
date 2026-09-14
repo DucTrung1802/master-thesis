@@ -2263,3 +2263,24 @@ Measured and not shipped (read-only, no GPU unless named):
   default path files them as a balance sheet and a note; the `+title` layers recover the income statements only.
 
 VN30 (2026-09-14, after): **4,890/5,214 = 93.8 %**, quarters 1,467/1,738 = 84.4 %, holes 220, one band 5/30.
+
+### ⚠️ 2026-09-14 — READERS THAT NEVER SAW THE PAGE'S OWN TEXT (`ENC-4`, `VHD-1`, `MSC-2`, `SDW-2`, `SCG-1`)
+
+| run | documents | GPU | written | kept after checking each row |
+|---|---|---|---|---|
+| `ENC-4`: SHB Q3-2016, MSN Q1-2011, SAB Q4-2008 | 3 | 19.3 min | +4 (SHB IS, MSN BS, SAB BS and 12-month IS) | 4; SAB's income statement lacks its PBT and PAT columns |
+
+Replays on text layers with OCR off, each against a null that switches the change off:
+
+| cell | null | with the change |
+|---|---|---|
+| GAS Q2-2022 income statement (`VHD-1`) | `no such statement on any page` | WON `[onnx@200+tail]` 19 items |
+| GAS Q2-2022 balance sheet (`VHD-1`, then `MSC-2`) | `no such statement`, then `assets 270 != liabilities + equity 440` | WON `[onnx@200+codecol]` 66 items |
+| SHB Q3-2022 balance sheet (`VHD-1`) | `no such statement on any page` | `1 figure split across two boxes` (embedded OCR `248 643`) |
+
+Censuses over the open VN30 cells (read-only): 16 balance sheets were refused with item codes as totals; 9 SHB filings
+(10 cells) open on a full-page scan under 93.5-99.6 % invisible text plus a signature stamp; one filing (SHB Q3-2016)
+carries a CJK text layer, and two (SAB FY-2008, MSN Q1-2011) VNI text. VPB Q2-2012 re-run on GPU with `SCG-1`: its
+balance sheet no longer reconciles at any layer (`GTT-2`'s parse-time lock), so the gate had nothing to fall back on.
+
+VN30 (2026-09-14, after): **4,894/5,214 = 93.9 %**, quarters 1,468/1,738 = 84.5 %, holes 219, one band 5/30.
