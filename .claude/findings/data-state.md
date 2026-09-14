@@ -2229,3 +2229,37 @@ Q3-2015, BVH Q2-2013, SAB Q3-2018 and POW Q3-2025 income statements, those two B
 not what refuses them at the repair layers.
 
 VN30 (2026-09-14, after): **4,889/5,214 = 93.8 %**, quarters 1,467/1,738 = 84.4 %, holes 220, one band 5/30.
+
+### ⚠️ 2026-09-14 — A BVH RUN WHOSE CELLS WERE WRONG, AND THE Q2 ROWS IT EXPOSED (`MES-1`, `QCD-2`, `FTH-1`)
+
+| run | documents | GPU | written | kept after checking each row |
+|---|---|---|---|---|
+| BVH Q3-2010, Q2-2013, Q3-2013 income statements, `ROT-5` filling the landscape page each lacked | 3 | 19.6 min | +6, and +2 Q4s in the release | 1 (Q3-2013 income statement: its nine-month column minus the quarter is Q2-2013's six months to the đồng) |
+
+The seven rolled back: Q3-2010's balance sheet (charter capital as the equity total, re-written by the run's own merge,
+`MES-1`), Q2-2013's and Q3-2013's (charter capital and share premium in `d_von_chu_so_huu`, liabilities unmapped),
+Q3-2010's income statement (claims +11,177,191,092,201), Q2-2013's (written as Q2 minus Q1, `QCD-2`) and the Q4-2010 and
+Q4-2013 derived from them. Three of those readings are held by name in `held_readings.csv` (`HLI-1`).
+
+`QCD-2`, measured: a replay of `_quarter_column_proof` over every `pdf` Q2/Q3 income statement written from a cumulative
+reading found 5 rows where a second-place year-to-date column proves the quarter and the third-place test did not, all
+BVH. The repairs were scoped `force_differs` merges, planned first; after them the premium series reads Q2-2014 3,200,
+Q2-2015 3,850, Q2-2018 7,530, Q2-2020 8,818 bn beside Q1/Q3 neighbours of 3,037-9,679 bn, where it read 136-492 bn.
+Q2-2016 and Q2-2019 fail the proof against their Q1 rows on disk and stay wrong (471 and 312 bn), with Q4-2016 10,033 bn
+and Q4-2019 17,958 bn beside Q3s of 5,231 and 9,277 bn.
+
+Measured and not shipped (read-only, no GPU unless named):
+
+- Turned pages: of the 326 open VN30 cells, 115 sit on filings whose run logs show a page the rotation probe turned, and
+  12 refused statements end on one. A GPU probe of those pages with `ROT-5` turned the missing page of three BVH income
+  statements and none of the other nine (notes pages, a signature block, 5 of 8 boxes vertical, 5 boxes in all).
+- The open cells by filing: 254 scans, 42 garbled text layers, 25 text, 3 empty, 1 unreadable; 68 were accepted in some
+  run and are held or withheld, and 33 income statements wait on 29 de-cumulation roots.
+- VHM Q3-2021/Q1-2022/Q3-2025, VIC Q3-2025, VRE Q3-2021/Q3-2024: each root's stored reading is a management signature
+  page (`only 1 rows parsed`), so the income statement page itself is never classified.
+- VIB's withheld 2019-2025 balance sheets lose the leading digit group of total liabilities (Q2-2022 reads 773,142 m
+  where the sheet's own lines sum to 319,773,142 m, a gap of exactly 319,000,000 m); the screens withhold them correctly.
+- STB's 2008-2009 bank filings stamp the income statement page `B02/TCTD-HN` and the cash flow `B05/TCTD-HN`, so the
+  default path files them as a balance sheet and a note; the `+title` layers recover the income statements only.
+
+VN30 (2026-09-14, after): **4,890/5,214 = 93.8 %**, quarters 1,467/1,738 = 84.4 %, holes 220, one band 5/30.

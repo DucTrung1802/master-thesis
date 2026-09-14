@@ -278,10 +278,20 @@ def _quarter_column_proof(got: dict, priors: Dict[str, Dict[str, int]]) -> int:
     and the reading's own row for it — found by its first figure being the accepted one — prints
     at least three columns. Returns the proving count, or 0 unless it reaches
     `QUARTER_PROOF_MIN_LINES` and outnumbers the lines that contradict it.
+
+    ⚠️ **`QCD-2` — AND THE YEAR-TO-DATE COLUMN IS NOT ALWAYS THE THIRD** (2026-09-14). BVH prints
+    `QUARTER | YEAR-TO-DATE | PRIOR QUARTER | PRIOR YTD`: Q2-2013's premium row reads
+    `[2,830,200,701,085, 5,480,980,559,363, 2,455,254,707,894, 4,973,633,554,859]` and column 1
+    minus column 0 is 2,650,779,858,278 = Q1-2013 on disk, to the đồng, on premium, claims, PBT and
+    PAT. Testing column 2 alone found a prior-year quarter there, the proof failed, Q1 was
+    subtracted, and **every BVH Q2 from 2010 to 2020 that took this path was written as its own
+    Q2 minus Q1** (Q2-2016 premium 470,786,916,906 for a printed 4,754,439,911,715) — each Q4
+    after one overstated by the same amount. Both positions are tallied apart and the better
+    one must pass the same bar, so one reading can never prove on a mix of the two.
     """
     values = got.get("values") or {}
     dump = got.get("row_dump") or []
-    proving = contradicting = 0
+    tallies = {2: [0, 0], 1: [0, 0]}
     for column, raw in values.items():
         try:
             accepted = int(raw)
@@ -300,15 +310,33 @@ def _quarter_column_proof(got: dict, priors: Dict[str, Dict[str, int]]) -> int:
             numbers = [x for x in (row[3] if row else []) if isinstance(x, (int, float))]
             if len(numbers) < 3:
                 continue
-            ytd = int(numbers[2])
-            # The filing rounds each printed figure once, to its own unit: the identity holds to
-            # `unit` per figure summed, or to a millionth of the year-to-date figure — never to a share.
-            tolerance = max(int(got.get("unit") or 1) * (len(priors) + 2), abs(ytd) // 1_000_000)
-            if abs((ytd - accepted) - prior_sum) <= tolerance:
-                proving += 1
-            else:
-                contradicting += 1
-    return proving if proving >= QUARTER_PROOF_MIN_LINES and proving > contradicting else 0
+            for at, tally in tallies.items():
+                ytd = int(numbers[at])
+                # The filing rounds each printed figure once, to its own unit: the identity holds to
+                # `unit` per figure summed, or to a millionth of the year-to-date figure — never to a share.
+                tolerance = max(int(got.get("unit") or 1) * (len(priors) + 2), abs(ytd) // 1_000_000)
+                tally[0 if abs((ytd - accepted) - prior_sum) <= tolerance else 1] += 1
+    return max((proving for proving, contradicting in tallies.values()
+                if proving >= QUARTER_PROOF_MIN_LINES and proving > contradicting), default=0)
+
+
+def _fell_through(got: dict, values: Dict[str, int]) -> List[str]:
+    """Columns of a reading PROVEN to be the quarter whose figure is not column 0's — `QCD-2`.
+
+    ⚠️ **`_first_value` RETURNS THE FIRST POPULATED COLUMN ON A STATEMENT OF THREE OR MORE, SO A
+    LINE WHOSE QUARTER CELL IS BLANK HANDS BACK A COMPARATIVE** (2026-09-14). That rule exists for
+    over-segmented balance sheets (ACB Q2-2010's `[None, total, None, prior, None]`), and on
+    3,843 written values across 477 statements it is load-bearing, so it is not changed here.
+    But once `_quarter_column_proof` has shown column 0 IS the quarter, a figure from a later
+    column is by construction not the quarter: BVH Q2-2020's profit before tax row reads
+    `[None, None, None, 831,667,808,040]` — the prior year's six months — and was the accepted
+    figure, as was Q2-2010's `[None, None, 568,772,672,352]`. Such a column is dropped, never
+    replaced: a blank the filing's reading left is `missing`, not somebody else's number.
+    """
+    rows = [r[3] for r in got.get("row_dump") or [] if len(r) > 3 and isinstance(r[3], list) and r[3]]
+    first = {r[0] for r in rows if r[0] is not None}
+    later = {x for r in rows if r[0] is None for x in r[1:] if x is not None}
+    return sorted(c for c, v in values.items() if v not in first and v in later)
 
 
 def _quarter_priors(builder: FinancialsBuilder, exchange: str, symbol: str, template: str,
@@ -548,9 +576,13 @@ def plan_merge(folder: os.PathLike | str,
                     # ⚠️ `QCD-1`: before subtracting, ask the reading's own columns whether it
                     # is already the quarter. The span label can be wrong; the arithmetic cannot.
                     proof = _quarter_column_proof(got, priors)
+                    fell: List[str] = []
                     if proof:
                         quarter_values = {k: int(v) for k, v in (got.get("values") or {}).items()}
                         resigned, dropped_cols = set(), {}
+                        fell = _fell_through(got, quarter_values)
+                        for column in fell:
+                            del quarter_values[column]
                     else:
                         quarter_values, resigned, dropped_cols = _decumulate(
                             builder, template,
@@ -598,7 +630,9 @@ def plan_merge(folder: os.PathLike | str,
                         decision.note = (
                             f"NOT de-cumulated — the reading is already the QUARTER: its own "
                             f"year-to-date column minus it equals {', '.join(sorted(priors))} on "
-                            f"disk on {proof} line(s) (`QCD-1`)")
+                            f"disk on {proof} line(s) (`QCD-1`)"
+                            + (f"; ⚠️ {len(fell)} column(s) DROPPED — read from a later column where "
+                               f"the quarter's is blank: {', '.join(fell)} (`QCD-2`)" if fell else ""))
                     if convicted:
                         decision.note += "".join(
                             f"; ⚠️ {prior_period} on disk fails the screens, so "

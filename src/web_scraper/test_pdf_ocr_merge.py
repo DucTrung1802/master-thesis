@@ -1108,3 +1108,48 @@ def test_a_prior_column_the_screens_convict_is_not_subtracted(root, tmp_path):
     assert inc not in decision.values and net not in decision.values
     assert decision.values[PBT] == (4_615_726 - 1_100_000 - 1_200_000 - 1_477_757) * _MN
     assert "DCS-2" in decision.note
+
+
+# -- `QCD-2`: the year-to-date column in second place --------------------------------------
+def _bvh_q2_2013(q1_scale=1.0):
+    rows = {"phi_bao_hiem_goc": [2_830_200_701_085, 5_480_980_559_363, 2_455_254_707_894, 4_973_633_554_859],
+            "6_chi_boi_thuong": [-1_535_304_210_010, -2_939_446_157_348, -1_556_273_012_594, -2_859_146_900_212],
+            "25_tong_loi_nhuan_ke_toan_truoc_thue": [314_635_109_116, 734_763_734_787, 401_483_382_923, 1_027_427_081_542],
+            "28_loi_nhuan_sau_thue_thu_nhap_doanh_nghiep": [244_731_125_074, 552_813_246_274, 301_373_137_710, 745_147_659_560]}
+    got = {"unit": 1, "values": {k: v[0] for k, v in rows.items()},
+           "row_dump": [["", k, k, v] for k, v in rows.items()]}
+    q1 = {"phi_bao_hiem_goc": 2_650_779_858_278, "6_chi_boi_thuong": -1_404_141_947_338,
+          "25_tong_loi_nhuan_ke_toan_truoc_thue": 420_128_625_671,
+          "28_loi_nhuan_sau_thue_thu_nhap_doanh_nghiep": 308_082_121_200}
+    return got, {"Q1-2013": {k: int(v * q1_scale) for k, v in q1.items()}}
+
+
+def test_a_year_to_date_column_in_second_place_proves_the_quarter():
+    """BVH Q2-2013: column 1 minus column 0 is Q1-2013 on disk on all four lines."""
+    from web_scraper import pdf_ocr_merge as merge_qcd2
+    got, priors = _bvh_q2_2013()
+    assert merge_qcd2._quarter_column_proof(got, priors) == 4
+
+
+def test_the_second_place_proof_still_fails_when_the_priors_do_not_close():
+    from web_scraper import pdf_ocr_merge as merge_qcd2
+    got, priors = _bvh_q2_2013(q1_scale=1.1)
+    assert merge_qcd2._quarter_column_proof(got, priors) == 0
+
+
+def test_a_proven_quarter_drops_a_figure_read_from_a_later_column():
+    """BVH Q2-2020: the PBT row printed only the prior year's six months, and that was accepted."""
+    from web_scraper import pdf_ocr_merge as merge_qcd2
+    got, priors = _bvh_q2_2013()
+    pbt = "25_tong_loi_nhuan_ke_toan_truoc_thue"
+    got["values"][pbt] = 831_667_808_040
+    got["row_dump"] = [r for r in got["row_dump"] if r[1] != pbt] + [["", pbt, pbt, [None, None, None, 831_667_808_040]]]
+    assert merge_qcd2._quarter_column_proof(got, priors) == 3
+    values = {k: int(v) for k, v in got["values"].items()}
+    assert merge_qcd2._fell_through(got, values) == [pbt]
+
+
+def test_a_proven_quarter_read_from_column_zero_drops_nothing():
+    from web_scraper import pdf_ocr_merge as merge_qcd2
+    got, _priors = _bvh_q2_2013()
+    assert merge_qcd2._fell_through(got, {k: int(v) for k, v in got["values"].items()}) == []

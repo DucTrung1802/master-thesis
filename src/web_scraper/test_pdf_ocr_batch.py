@@ -994,3 +994,46 @@ def test_NO_ceiling_extends_nothing(monkeypatch):
     got = _grid_periods(monkeypatch, ["Q3-2020", "Q4-2020"], None)
 
     assert got == ["Q3-2020", "Q4-2020"]
+
+
+# ── `MES-1`: the immediate write asks the release's screens ──────────────────────────────
+class _NoWrite:
+    backup = None
+    to_write: list = []
+
+    def lines(self):
+        return [""]
+
+
+def _merge_each_reports(tmp_path, monkeypatch, balance_sheet):
+    folder = _run_folder(tmp_path, "20260914-000000__hose_bvh__pdf_ocr", "BVH", ["Q3-2010"])
+    _document(folder, "BVH", "Q3-2010", {
+        "balance_sheet": {"layer": "onnx@200+joinlost", "items": 39, "values": balance_sheet},
+        "income_statement": {"layer": "onnx@200", "items": 19},
+        "cash_flow": {"layer": "onnx@200", "items": 14}}, template="insurance")
+    seen, said = [], []
+    from web_scraper import pdf_ocr_merge as real
+    monkeypatch.setattr(real, "merge_run", lambda _folder, **kw: seen.append(kw) or _NoWrite())
+    plan = batch.TickerPlan(exchange="HOSE", symbol="BVH", template="insurance",
+                            template_how="given", quarters=["2010-Q3"], filed=1, complete=0)
+    batch._merge_finished_quarters(folder, plan, apply=False, reports=None, backed=set(),
+                                   say=said.append)
+    return seen, said
+
+
+def test_merge_each_withholds_a_statement_the_release_screens_would_withhold(tmp_path, monkeypatch):
+    """BVH Q3-2010: the charter capital read into the equity total, under totals that reconcile."""
+    seen, said = _merge_each_reports(tmp_path, monkeypatch, {
+        "tong_cong_tai_san": 42_604_783_076_412, "tong_cong_nguon_von": 42_604_783_076_412,
+        "d_von_chu_so_huu": 6_267_090_790_000, "i_von_chu_so_huu": 10_524_257_835_935})
+    assert len(seen) == 1 and "balance_sheet" not in seen[0]["reports"]
+    assert set(seen[0]["reports"]) == {"income_statement", "cash_flow"}
+    assert any("hold" in line and "balance_sheet" in line for line in said)
+
+
+def test_merge_each_writes_a_quarter_the_screens_pass_whole(tmp_path, monkeypatch):
+    seen, said = _merge_each_reports(tmp_path, monkeypatch, {
+        "tong_cong_tai_san": 42_604_783_076_412, "tong_cong_nguon_von": 42_604_783_076_412,
+        "d_von_chu_so_huu": 10_524_257_835_935, "i_von_chu_so_huu": 10_524_257_835_935})
+    assert len(seen) == 1 and seen[0]["reports"] is None
+    assert not any("hold" in line for line in said)

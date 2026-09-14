@@ -1125,12 +1125,35 @@ def _merge_finished_quarters(folder: Path, plan: TickerPlan, *, apply: bool,
     not a re-parse. It is reported at the document it happened on, not swallowed.
     """
     from web_scraper import pdf_ocr_merge
+    from web_scraper import statement_screens as screens
 
+    # ⚠️ **`MES-1` — THIS WRITER NEVER ASKED THE SCREENS THE RELEASE ASKS, SO A READING THE
+    # RELEASE WITHHOLDS WAS WRITTEN HERE** (2026-09-14). `merge_batch` withholds a complete
+    # filing's statement that fails an identity (`screen=True`) and this path wrote the same
+    # statement with `force_empty_band=True` and no screen at all, although both claim one rule
+    # for one quarter. Measured on BVH Q3-2010: a rolled-back balance sheet whose equity total is
+    # its charter capital (`EQS-1`) came back from a new run's `+joinlost` reading. The screens
+    # read THIS run folder, so every per-document identity applies; continuity needs neighbours
+    # and stays the sweep's.
+    try:
+        flagged = screens.screen_run([folder])
+    except Exception as exc:                    # noqa: BLE001 — a check that did not run
+        say(f"   ⚠️ the screens RAISED ({type(exc).__name__}: {exc}) — nothing is withheld on "
+            f"their account (§5 rule 2)")
+        flagged = {}
     written = unguarded = 0
     for period in complete_periods(folder):
+        allowed = list(reports or fin.REPORTS)
+        held = [r for r in allowed if flagged.get((period, r))]
+        for r in held:
+            say(f"   hold   {period:9} {r:18} fails an identity: {'; '.join(flagged[(period, r)])[:90]}")
+        allowed = [r for r in allowed if r not in held]
+        if not allowed:
+            continue
         try:
             report = pdf_ocr_merge.merge_run(
-                folder, apply=apply, periods=[period], reports=reports,
+                folder, apply=apply, periods=[period],
+                reports=allowed if (reports or held) else None,
                 force_empty_band=True, backup=plan.key not in backed, quiet=True)
         except Exception as exc:                # noqa: BLE001 — see the docstring
             say(f"   ⚠️ the merge of {period} RAISED: {exc}")

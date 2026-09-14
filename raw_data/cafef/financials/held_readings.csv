@@ -1,3 +1,6 @@
 folder,period,report,reason
 20260914-054204__hose_bvh__pdf_ocr,Q2-2011,balance_sheet,"d_von_chu_so_huu reads the charter capital 6,804,714,340,000 (share premium 3.18 tn and retained earnings 1.37 tn sit under it); c_no_phai_tra unmapped, so no identity can run"
 20260914-061046__hose_vnm__pdf_ocr,Q4-2016,income_statement,"the FY-2016 reading is sound but its de-cumulation is not: Q3-2016 on disk fails its own identities (PBT 2,553,778,018,374 against operating profit plus other income 3,044,873,308,173; PAT 2,122,566,492,437 against PBT less tax), so FY - (Q1+Q2+Q3) wrote PAT 2,255,135,733,121 where its own lines give ~1.73 tn; remove this row when Q3-2016 is repaired"
+20260914-090725__hose_bvh__pdf_ocr,Q3-2010,income_statement,"6_chi_boi_thuong reads +11,177,191,092,201, positive and 57x the prior quarter's -197,398,891,906; no insurance identity on the page can convict it"
+20260914-091219__hose_bvh__pdf_ocr,Q2-2013,balance_sheet,"d_von_chu_so_huu reads the charter capital 6,804,714,340,000 with c_no_phai_tra and i_von_chu_so_huu unmapped, so neither A = L + E nor EQS-1 can run"
+20260914-092236__hose_bvh__pdf_ocr,Q3-2013,balance_sheet,"d_von_chu_so_huu reads the share premium 3,184,332,381,197 with c_no_phai_tra and i_von_chu_so_huu unmapped, so neither A = L + E nor EQS-1 can run"
