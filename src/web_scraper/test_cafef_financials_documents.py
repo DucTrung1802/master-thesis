@@ -191,6 +191,19 @@ class MagnitudeHistoryTest(unittest.TestCase):
         self.assertIn('{"True": [], "False": []}', src)
         self.assertIn("history[report][entity]", src)
 
+    def test_a_small_quarter_whose_comparative_is_on_disk_is_not_banded(self):
+        """`SAN-2` — SSI Q1-2020's crash-quarter PBT, its row's comparative equal to Q1-2019 on disk."""
+        from web_scraper.cafef_pdf_parser import Row
+        st = _statement(cf.INCOME_STATEMENT)
+        st.rows = [Row(label="Tổng lợi nhuận kế toán trước thuế", key="tong_loi_nhuan_ke_toan_truoc_thue", number=None,
+                       values=[7_964_881_112, 246_165_331_686, 7_964_881_112])]
+        history = [246_165_331_686, 262_964_653_001, 263_500_000_000]
+        self.assertIsNone(self.b.sane(st, history, {self.b.C_PBT[0]: 7_964_881_112}))
+        st.rows[0].values = [7_964_881_112, 246_165_331_000, 7_964_881_112]
+        self.assertIn("magnitude", self.b.sane(st, history, {self.b.C_PBT[0]: 7_964_881_112}))
+        st.rows[0].values = [7_964_881_112, 246_165_331_686, 17_964_881_112]
+        self.assertIn("magnitude", self.b.sane(st, history, {self.b.C_PBT[0]: 7_964_881_112}))
+
     def test_a_probe_equal_to_an_accepted_quarter_is_refused(self):
         """The comparative column read as the current one — unchanged by the fix."""
         st = _statement(cf.INCOME_STATEMENT)

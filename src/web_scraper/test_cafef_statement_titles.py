@@ -223,3 +223,28 @@ def test_the_balance_sheets_own_off_balance_section_still_reads_as_the_balance_s
     text = ("Ngân hàng Thương mại Cổ phần Quân đội\nngày 30 tháng 9 năm 2015\n"
             "CÁC CHITICU NGOÀI BẢNG CÂN ĐỐI KẾ TOÁN\nNghĩa vụ nợ tiềm ẩn\n")
     assert _parser()._page_kind(text)[0] == "balance_sheet"
+
+
+# ── `BIL-1` — a bilingual filing prints its statements in English first ───────────────────────────
+def test_an_english_statement_page_is_recognised_and_a_vietnamese_one_is_not():
+    p = PdfParser.__new__(PdfParser)
+    english = "Vinhomes Joint Stock Company B01a-DN/HN\nINTERIM STATEMENT OF FINANCIAL POSITION\nAs at 31 March 2026\n"
+    vietnamese = "Công ty Cổ phần Vinhomes B01a-DN/HN\nBẢNG CÂN ĐỐI KẾ TOÁN HỢP NHẤT GIỮA NIÊN ĐỘ\nNgày 31 tháng 3 năm 2026\n"
+    assert p._english_statement_page(english, BALANCE_SHEET)
+    assert not p._english_statement_page(vietnamese, BALANCE_SHEET)
+
+
+def test_english_pages_give_way_to_the_same_statement_in_vietnamese():
+    pages = {11: {"kind": BALANCE_SHEET, "from_form": True, "english": True},
+             15: {"kind": INCOME_STATEMENT, "from_form": True, "english": True},
+             79: {"kind": BALANCE_SHEET, "from_form": True},
+             83: {"kind": INCOME_STATEMENT, "from_form": True}}
+    PdfParser._drop_english_duplicates(pages)
+    assert [pages[i]["kind"] for i in sorted(pages)] == [None, None, BALANCE_SHEET, INCOME_STATEMENT]
+
+
+def test_an_english_only_filing_keeps_its_pages():
+    pages = {11: {"kind": BALANCE_SHEET, "from_form": True, "english": True},
+             15: {"kind": INCOME_STATEMENT, "from_form": True, "english": True}}
+    PdfParser._drop_english_duplicates(pages)
+    assert [pages[i]["kind"] for i in sorted(pages)] == [BALANCE_SHEET, INCOME_STATEMENT]

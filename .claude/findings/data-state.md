@@ -2381,3 +2381,11 @@ repairs iterated through their dependents until nothing moved, 9 left. Newest st
 (Q1-2018 found by the newest-reading census). Per-share cells scaled by the unit (`EPS-1`): 170 of 569 VN30 values.
 
 VN30 (2026-09-15, after): **4,950/5,214 = 94.9 %**, quarters 1,513/1,738 = 87.1 %, holes 178, one band 5/30.
+
+| run | documents | GPU | written | kept |
+|---|---|---|---|---|
+| roots re-asked with today's parser: VRE Q2-2024, SAB Q3-2018, GAS Q3-2014, PLX Q3-2015, VIB Q3-2013, GVR Q3-2021 (stopped) | 5 of 10 | not recorded | 0 — VRE Q2-2024 re-read identical to its wrong row; the other four still refuse their income statement | — |
+| `SAN-2`: SSI Q1-2020 | 1 | 2.1 min | SSI Q1-2020 IS; release Q2-2020, Q4-2020 | 3 |
+| `BIL-1`: VHM Q1-2026 | 1 | 3.8 min | balance sheet, income statement, cash flow | 3 |
+
+VN30 (2026-09-15, later): **4,956/5,214 = 95.05 %**, quarters 1,517/1,738 = 87.3 %, holes 175, one band 5/30.

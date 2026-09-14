@@ -5883,6 +5883,8 @@ class FinancialsBuilder:
         # poisons the magnitude history for every quarter that follows it (SAN-1).
         return st.find(*text, reject=self.CASH_OPEN_WORDS if report == CASH_FLOW else ())
 
+    SANE_PROOF_MIN = 10 ** 9                 # `SAN-2`: a comparative this large cannot match by chance
+
     def sane(self, st: Statement, history: List[int],
              mapped: Optional[Dict[str, int]] = None) -> Optional[str]:
         """Magnitude guard against the quarters already accepted.
@@ -5913,6 +5915,22 @@ class FinancialsBuilder:
             return (f"probe {abs(got):.3g} exactly equals an already-accepted quarter "
                     f"(comparative column read as the current one?)")
 
+        # ⚠️ **`SAN-2` — A GENUINELY SMALL QUARTER WHOSE OWN COMPARATIVE IS A QUARTER ALREADY ON DISK**
+        # (2026-09-15). The income statement is banded on profit before tax, the most volatile figure it
+        # prints: SSI Q1-2020 — the March 2020 crash — reads PBT 7,964,881,112 against a median of 2.64e11
+        # (33x), and every layer that reconciled it was refused `sane: magnitude`, on a de-cumulation root.
+        # Its row prints `[7,964,881,112, 246,165,331,686, 7,964,881,112]`, and 246,165,331,686 is Q1-2019's
+        # PBT on disk to the đồng. A units error scales the comparative too, and a comparative read as the
+        # current figure is caught by the test above, so the statement's own row naming an accepted quarter
+        # exactly proves the columns and the unit. ⚠️ **It does not prove the DIGITS** — a current figure that
+        # lost its leading groups (`QTL-1`) sits beside a sound comparative — so the figure must also be read
+        # TWICE in its own row (a first quarter's year-to-date column is the quarter), and only then is the
+        # band not asked.
+        accepted = {v for v in history if abs(v) >= self.SANE_PROOF_MIN}
+        row = next((r.values for r in st.rows if st._first_value(r.values) == got), None)
+        if (row and row.count(got) >= 2
+                and any(v is not None and v != got and v in accepted for v in row)):
+            return None
         ref = sorted(abs(v) for v in history)
         median = ref[len(ref) // 2]
         if median and abs(got) and not (median / 20 <= abs(got) <= median * 20):

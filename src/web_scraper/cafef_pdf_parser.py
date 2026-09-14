@@ -2381,10 +2381,37 @@ class PdfParser:
                       + f" — reading it at /Rotate {best}")
         return best
 
+    # ⚠️ **`BIL-1` — A BILINGUAL FILING PRINTS ITS STATEMENTS IN ENGLISH FIRST** (2026-09-15). VHM's Q1-2026
+    # interim report is 142 pages: the English statements on pages 12-19 (`INTERIM STATEMENT OF FINANCIAL
+    # POSITION`, `B01a-DN/HN`), English notes to page 78, and the Vietnamese statements on pages 80-87 under the
+    # same form codes. The form code classified the English pages, `scan` stopped at the first coded notes page
+    # once all three kinds were seen, and every layer mapped `current_assets`, `net_profit_after_tax` against a
+    # Vietnamese chart: `no total assets`, `no profit before tax`, `no closing cash balance`. A statement seen
+    # only on English pages does not end the scan, and an English page is dropped wherever the same statement is
+    # printed in Vietnamese; an English-only filing keeps its pages exactly as before.
+    ENGLISH_STATEMENT_NS = ("statementoffinancialposition", "balancesheet", "incomestatement",
+                            "statementofincome", "cashflowstatement", "statementofcashflows")
+
+    def _english_statement_page(self, text: str, kind: str) -> bool:
+        """Is this statement page headed in ENGLISH and not with the statement's Vietnamese title? (`BIL-1`)"""
+        header = self.norm("\n".join([l for l in text.splitlines() if l.strip()][:self.HEADER_LINES])).replace(" ", "")
+        if not any(n in header for n in self.ENGLISH_STATEMENT_NS):
+            return False
+        return self._title_score(header, self.HEADING[kind]) < 1.0
+
+    @staticmethod
+    def _drop_english_duplicates(pages: Dict[int, dict]) -> None:
+        """Unclassify every English statement page whose statement is also printed in Vietnamese (`BIL-1`)."""
+        vietnamese = {p["kind"] for p in pages.values() if p["kind"] in REPORTS and not p.get("english")}
+        for info in pages.values():
+            if info.get("english") and info["kind"] in vietnamese:
+                info["kind"], info["from_form"] = None, False
+
     def scan(self, doc) -> Dict[int, dict]:
         """Read each page ONCE — OCR only the pages that need it — and cache text + words."""
         pages: Dict[int, dict] = {}
         seen = set()
+        english: set = set()             # `BIL-1`: statements seen only on English pages so far
         # Load pages BY INDEX. Several filings have a damaged page tree ("non-page object in
         # page tree") and iterating the document simply stops at the bad node — one VCB
         # filing yielded 14 of its 58 pages that way, dropping every statement after it.
@@ -2412,9 +2439,16 @@ class PdfParser:
                         "from_form": from_form, "width": page.rect.width}
 
             if kind in REPORTS:
-                seen.add(kind)
+                if self._english_statement_page(text, kind):
+                    pages[i]["english"] = True
+                    english.add(kind)
+                else:
+                    seen.add(kind)
             elif kind == NOTES and from_form and len(seen) == len(REPORTS):
                 break            # the statements are behind us; the rest is notes
+
+        self._drop_english_duplicates(pages)   # `BIL-1`
+        seen |= english                        # the checks below see what they saw before `BIL-1`
 
         # ⚠️ `PST-1`: a one-page poster is read as the panels and statements it prints.
         if self.poster_split and doc.page_count == 1 and 0 in pages:
