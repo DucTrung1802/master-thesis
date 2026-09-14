@@ -588,6 +588,22 @@ def plan_merge(folder: os.PathLike | str,
             on_disk = disk.get("source", "absent")
             decision = Decision(period, name, "write", "", layer=got.get("layer", ""),
                                 items=got.get("items", 0), on_disk=on_disk)
+            # ⚠️ `DED-1`: a deductions line holding revenue itself is dropped from the READING, before
+            # any de-cumulation subtracts it — the rest of the statement is judged as it was.
+            if name == fin.INCOME_STATEMENT:
+                read = {k: int(v) for k, v in (got.get("values") or {}).items()}
+                moves, dropped = screens.deduction_fix(read, unit=int(got.get("unit") or 1))
+                if moves or dropped:
+                    for frm, to in moves.items():
+                        read[to] = read.pop(frm)
+                    for column in dropped:
+                        read.pop(column, None)
+                    got = dict(got, values=read)
+                    decision.values = dict(read)
+                    decision.note = "; ".join(
+                        [f"⚠️ {frm} MOVED to {to} — gross profit plus cost of sales proves it is net "
+                         f"revenue (`DED-1`)" for frm, to in moves.items()]
+                        + [f"⚠️ {c} DROPPED — it holds the revenue line itself (`DED-1`)" for c in dropped])
 
             # ── refusal 1: a cumulative P&L is not a quarter — UNLESS it can never be one ─
             #
@@ -749,6 +765,24 @@ def plan_merge(folder: os.PathLike | str,
                     "open and this figure passed no magnitude guard. Screen it by arithmetic "
                     "(two statements agreeing, a printed subtotal closing) before quoting it"]))
 
+            # ⚠️ **`GTT-4` — A LINE ITEM HOLDING THE GRAND TOTAL IS NOT WRITTEN** (2026-09-14). `GTT-3`
+            # holds such a reading at the release, and rows written before it are on disk: over the
+            # 1,632 VN30 `pdf` balance sheets, `tong_no_phai_tra` carries total assets on 22 (HDB's Q1
+            # and Q3 sheets from 2018 on, BID, CTG) and `ix_loi_ich_cua_co_dong_thieu_so` on 25 (STB 14,
+            # SHB 5) — the label `TỔNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU` matched to the wrong account. No
+            # account but the totals can equal total assets, so the column goes and nothing is
+            # computed in its place; the rest of the reading is judged exactly as before.
+            if name == fin.BALANCE_SHEET:
+                read = (decision.values if decision.values is not None
+                        else {k: int(v) for k, v in (got.get("values") or {}).items()})
+                carriers = screens.grand_total_carriers(read, builder)
+                if carriers:
+                    decision.values = {k: v for k, v in read.items() if k not in carriers}
+                    decision.note = "; ".join(filter(None, [
+                        decision.note,
+                        f"⚠️ {len(carriers)} column(s) DROPPED — a line item holds the grand total: "
+                        f"{', '.join(carriers)} (`GTT-4`)"]))
+
             # ── refusal 3: two runs disagree about a figure already on disk ───────────
             # ⚠️ THE FIGURES THIS DECISION WOULD WRITE — which is the run's own set unless
             # refusal 1 de-cumulated it. Comparing the YEAR-TO-DATE figures against disk
@@ -813,7 +847,9 @@ def plan_merge(folder: os.PathLike | str,
             # become Q4's operand: disk would still hold the other value, and the two would
             # disagree about the same year. Recorded here, where the decision is final, the
             # fallback is `_quarter_priors`' disk read, which is what a reader can check.
-            if decision.writing and decision.values is not None:
+            # ⚠️ Keyed by PERIOD alone, so only an income statement may enter it: a balance sheet whose
+            # carrier column `GTT-4` dropped carries `values` too, and would become the next quarter's operand.
+            if name == fin.INCOME_STATEMENT and decision.writing and decision.values is not None:
                 decumulated[period] = decision.values
 
     return report

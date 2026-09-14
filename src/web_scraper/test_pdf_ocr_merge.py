@@ -1196,3 +1196,60 @@ def test_a_second_quarter_is_never_judged_against_its_own_half_year(tmp_path):
     from web_scraper import pdf_ocr_merge as merge_qtl
     folder = _qtl_half_year(tmp_path)
     assert merge_qtl._tail_convicted(folder, "HOSE", "VIB", "Q2-2022", _qtl_q1_on_disk(136_000_000)) == {}
+
+
+# -- `GTT-4`: a balance-sheet line item holding the grand total is dropped at the merge ------
+def test_a_line_item_holding_the_grand_total_is_dropped_and_said(root, tmp_path):
+    """HDB Q1-2018: `tong_no_phai_tra` read the 190,374,307 m grand total."""
+    sheet = _statement(**{ASSETS: 190_374_307, "tong_no_phai_tra": 190_374_307,
+                          "i_tien_mat_vang_bac_da_quy": 2_000_000})
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: sheet})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]), fin.BALANCE_SHEET)
+    assert decision.action == "write"
+    assert "tong_no_phai_tra" not in decision.values
+    assert decision.values[ASSETS] == 190_374_307 and decision.values["i_tien_mat_vang_bac_da_quy"] == 2_000_000
+    assert "GTT-4" in decision.note
+
+
+def test_the_grand_totals_themselves_are_never_dropped(root, tmp_path):
+    sheet = _statement(**{ASSETS: 190_374_307, "tong_no_phai_tra_va_von_chu_so_huu": 190_374_307,
+                          "tong_no_phai_tra": 170_000_000})
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: sheet})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]), fin.BALANCE_SHEET)
+    assert decision.values is None or "tong_no_phai_tra_va_von_chu_so_huu" in decision.values
+    assert "GTT-4" not in (decision.note or "")
+
+
+def test_a_balance_sheet_whose_carrier_was_dropped_never_becomes_an_operand(root, tmp_path):
+    """`GTT-4` gives a balance-sheet decision `values`, and `decumulated` is keyed by period alone."""
+    _disk_rows(fin.INCOME_STATEMENT, [("Q1-2014", {PBT: 400})])
+    _run_folder(tmp_path, period="Q1-2014", accepted={
+        fin.BALANCE_SHEET: _statement(**{ASSETS: 1_000, "tong_no_phai_tra": 1_000})})
+    folder = _run_folder(tmp_path, period="Q2-2014", cumulative=True, accepted={
+        fin.INCOME_STATEMENT: _statement(months=6, **{PBT: 1_000})})
+    decision = next(d for d in merge.plan_merge(folder).decisions
+                    if d.report == fin.INCOME_STATEMENT and d.period == "Q2-2014")
+    assert decision.values == {PBT: 600}
+
+
+# -- `DED-1`: a deductions line holding revenue itself is dropped at the merge --------------
+def test_a_deductions_line_holding_revenue_is_dropped_from_the_written_row(root, tmp_path):
+    """VRE Q3-2021: gross revenue and deductions both read 787,355,000,000."""
+    rev, ded = "1_doanh_thu_ban_hang_va_cung_cap_dich_vu", "2_cac_khoan_giam_tru_doanh_thu"
+    folder = _run_folder(tmp_path, accepted={fin.INCOME_STATEMENT: _statement(
+        months=3, **{rev: 787_355_000_000, ded: 787_355_000_000, PBT: 48_355_000_000})})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.INCOME_STATEMENT]), fin.INCOME_STATEMENT)
+    assert decision.writing
+    assert ded not in decision.values and decision.values[rev] == 787_355_000_000
+    assert "DED-1" in decision.note
+
+
+def test_a_deductions_figure_the_gross_profit_identity_proves_is_net_revenue_moves(root, tmp_path):
+    """POW Q1-2018: deductions 8,355,616,147,645 = gross profit 1,345,087,552,195 + cost 7,010,528,595,450."""
+    ded, net = "2_cac_khoan_giam_tru_doanh_thu", "3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu"
+    folder = _run_folder(tmp_path, accepted={fin.INCOME_STATEMENT: _statement(months=3, **{
+        ded: 8_355_616_147_645, "4_gia_von_hang_ban": 7_010_528_595_450,
+        "5_loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu": 1_345_087_552_195, PBT: 900_000_000_000})})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.INCOME_STATEMENT]), fin.INCOME_STATEMENT)
+    assert decision.values[net] == 8_355_616_147_645 and ded not in decision.values
+    assert "MOVED" in decision.note and "DED-1" in decision.note

@@ -2309,3 +2309,31 @@ BVH Q1-2013. Repaired by scoped `force_differs` (columns dropped, nothing comput
 (7), VNM Q4-2025 (2).
 
 VN30 (2026-09-14, after): **4,897/5,214 = 93.9 %**, quarters 1,469/1,738 = 84.5 %, holes 218, one band 5/30.
+
+### ⚠️ 2026-09-14 — VINGROUP'S TURNED AND MIS-STAMPED STATEMENTS, AND TWO WRONG COLUMNS ON DISK (`ROT-6`, `STM-1`, `DED-1`, `GTT-4`)
+
+| run | documents | GPU | written | kept after checking each row |
+|---|---|---|---|---|
+| `ROT-6`/`STM-1`: VRE 2021-Q3/2024-Q3/2026-Q1, VIC 2025-Q3/2026-Q1, VHM 2021-Q3/2022-Q1..Q3/2025-Q3/2026-Q1 | 11 | 42.6 min | 5 in the run + 3 released (VRE Q4-2021, VIC Q4-2025, VHM Q4-2025) | 7 — VRE Q4-2021's own lines disagree (PBT from lines 96,712 m vs 180,712 m, interest above financial expense) and is held by name |
+
+Today's release screens over every VN30 `pdf` row on disk (`disk_screen_census.py`, read-only), before the repairs:
+
+| report | rows | flag | rows flagged |
+|---|---|---|---|
+| balance sheet | 1,632 | assets != liabilities + equity | 66 |
+| balance sheet | 1,632 | a line item holds the grand total (`GTT-4`) | 53 -> 4 after repair |
+| balance sheet | 1,632 | a section sum does not close (A+B, C+D) | 26 |
+| cash flow | 1,625 | opening + net + fx != closing | 69 |
+| cash flow | 1,625 | operating + investing + financing != net (`CFS-1`) | 40 |
+| income statement | 1,640 | a bank net line does not close (`BIS-1`), flags | 145 |
+| income statement | 1,640 | a part above its whole, or negative gross income, flags | 141 |
+
+`DED-1` over the corp `pdf` income statements: 55 deductions figures equal to gross profit plus cost of sales before;
+after the oldest-first repair 2 still close within a million (not to the unit) and are left. The label-only move
+fired on 80 of 801 stored readings and the identity refused 10 of them, FPT Q1-2025's printed 6.8 bn deduction among them.
+
+Text-layer replays of open cells with OCR off (candidates for a run, `sane` has no band there): SHB Q1-2020 balance sheet
+WON `[onnx@200+codecol+notes]` 29 items, STB Q3-2008 cash flow WON `[onnx@200]` 20 items, VJC Q3-2021 cash flow WON
+`[onnx@200+relax]` 15 items; HDB Q4-2013 cash flow, STB Q3-2009, VNM Q4-2010/Q1-2011/Q3-2015 still refused.
+
+VN30 (2026-09-14, after): **4,904/5,214 = 94.1 %**, quarters 1,476/1,738 = 84.9 %, holes 215, one band 5/30.

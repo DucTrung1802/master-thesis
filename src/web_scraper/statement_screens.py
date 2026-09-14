@@ -301,6 +301,57 @@ def suspect_columns(values: Dict[str, int], builder: FinancialsBuilder, unit: in
     return out
 
 
+# ⚠️ **`DED-1` — THE REVENUE-DEDUCTIONS LINE HOLDING REVENUE ITSELF** (2026-09-14). VRE, VHM and POW print
+# no `Các khoản giảm trừ doanh thu` figure, and the reading hands that account the revenue line under it:
+# VRE Q3-2021 on disk reads gross revenue AND deductions 787,355,000,000, while its gross profit
+# (130,349,000,000) plus cost of sales (657,006,000,000) is that same figure — net revenue, so the
+# deductions are nil. Over the 775 corp `pdf` income statements on disk, 15 carry deductions equal to
+# gross revenue and one (POW Q1-2020) equal to net revenue, every figure over a billion. An equality to
+# the đồng is the evidence; a smaller deduction, or the item codes VIC 2009-2012 print (`271`), is not
+# judged here.
+REVENUE_GROSS = "1_doanh_thu_ban_hang_va_cung_cap_dich_vu"
+REVENUE_DEDUCTIONS = "2_cac_khoan_giam_tru_doanh_thu"
+REVENUE_NET = "3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu"
+DEDUCTION_MIN = 10 ** 9
+
+
+COST_OF_SALES = "4_gia_von_hang_ban"
+GROSS_PROFIT = "5_loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu"
+
+
+def deduction_fix(values: Dict[str, int], unit: int = 1) -> Tuple[Dict[str, str], List[str]]:
+    """`({deductions: net revenue}, [])` when the statement's own `5 = 3 - 4` proves the deductions
+    figure IS net revenue and net revenue is empty; `({}, [deductions])` when it equals gross or net
+    revenue to the đồng and no identity can say more — `DED-1`. The figure moves or goes; nothing is
+    computed."""
+    d = values.get(REVENUE_DEDUCTIONS)
+    if d is None or abs(d) < DEDUCTION_MIN:
+        return {}, []
+    gp, cogs = values.get(GROSS_PROFIT), values.get(COST_OF_SALES)
+    if (values.get(REVENUE_NET) is None and gp is not None and cogs is not None
+            and abs(abs(d) - (gp + abs(cogs))) <= 3 * max(1, int(unit or 1))):
+        return {REVENUE_DEDUCTIONS: REVENUE_NET}, []
+    if any(values.get(c) is not None and abs(values[c]) == abs(d) for c in (REVENUE_GROSS, REVENUE_NET)):
+        return {}, [REVENUE_DEDUCTIONS]
+    return {}, []
+
+
+def deduction_carriers(values: Dict[str, int]) -> List[str]:
+    """The deductions column when `deduction_fix` would move or drop it — `DED-1`."""
+    moves, drops = deduction_fix(values)
+    return sorted(set(moves) | set(drops))
+
+
+def grand_total_carriers(values: Dict[str, int], builder: FinancialsBuilder) -> List[str]:
+    """The balance-sheet columns, other than the two grand totals and the chart's own section-header
+    total, that hold the figure total assets holds — `GTT-3`'s test, shared with the merge (`GTT-4`)."""
+    a = _first(values, builder.C_ASSETS)
+    if not a:
+        return []
+    exempt = set(builder.C_ASSETS) | set(builder.C_RESOURCES) | set(builder.TWIN_TOTAL_HEADERS)
+    return sorted(k for k, x in values.items() if x == a and k not in exempt)
+
+
 def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str]]:
     """`{report: [why it is suspect]}` for ONE document JSON of a run folder.
 
@@ -322,8 +373,7 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
             # in a line item. So the same test is applied here, on the stored values: no column but the
             # two totals and the chart's own section-header total may equal total assets.
             if a:
-                exempt = set(builder.C_ASSETS) | set(builder.C_RESOURCES) | set(builder.TWIN_TOTAL_HEADERS)
-                carriers = sorted(k for k, x in values.items() if x == a and k not in exempt)
+                carriers = grand_total_carriers(values, builder)
                 if carriers:
                     why.append("a line item holds the grand total {:,}: {}".format(a, ", ".join(carriers)))
             for whole_col, part_col in SECTION_PARTS:

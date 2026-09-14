@@ -452,7 +452,17 @@ class PdfParser:
     # line 11 or 13, and every layer refused it `no profit before tax`. So a page directly after a
     # page this probe TURNED may be probed on this many boxes, and only when they are vertical: the
     # neighbour is the evidence the floor was standing in for, and the probe still has to read more.
-    MIN_ROT_WORDS_AFTER_TURN = 8
+    # ⚠️ **AND `ROT-6` — A WHOLE TURNED STATEMENT CAN BE THAT SPARSE, WITH NO TURNED PAGE BEFORE IT**
+    # (2026-09-14). VRE Q3-2021 and Q3-2024 print the income statement on two landscape pages scanned
+    # into portrait ones, and BOTH come back as **13-14 boxes, 12-13 of them tall**, reading
+    # `T s I 8 5 L 1 S s F N L S 3`; VIC Q3-2025's first income-statement page returns 19 boxes, 17
+    # tall, and its second **5, all tall** (`1 1 s P s`). The balance sheet before them is upright, so
+    # `ROT-5`'s neighbour rule never fires, and every layer refused the statement `only 1 rows
+    # parsed` - the Q3 root of a cumulative Q4 on each. So a page this sparse may be probed on its own
+    # when its boxes are vertical AND the upright read is nearly empty (`MIN_UPRIGHT_CHARS`), and the
+    # page after a turned one on as few as four vertical boxes; the probe must still read more.
+    MIN_ROT_WORDS_AFTER_TURN = 4
+    MIN_ROT_WORDS_UNREADABLE = 8
     # ⚠️ **THE DETECTOR CANNOT TELL 90 FROM 270** — both make the lines horizontal — so the
     # direction is decided by READING the page each way and counting the tokens that parse as
     # numbers. Upside down, digits do not: on BID's Q3-2011 income statement that is 100
@@ -2297,9 +2307,12 @@ class PdfParser:
         if len(words) >= self.MIN_ROT_WORDS:
             if not (vertical or unreadable or mixed):
                 return base
-        # ⚠️ `ROT-5`: under the floor only the page right after a turned one, and only if vertical.
-        elif not (vertical and len(words) >= self.MIN_ROT_WORDS_AFTER_TURN
-                  and (page.number - 1) in getattr(self, '_turned', ())):
+        # ⚠️ `ROT-5`: under the floor only the page right after a turned one, and only if vertical;
+        # ⚠️ `ROT-6`: or a vertical page whose upright read is nearly empty, on its own.
+        elif not (vertical and (
+                (len(words) >= self.MIN_ROT_WORDS_AFTER_TURN
+                 and (page.number - 1) in getattr(self, '_turned', ()))
+                or (len(words) >= self.MIN_ROT_WORDS_UNREADABLE and unreadable))):
             return base
 
         def probe(extra: int):

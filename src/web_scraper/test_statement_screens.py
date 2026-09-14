@@ -433,3 +433,51 @@ def test_an_unmapped_section_abstains(builder):
     doc = _cf_sections(500_012_110_163, 769_482_533_733, 303_323_667_916, 572_794_091_486)
     del doc["accepted"]["cash_flow"]["values"]["hddt_luu_chuyen_tien_thuan_tu_hoat_dong_dau_tu"]
     assert screen_document(doc, builder) == {}
+
+
+# -- `DED-1`: the deductions line holding revenue itself ------------------------------------
+def test_deductions_equal_to_gross_revenue_are_a_carrier():
+    from web_scraper.statement_screens import deduction_carriers
+    v = {"1_doanh_thu_ban_hang_va_cung_cap_dich_vu": 787_355_000_000,
+         "2_cac_khoan_giam_tru_doanh_thu": 787_355_000_000,
+         "5_loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu": 130_349_000_000}
+    assert deduction_carriers(v) == ["2_cac_khoan_giam_tru_doanh_thu"]
+
+
+def test_a_real_deduction_and_item_codes_are_not_judged():
+    from web_scraper.statement_screens import deduction_carriers
+    assert deduction_carriers({"1_doanh_thu_ban_hang_va_cung_cap_dich_vu": 800_000_000_000,
+                               "2_cac_khoan_giam_tru_doanh_thu": 12_645_000_000}) == []
+    assert deduction_carriers({"1_doanh_thu_ban_hang_va_cung_cap_dich_vu": 271,
+                               "2_cac_khoan_giam_tru_doanh_thu": 271}) == []
+
+
+def test_the_parser_moves_a_deductions_label_riding_onto_net_revenue(builder):
+    """VRE Q3-2021's glued row: the deductions wording, then net revenue's, beside net revenue's figures."""
+    from web_scraper.cafef_pdf_parser import INCOME_STATEMENT, Row, Statement
+    rows = [Row(label="1. Doanh thu bán hàng và cung cấp dịch vụ", key="doanh_thu_ban_hang_va_cung_cap_dich_vu", number=None,
+                values=[787_355_000_000, 1_760_351_000_000]),
+            Row(label="2. Các khoàn giảm trừ doanh thu 3. Doanh thu thuần về bán hàng và cung cấp", number=None,
+                key="cac_khoan_giam_tru_doanh_thu_3_doanh_thu_thuan_ve_ban_hang_v",
+                values=[787_355_000_000, 1_760_351_000_000]),
+            Row(label="dịch vụ 4. Giá vốn hàng bán và dịch vụ cung cấp", number=None, key="dich_vu_4_gia_von_hang_ban_va_dich_vu_cung_cap",
+                values=[-657_006_000_000, -915_567_000_000]),
+            Row(label="5. Lợi nhuận gộp về bán hàng và cung cấp", number=None, key="loi_nhuan_gop_ve_ban_hang_va_cung_cap",
+                values=[130_349_000_000, 844_784_000_000])]
+    st = Statement(report=INCOME_STATEMENT, pages=[1], unit=1, n_columns=2, rows=rows)
+    out = builder.map_to_schema(st, "corp")
+    assert out.get("3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu") == 787_355_000_000
+    assert "2_cac_khoan_giam_tru_doanh_thu" not in out
+
+
+def test_a_printed_deduction_stays_a_deduction(builder):
+    from web_scraper.cafef_pdf_parser import INCOME_STATEMENT, Row, Statement
+    rows = [Row(label="1. Doanh thu bán hàng và cung cấp dịch vụ", key="doanh_thu_ban_hang_va_cung_cap_dich_vu", number=None,
+                values=[28_791_594_000_000]),
+            Row(label="2. Các khoản giảm trừ doanh thu", key="cac_khoan_giam_tru_doanh_thu", number=None, values=[49_238_000_000]),
+            Row(label="3. Doanh thu thuần về bán hàng và cung cấp dịch vụ", number=None,
+                key="doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu", values=[28_742_356_000_000])]
+    st = Statement(report=INCOME_STATEMENT, pages=[1], unit=1, n_columns=1, rows=rows)
+    out = builder.map_to_schema(st, "corp")
+    assert out.get("2_cac_khoan_giam_tru_doanh_thu") == 49_238_000_000
+    assert out.get("3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu") == 28_742_356_000_000

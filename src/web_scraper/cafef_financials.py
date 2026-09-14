@@ -2081,6 +2081,18 @@ class FinancialsBuilder:
         # classifier blind (`column_header_blind`) — that block stays one contiguous run.
         ParseLayer("onnx@200+alignpages+jvshare", "onnx", 200, align_pages=True,
                    equity_wording=True, merged_tail=True),
+        # ⚠️ **`STM-1` — AN INCOME STATEMENT STAMPED WITH THE BALANCE SHEET'S FORM CODE, WHOSE ASSOCIATES
+        # LINE ONLY `equity_wording` MAPS** (2026-09-14). VHM Q1-2022 prints `B01a-DN/HN` at the head of
+        # its income-statement pages (rendered and read), so the code classifies them as the balance
+        # sheet and only `title_over_form` finds the statement; and it words VAS line 24 `Lợi nhuận chia
+        # sẻ từ liên doanh, liên kết`, which `JVW-2`'s alias maps only under `equity_wording`. No layer
+        # carried both: an easyocr reading of the page closes the identity only with that line
+        # (3,865,969 + 3,828,959 - 477,418 + 10,700 - 326,742 - 1,077,408 = 5,824,060, in millions), and
+        # replayed on the GPU `+title` refused (components 1.948e12), `+title` with `equity_wording` and
+        # `merged_tail` refused (2.44e11), and with the wider crop and `relax_components` as well it
+        # WON, 19 items. The wider crop re-renders, so it runs here, late.
+        ParseLayer("onnx@200+title+jvshare+pad6", "onnx", 200, title_over_form=True,
+                   equity_wording=True, merged_tail=True, relax_components=True, crop_pad=6.0),
         # ── A ONE-PAGE POSTER, ITS STATEMENTS SIDE BY SIDE (`poster_split`, `PST-1`) ──
         # ⚠️ SSB's 2008-2015 annual summaries: auditor, balance sheet and income statement on one
         # sheet. Skipped on any filing of more than one page.
@@ -3779,9 +3791,72 @@ class FinancialsBuilder:
         self._anchor(out, schema, st, relax_totals, src, relax_merged_seam, annual_tail,
                      merged_tail, equity_wording, cash_wording)
         self._split_fx_from_balance(out, src, st, schema)
+        self._split_deductions_from_net_revenue(out, src, st, schema)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
         return out
+
+    DEDUCTIONS_COL = "2_cac_khoan_giam_tru_doanh_thu"
+    NET_REVENUE_COL = "3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu"
+
+    def _split_deductions_from_net_revenue(self, out: Dict[str, int], src: Dict[str, int],
+                                           st: Statement, schema: List[Tuple[str, str]]) -> None:
+        """The DEDUCTIONS line printed blank, so its label rode onto NET REVENUE's figures — `DED-1`.
+
+        ⚠️ **`_split_fx_from_balance`'s SHAPE ON THE INCOME STATEMENT, AND IT WROTE WRONG FIGURES FOR
+        THREE TICKERS** (2026-09-14). VRE, VHM and POW print `2. Các khoản giảm trừ doanh thu` with no
+        figure, so `table_rows` carries that label onto the next line and the row arrives as `Các khoản
+        giảm trừ doanh thu Doanh thu thuần về bán hàng và cung cấp dịch vụ` beside NET REVENUE's
+        figures; the ordered walk maps it to the deductions account, the net-revenue account stays
+        empty, and no identity notices — the operating-profit identity starts from gross profit. Over
+        the 775 corp `pdf` income statements on disk, **55 carry a deductions figure equal to gross
+        profit plus cost of sales**, i.e. net revenue: POW 18, VHM 16, VRE 16 (POW Q1-2018 `8,355,616,147,645`
+        of deductions for a company whose revenue that is).
+
+        The same four preconditions as the FX split: an income statement whose chart has both columns;
+        net revenue EMPTY; the row holding the deductions figure begins with the deductions wording;
+        and what follows it, with the line's own numeral dropped, matches the net-revenue account.
+        ⚠️ **THE FIGURE MOVES; NOTHING IS COPIED OR COMPUTED**, and the deductions cell is left empty
+        because the filing printed no figure there.
+        """
+        if st.report != INCOME_STATEMENT:
+            return
+        accounts = dict(schema)
+        head_col, tail_col = self.DEDUCTIONS_COL, self.NET_REVENUE_COL
+        if head_col not in accounts or tail_col not in accounts:
+            return
+        if tail_col in out or head_col not in out or head_col not in src:
+            return
+        ri = src[head_col]
+        if ri is None or ri >= len(st.rows):
+            return
+        from web_scraper.cafef_pdf_parser import PdfParser
+        head = accounts[head_col].replace("_", "")
+        full = PdfParser.slug(st.rows[ri].label, maxlen=self.SEAM_SLUG_LEN).replace("_", "")
+        full = full.lstrip("0123456789")
+        if len(full) <= len(head) or self._label_score(head, full[:len(head)]) < Statement.NAME_MATCH:
+            return
+        tail = full[len(head):].lstrip("0123456789")
+        net = accounts[tail_col].replace("_", "")
+        # ⚠️ The wrapped label is CUT — VRE's row ends `…và cung cấp`, its `dịch vụ` on the next line — so
+        # the tail is scored against the account's own head of the same length as well as whole.
+        if not tail or max(self._label_score(net, tail),
+                           self._label_score(net[:len(tail)], tail)) < Statement.NAME_MATCH:
+            return
+        # ⚠️ **AND THE STATEMENT'S OWN `5 = 3 - 4` MUST AGREE, BECAUSE THE WORDING ALONE MOVED A REAL
+        # DEDUCTION.** Replayed over the 801 stored corp income statements, the label test fires on 80:
+        # 70 close gross profit plus cost of sales to the unit, and FPT Q1-2025's `6,839,448,804` is a
+        # printed deduction under a glued label (its net revenue line lost its figure) — moved, it would
+        # have written 6.8 bn of revenue for a 22 tn quarter. No identity, no move.
+        value = out[head_col]
+        gp, cogs = out.get("5_loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu"), out.get("4_gia_von_hang_ban")
+        if gp is None or cogs is None or abs(abs(value) - (gp + abs(cogs))) > 3 * max(1, int(st.unit or 1)):
+            return
+        out.pop(head_col)
+        src.pop(head_col, None)
+        self._claim(out, src, tail_col, ri, value)
+        self._warn(f"    income statement: the deductions line printed no figure and its label rode "
+                   f"onto net revenue — {value:,} moved from `{head_col}` to `{tail_col}` (`DED-1`)")
 
     def _split_fx_from_balance(self, out: Dict[str, int], src: Dict[str, int],
                                st: Statement, schema: List[Tuple[str, str]]) -> None:

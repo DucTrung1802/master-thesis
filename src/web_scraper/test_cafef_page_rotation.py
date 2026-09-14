@@ -462,10 +462,11 @@ def test_a_sparse_vertical_page_after_a_turned_page_is_turned_too():
     assert page.rotation == 0 and 10 in p._turned
 
 
-def test_the_same_page_with_no_turned_neighbour_is_never_probed():
+def test_a_sparse_page_under_every_floor_with_no_turned_neighbour_is_never_probed():
+    """Seven boxes: under `MIN_ROT_WORDS_UNREADABLE`, and nothing turned before it."""
     p = _parser_reading({0: [], 90: _turned_read(), 270: []})
     page = _Page(number=10, rotation=0)
-    assert p._page_rotation(page, _sparse_tail_page()) == 0
+    assert p._page_rotation(page, _sparse_tail_page()[:6] + _sparse_tail_page()[-1:]) == 0
     assert p._onnx.calls == []
 
 
@@ -483,3 +484,36 @@ def test_a_new_document_forgets_which_pages_were_turned():
     p._turned = {9}
     p._use_document("another.pdf")
     assert p._turned == set()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `ROT-6` — a whole turned statement that sparse, with no turned page before it
+# ──────────────────────────────────────────────────────────────────────────────
+def _vre_page():
+    """VRE Q3-2021 page 7 read upright: 14 boxes, 13 taller than wide, one character each."""
+    words = [_word(100, 60 + 50 * i, 110, 100 + 50 * i, "T") for i in range(13)]
+    return words + [_word(300, 100, 312, 110, "s")]
+
+
+def test_a_sparse_vertical_page_that_reads_nothing_is_probed_on_its_own():
+    p = _parser_reading({0: [_word(0, 0, 5, 30, "I")] * 14, 90: _turned_read(), 270: []})
+    page = _Page(number=6, rotation=0)
+    assert p._page_rotation(page, _vre_page()) == 90
+    assert page.rotation == 0 and 6 in p._turned
+
+
+def test_a_sparse_vertical_page_that_reads_real_text_is_not_probed_on_its_own():
+    """The same boxes carrying words: over `MIN_UPRIGHT_CHARS`, so only a turned neighbour may ask."""
+    p = _parser_reading({0: [], 90: _turned_read(), 270: []})
+    words = [w[:4] + ("Tổng lợi nhuận kế toán",) + w[5:] for w in _vre_page()]
+    assert sum(len(w[4]) for w in words) >= PdfParser.MIN_UPRIGHT_CHARS
+    assert p._page_rotation(_Page(number=6, rotation=0), words) == 0
+    assert p._onnx.calls == []
+
+
+def test_five_vertical_boxes_after_a_turned_page_are_probed():
+    """VIC Q3-2025 page 11, the income statement's second page: `1 1 s P s`, all five tall."""
+    p = _parser_reading({0: [], 90: _turned_read(), 270: []})
+    p._turned = {9}
+    words = _sparse_tail_page()[:5]
+    assert p._page_rotation(_Page(number=10, rotation=0), words) == 90
