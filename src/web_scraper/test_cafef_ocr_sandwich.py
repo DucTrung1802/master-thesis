@@ -139,3 +139,31 @@ def test_the_sandwich_layers_are_last():
                  if l.engine == "onnx" and l.ocr_sandwich)
     assert all(l.ocr_sandwich for l in FinancialsBuilder.LAYERS[first:] if l.engine == "onnx")
     assert "onnx@200+sandwich" in names
+
+
+# -- `SDW-2`: a signature stamp's visible text does not make a scan a printed page -----------
+def _signed_pdf(tmp_path):
+    """A full-page image under invisible text, plus a visible stamp line at the foot of the page."""
+    path = _pdf(tmp_path, name="signed.pdf")
+    doc = fitz.open(path)
+    doc[0].insert_textbox(fitz.Rect(4, 816, 300, 842), "Ký bởi: NGÂN HÀNG TMCP", fontsize=6, render_mode=0)
+    out = str(tmp_path / "signed2.pdf")
+    doc.save(out)
+    return out
+
+
+def test_visible_text_inside_the_signature_widget_is_left_out(tmp_path):
+    """SHB Q3-2022 page 1: 2,144 invisible characters and a 103-character stamp inside its widget."""
+    path = _signed_pdf(tmp_path)
+    p = PdfParser()
+    p._signature_rects = lambda page: [fitz.Rect(0, 810, 320, 842)]
+    with fitz.open(path) as doc:
+        assert p._is_sandwich(doc[0])
+
+
+def test_the_same_visible_text_outside_any_widget_still_makes_it_a_printed_page(tmp_path):
+    path = _signed_pdf(tmp_path)
+    p = PdfParser()
+    p._signature_rects = lambda page: []
+    with fitz.open(path) as doc:
+        assert not p._is_sandwich(doc[0])

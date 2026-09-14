@@ -2199,6 +2199,28 @@ class FinancialsBuilder:
         parser.set_reseat_words(layer.reseat_words)
         parser.set_deskew_rows(layer.deskew_rows)
 
+    def _screen_flags(self, report: str, row: dict, st) -> List[str]:
+        """What the release screens would say about one accepted reading — `SCG-1`.
+
+        ⚠️ **A READING THE RELEASE WITHHOLDS STILL ENDED THE CASCADE FOR ITS STATEMENT** (2026-09-14).
+        `_parse_cascaded` stops asking about a statement at the first layer where `reconcile` and
+        `sane` pass, and the arithmetic screens run only later, at the merge. So VPB Q2-2012's
+        balance sheet was accepted at `onnx@200+twintotal` with the grand total 87,519,140,355,027
+        in `viii_von_chu_so_huu` (the pre-2015 wording `Vốn và các quỹ` maps only under the
+        `+equity` layers, which it never reached), withheld by the release, and left `missing` —
+        while 68 open VN30 cells had been accepted by some run and held or withheld. The same
+        per-document screens are asked here, on the mapped row, so a flagged reading does not stop
+        the cascade. A check that raises flags nothing (§5 rule 2).
+        """
+        from web_scraper import statement_screens as screens
+        try:
+            doc = {"period": "", "accepted": {report: {
+                "values": {k: int(v) for k, v in row.items() if v is not None},
+                "unit": int(getattr(st, "unit", 1) or 1)}}}
+            return list(screens.screen_document(doc, self).get(report, []))
+        except Exception:                                  # noqa: BLE001
+            return []
+
     def _parse_cascaded(self, path: str, period_end,
                         template: str, history: Dict[str, List[int]],
                         open_ref: Optional[int] = None):
@@ -2226,6 +2248,8 @@ class FinancialsBuilder:
         # records the reason cannot cost that again.
         refused: Dict[str, List[Tuple[str, str]]] = {}
         self.refusals = refused
+        # `SCG-1`: {report: the FIRST reading that passed reconcile and sane but not the screens}.
+        flagged: Dict[str, tuple] = {}
         # ⚠️ **A LAYER THAT RAISES IS NOT A LAYER THAT REFUSED, AND THE DIFFERENCE DECIDES
         # WHETHER A RESULT MAY BE BELIEVED.** A refusal is a measurement of the document; an
         # exception is a broken tool, and the cascade's answer then comes from whichever layer
@@ -2375,9 +2399,22 @@ class FinancialsBuilder:
                     bad = self.sane(st, history[report], row)
                     why = f"sane: {bad}" if bad is not None else None
                 if why is None:
-                    accepted[report] = (row, st, layer.name)
+                    # ⚠️ `SCG-1`: a reading the release would withhold does not end the cascade;
+                    # it is kept as the answer only if no later layer reads the statement clean.
+                    flags = self._screen_flags(report, row, st)
+                    if flags:
+                        flagged.setdefault(report, (row, st, layer.name))
+                        refused.setdefault(report, []).append(
+                            (layer.name, "screens: " + "; ".join(flags)))
+                    else:
+                        accepted[report] = (row, st, layer.name)
                 else:
                     refused.setdefault(report, []).append((layer.name, why))
+
+        # ⚠️ `SCG-1`: a statement no layer read clean keeps its first flagged reading, which is exactly
+        # what the cascade accepted before the gate existed — the merge's screens still judge it.
+        for report, got in flagged.items():
+            accepted.setdefault(report, got)
 
         # ⚠️ **AND THE CASH-FLOW CROSS-CHECK IS RE-RUN ONCE THE CASCADE IS OVER — `CBS-1`,
         # and WITHOUT THIS 20 % OF IT IS INERT.** Inside the loop the reference exists only if

@@ -676,3 +676,21 @@ def test_a_section_total_descending_below_its_own_block_still_abstains(parser):
     codes = ["110", "120", "300", "310", "400", "500", "320", "700", "800"]
     assert parser._code_column_by_value([X_CODE, X_NOW, X_PRIOR],
                                         _page(header=False, rows=_bank(codes))) is None
+
+
+# -- `MSC-2`: a page number under the codes ------------------------------------------------
+def _with_footer(gap):
+    page = _page(header=False)
+    last_y = 100.0 + (len(ROWS) - 1) * 16.0
+    page[0].append(_box(X_CODE + 2.0, last_y + gap, "1", 5.0))
+    return page
+
+
+def test_a_page_number_far_below_the_codes_does_not_stop_the_detector():
+    """GAS Q2-2022: codes a line apart, then the page number 70 pt under code 270."""
+    assert len(_flagged().value_columns(_with_footer(70.0), WIDTH)) == 2
+
+
+def test_a_number_a_line_below_the_codes_still_abstains():
+    """At a line's distance the number could be a damaged code, and the strict rule stands."""
+    assert len(_flagged().value_columns(_with_footer(16.0), WIDTH)) == 3

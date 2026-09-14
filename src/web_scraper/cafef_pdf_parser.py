@@ -1065,7 +1065,22 @@ class PdfParser:
                     covered += (max(0.0, min(x1, pw) - max(x0, 0.0))
                                 * max(0.0, min(y1, ph) - max(y0, 0.0)))
                 if area and covered / area >= self.SANDWICH_COVER:
-                    kinds = {span.get("type") for span in page.get_texttrace()}
+                    # ⚠️ **`SDW-2` — A SIGNATURE STAMP IS NOT THE PAGE'S TEXT** (2026-09-14). SHB
+                    # Q3-2022's balance sheet opens on a full-page scan under 2,144 invisible characters
+                    # of somebody else's OCR, plus 103 VISIBLE ones: `Ký bởi: NGÂN HÀNG THƯƠNG MẠI CỔ
+                    # PHẦN SÀI GÒN - HÀ NỘI`, `Ký ngày: 28/10/2022`, `Signature Not Verified`, all inside
+                    # the page's signature widget. Every span had to be invisible, so the page was not
+                    # a sandwich, and no layer ever OCR'd it — while pages 2-4, unsigned, were. Spans
+                    # inside a signature widget are left out, `_page_content_text`'s own rule.
+                    import fitz
+                    rects = self._signature_rects(page)
+                    kinds = set()
+                    for span in page.get_texttrace():
+                        box = fitz.Rect(span.get("bbox", (0, 0, 0, 0)))
+                        size = abs(box.get_area())
+                        if rects and size and max(abs((box & r).get_area()) for r in rects) >= self.SIG_INSIDE * size:
+                            continue
+                        kinds.add(span.get("type"))
                     hit = kinds == {3}
             except Exception:
                 hit = False                # a damaged page is not evidence either way
@@ -1282,6 +1297,37 @@ class PdfParser:
     # ──────────────────────────────────────────────────────────────────────
     # Pages
     # ──────────────────────────────────────────────────────────────────────
+
+    @classmethod
+    def _visual_text(cls, words) -> str:
+        """The page's words as lines in READING order — top to bottom, left to right — `VHD-1`."""
+        lines: List[list] = []
+        for w in sorted(words or [], key=lambda w: (w[1], w[0])):
+            if lines and abs(lines[-1][0][1] - w[1]) <= cls.Y_TOL:
+                lines[-1].append(w)
+            else:
+                lines.append([w])
+        return "\n".join(" ".join(x[4] for x in sorted(line, key=lambda x: x[0])) for line in lines)
+
+    def _page_kind_visual(self, text: str, words):
+        """`_page_kind`, asked again of the page in reading order when the text layer names nothing.
+
+        ⚠️ **`VHD-1` — A TEXT LAYER CAN EMIT THE STATEMENT'S TITLE LAST** (2026-09-14). GAS's
+        Q2-2022 consolidated filing prints `BẢNG CÂN ĐỐI KẾ TOÁN HỢP NHẤT` at the top of page 4
+        (y = 102 pt) and `BÁO CÁO KẾT QUẢ HOẠT ĐỘNG KINH DOANH HỢP NHẤT` at the top of page 6 (y =
+        80 pt), and `get_text()` returns them as lines 200 of 206 and 102 of 110, after every figure.
+        `_page_kind` reads the first `HEADER_LINES` lines of that order, found neither title, and
+        both statements were refused `no such statement on any page of this filing` on every layer
+        — on a text layer, where every word is the PDF's own. The same question is asked of the
+        words sorted by position, and the answer is taken only when it names a STATEMENT: a page
+        the text order already classified, as anything, keeps that verdict.
+        """
+        kind, from_form = self._page_kind(text)
+        if kind is None and words:
+            visual_kind, visual_form = self._page_kind(self._visual_text(words))
+            if visual_kind in REPORTS:
+                return visual_kind, visual_form
+        return kind, from_form
 
     def _page_kind(self, text: str):
         """-> (which statement this page is, whether a FORM CODE said so).
@@ -1582,6 +1628,13 @@ class PdfParser:
     # under genuine Vietnamese (~0.10) and far over the mojibake floor (0.00).
     MIN_DIACRITIC_RATIO = 0.02
 
+    # `ENC-1`: a page whose raw text is at least this share CJK/kana is not a Vietnamese text layer,
+    # and one whose letters are at least this share Latin-1 letters Vietnamese never uses is a
+    # legacy 8-bit encoding read as Latin-1. See `_native_garbled` for the measurement.
+    FOREIGN_SCRIPT_SHARE = 0.5
+    LEGACY_LETTER_SHARE = 0.05
+    LEGACY_LETTERS = frozenset("åæçëîïñöøûüÿäÅÆÇËÎÏÑÖØÛÜÄ")
+
     def _native_garbled(self, native: str) -> bool:
         """True when a non-trivial native text layer is legacy-font mojibake and must be OCR'd.
 
@@ -1595,6 +1648,24 @@ class PdfParser:
         Either one means the page classifier would match nothing and the statement would be lost,
         so the page must be OCR'd. Genuine Vietnamese text trips neither.
         """
+        # ⚠️ **`ENC-1` — TWO FLAVOURS BOTH TESTS BELOW ARE BLIND TO, BECAUSE `norm` FOLDS THE TEXT
+        # BEFORE EITHER IS MEASURED** (2026-09-14). Measured on the RAW text instead:
+        #   * FOREIGN SCRIPT — SHB Q3-2016's scanned pages carry a Japanese OCR layer (`ヽ ヽ ０ ミ`,
+        #     3,311 characters on the income statement's page) that folds to 10 characters, so
+        #     the length test said `too little to judge`, the length gate saw 3,311 and the page
+        #     was read as text on every layer but the eight `+sandwich` ones.
+        #   * LEGACY 8-BIT ENCODING — SAB's FY-2008 and MSN's Q1-2011 filings embed VNI-encoded
+        #     text read as Latin-1 (`Toång Coâng ty Coå phaàn`): the accents survive as Latin-1
+        #     letters Vietnamese never uses, so the diacritic ratio and the short-token share
+        #     both look like Vietnamese.
+        chars = [c for c in native if not c.isspace()]
+        if (len(chars) >= self.MIN_PAGE_TEXT and sum(1 for c in chars if ord(c) >= 0x2E80)
+                >= self.FOREIGN_SCRIPT_SHARE * len(chars)):
+            return True
+        letters = [c for c in native if c.isalpha()]
+        if (len(letters) >= self.MIN_PAGE_TEXT and sum(1 for c in letters if c in self.LEGACY_LETTERS)
+                >= self.LEGACY_LETTER_SHARE * len(letters)):
+            return True
         ns = self.norm(native).replace(" ", "")
         if len(ns) < self.MIN_PAGE_TEXT:
             return False            # too little text to judge; the length gate handles it
@@ -2293,7 +2364,7 @@ class PdfParser:
                 if page.rotation != self._page_rot[page.number]:
                     text, words = self._ocr_page(page, native)
 
-            kind, from_form = self._page_kind(text)
+            kind, from_form = self._page_kind_visual(text, words)
             pages[i] = {"text": text, "words": words, "kind": kind,
                         "from_form": from_form, "width": page.rect.width}
 
@@ -3166,6 +3237,9 @@ class PdfParser:
     # number falls, so a descent INTO one of them is the form (`MSC-1`).
     CODE_GRAND_TOTALS = (270, 440)
 
+    # `MSC-2`: a non-code this many median code gaps below the page's last code is the page's footer.
+    CODE_FOOTER_GAP = 3.0
+
     def _code_column_by_value(self, cols: List[float],
                               words_by_page: Dict[int, list]) -> Optional[float]:
         """The leftmost column when its own FIGURES are the VAS item codes, or None — `MSO`.
@@ -3218,6 +3292,7 @@ class PdfParser:
             # passed over. Everything from the first code down is judged exactly as before, and a
             # figures column — whose body is all non-code numbers — exceeds the cap and abstains.
             skipped, opened = 0, False
+            code_ys: List[float] = []
             for w in sorted(self._numbers(words_by_page[page]), key=lambda b: b[1]):
                 if abs(w[2] - leftmost) > self.EDGE_TOL:
                     continue
@@ -3238,11 +3313,23 @@ class PdfParser:
                     ended = True
                     break
                 if not code:
+                    # ⚠️ **`MSC-2` — A PAGE NUMBER UNDER THE TABLE IS NOT A DAMAGED CODE** (2026-09-14).
+                    # GAS Q2-2022's text layer numbers its codes 100 -> 270 a line apart (median gap
+                    # 12 pt) and prints the page number `1` at y 815, 70 pt under code 270 and inside
+                    # `EDGE_TOL` of the column, so the detector abstained on the footer and the balance
+                    # sheet was refused `assets 270 != liabilities + equity 440`. A figure that far
+                    # below the page's last code ends the page's scan; one a line's distance away
+                    # still abstains, which is the damaged code the strict rule exists for.
+                    if opened and len(code_ys) >= 3:
+                        gaps = sorted(b - a for a, b in zip(code_ys, code_ys[1:]))
+                        if w[1] - code_ys[-1] > self.CODE_FOOTER_GAP * max(gaps[len(gaps) // 2], 1.0):
+                            break
                     if opened or skipped >= self.CODE_HEADER_BAND:
                         return None
                     skipped += 1
                     continue
                 opened = True
+                code_ys.append(w[1])
                 seq.append(int(digits))
             if ended:
                 break

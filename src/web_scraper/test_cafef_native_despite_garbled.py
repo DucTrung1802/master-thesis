@@ -115,3 +115,26 @@ def test_the_cascade_offers_a_native_reading_only_after_every_strict_one():
     assert native, "no native layer in the cascade - this test measures nothing"
     assert min(native) > max(strict)
     assert any(layers[i].notes_boundary and layers[i].relax_merged_seam for i in native)
+
+
+# -- `ENC-1`: two flavours a fold-first test cannot see ---------------------------------------
+# SHB Q3-2016 page 3 as `get_text()` returns it: a Japanese OCR layer over a Vietnamese scan.
+SHB_CJK = "ヽ ヽ ０ ヽ ヽ ミ ヽ ミ ュ ミ ヽ ミ ヽ ％ ミ ヽ ミ ヽ ミ ヽ ミ ¨ ヽ ら ヽ ヽ ヽ ヽ ヽ ミ ヽ ミ し 、 一 卜 ゛ Ｎ ． 一 卜 り （ い 一 ， 一 一 し （ ヽ い い い い 一 " * 20
+# SAB FY-2008's balance sheet: VNI-encoded Vietnamese read as Latin-1.
+SAB_VNI = ("Toång Coâng ty Coå phaàn Bia – Röôïu – Nöôùc Giaûi Khaùt Saøi Goøn vaø caùc coâng ty con "
+           "Baûng caân ñoái keá toaùn hôïp nhaát taïi ngaøy 31 thaùng 12 naêm 2008 ") * 6
+GENUINE = ("Tổng Công ty Cổ phần Bia – Rượu – Nước Giải Khát Sài Gòn và các công ty con "
+           "Bảng cân đối kế toán hợp nhất tại ngày 31 tháng 12 năm 2008 ") * 6
+
+
+def test_a_foreign_script_text_layer_is_garbled():
+    """It folds to almost nothing, which the length test used to read as `too little to judge`."""
+    assert PdfParser()._native_garbled(SHB_CJK) is True
+
+
+def test_a_legacy_encoded_text_layer_is_garbled():
+    assert PdfParser()._native_garbled(SAB_VNI) is True
+
+
+def test_the_same_words_in_unicode_are_not():
+    assert PdfParser()._native_garbled(GENUINE) is False
