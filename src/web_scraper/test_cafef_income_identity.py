@@ -203,3 +203,22 @@ def test_the_new_roles_are_not_in_anchors():
     for col, (plus, minus, optional) in F.OP_IDENTITY.items():
         roles |= {col, *plus, *minus, *optional}
     assert roles & set(F.ANCHORS) == {BANK_PBT}, "only C_PBT was an anchor already"
+
+
+# -- `OPU-1`: exact to the unit the statement prints in -------------------------------------------
+def _vib_q1_2017(pbt):
+    return {BANK_OP: 302_844_000_000, BANK_PROV: 145_707_000_000, "xi_tong_loi_nhuan_truoc_thue": pbt}
+
+
+def test_a_statement_in_millions_closes_within_its_own_rounding(b):
+    """VIB Q1-2017: 302,844 - 145,707 = 157,137 against a printed 157,136 triệu."""
+    assert b._operating_profit_identity(_vib_q1_2017(157_136_000_000)) is not None, "the premise: exact in đồng fails"
+    assert b._operating_profit_identity(_vib_q1_2017(157_136_000_000), unit=1_000_000) is None
+
+
+def test_and_a_miss_of_several_units_is_still_refused(b):
+    assert b._operating_profit_identity(_vib_q1_2017(157_130_000_000), unit=1_000_000) is not None
+
+
+def test_a_statement_in_dong_keeps_the_exact_tolerance(b):
+    assert b._operating_profit_identity(bsr_q3_2019(89_916_450_279), unit=1) is not None

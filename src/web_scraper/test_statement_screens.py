@@ -598,3 +598,105 @@ def test_a_blank_funds_line_riding_onto_the_resources_total_gives_the_total_back
     out = builder.map_to_schema(st, "securities")
     assert out.get("tong_cong_no_phai_tra_va_von_chu_so_huu") == 25_031_547_530_915
     assert out.get("ii_nguon_kinh_phi_va_quy_khac") is None
+
+
+def test_both_grand_totals_glued_to_blank_lines_take_each_other_as_evidence(builder):
+    """SSI Q1-2019 prints BOTH blank lines, so neither total is mapped to lend the other its figure."""
+    from web_scraper.cafef_pdf_parser import BALANCE_SHEET, Row, Statement
+    rows = [Row(label="VI. Dự phòng suy giảm giá trị tài sản dài hạn TỔNG CỘNG TÀI SẢN",
+                key="du_phong_suy_giam_gia_tri_tai_san_dai_han_tong_cong_tai_san", number=None, values=[25_031_547_530_915]),
+            Row(label="I. Nợ phải trả ngắn hạn", key="no_phai_tra_ngan_han", number=None, values=[14_445_025_948_638]),
+            Row(label="I. Vốn chủ sở hữu", key="von_chu_so_huu", number=None, values=[9_370_891_277_310]),
+            Row(label="II. Nguồn kinh phí và quỹ khác TỔNG CỘNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU",
+                key="nguon_kinh_phi_va_quy_khac_tong_cong_no_phai_tra_va_von", number=None, values=[25_031_547_530_915])]
+    st = Statement(report=BALANCE_SHEET, pages=[1], unit=1, n_columns=1, rows=rows)
+    out = builder.map_to_schema(st, "securities")
+    assert out.get("tong_cong_tai_san") == 25_031_547_530_915
+    assert out.get("tong_cong_no_phai_tra_va_von_chu_so_huu") == 25_031_547_530_915
+
+
+def test_a_grand_total_wording_cut_where_the_label_wrapped_still_names_the_total(builder):
+    """SSI Q1-2019's own rows: both totals glued, the resources wording stopping at `VÀ VỐN`."""
+    from web_scraper.cafef_pdf_parser import BALANCE_SHEET, Row, Statement
+    rows = [Row(label="Vi. Dự phòng suy giảm giá trị tài sản dài hạn TÓNG CỌNG TÀI SẢN",
+                key="du_phong_suy_giam_gia_tri_tai_san_dai_han_tong_cong_tai_san", number=None,
+                values=[25_031_547_530_915, 23_825_626_725_361]),
+            Row(label="I. Vốn chủ sở hữu", key="von_chu_so_huu", number=None, values=[9_370_891_277_310, 9_155_664_527_633]),
+            Row(label="II. Nguồn kinh phí và quỹ khác TỔNG CỘNG NỢ PHẢI TRẢ VÀ VÓN",
+                key="nguon_kinh_phi_va_quy_khac_tong_cong_no_phai_tra_va_von", number=None,
+                values=[25_031_547_530_915, 23_825_626_725_361])]
+    st = Statement(report=BALANCE_SHEET, pages=[1], unit=1, n_columns=2, rows=rows)
+    out = builder.map_to_schema(st, "securities")
+    assert out.get("tong_cong_no_phai_tra_va_von_chu_so_huu") == 25_031_547_530_915
+    assert builder.reconcile(st, out) is None or "liabilities + equity 9,370" not in builder.reconcile(st, out)
+
+
+# -- `FTH-2`: an operating-profit term whose current cell is blank took the comparative ----------
+def _pow_q3_2021_rows(selling):
+    from web_scraper.cafef_pdf_parser import Row
+    lines = [("Doanh thu thuần về bán hàng và cung cấp dịch vụ", "doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu",
+              [5_342_484_577_946, 6_112_182_265_883, 20_966_980_023_816]),
+             ("Giá vốn hàng bán", "gia_von_hang_ban", [4_499_699_904_302, 5_564_783_920_381, 18_097_923_798_945]),
+             ("Lợi nhuận gộp về bán hàng và cung cấp dịch vụ", "loi_nhuan_gop_ve_ban_hang_va_cung_cap_dich_vu",
+              [842_784_673_644, 547_398_345_502, 2_869_056_224_871]),
+             ("Doanh thu hoạt động tài chính", "doanh_thu_hoat_dong_tai_chinh", [119_378_557_822, 145_947_193_023, 590_225_401_734]),
+             ("Chi phí tài chính", "chi_phi_tai_chinh", [136_971_129_567, 235_394_953_320, 505_119_639_934]),
+             ("Phần lãi (lỗ) trong công ty liên kết", "phan_lai_lo_trong_cong_ty_lien_ket", [7_080_138_972, None, 8_623_183_529]),
+             ("Chi phí bán hàng", "chi_phi_ban_hang", selling),
+             ("Chi phí quản lý doanh nghiệp", "chi_phi_quan_ly_doanh_nghiep", [154_315_415_759, 264_039_543_174, 525_978_541_089]),
+             ("Lợi nhuận thuần từ hoạt động kinh doanh", "loi_nhuan_thuan_tu_hoat_dong_kinh_doanh",
+              [677_956_825_112, 187_105_019_120, 2_427_380_208_451]),
+             ("Tổng lợi nhuận kế toán trước thuế", "tong_loi_nhuan_ke_toan_truoc_thue",
+              [678_895_462_061, 189_749_580_244, 2_307_849_323_854])]
+    return [Row(label=l, key=k, number=None, values=v) for l, k, v in lines]
+
+
+def test_a_blank_quarter_cell_that_took_the_comparative_is_left_blank_when_the_identity_says_so(builder):
+    """POW Q3-2021: no selling expense for the quarter, 6.8 bn for last year's — operating profit closes blank."""
+    from web_scraper.cafef_pdf_parser import INCOME_STATEMENT, Statement
+    st = Statement(report=INCOME_STATEMENT, pages=[1], unit=1, n_columns=3,
+                   rows=_pow_q3_2021_rows([None, 6_806_022_911, 9_426_420_660]))
+    out = builder.map_to_schema(st, "corp", equity_wording=True)
+    assert out.get("9_chi_phi_ban_hang") is None
+    assert out.get("11_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh") == 677_956_825_112
+    assert builder._operating_profit_identity(out) is None
+
+
+def test_a_comparative_figure_is_kept_when_blanking_it_does_not_close_the_identity(builder):
+    """The null: the same statement with operating profit misread — blanking the fall-through proves nothing."""
+    from web_scraper.cafef_pdf_parser import INCOME_STATEMENT, Statement
+    rows = _pow_q3_2021_rows([None, 6_806_022_911, 9_426_420_660])
+    rows[8].values = [677_956_825_912, 187_105_019_120, 2_427_380_208_451]
+    st = Statement(report=INCOME_STATEMENT, pages=[1], unit=1, n_columns=3, rows=rows)
+    out = builder.map_to_schema(st, "corp", equity_wording=True)
+    assert out.get("9_chi_phi_ban_hang") == 6_806_022_911
+    assert builder._operating_profit_identity(out) is not None
+
+
+# -- `PBC-1`: profit before tax mapped into another line ----------------------------------------
+def test_profit_before_tax_in_the_current_tax_line_is_flagged(builder):
+    """POW Q3-2019 at `onnx@200+tail`: the tax line holds operating profit + other profit exactly."""
+    values = {"11_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh": 868_882_824_378, "14_loi_nhuan_khac": 5_857_593_392,
+              "16_chi_phi_thue_tndn_hien_hanh": 874_740_417_770}
+    why = income_statement_screens(values, builder)
+    assert any("profit before tax (874,740,417,770) sits in 16_chi_phi_thue_tndn_hien_hanh" in w for w in why)
+
+
+def test_profit_before_tax_in_its_own_column_is_not(builder):
+    values = {"11_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh": 868_882_824_378, "14_loi_nhuan_khac": 5_857_593_392,
+              "15_tong_loi_nhuan_ke_toan_truoc_thue": 874_740_417_770, "16_chi_phi_thue_tndn_hien_hanh": 174_655_583_824}
+    assert income_statement_screens(values, builder) == []
+
+
+def test_a_deferred_tax_that_took_the_comparative_is_left_blank_when_profit_after_tax_says_so(builder):
+    """POW Q3-2025: PBT less the current tax is the printed PAT; the deferred line printed nothing."""
+    from web_scraper.cafef_pdf_parser import INCOME_STATEMENT, Row, Statement
+    lines = [("Tổng lợi nhuận kế toán trước thuế", "tong_loi_nhuan_ke_toan_truoc_thue", [1_011_826_163_428, 700_000_000_000, 2_500_000_000_000]),
+             ("Chi phí thuế TNDN hiện hành", "chi_phi_thue_tndn_hien_hanh", [63_448_641_579, 50_000_000_000, 150_000_000_000]),
+             ("Chi phí thuế TNDN hoãn lại", "chi_phi_thue_tndn_hoan_lai", [None, -4_385_813_849, -4_000_000_000]),
+             ("Lợi nhuận sau thuế thu nhập doanh nghiệp", "loi_nhuan_sau_thue_thu_nhap_doanh_nghiep", [948_377_521_849, 654_385_813_849, 2_354_000_000_000])]
+    st = Statement(report=INCOME_STATEMENT, pages=[1], unit=1, n_columns=3,
+                   rows=[Row(label=l, key=k, number=None, values=v) for l, k, v in lines])
+    out = builder.map_to_schema(st, "corp")
+    assert out.get("17_chi_phi_thue_tndn_hoan_lai") is None
+    assert out.get("18_loi_nhuan_sau_thue_thu_nhap_doanh_nghiep") == 948_377_521_849

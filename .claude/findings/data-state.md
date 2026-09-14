@@ -2362,3 +2362,22 @@ VN30 (2026-09-14, after): **4,918/5,214 = 94.3 %**, quarters 1,484/1,738 = 85.4 
 `GLU-2` over every stored balance sheet: 40 readings change mapping (39 accepted, 1 refused -> reconciles).
 
 VN30 (2026-09-14, after): **4,923/5,214 = 94.4 %**, quarters 1,489/1,738 = 85.7 %, holes 202, one band 5/30.
+
+### ⚠️ 2026-09-14/15 — FOUR READERS ON GPU, AND A SWEEP OF WRONG ROWS (`GLU-2`, `MSC-3`, `STM-2`, `TRC-2`, `FTH-2`, `OPU-1`, `DCA-1`, `PYR-3`, `UNT-1`, `EPS-1`)
+
+| run | documents | GPU | written | kept |
+|---|---|---|---|---|
+| `GLU-2` v3 + `MSC-3`: SSI 6, VNM 5, SHB 7 planned | 14 of 18 (stopped) | not recorded | SSI 6 balance sheets, VNM Q1-2011 BS, VNM Q2-2019 and Q3-2018 IS, SHB Q1-2016 BS | 8 — VNM Q3-2018 (a column mix) and SHB Q1-2016 (`BBS-1`) rolled back and held |
+| `STM-2` + `TRC-2`: VHM Q3-2021, Q3-2022; VNM Q1-2019, Q3-2019 | 4 | 17.7 min | VHM Q3-2021/Q3-2022 IS, VNM Q1-2019 BS; release VHM Q4-2021/Q4-2022 IS | 5 |
+| `UNT-1` re-read, no merge write: SSB Q1-2017, Q3-2017, Q1-2018; HDB Q3-2018/2019/2020 | 6 | 31.5 min | 0 by the run; 5 by scoped repair (HDB Q3-2018 rolled back) | — |
+| `FTH-2` + `OPU-1`: POW Q3-2020, Q3-2021; VIB Q1-2017 | 3 | 16.1 min | POW Q3-2021, Q3-2020 (sweep), VIB Q1-2017 IS; release POW Q4-2020, Q4-2021, VIB Q2-2017, Q4-2017 | — |
+| turned-page roots last read before `ROT-5`/`ROT-6`: PLX Q1-2016, SSI Q1-2020, POW Q3-2019, Q3-2025, VRE Q3-2017, SAB Q3-2019 | 6 | 36.0 min | PLX Q1-2016, POW Q3-2019, Q3-2025, VRE Q3-2017 IS; release PLX Q2-2016, Q4-2016, POW Q4-2025 | 6 — POW Q3-2019 (PBT in the tax line, `PBC-1`) rolled back and held |
+| VJC Q3-2019 (mis-stamped codes), TPB Q4-2010 (a sheet a thousand times short) | 2 | 11.8 min | 0 — VJC 1 of 3, TPB 0 of 3 | — |
+| `ISN-1` + `PBC-1` + VNM Q3-2016: VRE Q3-2024, POW Q3-2019, VNM Q3-2016 | 3 | 13.3 min | VRE Q3-2024, POW Q3-2019 IS; release VRE Q4-2024, POW Q4-2019 | 1 — POW Q3-2019 read PBT from the nine-month column and VRE Q4-2024 came from a wrong Q2; rolled back and held |
+
+Re-deriving every Q2-Q4 `pdf` income statement from the reading that wrote it (`DCA-1`): 18 rows differed at the first pass;
+repairs iterated through their dependents until nothing moved, 9 left. Newest stored reading vs disk: 95 balance sheets and
+44 income statements differ, 4 replaced. Half-year cross-check of every Q1 (`PYR-3`): VNM Q1-2012 and Q1-2017 prior-year
+(Q1-2018 found by the newest-reading census). Per-share cells scaled by the unit (`EPS-1`): 170 of 569 VN30 values.
+
+VN30 (2026-09-15, after): **4,950/5,214 = 94.9 %**, quarters 1,513/1,738 = 87.1 %, holes 178, one band 5/30.

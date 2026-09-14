@@ -2093,6 +2093,18 @@ class FinancialsBuilder:
         # WON, 19 items. The wider crop re-renders, so it runs here, late.
         ParseLayer("onnx@200+title+jvshare+pad6", "onnx", 200, title_over_form=True,
                    equity_wording=True, merged_tail=True, relax_components=True, crop_pad=6.0),
+        # ⚠️ `STM-2` (2026-09-14): VHM Q3-2021 and Q3-2022 come closest at `onnx@300+cashbs+relax` — operating
+        # profit short by 22.2 bn and 3.6 bn of printed 13,891.2 bn and 18,070.2 bn, the size of the associates
+        # line `JVW-2`'s alias maps only under `equity_wording`. The 300-dpi reading with that wording and the
+        # relaxed totals, without `column_header_blind`, which moves pages. It re-maps a cached 300-dpi parse.
+        ParseLayer("onnx@300+title+jvshare+relax", "onnx", 300, title_over_form=True, equity_wording=True,
+                   merged_tail=True, relax_totals=True),
+        # ⚠️ `TRC-2` (2026-09-14): VNM Q1-2019's balance sheet reads its resources total with the leading groups
+        # cropped (`261,792,855` of 38,305,261,792,855) on the pages whose item codes survive as column 0; the
+        # counterpart repair and the code-column detector were never on one layer. Replayed on the GPU with the
+        # real band: WON, 61 items.
+        ParseLayer("onnx@300+codecol+trunctotal", "onnx", 300, code_column_by_value=True,
+                   truncated_total=True),
         # ── A ONE-PAGE POSTER, ITS STATEMENTS SIDE BY SIDE (`poster_split`, `PST-1`) ──
         # ⚠️ SSB's 2008-2015 annual summaries: auditor, balance sheet and income statement on one
         # sheet. Skipped on any filing of more than one page.
@@ -3806,12 +3818,102 @@ class FinancialsBuilder:
         self._split_fx_from_balance(out, src, st, schema)
         self._split_deductions_from_net_revenue(out, src, st, schema)
         self._split_blank_label_from_totals(out, src, st, schema)
+        self._blank_comparative_fallthrough(out, src, st)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
         return out
 
+    def _blank_comparative_fallthrough(self, out: Dict[str, int], src: Dict[str, int],
+                                       st: Statement) -> None:
+        """An operating-profit term whose CURRENT cell is blank took the comparative's figure — `FTH-2`.
+
+        ⚠️ **`FTH-1`'s WRONG KIND, DECIDED BY THE FILING'S OWN ARITHMETIC RATHER THAN BY A THRESHOLD**
+        (2026-09-15). `Statement._first_value` returns the first POPULATED column on a statement of three
+        or more, and no share of rows printing column 0 separates an over-segmented sheet from a dash in
+        the quarter column, so the rule itself stays. But POW Q3-2021 prints no selling expense for the
+        quarter (`[None, 6,806,022,911, 9,426,420,660]`), the line took last year's 6.8 bn, and every layer
+        refused `operating profit does not close` on a statement whose own lines give 677,956,825,112
+        exactly with that cell blank: 842,784,673,644 + 119,378,557,822 - 136,971,129,567 + 7,080,138,972
+        - 154,315,415,759. POW Q3-2021 is a de-cumulation root, so its Q4 waited on it too.
+
+        Only when the identity FAILS: the terms whose row printed nothing in column 0 are tried as blank
+        (zero for the identity alone), smallest sets first, and exactly one set may close it within
+        `OP_IDENTITY_TOL` with every required term answered. Those columns are then left EMPTY — a dash
+        is `missing`, never somebody else's figure and never a computed zero. Operating profit itself is
+        never blanked, and a statement the identity already passes is not touched.
+        """
+        if st.report != INCOME_STATEMENT:
+            return
+        if self._operating_profit_identity(out, unit=st.unit) is not None:
+            entry = next(((c, e) for c, e in self.OP_IDENTITY.items() if out.get(c) is not None), None)
+            if entry is not None:
+                _col, (plus, minus, optional) = entry
+                self._blank_to_close(out, src, st, plus + minus + optional, "operating profit",
+                                     lambda trial: self._operating_profit_identity(trial, unit=st.unit) is None)
+        # ⚠️ **AND THE SAME ON PROFIT AFTER TAX** (2026-09-15): POW Q3-2021 and Q3-2025 were written with the
+        # deferred tax line holding last year's figure (550,508,460 and -4,385,813,849) while PBT less the
+        # current tax IS the printed PAT to the đồng. Corp chart only; abstains unless PBT, current tax and PAT
+        # all mapped.
+        if self._pat_identity(out, st.unit) is False:
+            self._blank_to_close(out, src, st, (self.PAT_CURRENT_TAX, self.PAT_DEFERRED_TAX), "profit after tax",
+                                 lambda trial: self._pat_identity(trial, st.unit) is True)
+
+    PAT_PBT = "15_tong_loi_nhuan_ke_toan_truoc_thue"
+    PAT_CURRENT_TAX = "16_chi_phi_thue_tndn_hien_hanh"
+    PAT_DEFERRED_TAX = "17_chi_phi_thue_tndn_hoan_lai"
+    PAT_COL = "18_loi_nhuan_sau_thue_thu_nhap_doanh_nghiep"
+
+    def _pat_identity(self, mapped: Dict[str, int], unit: int = 1) -> Optional[bool]:
+        """True when PBT less the taxes gives PAT (either sign convention), False when not, None when unjudged."""
+        pbt, cur, pat = (mapped.get(c) for c in (self.PAT_PBT, self.PAT_CURRENT_TAX, self.PAT_COL))
+        if pbt is None or cur is None or pat is None:
+            return None
+        deferred = mapped.get(self.PAT_DEFERRED_TAX) or 0
+        tol = max(self.OP_IDENTITY_TOL, max(1, int(unit or 1)) * 2)
+        return any(abs(pat - (pbt - s1 * abs(cur) - s2 * deferred)) <= tol for s1 in (1, -1) for s2 in (1, -1))
+
+    def _blank_to_close(self, out: Dict[str, int], src: Dict[str, int], st: Statement,
+                        terms: Sequence[str], what: str, closes) -> None:
+        """Leave blank the ONE smallest set of fell-through `terms` whose blanking closes `closes` — `FTH-2`."""
+        fell = [c for c in terms
+                if out.get(c) is not None and src.get(c) is not None
+                and 0 <= src[c] < len(st.rows) and len(st.rows[src[c]].values) >= 3
+                and st.rows[src[c]].values[0] is None]
+        solutions: List[Tuple[str, ...]] = []
+        for size in range(1, len(fell) + 1):
+            for combo in itertools.combinations(fell, size):
+                trial = dict(out)
+                trial.update({c: 0 for c in combo})
+                if closes(trial):
+                    solutions.append(combo)
+            if solutions:
+                break
+        if len(solutions) != 1:
+            return
+        for c in solutions[0]:
+            self._warn(f"    income statement: `{c}` prints no figure for the period and took the "
+                       f"comparative's {out[c]:,}; left blank, {what} closes (`FTH-2`)")
+            out.pop(c, None)
+            src.pop(c, None)
+
     DEDUCTIONS_COL = "2_cac_khoan_giam_tru_doanh_thu"
     NET_REVENUE_COL = "3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu"
+
+    GLUED_HEAD_CHARS = 14
+
+    @classmethod
+    def _carries_wording(cls, full: str, want: str) -> bool:
+        """Does `full` carry `want` AFTER some other wording — whole, or cut where the label wrapped? (`GLU-2`)
+
+        ⚠️ SSI Q1-2019's resources row reads `II. Nguồn kinh phí và quỹ khác TỔNG CỘNG NỢ PHẢI TRẢ VÀ VÓN` — `CHỦ SỞ
+        HỮU` wrapped onto the next line — so the account's head must start the tail and the tail may stop short.
+        """
+        head = want[:cls.GLUED_HEAD_CHARS]
+        at = full.find(head)
+        if at <= 0:
+            return False
+        tail = full[at:]
+        return want.startswith(tail) or tail.startswith(want)
 
     def _split_blank_label_from_totals(self, out: Dict[str, int], src: Dict[str, int],
                                        st: Statement, schema: List[Tuple[str, str]]) -> None:
@@ -3834,19 +3936,51 @@ class FinancialsBuilder:
             return
         from web_scraper.cafef_pdf_parser import PdfParser
         accounts = dict(schema)
+
+        def glued(total_col: str) -> Dict[int, int]:
+            """{row index: figure} for the rows carrying `total_col`'s wording after another wording."""
+            want = accounts[total_col].replace("_", "")
+            found = {}
+            for i, row in enumerate(st.rows):
+                full = PdfParser.slug(row.label, maxlen=self.SEAM_SLUG_LEN).replace("_", "")
+                value = st._first_value(row.values)
+                if value is not None and self._carries_wording(full, want):
+                    found[i] = value
+            return found
+
+        # ⚠️ BOTH totals glued (SSI Q1-2019 prints both blank lines): neither can lend the other its figure,
+        # so the two glued rows must carry the SAME figure, which is the evidence.
+        a_col = next((c for c in self.C_ASSETS if c in accounts), None)
+        r_col = next((c for c in self.C_RESOURCES if c in accounts), None)
+        if a_col and r_col and a_col not in out and r_col not in out:
+            ga, gr = glued(a_col), glued(r_col)
+            same = [(i, j, v) for i, v in ga.items() for j, w in gr.items() if v == w and i != j]
+            if len(same) == 1:
+                i, j, v = same[0]
+                for col, ri in list(src.items()):
+                    if ri in (i, j):
+                        out.pop(col, None)
+                        src.pop(col, None)
+                self._claim(out, src, a_col, i, v)
+                self._claim(out, src, r_col, j, v)
+                self._warn(f"    balance sheet: blank lines rode onto both grand totals — {v:,} (`GLU-2`)")
+                return
         for side, twin in ((self.C_ASSETS, self.C_RESOURCES), (self.C_RESOURCES, self.C_ASSETS)):
             total_col = next((c for c in side if c in accounts), None)
-            if total_col is None or total_col in out:
+            if total_col is None:
                 continue
             other = next((out[c] for c in twin if c in out), None)
-            if other is None:
+            # ⚠️ A total column already holding the twin's figure is settled; one holding ANOTHER figure is not —
+            # SSI Q1-2019's resources column took the equity line 9,370,891,277,310 by containment
+            # (`vonchusohuu` sits inside its account name) while the glued row printed 25,031,547,530,915.
+            if other is None or out.get(total_col) == other:
                 continue
             want = accounts[total_col].replace("_", "")
             for i, row in enumerate(st.rows):
                 if st._first_value(row.values) != other:
                     continue
                 full = PdfParser.slug(row.label, maxlen=self.SEAM_SLUG_LEN).replace("_", "")
-                if full.find(want) <= 0:
+                if not self._carries_wording(full, want):
                     continue
                 for col, ri in list(src.items()):
                     if ri == i and col != total_col and col not in twin:
@@ -4896,7 +5030,7 @@ class FinancialsBuilder:
             # `onnx@300` with `10_chi_phi_quan_ly_doanh_nghiep` read 200,000 too high, so the
             # cascade stops there and the exact reading at `onnx@400` is never reached. A gate
             # here refuses 300 and escalates by itself.
-            bad = self._operating_profit_identity(mapped or {})
+            bad = self._operating_profit_identity(mapped or {}, unit=st.unit)
             if bad:
                 return bad
             # ⚠️ `BIS-1`: and the net lines PBT is built from, on every layer, for the same reason.
@@ -5528,7 +5662,7 @@ class FinancialsBuilder:
             trial.update(dict(zip(unknown, combo)))
             if any(trial.get(c) is None for c in terms):
                 continue
-            if self._operating_profit_identity(trial) is None:
+            if self._operating_profit_identity(trial, unit=st.unit) is None:
                 solutions.append(dict(zip(unknown, combo)))
         if len(solutions) == 1:
             mapped.update(solutions[0])
@@ -5578,7 +5712,7 @@ class FinancialsBuilder:
                         f"printed {mapped[net]:,}")
         return None
 
-    def _operating_profit_identity(self, mapped: Dict[str, int]) -> Optional[str]:
+    def _operating_profit_identity(self, mapped: Dict[str, int], unit: int = 1) -> Optional[str]:
         """Operating profit must equal what the statement adds and deducts to reach it.
 
         ⚠️ **IT ABSTAINS RATHER THAN GUESSES, and that is three separate rules.** It runs only
@@ -5613,7 +5747,14 @@ class FinancialsBuilder:
                 + sum(mapped[c] for c in optional if mapped.get(c) is not None))
         as_stored = base + sum(mapped[c] for c in minus)
         as_expense = base - sum(abs(mapped[c]) for c in minus)
-        if min(abs(as_stored - op), abs(as_expense - op)) <= self.OP_IDENTITY_TOL:
+        # ⚠️ **`OPU-1` — EXACT TO THE UNIT THE FILING PRINTS IN, NOT TO THE ĐỒNG** (2026-09-15). A statement
+        # in millions rounds every line to the million, so its components can miss the printed total by a
+        # unit while every figure is read right: VIB Q1-2017 prints IX 302,844 and X (145,707) against XI
+        # 157,136 triệu, and every layer refused it at 1,000,000 đồng — a de-cumulation root, so Q2 and Q4
+        # waited on it. Half a unit per printed figure, rounded up; a statement in đồng keeps the 4.
+        n_terms = 1 + len(plus) + len(minus) + sum(1 for c in optional if mapped.get(c) is not None)
+        tol = max(self.OP_IDENTITY_TOL, max(1, int(unit or 1)) * ((n_terms + 1) // 2))
+        if min(abs(as_stored - op), abs(as_expense - op)) <= tol:
             return None
         return (f"operating profit does not close: components give {as_stored:.6g} "
                 f"(or {as_expense:.6g} with the deductions taken as expenses) "

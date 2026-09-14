@@ -623,6 +623,15 @@ class PdfParser:
         BALANCE_SHEET: ("tongcongnguonvon",),
     }
     BALANCE_SHEET_TOTAL_CODE = "440"
+    # ⚠️ **`ISN-1` — THE INCOME STATEMENT'S LAST PAGE STAMPED AND TITLED AS A NOTE** (2026-09-15). VRE's
+    # Q3-2024 interim report prints `B09a-DN/HN  THUYẾT MINH BÁO CÁO TÀI CHÍNH HỢP NHẤT GIỮA NIÊN ĐỘ (TIẾP
+    # THEO)` over page 9, whose table is the income statement's own tail — codes 50, 51, 52, 60, 61, 62 from
+    # `Tổng lợi nhuận kế toán trước thuế` to the minority's share — so the statement ended at other profit and
+    # every layer refused `no profit before tax` on a de-cumulation root. The income-tax note quotes profit
+    # before tax too, so the wording alone is not evidence: both lines AND both form codes printed as words.
+    # Kept out of `SECTION_HEADING` on purpose, so `notes_head` can never OPEN a run on it.
+    INCOME_TAIL_WORDING = ("tongloinhuanketoantruocthue", "loinhuansauthue")
+    INCOME_TAIL_CODES = ("50", "60")
     TAIL_CLOSING = ("taithoidiemcuoiky", "taithoidiemcuoinam", "taithoidiemcuoiquy")
 
     # How far below the last line that fed it a pending wrapped label survives a line that
@@ -2775,6 +2784,13 @@ class PdfParser:
         """
         if not self.notes_tail:
             return False
+        if run == INCOME_STATEMENT:
+            if len(self._numbers(page["words"])) < self.MIN_TAIL_WORDS:
+                return False
+            ns = self.norm(page["text"]).replace(" ", "")
+            printed = {w[4] for w in page["words"]}
+            return (all(n in ns for n in self.INCOME_TAIL_WORDING)
+                    and all(c in printed for c in self.INCOME_TAIL_CODES))   # `ISN-1`
         section = self.SECTION_HEADING.get(run)
         if not section:
             return False

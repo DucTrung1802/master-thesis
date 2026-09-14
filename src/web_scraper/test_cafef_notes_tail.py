@@ -386,3 +386,40 @@ def test_notes_head_is_a_parse_key_and_not_an_ocr_key():
 
     assert parse_key(a) != parse_key(tail)
     assert ocr_key(a) == ocr_key(tail)
+
+
+# ── `ISN-1` — the income statement's last page, stamped and titled as a note ─────────────────────
+VRE_Q3_2024_TAIL = """Cong ty Co phan Vincom Retail B09a-DN/HN
+THUYET MINH BAO CAO TAI CHINH HOP NHAT GIUA NIEN DO (TIEP THEO)
+50 14. Tong loi nhuan ke toan truoc thue 1.655.772 3.763.003
+51 15. Chi phi thue TNDN hien hanh (339.107) (330.143)
+60 17. Loi nhuan sau thue TNDN 906.400 1.316.888
+"""
+
+
+def _with_codes(pages, index, codes=("50", "60")):
+    pages[index]["words"] = pages[index]["words"] + [(30.0, 200.0 + 10 * i, 42.0, 210.0 + 10 * i, c)
+                                                    for i, c in enumerate(codes)]
+    return pages
+
+
+def test_the_income_statements_last_page_stamped_as_a_note_is_admitted():
+    pages = _with_codes(_pages([(INCOME_STATEMENT, "BAO CAO KET QUA KINH DOANH HOP NHAT"), (NOTES, VRE_Q3_2024_TAIL)]), 1)
+    _parser(True)._fill_continuations(pages)
+
+    assert _kinds(pages) == [INCOME_STATEMENT, INCOME_STATEMENT]
+
+
+def test_the_tax_notes_wording_without_the_form_codes_stays_a_note():
+    """The income-tax note quotes profit before tax and after tax; it does not print codes 50 and 60."""
+    pages = _pages([(INCOME_STATEMENT, "BAO CAO KET QUA KINH DOANH HOP NHAT"), (NOTES, VRE_Q3_2024_TAIL)])
+    _parser(True)._fill_continuations(pages)
+
+    assert _kinds(pages) == [INCOME_STATEMENT, NOTES]
+
+
+def test_and_it_never_opens_an_income_statement_run():
+    pages = _with_codes(_pages([(BALANCE_SHEET, "BANG CAN DOI KE TOAN"), (NOTES, VRE_Q3_2024_TAIL)]), 1)
+    _parser(True, notes_head=True)._fill_continuations(pages)
+
+    assert _kinds(pages) == [BALANCE_SHEET, NOTES]

@@ -231,6 +231,28 @@ def absurd_figures(values: Dict[str, int]) -> List[str]:
                   if isinstance(x, (int, float)) and abs(x) >= ABSURD_MAGNITUDE and "co_phieu" not in k)
 
 
+# ⚠️ **`PBC-1` — PROFIT BEFORE TAX MAPPED INTO ANOTHER LINE** (2026-09-15). POW Q3-2019 was accepted at
+# `onnx@200+tail` with `16_chi_phi_thue_tndn_hien_hanh` = 874,740,417,770 — exactly operating profit
+# 868,882,824,378 plus other profit 5,857,593,392 — and no profit-before-tax or after-tax column: `reconcile`
+# found the PBT row by its text, the map gave its figure to the tax line, and the reading was written. A corp
+# chart's PBT is `11 + 14` by the form itself, so any OTHER column holding that sum to the unit is misplaced.
+OPERATING_PROFIT = "11_loi_nhuan_thuan_tu_hoat_dong_kinh_doanh"
+OTHER_PROFIT = "14_loi_nhuan_khac"
+PROFIT_BEFORE_TAX = "15_tong_loi_nhuan_ke_toan_truoc_thue"
+PBT_CARRIER_MIN = 10 ** 9
+
+
+def pbt_carriers(values: Dict[str, int], unit: int = 1) -> List[str]:
+    """Columns other than profit before tax holding operating profit + other profit — `PBC-1`."""
+    op, other = values.get(OPERATING_PROFIT), values.get(OTHER_PROFIT)
+    if op is None or other is None or abs(op + other) < PBT_CARRIER_MIN:
+        return []
+    tol = 3 * max(1, int(unit or 1))
+    return sorted(c for c, x in values.items()
+                  if c not in (PROFIT_BEFORE_TAX, OPERATING_PROFIT) and isinstance(x, (int, float))
+                  and abs(x - (op + other)) <= tol)
+
+
 def income_statement_screens(values: Dict[str, int], builder: FinancialsBuilder,
                              unit: int = 1, derived: bool = False) -> List[str]:
     """Why an income statement's figures cannot all be right — `ISR-1` / `DCS-1`.
@@ -266,6 +288,10 @@ def income_statement_screens(values: Dict[str, int], builder: FinancialsBuilder,
     net_lines = builder._bank_net_lines(values, unit)
     if net_lines:
         why.append(net_lines)
+    carriers = pbt_carriers(values, unit)
+    if carriers:
+        why.append("profit before tax ({:,}) sits in {}".format(
+            values[OPERATING_PROFIT] + values[OTHER_PROFIT], ", ".join(carriers)))
     absurd = absurd_figures(values)
     if absurd:
         why.append("a figure no listed company prints: " + ", ".join(
