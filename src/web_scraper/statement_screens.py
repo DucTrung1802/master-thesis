@@ -170,6 +170,38 @@ def _span_closes(acc: dict, opening: int, net: int, close: int) -> bool:
     return abs(opening + net + sum(span) - close) <= tolerance
 
 
+# ⚠️ **`CFS-1` — A CASH FLOW WHOSE THREE SECTIONS DO NOT ADD UP TO THE NET PRINTED BENEATH THEM**
+# (2026-09-14). Every chart prints `50 = 20 + 30 + 40` (the bank's `IV = I + II + III`) and neither
+# `reconcile` nor this module ever asked it: the cash identity runs `opening + net + fx = closing`, which
+# a reading passes with any section misread. Over the 554 VN30 `pdf` cash flows on disk that map all
+# four lines, **68 fail** — HPG Q1-2015's operating flow reads +500,012,110,163 where the net needs
+# -500,012,110,163 (the gap is exactly twice it), FPT Q2-2016 is 500,000,000,000 off, GAS Q3-2019
+# 900,000,000,000, and BCM Q1-2018 was written from a GPU run with the sections 365,966,829,013 short.
+# Abstains unless exactly one line per section and the net are mapped; the filing's rounding is a
+# `unit` per figure.
+FLOW_SECTION_PREFIXES = ("hdkd_", "hddt_", "hdtc_")
+FLOW_UNIT_SLACK = 3
+
+
+def flow_sections_gap(values: Dict[str, int], builder: FinancialsBuilder,
+                      unit: int = 1) -> Optional[Tuple[int, int]]:
+    """`(operating + investing + financing, net)` when all four are mapped and disagree — `CFS-1`."""
+    net = _first(values, builder.C_NET_CF)
+    if net is None:
+        return None
+    sections = []
+    for prefix in FLOW_SECTION_PREFIXES:
+        found = [values[c] for c in builder.C_FLOW_SECTIONS
+                 if c.startswith(prefix) and values.get(c) is not None]
+        if len(found) != 1:
+            return None
+        sections.append(found[0])
+    total = sum(sections)
+    if _close(total, net) or abs(total - net) <= FLOW_UNIT_SLACK * max(1, int(unit or 1)):
+        return None
+    return total, net
+
+
 # ⚠️ **`ISR-1` — FIGURES NO FILING OF A LISTED COMPANY CAN PRINT** (2026-09-14). The largest balance
 # sheet in the corpus is BID's ~2.7e15 đồng, so a line of 1e16 or more is a glued or mis-scaled
 # reading and never a figure: FPT's four 2025 income statements carried `12_thu_nhap_khac`
@@ -343,6 +375,10 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
                     and not _span_closes(acc, opening, net, close)):
                 why.append("opening + net + fx {:,} != closing {:,}"
                            .format(opening + net + fx, close))
+            flows = flow_sections_gap(values, builder, int(acc.get("unit") or 1))
+            if flows is not None:
+                why.append("operating + investing + financing {:,} != net {:,} (gap {:,}, `CFS-1`)"
+                           .format(flows[0], flows[1], flows[0] - flows[1]))
         if report == "income_statement":
             why += income_statement_screens(values, builder, unit=int(acc.get("unit") or 1))
         else:

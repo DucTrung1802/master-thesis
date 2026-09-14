@@ -2284,3 +2284,28 @@ carries a CJK text layer, and two (SAB FY-2008, MSN Q1-2011) VNI text. VPB Q2-20
 balance sheet no longer reconciles at any layer (`GTT-2`'s parse-time lock), so the gate had nothing to fall back on.
 
 VN30 (2026-09-14, after): **4,894/5,214 = 93.9 %**, quarters 1,468/1,738 = 84.5 %, holes 219, one band 5/30.
+
+### ⚠️ 2026-09-14 — FIVE WRITES, THREE WRONG, AND TWO IDENTITIES NOBODY ASKED (`CFS-1`, `QTL-1`)
+
+| run | documents | GPU | written | kept after checking each row |
+|---|---|---|---|---|
+| `SCG-1` sample: GAS Q4-2008/Q2-2022, BCM Q1-2018, SSI Q1-2016, TPB Q4-2010, SHB Q1-2011/Q3-2022 | 7 | 55.9 min | 3 (GAS BS + IS, BCM CF) | 2 — BCM's cash flow fails `CFS-1` by 365,966,829,013 |
+| `SDW-2`/`MSC-2` batch: SHB 8 filings, GAS Q3-2020, MSN Q1-2010, VJC Q2-2018 | 11 | 107.2 min | 2 (SHB Q3-2018 BS, GAS Q3-2020 BS) | 0 — SHB's lines sit one row off under correct totals; GAS's share premium is in `i_1_co_phieu_uu_dai` |
+
+Every rolled-back reading is in `raw_data/cafef/financials/held_readings.csv`, so a release cannot re-write it.
+
+`CFS-1` census, `statement_screens.flow_sections_gap` over disk and run folders (read-only):
+
+| population | checkable | fail |
+|---|---|---|
+| VN30 `pdf` cash flows on disk | 706 of 1,625 | **40** |
+| other tickers' `pdf` cash flows | 39 of 107 | 0 |
+| stored accepted cash flows (all run folders) | 3,079 | 86 |
+| disk failures with a stored reading passing every screen | 40 | **0** |
+
+`QTL-1` census (`q1_crosscheck.py`): 21 half-year readings proven to print the quarter; 17 Q1 rows disagree with
+their implied Q1 in 69 columns, mostly restatements and rounding; tails on VIB Q1-2022, VIB Q1-2023, VNM Q1-2025 and
+BVH Q1-2013. Repaired by scoped `force_differs` (columns dropped, nothing computed): VIB Q4-2022 (4), VIB Q4-2023
+(7), VNM Q4-2025 (2).
+
+VN30 (2026-09-14, after): **4,897/5,214 = 93.9 %**, quarters 1,469/1,738 = 84.5 %, holes 218, one band 5/30.

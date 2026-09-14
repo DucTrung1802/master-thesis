@@ -339,6 +339,68 @@ def _fell_through(got: dict, values: Dict[str, int]) -> List[str]:
     return sorted(c for c, v in values.items() if v not in first and v in later)
 
 
+def _tail_convicted(folder: Path, exchange: str, symbol: str, period: str,
+                    priors: Dict[str, Dict[str, int]]) -> Dict[str, List[str]]:
+    """`{Q1 period: [columns]}` whose figure on disk is the TAIL of what a later half-year filing prints — `QTL-1`.
+
+    ⚠️ **A FIRST QUARTER THAT LOST ITS LEADING DIGIT GROUPS IS SUBTRACTED INTO EVERY LATER QUARTER OF ITS
+    YEAR, AND NO SCREEN ON EITHER ROW CAN SEE IT** (2026-09-14). VIB Q1-2022's income statement reads profit
+    after tax **136,000,000** where the filing prints 1,823,136,000,000, and Q4-2022 = FY - (Q1+Q2+Q3) was
+    written with PAT **4,039.9 bn** beside Q2's 2,195.3 and Q3's 2,233.4; VIB Q1-2023 (111,000,000 for
+    2,155,111,000,000) did the same to Q4-2023, and VNM Q1-2025's general and administrative expense reads
+    463 for 430,929,441,463, so Q4-2025 carries 976.0 bn beside 462.3 and 465.8. Every stored reading of
+    those Q1 filings carries the same misread, so no repair from them exists.
+    ⚠️ **THE HALF-YEAR FILING PRINTS THE FIRST QUARTER, AND THE PROOF SAYS WHERE**: once
+    `_quarter_column_proof` shows a Q2 reading's column 0 is the quarter, its year-to-date column minus that
+    quarter is Q1 as the half-year filing prints it. A Q1 column whose digits are a strict SUFFIX of that
+    figure, at least a thousand times smaller, lost whole groups — a restated comparative is not a suffix,
+    and a rounding difference is not a thousandfold. Such a column is not subtracted; nothing is computed
+    into the CSV. Judged only for a Q3 or Q4, whose operand Q1 is; a Q2 IS the half-year document.
+    """
+    year = period.split("-")[1]
+    q1 = f"Q1-{year}"
+    if q1 not in priors or period.startswith(("Q1", "Q2")):
+        return {}
+    disk = priors[q1]
+    for doc_path in sorted(Path(folder).parent.glob(f"*/documents/{exchange}_{symbol}__Q2-{year}.json"),
+                           key=lambda x: x.stat().st_mtime, reverse=True):
+        try:
+            got = (json.loads(doc_path.read_text(encoding="utf-8")).get("accepted") or {}).get(
+                fin.INCOME_STATEMENT)
+        except (OSError, ValueError):
+            continue
+        if not got or int(got.get("months") or 3) <= 3 or not _quarter_column_proof(got, {q1: disk}):
+            continue
+        dump = got.get("row_dump") or []
+        implied: Dict[int, Dict[str, int]] = {1: {}, 2: {}}
+        closes = {1: 0, 2: 0}
+        for column, raw in (got.get("values") or {}).items():
+            try:
+                accepted = int(raw)
+            except (TypeError, ValueError):
+                continue
+            row = next((r for r in dump if len(r) > 3 and isinstance(r[3], list) and r[3]
+                        and r[3][0] == accepted), None)
+            numbers = [x for x in (row[3] if row else []) if isinstance(x, (int, float))]
+            if not accepted or len(numbers) < 3:
+                continue
+            for at in implied:
+                implied[at][column] = int(numbers[at]) - accepted
+                if disk.get(column) is not None and implied[at][column] == int(disk[column]):
+                    closes[at] += 1
+        at = max(closes, key=closes.get)
+        tails = []
+        for column, printed in implied[at].items():
+            held = disk.get(column)
+            if not held or not printed:
+                continue
+            small, big = str(abs(int(held))), str(abs(printed))
+            if abs(printed) >= 1000 * abs(int(held)) and big.endswith(small) and len(big) > len(small):
+                tails.append(column)
+        return {q1: sorted(tails)} if tails else {}
+    return {}
+
+
 def _quarter_priors(builder: FinancialsBuilder, exchange: str, symbol: str, template: str,
                     period: str,
                     pending: Dict[str, Dict[str, int]],
@@ -573,6 +635,11 @@ def plan_merge(folder: os.PathLike | str,
                             convicted[prior_period] = sorted(bad)
                             priors[prior_period] = {k: v for k, v in prior_values.items()
                                                     if k not in bad}
+                    # ⚠️ `QTL-1`: a Q1 column the half-year filing shows lost its leading groups is not subtracted.
+                    tails = _tail_convicted(folder, exchange, symbol, period, priors)
+                    for prior_period, columns in tails.items():
+                        priors[prior_period] = {k: v for k, v in priors[prior_period].items()
+                                                if k not in columns}
                     # ⚠️ `QCD-1`: before subtracting, ask the reading's own columns whether it
                     # is already the quarter. The span label can be wrong; the arithmetic cannot.
                     proof = _quarter_column_proof(got, priors)
@@ -633,6 +700,11 @@ def plan_merge(folder: os.PathLike | str,
                             f"disk on {proof} line(s) (`QCD-1`)"
                             + (f"; ⚠️ {len(fell)} column(s) DROPPED — read from a later column where "
                                f"the quarter's is blank: {', '.join(fell)} (`QCD-2`)" if fell else ""))
+                    if tails:
+                        decision.note += "".join(
+                            f"; ⚠️ {prior_period} on disk lost the leading digits of "
+                            f"{', '.join(columns)}, so they were not subtracted (`QTL-1`)"
+                            for prior_period, columns in sorted(tails.items()))
                     if convicted:
                         decision.note += "".join(
                             f"; ⚠️ {prior_period} on disk fails the screens, so "

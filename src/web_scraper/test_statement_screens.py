@@ -404,3 +404,32 @@ def test_a_reading_on_the_held_register_is_held_and_no_other(builder, tmp_path):
 
 def test_no_register_holds_nothing(builder, tmp_path):
     assert screen_run([], builder, held_path=tmp_path / "absent.csv") == {}
+
+
+# -- `CFS-1`: the three sections of a cash flow add up to its net ------------------------
+def _cf_sections(op, inv, fin, net, unit=1):
+    v = _cf(100_000_000_000, net, 100_000_000_000 + net)
+    v.update({"hdkd_luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh": op,
+              "hddt_luu_chuyen_tien_thuan_tu_hoat_dong_dau_tu": inv,
+              "hdtc_luu_chuyen_tien_thuan_tu_hoat_dong_tai_chinh": fin})
+    doc = _doc("Q1-2015", cash_flow=v)
+    doc["accepted"]["cash_flow"]["unit"] = unit
+    return doc
+
+
+def test_sections_that_miss_the_net_are_flagged(builder):
+    """HPG Q1-2015: the operating flow read without its parentheses — the gap is twice it."""
+    why = screen_document(_cf_sections(500_012_110_163, 769_482_533_733, 303_323_667_916,
+                                       572_794_091_486), builder)["cash_flow"]
+    assert any("CFS-1" in w for w in why), why
+
+
+def test_sections_that_close_to_the_filings_rounding_are_not_flagged(builder):
+    doc = _cf_sections(-500_012_000_000, 769_483_000_000, 303_324_000_000, 572_793_000_000, unit=1_000_000)
+    assert screen_document(doc, builder) == {}
+
+
+def test_an_unmapped_section_abstains(builder):
+    doc = _cf_sections(500_012_110_163, 769_482_533_733, 303_323_667_916, 572_794_091_486)
+    del doc["accepted"]["cash_flow"]["values"]["hddt_luu_chuyen_tien_thuan_tu_hoat_dong_dau_tu"]
+    assert screen_document(doc, builder) == {}

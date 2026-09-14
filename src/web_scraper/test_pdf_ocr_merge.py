@@ -1153,3 +1153,46 @@ def test_a_proven_quarter_read_from_column_zero_drops_nothing():
     from web_scraper import pdf_ocr_merge as merge_qcd2
     got, _priors = _bvh_q2_2013()
     assert merge_qcd2._fell_through(got, {k: int(v) for k, v in got["values"].items()}) == []
+
+
+# -- `QTL-1`: a first quarter that lost its leading digit groups ----------------------------
+def _qtl_half_year(tmp_path, pat_q1_printed=1_823_136_000_000):
+    """VIB Q2-2022 as the half-year filing prints it: quarter, prior quarter, year-to-date, prior."""
+    import json as _json
+    rows = {"xiii_loi_nhuan_sau_thue": (2_195_308_000_000, pat_q1_printed),
+            "i_thu_nhap_lai_thuan": (3_699_595_000_000, 3_515_891_000_000),
+            "xi_tong_loi_nhuan_truoc_thue": (2_744_000_000_000, 2_278_900_000_000)}
+    got = {"months": 6, "unit": 1_000_000,
+           "values": {k: q for k, (q, _q1) in rows.items()},
+           "row_dump": [["", k, k, [q, 1, q + q1, 2]] for k, (q, q1) in rows.items()]}
+    run = tmp_path / "20260913-003722__hose_vib__pdf_ocr" / "documents"
+    run.mkdir(parents=True)
+    (run / "HOSE_VIB__Q2-2022.json").write_text(_json.dumps({"accepted": {"income_statement": got}}),
+                                                  encoding="utf-8")
+    return tmp_path / "20260914-000000__hose_vib__pdf_ocr"
+
+
+def _qtl_q1_on_disk(pat):
+    return {"Q1-2022": {"xiii_loi_nhuan_sau_thue": pat, "i_thu_nhap_lai_thuan": 3_515_891_000_000,
+                        "xi_tong_loi_nhuan_truoc_thue": 2_278_900_000_000},
+            "Q2-2022": {"xiii_loi_nhuan_sau_thue": 2_195_308_000_000}}
+
+
+def test_a_first_quarter_figure_that_is_the_tail_of_the_printed_one_is_not_subtracted(tmp_path):
+    """VIB Q1-2022: PAT 136,000,000 on disk where the half-year filing prints 1,823,136,000,000."""
+    from web_scraper import pdf_ocr_merge as merge_qtl
+    folder = _qtl_half_year(tmp_path)
+    got = merge_qtl._tail_convicted(folder, "HOSE", "VIB", "Q4-2022", _qtl_q1_on_disk(136_000_000))
+    assert got == {"Q1-2022": ["xiii_loi_nhuan_sau_thue"]}
+
+
+def test_a_restated_first_quarter_is_not_a_tail(tmp_path):
+    from web_scraper import pdf_ocr_merge as merge_qtl
+    folder = _qtl_half_year(tmp_path, pat_q1_printed=1_823_136_000_000)
+    assert merge_qtl._tail_convicted(folder, "HOSE", "VIB", "Q4-2022", _qtl_q1_on_disk(1_799_136_000_000)) == {}
+
+
+def test_a_second_quarter_is_never_judged_against_its_own_half_year(tmp_path):
+    from web_scraper import pdf_ocr_merge as merge_qtl
+    folder = _qtl_half_year(tmp_path)
+    assert merge_qtl._tail_convicted(folder, "HOSE", "VIB", "Q2-2022", _qtl_q1_on_disk(136_000_000)) == {}
