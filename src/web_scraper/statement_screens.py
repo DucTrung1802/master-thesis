@@ -511,7 +511,8 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
 
 def screen_run(folders: Iterable[os.PathLike | str],
                builder: Optional[FinancialsBuilder] = None,
-               held_path: Optional[os.PathLike | str] = None
+               held_path: Optional[os.PathLike | str] = None,
+               disk_assets: Optional[Dict[str, int]] = None
                ) -> Dict[Tuple[str, str], List[str]]:
     """`{(period, report): [why]}` over a batch's run folders - the whole screen.
 
@@ -539,6 +540,14 @@ def screen_run(folders: Iterable[os.PathLike | str],
             total = _first(bs.get("values") or {}, builder.C_ASSETS)
             if total:
                 assets[period] = total
+    # ⚠️ **`MES-2` — A RUN OF ONE DOCUMENT HAS NO NEIGHBOURS, SO THE DISK LENDS THEM** (2026-09-14). The
+    # run's own merge screens one folder, and a parent-only BVH Q3-2023 (18,278,478,405,182) was written
+    # beside a consolidated 220,767,878,358,031 the release had held. Disk periods only ever serve as a
+    # neighbour: a figure already on disk is never flagged here.
+    in_run = set(assets)
+    for period, total in (disk_assets or {}).items():
+        if total:
+            assets.setdefault(period, total)
     order = sorted(assets, key=_q)
 
     def _breaks(a: str, b: str) -> bool:
@@ -578,6 +587,8 @@ def screen_run(folders: Iterable[os.PathLike | str],
         if before is not None:
             judged.append((before, after))
     for before, after in judged:
+        if after not in in_run:
+            continue
         # ⚠️ **PER QUARTER, NOT PER PAIR — two periods a YEAR apart legitimately move
         # further.** A batch parses the quarters that were OUTSTANDING, so consecutive HERE is
         # not consecutive on the calendar: FPT's run held Q2-2009 and then Q2-2010, four

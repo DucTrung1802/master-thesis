@@ -694,3 +694,28 @@ def test_a_page_number_far_below_the_codes_does_not_stop_the_detector():
 def test_a_number_a_line_below_the_codes_still_abstains():
     """At a line's distance the number could be a damaged code, and the strict rule stands."""
     assert len(_flagged().value_columns(_with_footer(16.0), WIDTH)) == 3
+
+
+# -- `MSC-3`: one misread code is a dip, not a figures column -----------------------------------
+SHB_Q1_2016_CODES = [110, 120, 130, 131, 132, 139, 140, 141, 149, 150, 160, 161, 169, 170, 171, 172, 179,
+             210, 211, 212, 213, 214, 219, 220, 300, 400, 500, 410, 411, 412, 413, 414, 415, 416, 420, 430]
+
+
+def _shb_rows(codes):
+    return [(f"Dòng {i}", str(code), f"{1_000_000 + i}.{i % 1000:03d}.000", f"{900_000 + i}.{i % 1000:03d}.000")
+            for i, code in enumerate(codes)]
+
+
+def test_one_misread_code_between_its_neighbours_is_forgiven():
+    """SHB Q1-2016: `415` read as `115` between `414` and `416`, on a column of 76 codes."""
+    codes = [115 if c == 415 else c for c in SHB_Q1_2016_CODES]
+    assert len(_flagged().value_columns(_page(header=False, rows=_shb_rows(codes)), WIDTH)) == 2
+
+
+def test_a_second_disagreement_still_abstains():
+    codes = [115 if c == 415 else (112 if c == 212 else c) for c in SHB_Q1_2016_CODES]
+    assert len(_flagged().value_columns(_page(header=False, rows=_shb_rows(codes)), WIDTH)) == 3
+
+
+def test_the_sequence_without_the_misread_is_recognised_as_before():
+    assert len(_flagged().value_columns(_page(header=False, rows=_shb_rows(SHB_Q1_2016_CODES)), WIDTH)) == 2

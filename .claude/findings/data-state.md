@@ -2349,3 +2349,16 @@ The stored balance sheets (1,749, newest reading per document) re-screened: `LNS
 releases 13 and convicts none; with parts read by text as well it convicted 129 (rejected). `EQS-3` flags 10.
 
 VN30 (2026-09-14, after): **4,918/5,214 = 94.3 %**, quarters 1,484/1,738 = 85.4 %, holes 207, one band 5/30.
+
+### ⚠️ 2026-09-14 — THE CASCADE'S SCREENS WITHOUT ROWS, AND THREE READERS (`SCG-2`, `OBS-1`, `GLU-2`, `MSC-3`, `MES-2`)
+
+| run | documents | GPU | written | kept |
+|---|---|---|---|---|
+| BVH re-ask with `EQS-3`/`LNS-2` (before `SCG-2`) | 8 | 53.5 min | 0 — the capital readings held, the repaired ones kept aside | — |
+| BVH with `SCG-2` | 5 | 26.0 min | 5 balance sheets (Q2-2011, Q3-2012, Q4-2012, Q1-2013, Q3-2013) | 5 — D = I, C + D + minority = total where C maps |
+| SHB with `OBS-1` (stopped after one filing for `MSC-3`) | 1 | 15.4 min | 0 — pages [2, 3] now, code column still abstaining | — |
+
+`OBS-1` over the 40,064 VN30 text-layer pages: 73 headers carry `ngoại bảng cân đối`, 4 reclassified (all notes).
+`GLU-2` over every stored balance sheet: 40 readings change mapping (39 accepted, 1 refused -> reconciles).
+
+VN30 (2026-09-14, after): **4,923/5,214 = 94.4 %**, quarters 1,489/1,738 = 85.7 %, holes 202, one band 5/30.

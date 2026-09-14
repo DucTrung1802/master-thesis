@@ -1136,7 +1136,20 @@ def _merge_finished_quarters(folder: Path, plan: TickerPlan, *, apply: bool,
     # read THIS run folder, so every per-document identity applies; continuity needs neighbours
     # and stays the sweep's.
     try:
-        flagged = screens.screen_run([folder])
+        # ⚠️ `MES-2`: the disk's balance sheets are the neighbours a one-document folder lacks.
+        builder = fin.FinancialsBuilder(logger=None)
+        disk = builder._existing(plan.exchange, plan.symbol, plan.template, fin.BALANCE_SHEET)
+        disk_assets = {}
+        for period, row in disk.items():
+            if row.get("source") != "pdf":
+                continue
+            for column in builder.C_ASSETS:
+                try:
+                    disk_assets[period] = int(round(float(row.get(column))))
+                    break
+                except (TypeError, ValueError):
+                    continue
+        flagged = screens.screen_run([folder], disk_assets=disk_assets)
     except Exception as exc:                    # noqa: BLE001 — a check that did not run
         say(f"   ⚠️ the screens RAISED ({type(exc).__name__}: {exc}) — nothing is withheld on "
             f"their account (§5 rule 2)")

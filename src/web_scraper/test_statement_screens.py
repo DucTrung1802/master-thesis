@@ -569,3 +569,32 @@ def test_a_section_read_as_its_sub_section_is_not_this_defect(builder):
     dump = [["", "d_von_chu_so_huu", "D. VỐN CHỦ SỞ HỮU", [49_757_899_155_567]],
             ["", "i_von_chu_so_huu", "I. Vốn chủ sở hữu", [49_665_142_878_789]]]
     assert not any("EQS-3" in w for w in screen_document(_bvh_doc(values, dump), builder).get("balance_sheet", []))
+
+
+# -- `MES-2`: a one-document run judged against the disk's neighbours ------------------------
+def test_a_single_document_run_breaking_with_the_disk_series_is_flagged(builder, tmp_path):
+    folder = tmp_path / "20260914-174006__hose_bvh__pdf_ocr"
+    (folder / "documents").mkdir(parents=True)
+    doc = {"period": "Q3-2023", "accepted": {"balance_sheet": {"values": {
+        "tong_cong_tai_san": 18_278_478_405_182, "tong_cong_nguon_von": 18_278_478_405_182}}}}
+    (folder / "documents" / "HOSE_BVH__Q3-2023.json").write_text(json.dumps(doc), encoding="utf-8")
+    disk = {"Q2-2023": 220_767_878_358_031, "Q4-2023": 221_101_602_593_651}
+    flagged = screen_run([folder], builder, held_path=tmp_path / "none.csv", disk_assets=disk)
+    assert ("Q3-2023", "balance_sheet") in flagged
+    assert not any(p != "Q3-2023" for p, _r in flagged)
+    assert screen_run([folder], builder, held_path=tmp_path / "none.csv") == {}
+
+
+# -- `GLU-2`: a blank line's label rode onto a grand total ---------------------------------------
+def test_a_blank_funds_line_riding_onto_the_resources_total_gives_the_total_back(builder):
+    """SSI Q1-2019: `II. Nguồn kinh phí và quỹ khác` printed blank above the resources total."""
+    from web_scraper.cafef_pdf_parser import BALANCE_SHEET, Row, Statement
+    rows = [Row(label="TỔNG CỘNG TÀI SẢN", key="tong_cong_tai_san", number=None, values=[25_031_547_530_915]),
+            Row(label="I. Nợ phải trả ngắn hạn", key="no_phai_tra_ngan_han", number=None, values=[14_445_025_948_638]),
+            Row(label="I. Vốn chủ sở hữu", key="von_chu_so_huu", number=None, values=[9_370_891_277_310]),
+            Row(label="II. Nguồn kinh phí và quỹ khác TỔNG CỘNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU",
+                key="nguon_kinh_phi_va_quy_khac_tong_cong_no_phai_tra_va_von", number=None, values=[25_031_547_530_915])]
+    st = Statement(report=BALANCE_SHEET, pages=[1], unit=1, n_columns=1, rows=rows)
+    out = builder.map_to_schema(st, "securities")
+    assert out.get("tong_cong_no_phai_tra_va_von_chu_so_huu") == 25_031_547_530_915
+    assert out.get("ii_nguon_kinh_phi_va_quy_khac") is None

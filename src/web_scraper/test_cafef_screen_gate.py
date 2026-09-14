@@ -80,3 +80,18 @@ def test_a_clean_first_reading_is_accepted_at_once():
     accepted, _facts = b._parse_cascaded("x.pdf", None, "bank", {r: [] for r in fin.REPORTS})
     row, _st, layer = accepted["balance_sheet"]
     assert row == CLEAN and layer == fin.FinancialsBuilder.LAYERS[0].name
+
+
+# -- `SCG-2`: the in-cascade screens see the statement's rows -----------------------------------
+def test_the_cascade_screens_read_a_loans_line_off_the_statements_rows():
+    """BVH Q1-2013: A + B + the banking subsidiary's loans is the total; only the rows hold the loans."""
+    from web_scraper.cafef_pdf_parser import BALANCE_SHEET, Row, Statement
+    builder = fin.FinancialsBuilder(logger=None)
+    rows = [Row(label="Cho vay và ứng trước cho khách hàng", key="cho_vay_va_ung_truoc_cho_khach_hang",
+                number=None, values=[7_516_886_653_078, 7_042_879_686_335])]
+    st = Statement(report=BALANCE_SHEET, pages=[1], unit=1, n_columns=2, rows=rows)
+    row = {"a_tai_san_ngan_han": 18_996_260_888_045, "b_tai_san_dai_han": 21_338_277_357_893,
+           "tong_cong_tai_san": 47_851_424_899_016, "tong_cong_nguon_von": 47_851_424_899_016}
+    assert builder._screen_flags(BALANCE_SHEET, row, st) == []
+    st.rows = []
+    assert builder._screen_flags(BALANCE_SHEET, row, st) != []

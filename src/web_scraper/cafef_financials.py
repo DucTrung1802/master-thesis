@@ -2226,9 +2226,18 @@ class FinancialsBuilder:
         """
         from web_scraper import statement_screens as screens
         try:
+            # ⚠️ **`SCG-2` — AND THE ROWS, BECAUSE TWO SCREENS READ THEM** (2026-09-14). `LNS-2` finds an
+            # unmapped optional section line and `EQS-3` the order of the equity lines in the row dump; without
+            # it, BVH Q1-2013's `onnx@200+joinlost` reading (A + B + loans = total, `EQS-2`'s repaired section)
+            # was flagged `assets A+B != total` and kept aside, and `onnx@300+joinlost+relax` — the charter
+            # capital as the equity section, which `EQS-3` convicts only off the rows — was accepted instead
+            # and then held: 53.5 min of re-asking for 0 cells. The same shape the run folder stores.
             doc = {"period": "", "accepted": {report: {
                 "values": {k: int(v) for k, v in row.items() if v is not None},
-                "unit": int(getattr(st, "unit", 1) or 1)}}}
+                "unit": int(getattr(st, "unit", 1) or 1),
+                "row_dump": [[r.number, r.key, r.label,
+                              [None if v is None else int(v) for v in r.values]]
+                             for r in getattr(st, "rows", [])]}}}
             return list(screens.screen_document(doc, self).get(report, []))
         except Exception:                                  # noqa: BLE001
             return []
@@ -3796,12 +3805,57 @@ class FinancialsBuilder:
                      merged_tail, equity_wording, cash_wording)
         self._split_fx_from_balance(out, src, st, schema)
         self._split_deductions_from_net_revenue(out, src, st, schema)
+        self._split_blank_label_from_totals(out, src, st, schema)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
         return out
 
     DEDUCTIONS_COL = "2_cac_khoan_giam_tru_doanh_thu"
     NET_REVENUE_COL = "3_doanh_thu_thuan_ve_ban_hang_va_cung_cap_dich_vu"
+
+    def _split_blank_label_from_totals(self, out: Dict[str, int], src: Dict[str, int],
+                                       st: Statement, schema: List[Tuple[str, str]]) -> None:
+        """A blank line's label rode onto a GRAND TOTAL's figures — `GLU-2`.
+
+        ⚠️ **THE SHAPE `_split_fx_from_balance` AND `DED-1` REPAIR, ON THE TWO LINES A BALANCE SHEET CANNOT
+        LOSE** (2026-09-14). SSI's securities chart prints `VI. Dự phòng suy giảm giá trị tài sản dài hạn` and
+        `II. Nguồn kinh phí và quỹ khác` with no figure directly above `TỔNG CỘNG TÀI SẢN` and `TỔNG CỘNG NỢ
+        PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU`, so both totals arrive keyed after the blank line — Q1-2019's resources row
+        is `nguon_kinh_phi_va_quy_khac_tong_cong_no_phai_tra_va_von` — the resources total never maps, the text
+        fallback answers with the equity line, and every layer refused `assets 25,031,547,530,915 != liabilities
+        + equity 9,370,891,277,310` on a sheet whose own lines close (14,445,025,948,638 + 1,215,630,304,967 +
+        9,370,891,277,310 = 25,031,547,530,915).
+
+        A total column left empty takes the row whose full label carries that total's wording AFTER some other
+        wording and whose figure equals the OTHER grand total — the one piece of evidence a balance sheet always
+        prints twice. The row's other mapping, if any, is released; nothing is computed.
+        """
+        if st.report != BALANCE_SHEET:
+            return
+        from web_scraper.cafef_pdf_parser import PdfParser
+        accounts = dict(schema)
+        for side, twin in ((self.C_ASSETS, self.C_RESOURCES), (self.C_RESOURCES, self.C_ASSETS)):
+            total_col = next((c for c in side if c in accounts), None)
+            if total_col is None or total_col in out:
+                continue
+            other = next((out[c] for c in twin if c in out), None)
+            if other is None:
+                continue
+            want = accounts[total_col].replace("_", "")
+            for i, row in enumerate(st.rows):
+                if st._first_value(row.values) != other:
+                    continue
+                full = PdfParser.slug(row.label, maxlen=self.SEAM_SLUG_LEN).replace("_", "")
+                if full.find(want) <= 0:
+                    continue
+                for col, ri in list(src.items()):
+                    if ri == i and col != total_col and col not in twin:
+                        out.pop(col, None)
+                        src.pop(col, None)
+                self._claim(out, src, total_col, i, other)
+                self._warn(f"    balance sheet: a blank line's label rode onto the grand total — {other:,} "
+                           f"is `{total_col}` (`GLU-2`)")
+                break
 
     EQUITY_SECTION, EQUITY_PART = "d_von_chu_so_huu", "i_von_chu_so_huu"
 

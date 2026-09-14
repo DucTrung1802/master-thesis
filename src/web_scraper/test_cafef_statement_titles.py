@@ -207,3 +207,19 @@ def test_an_inexact_title_does_not_override_an_inexact_notes_match():
     ns = p.norm(text).replace(" ", "")
     assert max(p._title_score(ns, n) for n in p.HEADING.values()) < 1.0
     assert p._page_kind(text)[0] == NOTES
+
+
+# -- `OBS-1`: a note saying "ngoại bảng cân đối kế toán" is not the balance sheet ----------------
+def test_a_note_about_off_balance_items_is_not_the_balance_sheet():
+    """SHB Q1-2016 page 31, note 37: the phrase sat inside the header block and matched the title."""
+    text = ("SHB\nNgân hàng TMCP Sài Gòn - Hà Nội\n37. Nghĩa vụ nợ tiềm ẩn và các cam kết đưa ra\n"
+            "Trong quá trình hoạt động kinh doanh, Ngân hàng thực hiện các công cụ tài chính liên quan\n"
+            "đến các khoản mục ngoại bảng cân đối kế toán. Các công cụ tài chính này chủ yếu bao gồm\n")
+    assert _parser()._page_kind(text)[0] != "balance_sheet"
+
+
+def test_the_balance_sheets_own_off_balance_section_still_reads_as_the_balance_sheet():
+    """MBB Q3-2015 page 4: `chỉ tiêu` read `chiticu` on the text layer, just before the phrase."""
+    text = ("Ngân hàng Thương mại Cổ phần Quân đội\nngày 30 tháng 9 năm 2015\n"
+            "CÁC CHITICU NGOÀI BẢNG CÂN ĐỐI KẾ TOÁN\nNghĩa vụ nợ tiềm ẩn\n")
+    assert _parser()._page_kind(text)[0] == "balance_sheet"

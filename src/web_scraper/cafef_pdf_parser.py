@@ -340,6 +340,27 @@ class PdfParser:
         CASH_FLOW: ["luuchuyentiente"],
     }
     NOTES_NS = "thuyetminhbaocao"
+    # ⚠️ **`OBS-1` — "NGOẠI BẢNG CÂN ĐỐI KẾ TOÁN" (OFF-BALANCE-SHEET) IS NOT THE BALANCE SHEET'S TITLE** (2026-09-14).
+    # SHB's note 37, "Nghĩa vụ nợ tiềm ẩn và các cam kết đưa ra", opens by saying the bank carries instruments
+    # "liên quan đến các khoản mục ngoại bảng cân đối kế toán"; inside the header block that contains the title
+    # needle verbatim, so the note page (31 of 43 in Q1-2016, 34 in Q3-2018, 29-35 across eight quarters) was
+    # classified as the balance sheet and joined to it, its note numbering broke the item-code sequence
+    # (`sequence of 76 codes` and no answer), and the sheets stayed refused `assets 300 != liabilities +
+    # equity 800`. The phrase is struck from the header before the titles are scored.
+    OFF_BALANCE_RE = re.compile(r"ngoaibangcandoi(?:ketoan)?")
+    # ⚠️ ...but the BALANCE SHEET's own section `CÁC CHỈ TIÊU NGOÀI BẢNG CÂN ĐỐI KẾ TOÁN` is kept, and on a
+    # text layer `chỉ tiêu` comes back `chiticu`, `chitiu`, `chititti` (MBB Q3-2015, SSI Q1-2011, TPB Q3-2017),
+    # so the test is `chi` and a few letters just before, not the exact word. Measured over the 40,064 VN30
+    # text-layer pages: 73 carry the phrase in their header, 4 change — SHB FY-2009's note (twice), SHB
+    # Q3-2016's note 37, VJC Q2-2021's note 28 — and every one is a note.
+    OFF_BALANCE_KEEP_RE = re.compile(r"chi[a-z]{0,5}$")
+
+    @classmethod
+    def _strip_off_balance(cls, ns: str) -> str:
+        """The header with every note's `ngoại bảng cân đối kế toán` struck out — `OBS-1`."""
+        return cls.OFF_BALANCE_RE.sub(
+            lambda m: m.group(0) if cls.OFF_BALANCE_KEEP_RE.search(ns[max(0, m.start() - 8):m.start()]) else "",
+            ns)
 
     # ⚠️ **THE STATEMENT TABLE'S OWN COLUMN HEADING CARRIES THE NOTES TITLE'S FIRST TEN
     # CHARACTERS, AND THAT IS ENOUGH TO CLASSIFY A CONTINUATION PAGE AS A NOTE.** The standard
@@ -1420,7 +1441,7 @@ class PdfParser:
 
         header = "\n".join(
             [l for l in text.splitlines() if l.strip()][:self.HEADER_LINES])
-        ns = self.norm(header).replace(" ", "")
+        ns = self._strip_off_balance(self.norm(header).replace(" ", ""))   # `OBS-1`
         if any(a in ns for a in self.AUDIT_NS):
             return None, False              # the auditor's report is not a statement
         # ⚠️ The NOTES verdict alone is re-taken without the table's column-heading row --
@@ -3239,6 +3260,7 @@ class PdfParser:
     # Below this many codes the ascending test is not evidence — three ascending 3-digit numbers
     # are a coincidence a real column can produce.
     CODE_COLUMN_MIN_ROWS = 8
+    CODE_DIP_MIN_ROWS = 20                   # `MSC-3`
     # ⚠️ How many non-code numbers may sit ABOVE a page's first code before the column is judged
     # (`MSC-1`): a page header carries a date's day and at most one more figure (a year). A
     # figures column opens with its grand total, so its body exceeds this on its first page.
@@ -3369,11 +3391,24 @@ class PdfParser:
         # misread digit (`411 → 112`, `414 → 115`, `120 → 111`) still abstain, because the code
         # descended FROM is not a section total.
         seen: set = set()
-        for a, b in zip(seq, seq[1:]):
+        # ⚠️ **`MSC-3` — ONE CODE MISREAD IS A DIP, NOT A FIGURES COLUMN** (2026-09-14). SHB Q1-2016's balance
+        # sheet numbers 76 lines 110 -> 913 and OCR reads `415` (`Cổ phiếu ưu đãi`) as `115` between `414` and
+        # `416`; the first disagreement abstained, the item codes survived as column 0, and every layer refused
+        # `assets 300 != liabilities + equity 800`. A figures column descends at every total, so ONE code below
+        # its predecessor with the NEXT code resuming above it is forgiven, once, and only on a column of
+        # `CODE_DIP_MIN_ROWS` codes or more; a second disagreement still abstains.
+        dips = 0
+        for i, (a, b) in enumerate(zip(seq, seq[1:])):
+            if dips and seq[i] == dipped:
+                a = seq[i - 1]
             seen.add(a)
             if b < a and b not in self.CODE_GRAND_TOTALS and b not in seen:
                 below = [x for x in seen if x % 100 == 0 and x < a]
                 if a % 100 == 0 and below and max(below) < b:
+                    continue
+                if (not dips and len(seq) >= self.CODE_DIP_MIN_ROWS and i + 2 < len(seq)
+                        and seq[i + 2] > a):
+                    dips, dipped = 1, b
                     continue
                 return None
         return leftmost
