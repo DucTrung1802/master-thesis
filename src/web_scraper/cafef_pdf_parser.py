@@ -444,6 +444,15 @@ class PdfParser:
     # …of at least this many recognised boxes. A page holding a handful of stray marks must not
     # be turned on the strength of three of them; every rotated page measured carried 46+.
     MIN_ROT_WORDS = 20
+    # ⚠️ **`ROT-5` — AND A TURNED STATEMENT'S LAST PAGE IS SPARSE** (2026-09-14). VHM Q3-2023 and
+    # Q3-2024 and VRE Q3-2018 print their income statement across two LANDSCAPE pages scanned into
+    # portrait ones; the first carries 96-121 boxes and is turned, and the second — lines 14-20:
+    # PBT, tax, PAT — returns **9, 10 and 13 boxes, 85-90 % of them taller than wide**, reading
+    # `I I 0 3 có cơ s 8 S`. Under the floor above it was never probed, the statement stopped at
+    # line 11 or 13, and every layer refused it `no profit before tax`. So a page directly after a
+    # page this probe TURNED may be probed on this many boxes, and only when they are vertical: the
+    # neighbour is the evidence the floor was standing in for, and the probe still has to read more.
+    MIN_ROT_WORDS_AFTER_TURN = 8
     # ⚠️ **THE DETECTOR CANNOT TELL 90 FROM 270** — both make the lines horizontal — so the
     # direction is decided by READING the page each way and counting the tokens that parse as
     # numbers. Upside down, digits do not: on BID's Q3-2011 income statement that is 100
@@ -773,6 +782,8 @@ class PdfParser:
         # `VERTICAL_LINES_SHARE`. Scoped to one filing like `_ocr_cache`, and for the same
         # reason: a parser instance outlives the document.
         self._page_rot: Dict[int, int] = {}
+        # page numbers `_page_rotation` turned; scoped to one filing (`ROT-5`)
+        self._turned: set = set()
         self.ocr_ready = self._init_ocr()
 
     def _ocr_config(self) -> tuple:
@@ -798,6 +809,7 @@ class PdfParser:
         if self._ocr_cache_path != pdf_path:
             self._ocr_cache = {}
             self._page_rot = {}
+            self._turned = set()
             self._sandwich = {}
             self._ocr_cache_path = pdf_path
 
@@ -2202,7 +2214,7 @@ class PdfParser:
         # page is already square with `page.rect` and there is nothing here to detect. This
         # probe exists for the case neither can see: a scan whose IMAGE is turned inside a page
         # the PDF calls upright.
-        if self.engine != "onnx" or self._onnx is None or len(words) < self.MIN_ROT_WORDS:
+        if self.engine != "onnx" or self._onnx is None or not words:
             return base
         tall = sum(1 for w in words if (w[3] - w[1]) > (w[2] - w[0]))
         upright_chars = sum(len(w[4]) for w in words)
@@ -2211,7 +2223,12 @@ class PdfParser:
         # ⚠️ `ROT-4` — a turned TABLE under an upright letterhead is neither of the above.
         mixed = (tall >= self.MIXED_TALL_LINES
                  and upright_chars < self.MIXED_UPRIGHT_CHARS)
-        if not (vertical or unreadable or mixed):
+        if len(words) >= self.MIN_ROT_WORDS:
+            if not (vertical or unreadable or mixed):
+                return base
+        # ⚠️ `ROT-5`: under the floor only the page right after a turned one, and only if vertical.
+        elif not (vertical and len(words) >= self.MIN_ROT_WORDS_AFTER_TURN
+                  and (page.number - 1) in getattr(self, '_turned', ())):
             return base
 
         def probe(extra: int):
@@ -2240,6 +2257,7 @@ class PdfParser:
             self.set_dpi(dpi)
             page.set_rotation(base)
         if best != base:
+            self.__dict__.setdefault('_turned', set()).add(page.number)
             self._log(f"page {page.number + 1}: "
                       + (f"text lines are vertical ({tall}/{len(words)} boxes)" if vertical
                          else f"upright read is nearly empty ({upright_chars} chars)"

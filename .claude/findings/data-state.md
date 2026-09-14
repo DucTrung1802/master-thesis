@@ -2205,3 +2205,27 @@ off, and the ones read (SSI Q1-2020, VIC Q2-2013, FPT Q1-2012, SHB Q1-2023/Q1-20
 or the cash checks.
 
 VN30 (2026-09-14, after): **4,883/5,214 = 93.7 %**, quarters 1,461/1,738 = 84.1 %, holes 226, one band 5/30.
+
+### ⚠️ 2026-09-14 — A TURNED STATEMENT'S SPARSE LAST PAGE (`ROT-5`)
+
+| run | documents | GPU | written | kept after checking each row |
+|---|---|---|---|---|
+| VHM Q3-2023, VHM Q3-2024, VRE Q3-2018, VIB Q3-2013 with `ROT-5` | 4 | 7.6 min (RTX 3050) | +3 income statements, +3 Q4 dependents in the release | 6; each closes PBT from its own lines and PAT from PBT and tax to the đồng |
+
+Read-only probe before the run (onnx, one page at a time): the statement's first page returns 96-121 boxes and is
+turned; the page after it returns 9 (VHM Q3-2023), 10 (VHM Q3-2024) and 13 (VRE Q3-2018) boxes, 85-90 % taller than
+wide, and was never probed under `MIN_ROT_WORDS = 20`. In the run log each of those pages reads `text lines are
+vertical` and is read at /Rotate 90, so the three cells are this change's and not another fix's. VIB Q3-2013's
+income statement is still HELD, 2 of 3.
+
+The release also re-labelled VIB Q1-2016's cash flow and income statement `onnx@200` -> `onnx@200+twintotal` with
+every figure unchanged: `merge_batch` re-writes a `pdf` row whose layer differs from disk even when no figure does,
+and the sweep merges folders oldest first, so the newest reading's label wins.
+
+Measured and not shipped: at 200 dpi with no repair flag, BVH Q1-2010's balance sheet and Q3-2011's cash flow hold
+pairs `split_figures` counts 4.4-4.5 pt apart, inside figures read with spaces for separators (`1 096 611 181 704`);
+with `join_lost_separator` and `drop_damaged_runs` on, no pair remains on any of seven targets (GAS Q3-2014, PLX
+Q3-2015, BVH Q2-2013, SAB Q3-2018 and POW Q3-2025 income statements, those two BVH statements), so the split gate is
+not what refuses them at the repair layers.
+
+VN30 (2026-09-14, after): **4,889/5,214 = 93.8 %**, quarters 1,467/1,738 = 84.4 %, holes 220, one band 5/30.

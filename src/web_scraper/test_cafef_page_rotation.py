@@ -430,3 +430,56 @@ def test_the_mixed_entry_still_refuses_a_rotation_that_reads_worse():
     page = _Page()
     assert _parser(onnx=engine)._page_rotation(page, _mixed_page()) == 0
     assert page.rotation == 0
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# `ROT-5` — a turned statement's sparse last page
+# ──────────────────────────────────────────────────────────────────────────────
+def _sparse_tail_page():
+    """VHM Q3-2023 page 11 read upright: nine boxes, eight of them taller than wide."""
+    words = [_word(100, 100 + 40 * i, 110, 136 + 40 * i, "S") for i in range(8)]
+    return words + [_word(300, 100, 330, 110, "có")]
+
+
+def _turned_read():
+    return [_word(40 + 60 * k, 100 + 20 * i, 90 + 60 * k, 110 + 20 * i, "14.206.184")
+            for i in range(7) for k in range(4)]
+
+
+def _parser_reading(by_rotation):
+    p = PdfParser()
+    p.engine = "onnx"
+    p._onnx = _Engine(by_rotation)
+    return p
+
+
+def test_a_sparse_vertical_page_after_a_turned_page_is_turned_too():
+    p = _parser_reading({0: [_word(0, 0, 5, 30, "I")] * 9, 90: _turned_read(), 270: []})
+    p._turned = {9}
+    page = _Page(number=10, rotation=0)
+    assert p._page_rotation(page, _sparse_tail_page()) == 90
+    assert page.rotation == 0 and 10 in p._turned
+
+
+def test_the_same_page_with_no_turned_neighbour_is_never_probed():
+    p = _parser_reading({0: [], 90: _turned_read(), 270: []})
+    page = _Page(number=10, rotation=0)
+    assert p._page_rotation(page, _sparse_tail_page()) == 0
+    assert p._onnx.calls == []
+
+
+def test_a_sparse_upright_page_after_a_turned_page_is_not_probed():
+    """A signature page after the statement: few boxes, and they lie flat."""
+    p = _parser_reading({0: [], 90: _turned_read(), 270: []})
+    p._turned = {9}
+    flat = [_word(100, 100 + 20 * i, 200, 110 + 20 * i, "Nguyễn") for i in range(9)]
+    assert p._page_rotation(_Page(number=10, rotation=0), flat) == 0
+    assert p._onnx.calls == []
+
+
+def test_a_new_document_forgets_which_pages_were_turned():
+    p = PdfParser()
+    p._turned = {9}
+    p._use_document("another.pdf")
+    assert p._turned == set()
