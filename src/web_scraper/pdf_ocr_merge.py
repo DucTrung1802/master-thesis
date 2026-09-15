@@ -786,6 +786,27 @@ def plan_merge(folder: os.PathLike | str,
                         f"⚠️ {len(carriers)} column(s) DROPPED — a line item holds the grand total or the equity "
                         f"section holds a later equity line: "
                         f"{', '.join(carriers)} (`GTT-4`)"]))
+                # ⚠️ `LES-1`: a bank sheet whose two subtotals miss its own agreeing grand totals.
+                read = (decision.values if decision.values is not None
+                        else {k: int(v) for k, v in (got.get("values") or {}).items()})
+                unclosed = screens.unclosed_bank_subtotals(read, int(got.get("unit") or 1), got.get("row_dump"))
+                if unclosed:
+                    decision.values = {k: v for k, v in read.items() if k not in unclosed}
+                    decision.note = "; ".join(filter(None, [
+                        decision.note,
+                        f"⚠️ {len(unclosed)} column(s) DROPPED — liabilities + equity miss the agreeing "
+                        f"grand totals: {', '.join(unclosed)} (`LES-1`)"]))
+
+            # ⚠️ `TNY-1`: a line item under 1,000 đồng on a statement reaching 1e9 is not an amount.
+            read = (decision.values if decision.values is not None
+                    else {k: int(v) for k, v in (got.get("values") or {}).items()})
+            tiny = screens.tiny_figures(read, min_count=1)
+            if tiny and decision.writing:
+                decision.values = {k: v for k, v in read.items() if k not in tiny}
+                decision.note = "; ".join(filter(None, [
+                    decision.note,
+                    f"⚠️ {len(tiny)} column(s) DROPPED — under 1,000 đồng on a statement reaching 1e9: "
+                    f"{', '.join(tiny)} (`TNY-1`)"]))
 
             # ── refusal 3: two runs disagree about a figure already on disk ───────────
             # ⚠️ THE FIGURES THIS DECISION WOULD WRITE — which is the run's own set unless

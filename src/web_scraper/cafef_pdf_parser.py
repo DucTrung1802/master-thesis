@@ -258,8 +258,14 @@ class PdfParser:
     # reads "Mẫu B02a/TCTDP-HN" — the stray P defeated a `(TCTD|DN)\b` match, and the entire
     # asset half of the balance sheet was dropped, taking TỔNG TÀI SẢN with it and failing
     # reconciliation on a filing that was perfectly readable.
+    # ⚠️ **`FSP-1` — THE RECOGNISER READS THE DASH AS `?`** (2026-09-15). MSN's Q2-2018 interim report heads
+    # its balance sheet's pages 4-6 `Báo cáo kết quả hoạt động kinh doanh hợp nhất (tiếp theo) Mẫu B 01a – DN/HN`
+    # — the filing's own title is the INCOME statement's, its form code the balance sheet's — and OCR returns
+    # the en dash as `B 01a ? DN/HN` there while page 3 reads `B 01a - DN/HN` (GPU probe). The code failed, the
+    # title decided, and the balance sheet stopped at its short-term assets on every layer: `no total assets`.
+    # Only `?` is added: a text layer's en dash is a different page population and moves 60+ pages' kinds.
     FORM_RE = re.compile(
-        r"(?:M[ẫâa]u\s*(?:s[ốô]\s*)?[:.]?\s*)?\b(B\s*\d{2})\s*[a-z]?\s*[-/]?\s*(TCTD|DN)",
+        r"(?:M[ẫâa]u\s*(?:s[ốô]\s*)?[:.]?\s*)?\b(B\s*\d{2})\s*[a-z]?\s*[-/?]?\s*(TCTD|DN)",
         re.I)
     # ⚠️ OCR ALSO APPENDS A STRAY DIGIT, and that costs far more than the code itself. VCB's
     # Q1-2009 prints "Mẫu số: B040/TCTD-HN" and its Q2-2014 balance sheet "Mẫu B020/TCTD-HN" —
@@ -275,7 +281,7 @@ class PdfParser:
     # three — so anything past them is noise. Reached only via `loose_form_code`, so a filing
     # whose codes read cleanly is untouched.
     FORM_RE_LOOSE = re.compile(
-        r"(?:M[ẫâa]u\s*(?:s[ốô]\s*)?[:.]?\s*)?\b(B\s*\d{2})\s*[0-9a-z]{0,2}\s*[-/]?\s*(TCTD|DN)",
+        r"(?:M[ẫâa]u\s*(?:s[ốô]\s*)?[:.]?\s*)?\b(B\s*\d{2})\s*[0-9a-z]{0,2}\s*[-/?]?\s*(TCTD|DN)",
         re.I)
     FORMS = {
         "TCTD": {"B02": BALANCE_SHEET, "B03": INCOME_STATEMENT,

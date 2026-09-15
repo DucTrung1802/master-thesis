@@ -1232,6 +1232,72 @@ def test_a_balance_sheet_whose_carrier_was_dropped_never_becomes_an_operand(root
     assert decision.values == {PBT: 600}
 
 
+# -- `LES-1`: bank subtotals that miss the agreeing grand totals are dropped at the merge ------
+def test_bank_subtotals_that_miss_the_grand_totals_by_a_digit_are_dropped(root, tmp_path):
+    """MBB Q3-2017: `tong_no_phai_tra` 253,479,200 for a printed 263,479,200 (millions)."""
+    sheet = _statement(**{ASSETS: 291_942_720, "tong_no_phai_tra_va_von_chu_so_huu": 291_942_720,
+                          "tong_no_phai_tra": 253_479_200, "viii_von_chu_so_huu": 28_463_520,
+                          "i_tien_mat_vang_bac_da_quy": 2_052_251})
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: sheet})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]), fin.BALANCE_SHEET)
+    assert decision.writing
+    assert "tong_no_phai_tra" not in decision.values and "viii_von_chu_so_huu" not in decision.values
+    assert decision.values[ASSETS] == 291_942_720 and decision.values["i_tien_mat_vang_bac_da_quy"] == 2_052_251
+    assert "LES-1" in decision.note
+
+
+def test_bank_subtotals_that_close_with_the_minority_line_are_kept(root, tmp_path):
+    sheet = _statement(**{ASSETS: 291_942_720, "tong_no_phai_tra_va_von_chu_so_huu": 291_942_720,
+                          "tong_no_phai_tra": 262_199_319, "viii_von_chu_so_huu": 28_463_520,
+                          "ix_loi_ich_cua_co_dong_thieu_so": 1_279_881})
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: sheet})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]), fin.BALANCE_SHEET)
+    assert "LES-1" not in (decision.note or "")
+    assert decision.values is None or decision.values.get("tong_no_phai_tra") == 262_199_319
+
+
+def test_bank_subtotals_closed_by_an_unmapped_minority_row_are_kept(root, tmp_path):
+    """SHB Q2-2017: the minority line read as `lot_ich_cua_co_dong_khong_kiem_soat`, exactly the gap."""
+    sheet = _statement(**{ASSETS: 249_738_755, "tong_no_phai_tra_va_von_chu_so_huu": 249_738_755,
+                          "tong_no_phai_tra": 235_878_716, "viii_von_chu_so_huu": 13_857_655})
+    sheet["row_dump"] = [["", "lot_ich_cua_co_dong_khong_kiem_soat", "Lợi ích của cổ đông không kiểm soát", [2_384, 2_100]]]
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: sheet})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]), fin.BALANCE_SHEET)
+    assert "LES-1" not in (decision.note or "")
+
+
+def test_a_lone_bank_subtotal_outside_its_share_of_the_total_is_dropped(root, tmp_path):
+    """SHB Q1-2011: `tong_no_phai_tra` 8,012,998,261 under 55,815,813,286,430 and no equity line."""
+    sheet = _statement(**{ASSETS: 55_815_813_286_430, "tong_no_phai_tra_va_von_chu_so_huu": 55_815_813_286_430,
+                          "tong_no_phai_tra": 8_012_998_261, "i_tien_mat_vang_bac_da_quy": 2_000_000_000})
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: sheet})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]), fin.BALANCE_SHEET)
+    assert "tong_no_phai_tra" not in decision.values and "LES-1" in decision.note
+    from web_scraper import statement_screens as screens
+    assert screens.unclosed_bank_subtotals({ASSETS: 100, "tong_no_phai_tra": 91}) == []
+    assert screens.unclosed_bank_subtotals({ASSETS: 100, "viii_von_chu_so_huu": 9}) == []
+    assert screens.unclosed_bank_subtotals({ASSETS: 100, "viii_von_chu_so_huu": 91}) == ["viii_von_chu_so_huu"]
+
+
+def test_bank_subtotals_are_not_judged_when_the_grand_totals_disagree(root, tmp_path):
+    sheet = _statement(**{ASSETS: 291_942_720, "tong_no_phai_tra_va_von_chu_so_huu": 281_942_720,
+                          "tong_no_phai_tra": 253_479_200, "viii_von_chu_so_huu": 28_463_520})
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: sheet})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]), fin.BALANCE_SHEET)
+    assert "LES-1" not in (decision.note or "")
+
+
+# -- `TNY-1`: a line item under 1,000 dong is dropped at the merge -----------------------------
+def test_a_single_tiny_line_item_is_dropped_and_said(root, tmp_path):
+    """PLX Q1-2015: inventory `581` on a sheet of 54,898,556,000,000."""
+    sheet = _statement(**{ASSETS: 54_898_556_000_000, "iv_1_hang_ton_kho": 581,
+                          "i_tien_mat_vang_bac_da_quy": 2_000_000_000})
+    folder = _run_folder(tmp_path, accepted={fin.BALANCE_SHEET: sheet})
+    decision = _reason(merge.plan_merge(folder, reports=[fin.BALANCE_SHEET]), fin.BALANCE_SHEET)
+    assert decision.writing and "iv_1_hang_ton_kho" not in decision.values
+    assert decision.values[ASSETS] == 54_898_556_000_000 and "TNY-1" in decision.note
+
+
 # -- `DED-1`: a deductions line holding revenue itself is dropped at the merge --------------
 def test_a_deductions_line_holding_revenue_is_dropped_from_the_written_row(root, tmp_path):
     """VRE Q3-2021: gross revenue and deductions both read 787,355,000,000."""

@@ -248,3 +248,16 @@ def test_an_english_only_filing_keeps_its_pages():
              15: {"kind": INCOME_STATEMENT, "from_form": True, "english": True}}
     PdfParser._drop_english_duplicates(pages)
     assert [pages[i]["kind"] for i in sorted(pages)] == [BALANCE_SHEET, INCOME_STATEMENT]
+
+
+def test_a_form_code_whose_dash_was_read_as_a_question_mark_still_decides():
+    """`FSP-1` — MSN Q2-2018 page 4: the income statement's title over the balance sheet's code."""
+    from web_scraper.cafef_pdf_parser import PdfParser, BALANCE_SHEET
+    PdfParser._init_ocr = lambda self: False
+    p = PdfParser()
+    text = ("Công ty Cổ phần Tập đoàn Masan và các công ty con\n"
+            "Báo cáo kết quả hoạt động kinh doanh hợp nhất cho kỳ kết thúc ngày 30 tháng 6 năm 2018 (tiếp theo)\n"
+            "Mẫu B 01a ? DN/HN\n(Ban hành theo Thông tư số 202/2014/TT-BTC ngày 22 tháng 12 năm 2014 của Bộ Tài chính)\n"
+            "Mã số Thuyết minh 30/6/2018 1/1/2018\nTài sản dài hạn 200\n")
+    assert p._page_kind(text) == (BALANCE_SHEET, True)
+    assert p._page_kind(text.replace("B 01a ? DN", "B 01a / DN")) == (BALANCE_SHEET, True)

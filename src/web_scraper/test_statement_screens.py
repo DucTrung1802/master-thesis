@@ -361,6 +361,27 @@ def test_an_absurd_figure_is_flagged_on_any_statement(builder):
     assert sorted(screen_document(doc, builder)) == ["cash_flow", "income_statement"]
 
 
+def test_row_codes_read_as_line_items_are_flagged(builder):
+    """`TNY-1` — SSI Q3-2014's cash flow: the nets read 20, 30, 40, the balances right."""
+    cf = {"hdkd_luu_chuyen_tien_thuan_su_dung_vao_hoat_dong_kinh_doanh": 20,
+          "hddt_luu_chuyen_tien_thuan_tu_su_dung_vao_hoat_dong_dau_tu": 30,
+          "hdtc_luu_chuyen_tien_thuan_tu_hoat_dong_tai_chinh": 40,
+          "hdtc_v_tien_va_cac_khoan_tuong_duong_tien_dau_ky": 1_838_619_478_462,
+          "hdtc_vi_tien_va_cac_khoan_tuong_duong_tien_cuoi_ky": 2_336_577_955_632}
+    why = screen_document(_doc("Q3-2014", cash_flow=cf), builder).get("cash_flow", [])
+    assert any("TNY-1" in w for w in why)
+
+
+def test_two_small_lines_or_a_small_statement_are_not_flagged(builder):
+    small_pair = {"a": 5, "b": 7, "tong": 2_000_000_000}
+    small_sheet = {"a": 5, "b": 7, "c": 9, "tong": 900_000_000}
+    per_share = {"20_lai_co_ban_tren_co_phieu": 512, "21_lai_suy_giam_tren_co_phieu": 498,
+                 "x_co_phieu": 3, "tong": 2_000_000_000}
+    for v in (small_pair, small_sheet, per_share):
+        why = screen_document(_doc("Q1-2020", cash_flow=v), builder).get("cash_flow", [])
+        assert not any("TNY-1" in w for w in why)
+
+
 def test_other_income_is_judged_only_on_a_printed_statement(builder):
     """A de-cumulated quarter of other income can go negative on a restated year-to-date."""
     v = {"5_thu_nhap_tu_hoat_dong_khac": -26_440 * _M}

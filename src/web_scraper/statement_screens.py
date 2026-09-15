@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import os
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -231,6 +232,31 @@ def absurd_figures(values: Dict[str, int]) -> List[str]:
                   if isinstance(x, (int, float)) and abs(x) >= ABSURD_MAGNITUDE and "co_phieu" not in k)
 
 
+# ⚠️ **`TNY-1` — ROW CODES AND FIGURE TAILS WRITTEN AS LINE ITEMS** (screen added 2026-09-15). A statement
+# is printed in đồng or triệu đồng and stored in đồng, so a line item under 1,000 on a statement whose figures
+# reach 1e9 is a form row code, a note reference or the last group of a figure whose leading groups were lost —
+# never an amount. SSI Q3-2014's cash flow was accepted at `onnx@200` and written with its operating, investing
+# and financing nets reading `20`, `30`, `40` — the `Mã số` column — because the two cash balances and the net
+# movement closed on their own; over the VN30 `pdf` rows on disk 44 carry three or more such lines (GVR Q4-2023's
+# balance sheet 32, VNM Q1-2016's 26, VIC Q4-2009's income statement revenue `271`). Per-share lines are not money.
+TINY_FIGURE = 1_000
+TINY_MIN_COUNT = 3
+TINY_SCALE_MIN = 10 ** 9
+
+
+def tiny_figures(values: Dict[str, int], min_count: int = TINY_MIN_COUNT) -> List[str]:
+    """The line items under `TINY_FIGURE` đồng when there are `min_count` of them on a statement whose
+    figures reach `TINY_SCALE_MIN` — `TNY-1`. Three or more convict the READING (the screen holds it);
+    the merge drops even one, because a single such cell is still not an amount (MBB Q3-2014's closing
+    cash `725`, VIC Q2-2011's profit after tax `142`, PLX Q1-2015's inventory `581`)."""
+    money = {k: x for k, x in values.items()
+             if isinstance(x, (int, float)) and x and "co_phieu" not in k}
+    if not money or max(abs(x) for x in money.values()) < TINY_SCALE_MIN:
+        return []
+    tiny = sorted(k for k, x in money.items() if abs(x) < TINY_FIGURE)
+    return tiny if len(tiny) >= min_count else []
+
+
 # ⚠️ **`PBC-1` — PROFIT BEFORE TAX MAPPED INTO ANOTHER LINE** (2026-09-15). POW Q3-2019 was accepted at
 # `onnx@200+tail` with `16_chi_phi_thue_tndn_hien_hanh` = 874,740,417,770 — exactly operating profit
 # 868,882,824,378 plus other profit 5,857,593,392 — and no profit-before-tax or after-tax column: `reconcile`
@@ -427,6 +453,53 @@ def equity_section_from_a_later_line(values: Dict[str, int], acc: dict) -> Optio
             .format(d, lines[0]))
 
 
+# ⚠️ **`LES-1` — A BANK SHEET'S TWO SUBTOTALS MISSED ITS OWN GRAND TOTAL BY ONE MISREAD DIGIT** (2026-09-15).
+# The bank chart prints `TỔNG NỢ PHẢI TRẢ` + `VIII. VỐN CHỦ SỞ HỮU` (+ `IX. LỢI ÍCH CỦA CỔ ĐÔNG THIỂU SỐ`) =
+# `TỔNG NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU` to the unit, and no term sits outside the three. `reconcile` closes the
+# two grand totals and the release screen asks `A = L + E` within `REL_TOL` (0.5 %), which lets a single
+# misread digit through: over the 1,656 VN30 `pdf` balance sheets on disk, 42 bank rows missed the agreeing
+# totals by more than 3 units — MBB Q3-2017 `tong_no_phai_tra` 253,479,200 m for a printed 263,479,200 m
+# (exactly 10 tn), HDB Q2-2025 by exactly 100 bn, VPB Q2-2026 by 1 bn, VCB Q1-2018 equity 131.4 tn for 56.1 tn.
+# Nothing on the sheet says WHICH subtotal is wrong, so both go and nothing is computed in their place.
+# ⚠️ And the minority line is not always MAPPED: HDB Q4-2015 prints it as `Lợi ích cổ đông không kiểm soát`
+# (449,264 m) and SHB Q2-2017's reading spells it `lot_ich_cua_co_dong_khong_kiem_soat` (2,384 m), each
+# exactly the gap, so an unmapped row of the stored dump closes the identity as the mapped column does.
+BANK_SUBTOTALS = ("tong_no_phai_tra", "viii_von_chu_so_huu")
+BANK_MINORITY = "ix_loi_ich_cua_co_dong_thieu_so"
+BANK_MINORITY_KEY = re.compile(r"lo[ijt]?_?ich.*(thieu_so|khong_kiem_soat)")
+
+
+def unclosed_bank_subtotals(values: Dict[str, int], unit: int = 1,
+                            row_dump: Optional[Sequence] = None) -> List[str]:
+    """The two bank-chart subtotals when they miss the agreeing grand totals by more than 3 units — `LES-1`."""
+    liab, eq = (values.get(c) for c in BANK_SUBTOTALS)
+    a, t = values.get("tong_tai_san"), values.get("tong_no_phai_tra_va_von_chu_so_huu")
+    total = t if t is not None else a
+    if total is None or total <= 0:
+        return []
+    # ⚠️ ONE SUBTOTAL ALONE has no identity, and SHB Q1-2011's reading carried `tong_no_phai_tra`
+    # 8,012,998,261 under totals of 55,815,813,286,430 with no equity line. A bank funds itself with
+    # liabilities: over the VN30 bank sheets on disk liabilities are 80-97 % of the total, so a lone
+    # subtotal outside half of it on its own side is the reading's and never the bank's.
+    if liab is not None and eq is None:
+        return [BANK_SUBTOTALS[0]] if not 0.5 <= liab / total <= 1.0 else []
+    if eq is not None and liab is None:
+        return [BANK_SUBTOTALS[1]] if not 0.0 < eq / total <= 0.5 else []
+    if liab is None or eq is None:
+        return []
+    tol = 3 * max(1, int(unit or 1))
+    if a is not None and t is not None and abs(a - t) > tol:
+        return []                     # the totals disagree: a different defect, judged elsewhere
+    minorities = {0, values.get(BANK_MINORITY) or 0}
+    for r in row_dump or ():
+        figures = [v for v in (r[3] if len(r) > 3 else []) if v is not None]
+        if figures and BANK_MINORITY_KEY.search(str(r[1])):
+            minorities.add(figures[0])
+    if any(abs(liab + eq + m - total) <= tol for m in minorities):
+        return []
+    return list(BANK_SUBTOTALS)
+
+
 def grand_total_carriers(values: Dict[str, int], builder: FinancialsBuilder) -> List[str]:
     """The balance-sheet columns, other than the two grand totals and the chart's own section-header
     total, that hold the figure total assets holds — `GTT-3`'s test, shared with the merge (`GTT-4`)."""
@@ -530,6 +603,11 @@ def screen_document(doc: dict, builder: FinancialsBuilder) -> Dict[str, List[str
             if absurd:
                 why.append("a figure no listed company prints: " + ", ".join(
                     "{} {:,}".format(c, values[c]) for c in absurd))
+        tiny = tiny_figures(values)
+        if tiny:
+            why.append("{} line item(s) under 1,000 đồng on a statement whose figures reach 1e9 — a row code "
+                       "or a figure's tail read as the figure (`TNY-1`): {}".format(
+                           len(tiny), ", ".join("{} {:,}".format(c, values[c]) for c in tiny[:6])))
         if why:
             out[report] = why
     return out

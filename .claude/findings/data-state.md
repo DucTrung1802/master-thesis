@@ -2389,3 +2389,17 @@ VN30 (2026-09-15, after): **4,950/5,214 = 94.9 %**, quarters 1,513/1,738 = 87.1 
 | `BIL-1`: VHM Q1-2026 | 1 | 3.8 min | balance sheet, income statement, cash flow | 3 |
 
 VN30 (2026-09-15, later): **4,956/5,214 = 95.05 %**, quarters 1,517/1,738 = 87.3 %, holes 175, one band 5/30.
+
+### 2026-09-15 — re-asking holes whose last cascade predates today's parser
+
+Of the 173 VN30 hole quarters, 117 had last met a full cascade of 115-139 layers and 14 today's 158: `+alignpages` (`MXP-1`), the in-cascade screens (`SCG-1`/`SCG-2`) that keep asking past a reading the release would hold, and every reader fixed since. Re-asked on the RTX 3050:
+
+| run | documents | GPU | written | kept |
+|---|---|---|---|---|
+| near-band holes (MBB MWG BCM MSN SSB SSI VHM VPB FPT) | 15 | 123.8 min | MBB Q3-2017 and Q1-2018 cash flows at `+alignpages+cashword+extra` (the continuation page sat 27-32 pt right of the first); BCM Q3-2023 balance sheet; MSN Q4-2011 income statement; VHM Q1-2024 balance sheet; SSI Q3-2014 cash flow **rolled back** (`TNY-1`) | 5 |
+| held stock statements whose last run predates the in-cascade screens (VIB PLX SHB BCM MSN) | 13 | 66.0 min | VIB Q1-2013 and Q4-2013 cash flows, Q2-2015 / Q1-2016 / Q2-2019 / Q2-2022 / Q2-2023 balance sheets (the `onnx@200` reading lost leading digit groups and the cascade now went on to `onnx@300`); release: MSN Q1-2010, PLX Q1-2014 and Q1-2015 balance sheets; SHB Q1-2011 and Q3-2022 balance sheets **rolled back and held** (`BBS-1`: liabilities 8.0 bn under 55.8 tn totals; a derivatives line reading `SDW-2`'s fragment) | 10 |
+| third batch, first two documents | 2 | 3.9 min | MSN Q2-2018 balance sheet at `onnx@200` (`FSP-1`), SSB Q4-2017 income statement at `onnx@400` | 2 |
+
+Wrong figures found on disk the same day, none of them visible to the rate: `LES-1` (40 bank rows whose subtotals miss their own totals: 38 blanked, 2 replaced from a closing reading of the same document), `TNY-1` (445 cells under 1,000 đồng on 188 rows plus 18 de-cumulated cells, blanked) and `TAC-1` (13 corp rows whose totals sit under bank column names, not yet moved).
+
+VN30 (2026-09-15, evening): **4,973/5,214 = 95.4 %**, quarters 1,530/1,738 = 88.0 %, holes 162, one band 5/30 — and MBB, MSN, MWG, SSB and VHM each one hole from a band.

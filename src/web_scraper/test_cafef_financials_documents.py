@@ -215,3 +215,25 @@ class MagnitudeHistoryTest(unittest.TestCase):
 def _statement(report):
     from web_scraper.cafef_pdf_parser import Statement
     return Statement(report=report, pages=[1], unit=1, n_columns=2, rows=[])
+
+
+def test_a_bank_named_grand_total_moves_to_the_charts_own_column():
+    """`TAC-1` — VHM Q1-2024: `TOTAL_ALIASES` claimed the corp total as `tong_tai_san`."""
+    b = cf.FinancialsBuilder(logger=None)
+    corp = {"tong_cong_tai_san", "tong_cong_nguon_von", "a_tai_san_ngan_han"}
+    out = {"tong_tai_san": 464_484_694, "tong_no_phai_tra_va_von_chu_so_huu": 464_484_694, "a_tai_san_ngan_han": 255_295_711}
+    src = {"tong_tai_san": 40, "tong_no_phai_tra_va_von_chu_so_huu": 70, "a_tai_san_ngan_han": 12}
+    b._chart_total_columns(out, src, corp)
+    assert out == {"tong_cong_tai_san": 464_484_694, "tong_cong_nguon_von": 464_484_694, "a_tai_san_ngan_han": 255_295_711}
+    assert src == {"tong_cong_tai_san": 40, "tong_cong_nguon_von": 70, "a_tai_san_ngan_han": 12}
+
+
+def test_a_bank_chart_and_a_filled_chart_column_are_left_alone():
+    b = cf.FinancialsBuilder(logger=None)
+    bank = {"tong_tai_san", "tong_no_phai_tra_va_von_chu_so_huu"}
+    out = {"tong_tai_san": 5, "tong_no_phai_tra_va_von_chu_so_huu": 5}
+    b._chart_total_columns(out, {}, bank)
+    assert out == {"tong_tai_san": 5, "tong_no_phai_tra_va_von_chu_so_huu": 5}
+    out = {"tong_tai_san": 7, "tong_cong_tai_san": 5}
+    b._chart_total_columns(out, {}, {"tong_cong_tai_san"})
+    assert out == {"tong_cong_tai_san": 5}

@@ -3821,7 +3821,32 @@ class FinancialsBuilder:
         self._blank_comparative_fallthrough(out, src, st)
         if relax_totals:
             self._recover_totals(out, st, src, relax_split_tail)
+            self._chart_total_columns(out, src, {c for c, _ in schema})
         return out
+
+    def _chart_total_columns(self, out: Dict[str, int], src: Dict[str, int], columns: set) -> None:
+        """A grand total `_recover_totals` claimed under the BANK chart's name goes to this chart's own column — `TAC-1`.
+
+        ⚠️ **`TOTAL_ALIASES` IS KEYED ON THE BANK COLUMNS AND WAS APPLIED TO EVERY CHART** (2026-09-15). VHM
+        Q1-2024's balance sheet printed `TỔNG CỘNG TÀI SẢN` 464,484,694 m and the fallback claimed it as
+        `tong_tai_san`, which the corp schema does not have: `reconcile` found it (its anchors are role
+        tuples), the statement was written, and the merge appended the two bank columns to the corp CSV and
+        left `tong_cong_tai_san` blank. Over the VN30 statement CSVs 13 non-bank rows hold a grand total only
+        under a bank name (BVH 3, VNM 2, TCX 2, GAS, GVR, PLX, VHM, VIC, VJC). The figure is the printed
+        total either way; only its column moves, and a chart column already filled keeps its own figure.
+        """
+        for role in (self.C_ASSETS, self.C_RESOURCES):
+            alias = role[0]
+            if alias not in out or alias in columns:
+                continue
+            own = next((c for c in role if c in columns), None)
+            if own is None:
+                continue
+            value, row = out.pop(alias), src.pop(alias, None)
+            if own not in out:
+                out[own] = value
+                if row is not None:
+                    src[own] = row
 
     def _blank_comparative_fallthrough(self, out: Dict[str, int], src: Dict[str, int],
                                        st: Statement) -> None:
