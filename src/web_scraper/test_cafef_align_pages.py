@@ -86,3 +86,18 @@ def test_the_flag_is_off_by_default_a_widening_and_a_parse_key():
     a, b = ParseLayer("x", "onnx", 200), ParseLayer("x", "onnx", 200, align_pages=True)
     assert parse_key(a) != parse_key(b)
     assert ocr_key(a) == ocr_key(b)
+
+
+def test_a_sparse_last_page_with_its_own_column_widths_is_moved_column_by_column(parser):
+    """`MXP-2` — MBB Q1-2024's cash flow: page 7 at 473 / 585, its four-line page 8 at 446 / 573."""
+    words = {7: _page((473.0, 585.0), 30), 8: _page((446.0, 573.0), 4)}
+    assert sum(1 for r in _rows(parser, words) if r.values[0] is None) >= 4
+    rows = _rows(parser, parser._align_pages(words, 595.0))
+    assert len(rows) == 34 and all(None not in r.values for r in rows)
+
+
+def test_a_dense_or_a_middle_page_keeps_the_one_shift_rule(parser):
+    dense = {7: _page((473.0, 585.0), 30), 8: _page((446.0, 573.0), 8)}
+    assert parser._align_pages(dense, 595.0)[8] == dense[8]
+    middle = {7: _page((446.0, 573.0), 4), 8: _page((473.0, 585.0), 30)}
+    assert parser._align_pages(middle, 595.0)[7] == middle[7]

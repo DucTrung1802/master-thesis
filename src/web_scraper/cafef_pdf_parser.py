@@ -3068,6 +3068,8 @@ class PdfParser:
             shift = sum(diffs) / k
             if (max(diffs) - min(diffs) > self.EDGE_TOL or abs(shift) <= self.EDGE_TOL / 2
                     or abs(shift) > self.PAGE_SHIFT_MAX):
+                if self._sparse_tail_columns(i, max(words_by_page), cols[i], ref, words_by_page[i]):
+                    out[i] = self._shift_by_column(words_by_page[i], cols[i], diffs, width)
                 continue
             moved = []
             for w in words_by_page[i]:
@@ -3077,6 +3079,42 @@ class PdfParser:
                 moved.append(tuple(nw) if isinstance(w, tuple) else nw)
             out[i] = moved
         return out
+
+    # ⚠️ **`MXP-2` — A STATEMENT'S SHORT LAST PAGE IS TYPESET WITH ITS OWN COLUMN WIDTHS** (2026-09-15).
+    # MBB's Q1-2024 cash flow reads page 7 at 473 / 585 pt (30 figures each) and its closing page 8 at
+    # 446 / 573 pt — the narrower tail table moves the left column 27 pt and the right one 12 pt, so
+    # `_align_pages` saw two columns disagreeing about ONE shift and, by design, left the page alone. The
+    # current column then landed on nothing, the prior one on column 1, and every layer refused
+    # `no closing cash balance` over `109.095.118 - 25.378.648 = 83.716.470` printed on the page (CPU
+    # word dump). Only the statement's LAST page, only when it is sparse, only with the same number of
+    # columns as the reference, each moved by its OWN offset within `PAGE_SHIFT_MAX` and in order — a
+    # column ~100 pt from its neighbour cannot be carried onto it. Labels are not moved.
+    SPARSE_TAIL_FIGURES = 12
+
+    def _sparse_tail_columns(self, page: int, last: int, cols: List[float], ref: List[float],
+                             words: list) -> bool:
+        """May this page's columns be moved one by one onto the reference's? (`MXP-2`)"""
+        if page != last or len(cols) != len(ref) or len(cols) < 2:
+            return False
+        if len(self._numbers(words)) > self.SPARSE_TAIL_FIGURES:
+            return False
+        diffs = [r - c for r, c in zip(ref, cols)]
+        return (all(abs(d) <= self.PAGE_SHIFT_MAX for d in diffs)
+                and max(abs(d) for d in diffs) > self.EDGE_TOL
+                and all(a + da < b + db for (a, da), (b, db) in zip(zip(cols, diffs), zip(cols[1:], diffs[1:]))))
+
+    def _shift_by_column(self, words: list, cols: List[float], diffs: List[float], width: float) -> list:
+        """Each figure in the value zone moved by the offset of the page column it sits on (`MXP-2`)."""
+        moved = []
+        for w in words:
+            nw = list(w)
+            if self.NUM_RE.match(w[4]) and w[2] >= width * self.VALUE_ZONE:
+                j = min(range(len(cols)), key=lambda j: abs(cols[j] - w[2]))
+                if abs(cols[j] - w[2]) <= self.EDGE_TOL * 2:
+                    nw[0] += diffs[j]
+                    nw[2] += diffs[j]
+            moved.append(tuple(nw) if isinstance(w, tuple) else nw)
+        return moved
 
     def value_columns(self, words_by_page: Dict[int, list], width: float) -> List[float]:
         """The right edge of each period column, left to right.

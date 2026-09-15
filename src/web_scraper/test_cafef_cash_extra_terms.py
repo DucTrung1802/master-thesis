@@ -437,3 +437,30 @@ def test_relocating_the_numeral_in_table_rows_was_measured_and_rejected():
 
     src = inspect.getsource(cafef_pdf_parser.PdfParser.table_rows)
     assert "_lead_numbering" not in src
+
+
+# ── `CCO-1`: the column that closes on the balance sheet ─────────────────────────────────
+
+def _msn_q1_2010():
+    def r3(key, a, b, c):
+        return Row(label=key.replace("_", " "), key=key, number="", values=[a, b, c])
+    filler = [r3(f"thu_chi_khac_tu_hoat_dong_{i}", 1_000 + i, 2_000 + i, 2_000 + i) for i in range(20)]
+    rows = filler + [r3("luu_chuyen_tien_thuan_trong_ky", -5_088, -638_314, -638_314),
+                     r3("tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_dau_ky", 364_265, 1_123_616, 1_123_616),
+                     r3("tien_va_cac_khoan_tuong_duong_tien_tai_thoi_diem_cuoi_ky", 359_177, 485_302, 485_302)]
+    return Statement(report=CASH_FLOW, pages=[5, 6], unit=1, n_columns=3, rows=rows)
+
+
+class _Layer:
+    relax_totals = relax_split_tail = relax_merged_seam = annual_tail = merged_tail = False
+    equity_wording = cash_wording = relax_components = cash_extra_terms = condensed_income = False
+
+
+def test_the_column_that_closes_on_the_balance_sheet_is_read(builder):
+    got = builder._cash_flow_by_balance_column(_msn_q1_2010(), "bank", _Layer(), 485_302, None, [])
+    assert got is not None and got[2] == 1
+    assert builder._cash_flow_identity(got[1]) is None
+
+
+def test_no_column_is_chosen_when_none_closes_on_the_balance_sheet(builder):
+    assert builder._cash_flow_by_balance_column(_msn_q1_2010(), "bank", _Layer(), 480_000, None, []) is None

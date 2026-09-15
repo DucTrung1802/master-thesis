@@ -2403,3 +2403,18 @@ Of the 173 VN30 hole quarters, 117 had last met a full cascade of 115-139 layers
 Wrong figures found on disk the same day, none of them visible to the rate: `LES-1` (40 bank rows whose subtotals miss their own totals: 38 blanked, 2 replaced from a closing reading of the same document), `TNY-1` (445 cells under 1,000 đồng on 188 rows plus 18 de-cumulated cells, blanked) and `TAC-1` (13 corp rows whose totals sit under bank column names, not yet moved).
 
 VN30 (2026-09-15, evening): **4,973/5,214 = 95.4 %**, quarters 1,530/1,738 = 88.0 %, holes 162, one band 5/30 — and MBB, MSN, MWG, SSB and VHM each one hole from a band.
+
+### 2026-09-15, night — the rest of the stale-cascade holes, and two more wrong-figure classes
+
+| run | documents | GPU | written | kept |
+|---|---|---|---|---|
+| third batch, the other 13 (VPB STB VIC VRE) | 13 | 125.7 min | VIC Q3-2010 balance sheet (A = L + E = A + B to the đồng, 17.2 -> 19.3 -> 26.1 tn); VRE Q3-2022 cash flow (9 months: opening = year-end cash, sections add to the net, closing = the balance sheet's cash) | 2 |
+| VJC POW GAS SAB holes | 27 | 135.9 min | POW Q1-2024 and Q3-2024, GAS Q2-2016, VJC Q3-2018 balance sheets; SAB Q3-2016 and Q3-2020 cash flows — each closing to the đồng against its own totals and the balance sheet | 6 |
+| near band (MSN BVH SSI MBB) | 4 | 41.1 min | MBB Q1-2024 cash flow (`MXP-2`); MSN Q1-2010 and BVH Q2-2010 still `2 of 3` (`CCO-1` did not fire); SSI Q3-2014's cash flow withheld by `TNY-1` again | 1 |
+| TPB VNM HDB PLX GVR SHB holes | 27 | 373.0 min | HDB Q2-2013 and TPB Q3-2024 balance sheets, TPB Q1-2014 cash flow; GVR Q3-2025 alone is a 188-page filing whose OCR passes spend their time rendering on one CPU core | 3 |
+
+On disk, no GPU: `TAC-1`'s moves (17 cells, eight tickers) and `LGS-1` — 92 cells that had lost their leading digit groups while another reading of the same filing printed them, blanked.
+
+⚠️ **A text-layer replay of today's parser over the 91 holes no GPU batch was asking (`replay_text_layer.py`) won 11 statements and ONE open cell** (SHB Q1-2020's balance sheet): most of the 91 are scans, where OCR-off says nothing, and the other wins were statements already on disk or held by name. ⚠️ **And an exact-equality census found 191 flow cells equal to the same quarter a year earlier to the đồng** — whole rows on VIC Q3-2014 (14 of 14), VNM Q1-2012 (14 of 14), GVR Q1-2021 (14 of 16), which are `PYR-2`'s unrepaired rows, and VNM Q3-2016's profit before tax, current tax and profit after tax, which is what `HLI-1` holds VNM Q4-2016 for. Single-cell equalities are not evidence (VRE's finance-lease principal repeats by contract); 11 documents are queued for a `REPAIR` read.
+
+VN30 (2026-09-15, night): **4,985/5,214 = 95.61 %**, quarters 1,541/1,738 = 88.7 %, holes 151, one band **6/30** (MBB joins ACB BID CTG TCB VCB).

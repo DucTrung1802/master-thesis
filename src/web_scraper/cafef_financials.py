@@ -2254,6 +2254,47 @@ class FinancialsBuilder:
         except Exception:                                  # noqa: BLE001
             return []
 
+    def _cash_flow_by_balance_column(self, st, template: str, layer, bs_cash: int,
+                                     open_ref: Optional[int], history: List[int]):
+        """The statement read from a LATER value column, when that column's own cash arithmetic closes on the
+        balance sheet's cash line of the same filing — `CCO-1`. -> (statement, row, column index) or None.
+
+        ⚠️ **THE CURRENT PERIOD IS NOT ALWAYS THE FIRST COLUMN** (2026-09-15). MSN's Q1-2010 cash flow prints
+        three columns; the first opens at 364,265 m, moves -5,334 m and closes at 359,177 m, the second and
+        third open at 1,123,616 m, move -638,560 m and close at 485,302 m — and 485,302 m is the balance
+        sheet's cash line of the same filing, while 1,123,616 m is the half-year statement's opening. Every
+        layer mapped the first column, fell through to the second for the closing line alone, and was
+        flagged `opening + net + fx != closing`. A comparative column cannot close on the CURRENT balance
+        sheet unless cash did not move to the unit, so the equality is the proof; nothing is computed, the
+        cash identity is demanded (`verify_cash`) and `sane` and the screens judge the result as before.
+        """
+        import copy
+        width = max((len(r.values) for r in st.rows), default=0)
+        tol = 3 * max(1, int(getattr(st, "unit", 1) or 1))
+        for k in range(1, width):
+            alt = copy.copy(st)
+            alt.rows = []
+            for r in st.rows:
+                moved = copy.copy(r)
+                moved.values = list(r.values[k:])
+                alt.rows.append(moved)
+            alt.n_columns = max(1, width - k)
+            row = self.map_to_schema(alt, template, relax_totals=layer.relax_totals,
+                                     relax_split_tail=layer.relax_split_tail,
+                                     relax_merged_seam=layer.relax_merged_seam,
+                                     annual_tail=layer.annual_tail, merged_tail=layer.merged_tail,
+                                     equity_wording=layer.equity_wording, cash_wording=layer.cash_wording)
+            close = next((row[c] for c in self.C_CASH_CLOSE if row.get(c) is not None), None)
+            if close is None or abs(close - bs_cash) > tol:
+                continue
+            why = self.reconcile(alt, row, verify_cash=True, open_ref=open_ref,
+                                 relax_components=layer.relax_components,
+                                 cash_extra_terms=layer.cash_extra_terms,
+                                 condensed_income=layer.condensed_income, bs_cash=bs_cash)
+            if why is None and self.sane(alt, history, row) is None:
+                return alt, row, k
+        return None
+
     def _parse_cascaded(self, path: str, period_end,
                         template: str, history: Dict[str, List[int]],
                         open_ref: Optional[int] = None):
@@ -2435,6 +2476,16 @@ class FinancialsBuilder:
                 else:
                     bad = self.sane(st, history[report], row)
                     why = f"sane: {bad}" if bad is not None else None
+                # ⚠️ `CCO-1`: a cash flow whose FIRST column is not the period the balance sheet closes on.
+                if (report == CASH_FLOW and bs_cash is not None
+                        and (why is not None or self._screen_flags(report, row, st))):
+                    alt = self._cash_flow_by_balance_column(st, template, layer, bs_cash, open_ref,
+                                                            history[report])
+                    if alt is not None:
+                        st, row, k = alt
+                        why = None
+                        self._warn(f"    cash flow: column {k + 1} opens, moves and closes on the balance "
+                                   f"sheet's cash line {bs_cash:,} (`CCO-1`)")
                 if why is None:
                     # ⚠️ `SCG-1`: a reading the release would withhold does not end the cascade;
                     # it is kept as the answer only if no later layer reads the statement clean.
