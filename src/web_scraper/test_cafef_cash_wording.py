@@ -223,6 +223,44 @@ def test_the_block_is_contiguous_and_past_every_strict_layer():
     at = [i for i, l in enumerate(layers) if l.cash_wording]
     # ⚠️ RESTATED 2026-09-14: six, with `onnx@200+alignpages+cashword+extra` (`MXP-1`) kept inside
     # the block rather than appended elsewhere, so the invariant below is unchanged.
-    assert len(at) == 6
-    assert at == list(range(at[0], at[0] + 6)), "the block must stay contiguous"
+    # ⚠️ RESTATED 2026-09-16: eight, with `CWN-1`'s two `+cashword+red` layers inside it.
+    assert len(at) == 8
+    assert at == list(range(at[0], at[0] + 8)), "the block must stay contiguous"
     assert max(i for i, l in enumerate(layers) if l.is_strict) < at[0]
+
+
+# ── `CWN-1`: `Tiền cuối năm` — the two-word spelling ─────────────────────────────────────
+
+MWG_FY_2011 = [
+    ("Lưu chuyển tiền thuần từ hoạt động kinh doanh", "luu_chuyen_tien_thuan_tu_hoat_dong_kinh_doanh", [60517977552, 40216913993]),
+    ("Lưu chuyển tiền thuần từ hoạt động đầu tư", "luu_chuyen_tien_thuan_tu_hoat_dong_dau_tu", [-42330311719, -16825757948]),
+    ("Lưu chuyển tiền thuần từ hoạt động tài chính", "luu_chuyen_tien_thuan_tu_hoat_dong_tai_chinh", [33262948326, -23370995126]),
+    ("Tăng (giảm) tiền thuần trong năm", "tang_giam_tien_thuan_trong_nam", [51450614159, -979839081]),
+    ("Tiền đầu năm", "tien_dau_nam", [28546379179, 29526218260]),
+    ("Tiền cuối năm", "tien_cuoi_nam", [79996993338, 28546379179]),
+]
+
+
+def test_the_two_word_spelling_scores_under_the_bar_and_the_alias_maps_it(builder):
+    """`CWN-1` — MWG's FY-2011 cash flow, whose closing figure the red channel reads under the seal."""
+    assert builder._label_score("tienvatuongduongtiencuoiky", "tiencuoinam") < builder.SCHEMA_MATCH
+    st = _statement(MWG_FY_2011 + [(f"Tien chi khac {i}", f"tien_chi_khac_{i}", [-1_000 * i, -900 * i])
+                                 for i in range(1, 13)])
+    assert CLOSE not in builder.map_to_schema(st, "corp")
+    mapped = builder.map_to_schema(st, "corp", cash_wording=True)
+    assert mapped[CLOSE] == 79996993338
+    assert mapped[OPEN] == 28546379179
+    assert builder.reconcile(st, mapped) is None
+
+
+def test_the_two_word_opening_row_can_never_win_the_closing_slot(builder):
+    """The period gate, on the shortest spelling there is."""
+    assert builder._label_score("tienvatuongduongtiencuoiky", "tiendaunam", cash_wording=True) == 0.0
+    assert builder._label_score("tienvatuongduongtiendauky", "tiencuoinam", cash_wording=True) == 0.0
+
+def test_the_cascade_carries_the_short_spelling_and_the_red_channel_on_one_layer():
+    """`CWN-1` — neither flag alone reads MWG's FY-2011 closing balance."""
+    from web_scraper.cafef_financials import FinancialsBuilder
+    both = [l for l in FinancialsBuilder.LAYERS if l.cash_wording and l.red_channel]
+    assert [l.name for l in both] == ["onnx@200+cashword+red", "onnx@300+cashword+red"]
+    assert all(not l.is_strict for l in both)

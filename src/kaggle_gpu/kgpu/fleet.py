@@ -472,6 +472,70 @@ def _fragment_floor(root: Path, exchange: str, symbol: str) -> Dict[Tuple[str, s
     return floor
 
 
+def hole_quarters(names: Sequence[Tuple[str, str]], *,
+                  reports_root: Optional[os.PathLike | str] = None,
+                  log: Optional[Callable[[str], None]] = None,
+                  ) -> Dict[str, Dict[str, object]]:
+    """`{ticker: {exchange, template, quarters, cells}}` — the HOLES: non-solid quarters that sit
+    BETWEEN two solid ones, which is the only population a CONTIGUITY goal is about.
+
+    ⚠️ **A RATE AND A BAND ARE DIFFERENT TARGETS AND THE OTHER CENSUSES SERVE THE RATE**
+    (`HLM-1`, 2026-09-16). `winnable` plans every open cell, `fragmented_quarters` those one
+    defect away, `alternate_quarters` those never asked on a second filing — all three are
+    ranked by CELLS, and a cell at the start of a ticker's history raises the rate and closes
+    no hole. `_holes` already names the quarters that do (see `coverage`); this hands them to a
+    lane, richest first, so the fleet can be pointed at the band instead of at the total.
+
+    ⚠️ **`ASK-1` IS NOT CONSULTED, FOR `fragmented_quarters`' REASON** — these cells were asked
+    and lost, and what makes them worth asking again is that the PARSER has learned since.
+    `parser_digest()` moves with the parser bytes, so the skip lifts by itself; the census is
+    built whole so the plan states what it intends.
+    """
+    anchor()
+    from web_scraper import cafef_financials as fin
+    from web_scraper import pdf_ocr_job as job
+
+    say = log or (lambda _line: None)
+    builder = fin.FinancialsBuilder(logger=None)
+    out: Dict[str, Dict[str, object]] = {}
+    for symbol, exchange in names:
+        template = job.resolve_template(builder, symbol)[0]
+        tasks = list(job.plan(builder, exchange, symbol, allow_parent=True, template=template))
+        gaps = [[r for r in job.REPORTS if r not in set(job.parsed_reports(builder, t))]
+                for t in tasks]
+        solid = [not gap for gap in gaps]
+        if True not in solid:
+            continue
+        first = solid.index(True)
+        last = len(solid) - 1 - solid[::-1].index(True)
+        quarters = [job.as_quarter(tasks[i].period) for i in range(first + 1, last)
+                    if not solid[i]]
+        cells = sum(len(gaps[i]) for i in range(first + 1, last) if not solid[i])
+        if not quarters:
+            continue
+        out[symbol] = {"exchange": exchange, "template": template,
+                       "quarters": quarters, "cells": cells}
+        say(f"{exchange}_{symbol}: {len(quarters)} hole quarter(s), {cells} cell(s) — "
+            + ", ".join(quarters[:6]) + (" …" if len(quarters) > 6 else ""))
+    return out
+
+
+def hole_plans(names: Sequence[Tuple[str, str]], *,
+               reports_root: Optional[os.PathLike | str] = None,
+               log: Optional[Callable[[str], None]] = None) -> List["object"]:
+    """`hole_quarters` as `TickerPlan`s, richest first — what a lane consumes."""
+    anchor()
+    from web_scraper import pdf_ocr_batch as batch
+
+    census = hole_quarters(names, reports_root=reports_root, log=log)
+    plans = [batch.TickerPlan(exchange=str(row["exchange"]), symbol=symbol,
+                              template=str(row["template"]), template_how="resolved",
+                              quarters=list(row["quarters"]))
+             for symbol, row in census.items()]
+    plans.sort(key=lambda p: (-len(p.quarters), p.symbol))
+    return plans
+
+
 def fragmented_quarters(names: Sequence[Tuple[str, str]], *,
                         max_fragments: int = 3,
                         reports_root: Optional[os.PathLike | str] = None,
@@ -730,6 +794,7 @@ def run_local(tickers: Sequence[str], *, exchange: str = "HOSE",
     names = [(t, exchange) for t in tickers]
     plans = (fragmented_plans(names, reports_root=root, log=say) if mode == "fragmented"
              else alternate_plans(names, reports_root=root, log=say) if mode == "alternates"
+             else hole_plans(names, reports_root=root, log=say) if mode == "holes"
              else winnable(tickers, exchange=exchange, reports_root=root, log=say))
     if not plans:
         say(f"nothing to parse on this lane (mode={mode}) — every ticker is done or exhausted")
@@ -784,6 +849,7 @@ def run_kaggle(tickers: Sequence[str], *, account: str, exchange: str = "HOSE",
     names = [(t, exchange) for t in tickers]
     plans = (fragmented_plans(names, reports_root=root, log=say) if mode == "fragmented"
              else alternate_plans(names, reports_root=root, log=say) if mode == "alternates"
+             else hole_plans(names, reports_root=root, log=say) if mode == "holes"
              else winnable(tickers, exchange=exchange, reports_root=root, log=say))
     if not plans:
         say(f"nothing to ship on this lane (mode={mode}) — every ticker is done or exhausted")
@@ -1017,6 +1083,13 @@ def plan_fleet(tickers: Sequence[Tuple[str, str]], *, local_lanes: int = 1,
             say(f"{exchange}: {len(group)} ticker(s) — resolving the UNASKED ALTERNATES "
                 f"(`ALT-2`), the one block where GPU still buys cells")
             plans = alternate_plans([(t, exchange) for t in group], log=say)
+        elif mode == "holes":
+            # ⚠️ The only mode ranked by BAND rather than by cells (`HLM-1`): a quarter here
+            # sits between two solid ones, so closing it shortens the gap a difference cannot
+            # cross. A ticker whose gaps are all at the edges has nothing on this plan.
+            say(f"{exchange}: {len(group)} ticker(s) — resolving the HOLES: quarters that sit "
+                f"BETWEEN two solid ones (`HLM-1`)")
+            plans = hole_plans([(t, exchange) for t in group], log=say)
         else:
             say(f"{exchange}: {len(group)} ticker(s) — resolving what is still winnable")
             plans = winnable(group, exchange=exchange, skip_exhausted=skip_exhausted, log=say)
@@ -1065,7 +1138,7 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
         p.add_argument("--layer", action="append", default=[], help="an explicit layer list")
         p.add_argument("--vram-floor-mb", type=int, default=None)
         p.add_argument("--mode", default="open",
-                       choices=("open", "alternates", "fragmented"),
+                       choices=("open", "alternates", "fragmented", "holes"),
                        help="open = every winnable document; alternates = only the periods "
                             "holding a filing NO run has read (`ALT-2`), which `ASK-1` "
                             "correctly retires and which is the one GPU-shaped block left")
@@ -1087,7 +1160,7 @@ def _main(argv: Optional[Sequence[str]] = None) -> int:
     lane.add_argument("--layer", action="append", default=[])
     lane.add_argument("--vram-floor-mb", type=int, default=None)
     lane.add_argument("--mode", default="open",
-                      choices=("open", "alternates", "fragmented"))
+                      choices=("open", "alternates", "fragmented", "holes"))
 
     args = ap.parse_args(argv)
 

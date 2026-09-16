@@ -50,7 +50,7 @@
 
 | file | ~tokens | what it answers |
 |---|---|---|
-| [../CLAUDE.md](../../CLAUDE.md) | **14.3k** | *what is this project, and what has it PROVED?* **The map and the verdict, and nothing else** — §2 the headline negative, §6 the current state, **§7 the module→file routing you are meant to lazy-load from**. ⚠️ **Was 162.7k, then 2,549 lines, both on 2026-09-06**; the evidence is in Tier 1's `findings/` rows and the hub is capped at 300 lines by R2 |
+| [../CLAUDE.md](../../CLAUDE.md) | **17.3k** | *what is this project, and what has it PROVED?* **The map and the verdict, and nothing else** — §2 the headline negative, §6 the current state, **§7 the module→file routing you are meant to lazy-load from**. ⚠️ **Was 162.7k, then 2,549 lines, both on 2026-09-06**; the evidence is in Tier 1's `findings/` rows and the hub is capped at 300 lines by R2 |
 | **.claude/current_state/INDEX.md** *(this file)* | **4.0k** | *where is everything else, and what does it cost to open?* |
 | [../.claude/rules/common.md](../rules/common.md) | **1.4k** | *what rules hold in EVERY session, whatever the task?* Added 2026-09-06; auto-loaded via `@.claude/rules/common.md` in `CLAUDE.md`. **R1: everything written into a file is English** (the conversation stays Vietnamese; `*_VI.md` and Vietnamese DATA are the two named exceptions). **R2: `CLAUDE.md` is at most 300 lines**, checked by `state_check.py`, with the table saying where displaced prose goes. ⚠️ **A new file in `.claude/rules/` is loaded only if `CLAUDE.md` imports it** — add the `@` line in the same commit |
 

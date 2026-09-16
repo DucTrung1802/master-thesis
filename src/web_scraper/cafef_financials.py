@@ -1981,6 +1981,14 @@ class FinancialsBuilder:
         ParseLayer("onnx@200+cashword", "onnx", 200, cash_wording=True),
         ParseLayer("onnx@300+cashword", "onnx", 300, cash_wording=True),
         ParseLayer("onnx@400+cashword", "onnx", 400, cash_wording=True),
+        # ⚠️ **`CWN-1`: THE TWO DEFECTS MET ON ONE LINE, AND EITHER ALONE LEAVES THE CELL LOST**
+        # (2026-09-16). MWG's FY-2011 closing balance is printed `Tiền cuối năm` — two words where
+        # the chart has six, which no layer maps without `cash_wording` — UNDER the company seal,
+        # which no layer reads without `red_channel`. Measured: `+red` alone reads
+        # `79.996.993.338` and refuses `no closing cash balance`; `+cashword` alone maps a line
+        # whose figure the composite never recovered. HPG's lesson, on a cash flow.
+        ParseLayer("onnx@200+cashword+red", "onnx", 200, cash_wording=True, red_channel=True),
+        ParseLayer("onnx@300+cashword+red", "onnx", 300, cash_wording=True, red_channel=True),
         ParseLayer("onnx@200+cashword+relax", "onnx", 200, cash_wording=True,
                    relax_totals=True),
         ParseLayer("onnx@300+cashword+relax", "onnx", 300, cash_wording=True,
@@ -3544,13 +3552,19 @@ class FinancialsBuilder:
     #
     # ⚠️ **`CASH_WORDING_PERIOD` BELOW IS WHAT KEEPS THE MIRRORS APART** and it is a HARD gate,
     # not a score: an opening line can never answer for a closing one however well it scores.
-    _CASH_CLOSE_SPELLINGS = ("tientoncuoinam", "tientoncuoiky",
+    # ⚠️ **`CWN-1`: MWG PRINTS THE LINE WITH NO NOUN PHRASE AT ALL** (2026-09-16) — `Tiền cuối năm`
+    # and `Tiền đầu năm`, two words where the chart has six. Its FY-2011 cash flow is a scan whose
+    # closing figure sits under the company seal, and the red channel reads it (`79.996.993.338` at
+    # 300 dpi, exactly `28.546.379.179 + 51.450.614.159`) — yet every `+red` layer still refused
+    # `no closing cash balance`, because the LABEL scores nowhere near the chart's. The period word
+    # is what keeps the pair apart, as for every other spelling here.
+    _CASH_CLOSE_SPELLINGS = ("tientoncuoinam", "tientoncuoiky", "tiencuoinam", "tiencuoiky",
                              "tienvacackhoantuongduongtiencuoiky",
                              "tienvacackhoantuongduongcuoiky",
                              "tienvacackhoantuongduongtiencuoinam",
                              "tienvatuongduongtiencuoiky",
                              "tienvacackhoantuongduongtientaithoidiemcuoiky")
-    _CASH_OPEN_SPELLINGS = ("tientondaunam", "tientondauky",
+    _CASH_OPEN_SPELLINGS = ("tientondaunam", "tientondauky", "tiendaunam", "tiendauky",
                             "tienvacackhoantuongduongtiendauky",
                             "tienvacackhoantuongduongdauky",
                             "tienvacackhoantuongduongtiendaunam",
