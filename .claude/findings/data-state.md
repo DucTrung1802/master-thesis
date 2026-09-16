@@ -2434,3 +2434,16 @@ VN30 (2026-09-15, night): **4,985/5,214 = 95.61 %**, quarters 1,541/1,738 = 88.7
 **+5 cells, holes 151 -> 147, one band 6 -> 7 of 30** — 42 of the 47 documents still refuse, which is the honest shape of a hole: each is its own defect.
 
 VN30 (2026-09-16): **4,990/5,214 = 95.70 %**, quarters 1,545/1,738 = 88.9 %, holes 147, one band **7/30** (MWG joins ACB BID CTG MBB TCB VCB).
+
+### 2026-09-16 — what the 147 holes are made of
+
+Censused per report, so a plan can be aimed rather than sized (`is_holes.py`, `ccb_holes.py`, no GPU):
+
+| block | count | what it needs |
+|---|---|---|
+| income statements BLOCKED on a de-cumulation operand | 17 | the Q1/Q2/Q3 ROOT, which is itself a hole on 14 of the 17 (GVR 4, SHB 4, SAB 2) |
+| income statements ACCEPTED, unwritten, held by a screen or by name | 8 | a repair of the operand on disk, not a re-read: every one is `HLI-1` or an identity the filing's own lines fail (GVR Q1-2023's revenue 446 đồng, VNM Q4-2016's Q3 operand) |
+| income statements REFUSED | 26 | the largest single reason is `operating profit does not close` (9), and `replay_operating_profit.py` explains 4 of 10 by ONE row each — four DIFFERENT accounts, so no one alias is the lever |
+| cash flows refusing `no closing cash balance` | 47 documents | `CWN-1`'s batch: 5 written, 42 still refused |
+
+⚠️ **A text-layer replay cannot adjudicate a hole whose statement pages are IMAGES inside a text filing.** VHM Q4-2017's balance sheet refuses `1 figure split across two boxes` with OCR off — its pages 9 and 14 carry a GARBLED embedded text layer the replay reads and a real run never does — and with OCR on the same statement refuses `no total to balance against` instead. **The two refusals are different defects on one cell**, and only the second one exists in production.
