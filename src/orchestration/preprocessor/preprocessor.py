@@ -6208,7 +6208,7 @@ class DataPreprocessor:
             # Per condition: how many were MEASURED at all, and how many passed. Rule 22
             # one level down — a condition that measured nothing and a condition that
             # everything cleared both report 100% pass, and only the first number tells
-            # them apart. `debt_to_equity_max_12` is exactly that case at 2 of 781.
+            # them apart. `DEBT_TO_EQUITY_MAX_12` is exactly that case at 2 of 781.
             measured: dict = {}
             passed: dict = {}
             for condition in conditions:

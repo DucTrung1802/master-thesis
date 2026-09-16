@@ -2565,13 +2565,44 @@ dagster asset materialize -f src/orchestration/definitions.py \
   --select "group:unified"  --partition PRICE10K      # the schema it gates
 ```
 
-**Built and verified 2026-08-22, all three screens, ~1 s each:**
+**Re-built 2026-09-16, all three screens, ~1 s each** — after the 2026-08-23 carry-up
+(silver to 2026-08-21, **784** candidates) and the condition-name rename below:
+
+| screen | selected | rejected by (first failure) | per-condition passed · measured |
+|---|---|---|---|
+| **`PRICE10K`** | **461 / 784** | `CLOSE_RAW_MIN_10K` 323 | 461 · 784 |
+| **`LIQUID`** | **228 / 784** | `TURNOVER_MEDIAN_1BN` 550, `SESSIONS_MIN_200` 6 | turnover 234 · traded-days 484 · sessions 773 · still-trading 783, all measured 784 |
+| **`QUALITY`** | **222 / 784** | `TURNOVER_MEDIAN_1BN` 429, `CLOSE_RAW_MEDIAN_5K` 127, `SESSIONS_MIN_200` 6 | price-median 657 · `DEBT_TO_EQUITY_MAX_12` **784 passed on 2 measured** |
+
+✅ The tables built 2026-08-23 already held these counts: a live re-run of each screen's
+SELECT against today's silver reproduced 461 / 228 / 222, the stored `COMMENT`
+fingerprints matched the code, and each `unified_schema_<screen>.pool__basic` held exactly
+the selected tickers to 2026-08-21.
+
+⚠️ **CONDITION NAMES ARE UPPER_SNAKE SINCE 2026-09-16** (`CLOSE_RAW_MIN_10K`), the same
+shape as a screen name, and `first_failed` stores them that way. **The COLUMNS stay lower
+case** (`val__close_raw_min_10k`, `pass__close_raw_min_10k`): an upper-case PostgreSQL
+column would have to be double-quoted in every query that ever reads it.
+`Condition.value_column` / `pass_column` do the lowering. The tables written before that
+date carry the old lower-case names in `first_failed` and `COMMENT`.
+
+⚠️ **`unified_schema_price10k` IS INCOMPLETE SINCE 2026-09-16.** A `group:unified`
+rebuild of the three screens was stopped 19 min in, while it was still on PRICE10K. The
+asset DROPS a pool before its `CREATE TABLE AS`, so the cancelled `pool__targets` and
+`pool__ta` are **gone, not stale**: the schema holds basic, basic_bank, bonds, fa, funds,
+market_breadth, news_daily and stock_market plus the per-country economy/forex tables.
+LIQUID and QUALITY were not reached and keep `pool__basic` + `pool__targets`. Measured
+step times on PRICE10K (461 tickers): `pool__basic` 6m15s, `pool__bonds` 6m46s,
+`pool__funds` 5m24s, `pool__fa` 9s. ⚠️ A cancel is not free here: rebuild
+`group:unified --partition PRICE10K` before reading targets or TA off that schema.
+
+**First built and verified 2026-08-22, all three screens, ~1 s each:**
 
 | screen | conditions | selected | rejected by (first failure) | `unified_schema_*` |
 |---|---|---|---|---|
-| **`PRICE10K`** | 1 | **480 / 781** | `close_raw_min_10k` 301 | **1,503,958 × 101**, 480 tickers |
-| **`LIQUID`** | 4 | **206 / 781** | `turnover_median_1bn` 545, `sessions_min_200` 30 | **657,892 × 101**, 206 tickers |
-| **`QUALITY`** | 6 | **200 / 781** | `turnover_median_1bn` 426, `close_raw_median_5k` 125, `sessions_min_200` 30 | **635,919 × 101**, 200 tickers |
+| **`PRICE10K`** | 1 | **480 / 781** | `CLOSE_RAW_MIN_10K` 301 | **1,503,958 × 101**, 480 tickers |
+| **`LIQUID`** | 4 | **206 / 781** | `TURNOVER_MEDIAN_1BN` 545, `SESSIONS_MIN_200` 30 | **657,892 × 101**, 206 tickers |
+| **`QUALITY`** | 6 | **200 / 781** | `TURNOVER_MEDIAN_1BN` 426, `CLOSE_RAW_MEDIAN_5K` 125, `SESSIONS_MIN_200` 30 | **635,919 × 101**, 200 tickers |
 
 `pool__basic` + `pool__targets` built on all three; every one spans 2009-01-02 →
 2026-08-19 and carries the cross-sectional derived block, because a screen answers
@@ -2601,7 +2632,7 @@ condition therefore carries `on_missing`, and it is the field to get right:
 | | means | measured example |
 |---|---|---|
 | `"reject"` | no measurement ⇒ the ticker is OUT | anything from price/volume — an absent value means the name did not trade |
-| `"keep"` | no measurement ⇒ the condition ABSTAINS | **`debt_to_equity_max_12`, and it is not optional there** |
+| `"keep"` | no measurement ⇒ the condition ABSTAINS | **`DEBT_TO_EQUITY_MAX_12`, and it is not optional there** |
 
 ⚠️ **`gold.stocks_financials_bank_fa` HOLDS TWO TICKERS OF 781** — ACB and VCB, measured
 2026-08-22. On `"reject"` that one condition cuts any screen it joins down to two names.
@@ -2695,7 +2726,7 @@ what lets `first_failed` name exactly one. An `OR` belongs inside a single condi
 
 ⚠️ **A DATE metric is expressed as a numeric DISTANCE.** `value` is one
 `double precision` column for every condition — that is what lets six unrelated
-measurements sit side by side — so `still_trading_2026_06` is `MAX(date) - cutoff >= 0`
+measurements sit side by side — so `STILL_TRADING_2026_06` is `MAX(date) - cutoff >= 0`
 and the number stored is days past the cutoff.
 
 ## 2a. Cost of a full materialize (2026-07-31)

@@ -52,7 +52,7 @@ def test_screen_names_cannot_collide_with_a_ticker():
     for name in F.SCREENS:
         assert len(name) >= 4
     with pytest.raises(PipelineError, match="3, so a screen must be 4"):
-        F.Screen("VNM", "collides with a listing", ("close_raw_min_10k",))
+        F.Screen("VNM", "collides with a listing", ("CLOSE_RAW_MIN_10K",))
 
 
 def test_every_screen_is_wired_into_the_unified_member_filters():
@@ -69,19 +69,19 @@ def test_every_screen_is_wired_into_the_unified_member_filters():
 
 def test_the_requested_screen_means_what_it_says():
     """PRICE10K is close_raw >= 10,000 VND from 2026-01-01, and MIN not MEAN."""
-    condition = F.CONDITIONS["close_raw_min_10k"]
+    condition = F.CONDITIONS["CLOSE_RAW_MIN_10K"]
     assert condition.metric == "MIN(close_raw)"
     assert (condition.op, condition.threshold) == (">=", 10_000.0)
     assert condition.params == {"start": date(2026, 1, 1)}
     assert condition.on_missing == "reject"
-    assert F.SCREENS["PRICE10K"].conditions == ("close_raw_min_10k",)
+    assert F.SCREENS["PRICE10K"].conditions == ("CLOSE_RAW_MIN_10K",)
 
 
 # ── validation refuses the things that fail silently ─────────────────────────
 def test_undeclared_parameter_is_refused():
     with pytest.raises(PipelineError, match="undeclared parameter"):
         F.Condition(
-            name="x", description="", source="silver_schema.stocks_basic",
+            name="X", description="", source="silver_schema.stocks_basic",
             metric="MIN(close_raw)", op=">=", threshold=1.0,
             where="date >= %(start)s",  # never declared
         )
@@ -92,7 +92,7 @@ def test_dangling_parameter_is_refused():
     still whatever it used to be — the failure mode with no symptom."""
     with pytest.raises(PipelineError, match="that no expression uses"):
         F.Condition(
-            name="x", description="", source="silver_schema.stocks_basic",
+            name="X", description="", source="silver_schema.stocks_basic",
             metric="MIN(close_raw)", op=">=", threshold=1.0,
             where="date >= %(start)s",
             params={"start": date(2026, 1, 1), "cutoff": date(2020, 1, 1)},
@@ -112,7 +112,7 @@ def test_dangling_parameter_is_refused():
 )
 def test_malformed_conditions_are_refused(kwargs, match):
     base = dict(
-        name="x", description="", source="silver_schema.stocks_basic",
+        name="X", description="", source="silver_schema.stocks_basic",
         metric="MIN(close_raw)", op=">=", threshold=1.0,
     )
     with pytest.raises(PipelineError, match=match):
@@ -121,7 +121,7 @@ def test_malformed_conditions_are_refused(kwargs, match):
 
 def test_duplicate_condition_in_one_screen_is_refused():
     with pytest.raises(PipelineError, match="twice"):
-        F.Screen("DOUBLE", "", ("close_raw_min_10k", "close_raw_min_10k"))
+        F.Screen("DOUBLE", "", ("CLOSE_RAW_MIN_10K", "CLOSE_RAW_MIN_10K"))
 
 
 def test_empty_screen_is_refused():
@@ -136,7 +136,7 @@ def test_unknown_condition_is_refused_at_resolve_time():
 
 def test_registering_the_same_condition_twice_is_refused():
     with pytest.raises(PipelineError, match="already defined"):
-        F.register(F.CONDITIONS["close_raw_min_10k"])
+        F.register(F.CONDITIONS["CLOSE_RAW_MIN_10K"])
 
 
 # ── SQL generation ───────────────────────────────────────────────────────────
@@ -177,8 +177,8 @@ def test_every_pass_expression_is_total():
 
 
 def test_on_missing_keep_and_reject_differ_in_the_right_direction():
-    reject = F._pass_expression(F.CONDITIONS["close_raw_min_10k"], 0)
-    keep = F._pass_expression(F.CONDITIONS["debt_to_equity_max_12"], 0)
+    reject = F._pass_expression(F.CONDITIONS["CLOSE_RAW_MIN_10K"], 0)
+    keep = F._pass_expression(F.CONDITIONS["DEBT_TO_EQUITY_MAX_12"], 0)
     assert "c0.value IS NOT NULL AND" in reject
     assert "c0.value IS NULL OR" in keep
 
@@ -186,14 +186,14 @@ def test_on_missing_keep_and_reject_differ_in_the_right_direction():
 def test_latest_mode_generates_its_own_not_null_guard():
     """'The latest row' and 'the latest row that reported this' are different questions
     and only the second is ever what a fundamental screen means."""
-    cte, _ = F._cte(F.CONDITIONS["debt_to_equity_max_12"], 0)
+    cte, _ = F._cte(F.CONDITIONS["DEBT_TO_EQUITY_MAX_12"], 0)
     assert "DISTINCT ON (exchange, ticker)" in cte
     assert ") IS NOT NULL" in cte
     assert "ORDER BY exchange, ticker, date DESC" in cte
 
 
 def test_aggregate_mode_groups_by_the_grain():
-    cte, _ = F._cte(F.CONDITIONS["close_raw_min_10k"], 0)
+    cte, _ = F._cte(F.CONDITIONS["CLOSE_RAW_MIN_10K"], 0)
     assert "GROUP BY exchange, ticker" in cte
     assert "DISTINCT ON" not in cte
 
@@ -263,7 +263,7 @@ def test_comment_carries_every_window_and_the_not_point_in_time_warning():
 
 def test_window_rendering_never_builds_sql():
     """`window()` inlines values for DISPLAY; the statement must still bind them."""
-    condition = F.CONDITIONS["close_raw_min_10k"]
+    condition = F.CONDITIONS["CLOSE_RAW_MIN_10K"]
     assert "2026" in condition.window()
     sql, _ = F.build_universe_sql(F.SCREENS["PRICE10K"])
     assert condition.window() not in sql

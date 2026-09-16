@@ -29,7 +29,7 @@ unified schema stale.** Rebuild `group:unified` for that partition yourself.
 shape, one layer along. Read `selected` against `candidates` and, for every condition,
 `measured` against `candidates`: a condition that measured nothing and a condition
 everything cleared BOTH report a 100 % pass rate, and only the first number tells them
-apart. `debt_to_equity_max_12` is exactly that case at **2 of 781**.
+apart. `DEBT_TO_EQUITY_MAX_12` is exactly that case at **2 of 781**.
 """
 
 from typing import Callable, List
@@ -162,7 +162,7 @@ def filter_universe(
     # ⚠️ MEASURED, NOT ASSUMED, per condition — rule 22 at the filter. A pass rate alone
     # cannot tell "everything cleared this" from "nothing was measured", and this layer
     # has a live example of the second: `gold.stocks_financials_bank_fa` holds 2 of 781
-    # tickers, so `debt_to_equity_max_12` abstains on 779 and reports a 100% pass rate.
+    # tickers, so `DEBT_TO_EQUITY_MAX_12` abstains on 779 and reports a 100% pass rate.
     coverage = {
         c.name: 100.0 * result["measured"][c.name] / max(candidates, 1)
         for c in conditions

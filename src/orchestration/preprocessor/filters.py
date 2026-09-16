@@ -32,7 +32,7 @@ ADDING A CONDITION IS ONE ENTRY IN `CONDITIONS`. ADDING A UNIVERSE IS ONE IN `SC
 
 ```python
 register(Condition(
-    name="close_raw_min_10k",
+    name="CLOSE_RAW_MIN_10K",
     description="close_raw never below 10,000 VND on any session from 2026-01-01",
     source=f"{SILVER_SCHEMA}.stocks_basic",
     metric="MIN(close_raw)",
@@ -40,7 +40,7 @@ register(Condition(
     where="date >= %(start)s", params={"start": date(2026, 1, 1)},
 ))
 
-SCREENS["PRICE10K"] = Screen("PRICE10K", "…", ("close_raw_min_10k",))
+SCREENS["PRICE10K"] = Screen("PRICE10K", "…", ("CLOSE_RAW_MIN_10K",))
 ```
 
 Then add `"PRICE10K"` to `UNIFIED_PARTITIONS` in `assets/unified.py` and to
@@ -103,7 +103,7 @@ CANDIDATE_SOURCE = f"{SILVER_SCHEMA}.stocks_basic"
 # of a TABLE name and a SCHEMA name, so both are held to identifier rules. Screen names
 # are additionally constrained by `DataPreprocessor.UNIFIED_TICKER_PATTERN`, which they
 # must satisfy to name `unified_schema_<screen>`.
-_CONDITION_NAME = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
+_CONDITION_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,40}$")
 _SCREEN_NAME = re.compile(r"^[A-Z][A-Z0-9_]{2,19}$")
 _QUALIFIED_TABLE = re.compile(r"^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$")
 _IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]*$")
@@ -147,7 +147,7 @@ class Condition:
     for every condition — one column type is what lets the table hold six unrelated
     measurements side by side. A DATE metric is expressed as a numeric DISTANCE:
     `MAX(date) - %(cutoff)s` is a count of days and compares to `>= 0`. See
-    `still_trading_2026_06`.
+    `STILL_TRADING_2026_06`.
 
     ⚠️ **`threshold` and every `params` value are BOUND**, never interpolated. `metric`
     and `where` are raw SQL — see the module docstring on why that is safe here and what
@@ -170,8 +170,9 @@ class Condition:
         if not _CONDITION_NAME.match(self.name or ""):
             raise PipelineError(
                 f"Condition name {self.name!r} is not usable as a column name. Expected "
-                f"lower snake_case, 1-41 chars, starting with a letter — it becomes "
-                f"`val__{self.name}` and `pass__{self.name}`."
+                f"UPPER_SNAKE, 1-41 chars, starting with a letter — the same shape as a "
+                f"screen name. Its COLUMNS are lower-cased: `val__{self.name.lower()}` "
+                f"and `pass__{self.name.lower()}`."
             )
         if not _QUALIFIED_TABLE.match(self.source or ""):
             raise PipelineError(
@@ -218,11 +219,13 @@ class Condition:
     # ── rendering ────────────────────────────────────────────────────────────────
     @property
     def value_column(self) -> str:
-        return f"val__{self.name}"
+        # ⚠️ LOWER-CASED ON PURPOSE: the condition NAME is UPPER_SNAKE, but an upper-case
+        # PostgreSQL column must be double-quoted in every query that ever reads it.
+        return f"val__{self.name.lower()}"
 
     @property
     def pass_column(self) -> str:
-        return f"pass__{self.name}"
+        return f"pass__{self.name.lower()}"
 
     def window(self) -> str:
         """The `where` window with its parameters substituted, FOR DISPLAY ONLY.
@@ -346,7 +349,7 @@ def register(condition: Condition) -> Condition:
 # ── price ────────────────────────────────────────────────────────────────────────
 register(
     Condition(
-        name="close_raw_min_10k",
+        name="CLOSE_RAW_MIN_10K",
         description=(
             "close_raw never dips below 10,000 VND on ANY session from 2026-01-01 "
             "onward. MIN is the literal reading of 'không dưới 10,000' — one session at "
@@ -367,7 +370,7 @@ register(
 
 register(
     Condition(
-        name="close_raw_median_5k",
+        name="CLOSE_RAW_MEDIAN_5K",
         description=(
             "Median close_raw at or above 5,000 VND over the trailing year — the "
             "penny-stock screen. MEDIAN, not MIN, because this one is about where the "
@@ -387,7 +390,7 @@ register(
 # ── liquidity ────────────────────────────────────────────────────────────────────
 register(
     Condition(
-        name="turnover_median_1bn",
+        name="TURNOVER_MEDIAN_1BN",
         description=(
             "Median MATCHED turnover at or above 1 bn VND/session over the trailing "
             "year. ⚠️ MATCHED only — the negotiated channel is block trades and is not "
@@ -407,7 +410,7 @@ register(
 
 register(
     Condition(
-        name="traded_days_ratio_80",
+        name="TRADED_DAYS_RATIO_80",
         description=(
             "At least 80% of the trailing year's sessions had a non-zero matched "
             "volume — the halted/suspended/no-bid screen. A name can clear a turnover "
@@ -427,7 +430,7 @@ register(
 # ── continuity ───────────────────────────────────────────────────────────────────
 register(
     Condition(
-        name="sessions_min_200",
+        name="SESSIONS_MIN_200",
         description=(
             "At least 200 sessions in the trailing year — roughly a full listed year. "
             "Drops names that listed mid-window, which would otherwise enter a panel "
@@ -446,7 +449,7 @@ register(
 
 register(
     Condition(
-        name="still_trading_2026_06",
+        name="STILL_TRADING_2026_06",
         description=(
             "Last session on or after 2026-06-01 — the name is still quoted. ⚠️ A DATE "
             "metric is expressed as a numeric DISTANCE in days (`MAX(date) - cutoff`) "
@@ -470,7 +473,7 @@ register(
 # ── leverage ─────────────────────────────────────────────────────────────────────
 register(
     Condition(
-        name="debt_to_equity_max_12",
+        name="DEBT_TO_EQUITY_MAX_12",
         description=(
             "Latest reported total liabilities / owners' equity at or below 12. "
             "⚠️ TWELVE, NOT THREE, because the only fundamentals this database holds "
@@ -514,7 +517,7 @@ SCREENS: Dict[str, Screen] = {
                 "the same thing and the table is a clean reference for what that cut "
                 "alone costs."
             ),
-            conditions=("close_raw_min_10k",),
+            conditions=("CLOSE_RAW_MIN_10K",),
         ),
         Screen(
             name="LIQUID",
@@ -525,10 +528,10 @@ SCREENS: Dict[str, Screen] = {
                 "difference against QUALITY prices the other two."
             ),
             conditions=(
-                "turnover_median_1bn",
-                "traded_days_ratio_80",
-                "sessions_min_200",
-                "still_trading_2026_06",
+                "TURNOVER_MEDIAN_1BN",
+                "TRADED_DAYS_RATIO_80",
+                "SESSIONS_MIN_200",
+                "STILL_TRADING_2026_06",
             ),
         ),
         Screen(
@@ -536,15 +539,15 @@ SCREENS: Dict[str, Screen] = {
             description=(
                 "LIQUID plus the two 'bad stock' cuts: a 5,000 VND median price floor "
                 "and a debt/equity ceiling. ⚠️ The leverage condition ABSTAINS on 779 "
-                "of 781 names for want of fundamentals — see `debt_to_equity_max_12`."
+                "of 781 names for want of fundamentals — see `DEBT_TO_EQUITY_MAX_12`."
             ),
             conditions=(
-                "close_raw_median_5k",
-                "turnover_median_1bn",
-                "traded_days_ratio_80",
-                "sessions_min_200",
-                "still_trading_2026_06",
-                "debt_to_equity_max_12",
+                "CLOSE_RAW_MEDIAN_5K",
+                "TURNOVER_MEDIAN_1BN",
+                "TRADED_DAYS_RATIO_80",
+                "SESSIONS_MIN_200",
+                "STILL_TRADING_2026_06",
+                "DEBT_TO_EQUITY_MAX_12",
             ),
         ),
     )
