@@ -50,7 +50,25 @@ import numpy as np
 # would be fed a design the ranking never scored. See `model/common/features.py`.
 from model.common.features import WINDOW_STATS, window_statistics
 
-KINDS = ("zero", "mean", "ridge_stats", "ridge_flat", "ar")
+KINDS = ("zero", "mean", "ridge_stats", "ridge_flat", "ar",
+         "prior", "logistic_stats", "logistic_channel")
+
+# ⚠️ **THE THREE CLASSIFICATION BASELINES (2026-09-16)** — for a 0/1 event label such as
+# `up_5pct_5day` (`utils.event_target`). Each exposes `predict_logit`, which
+# `engine.train_estimator` requires of a classifier: the engine sigmoids the raw output
+# exactly once, so a probability returned here would be squashed twice.
+#
+# | `kind` | score | params |
+# |---|---|---|
+# | `prior` | the TRAIN base rate, as a constant log-odds | 1 |
+# | `logistic_stats` | L2 logistic regression on the 6 window statistics per channel | `6·n + 1` |
+# | `logistic_channel` | logistic regression on ONE named channel's last value | 2 |
+#
+# `prior` has no AUC (a constant ranks nothing) and is the reference for `log_loss` and
+# `brier`. `logistic_channel` is the one-feature question — does a single volatility
+# column already carry what a 1,000-column model finds? — and it resolves its channel by
+# NAME for the reason `ARPredictor` does.
+CLASSIFICATION_KINDS = ("prior", "logistic_stats", "logistic_channel")
 
 
 class _Base:
@@ -218,6 +236,78 @@ class ARPredictor(_Base):
         return self.model_.predict(self._design(X))
 
 
+def _logit(p: np.ndarray) -> np.ndarray:
+    p = np.clip(np.asarray(p, dtype=float), 1e-7, 1 - 1e-7)
+    return np.log(p / (1.0 - p))
+
+
+class PriorClassifier(_Base):
+    """The train base rate for every sample. The log-loss/Brier reference."""
+
+    n_params = 1
+
+    def fit(self, X, y):
+        self.rate_ = float(np.mean(np.asarray(y, dtype=float) >= 0.5))
+        return self
+
+    def predict_logit(self, X):
+        return np.full(len(X), float(_logit(np.array([self.rate_]))[0]), dtype=float)
+
+    predict = predict_logit
+
+
+class LogisticWindow(_Base):
+    """L2 logistic regression on the 6 window statistics per channel.
+
+    ⚠️ `C` is FIXED, not cross-validated — `RidgeWindow`'s argument (NUL-1). The design is
+    already standardised on the train slice, so one `C` means the same shrinkage on every
+    column.
+    """
+
+    def __init__(self, n_features: int, lookback: int, C: float = 0.1,
+                 class_weight=None, max_iter: int = 5000):
+        self.C = float(C)
+        self.class_weight = class_weight
+        self.max_iter = int(max_iter)
+        self.n_params = n_features * len(WINDOW_STATS) + 1
+
+    def fit(self, X, y):
+        from sklearn.linear_model import LogisticRegression
+
+        self.model_ = LogisticRegression(
+            C=self.C, class_weight=self.class_weight, max_iter=self.max_iter
+        ).fit(window_statistics(X), (np.asarray(y) >= 0.5).astype(int))
+        return self
+
+    def predict_logit(self, X):
+        return self.model_.decision_function(window_statistics(X))
+
+    predict = predict_logit
+
+
+class LogisticChannel(ARPredictor):
+    """Logistic regression on ONE named channel's LAST value — two parameters."""
+
+    def __init__(self, n_features: int, lookback: int, target_channel="drv_realized_vol_10",
+                 C: float = 1.0):
+        super().__init__(n_features, lookback, order=1, target_channel=target_channel)
+        self.C = float(C)
+        self.n_params = 2
+
+    def fit(self, X, y):
+        from sklearn.linear_model import LogisticRegression
+
+        self.model_ = LogisticRegression(C=self.C, max_iter=5000).fit(
+            self._design(X), (np.asarray(y) >= 0.5).astype(int)
+        )
+        return self
+
+    def predict_logit(self, X):
+        return self.model_.decision_function(self._design(X))
+
+    predict = predict_logit
+
+
 def build_model(n_features: int, lookback: int, kind: str = "zero", **kwargs):
     """One estimator, selected by `kind`. See `KINDS`."""
     if kind == "zero":
@@ -234,6 +324,15 @@ def build_model(n_features: int, lookback: int, kind: str = "zero", **kwargs):
         return ARPredictor(n_features, lookback, order=kwargs.get("order", 5),
                            target_channel=kwargs.get("target_channel", 0),
                            alpha=kwargs.get("alpha", 1.0))
+    if kind == "prior":
+        return PriorClassifier()
+    if kind == "logistic_stats":
+        return LogisticWindow(n_features, lookback, C=kwargs.get("C", 0.1),
+                              class_weight=kwargs.get("class_weight"))
+    if kind == "logistic_channel":
+        return LogisticChannel(n_features, lookback,
+                               target_channel=kwargs.get("target_channel", "drv_realized_vol_10"),
+                               C=kwargs.get("C", 1.0))
     raise ValueError(f"unknown baseline kind {kind!r}; have {KINDS}")
 
 

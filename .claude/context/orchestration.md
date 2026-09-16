@@ -3152,3 +3152,18 @@ is 7.2 h with no null and 6.3 days at the default 20 draws.
 **The depth, the config knobs and the exact commands are
 [.claude/context/feature_selection.md §15](feature_selection.md).** Do not duplicate
 them here; this section exists so the group is discoverable from the orchestration side.
+
+## The EVENT assets (2026-09-16)
+
+| asset | writes | measured |
+|---|---|---|
+| `unified/pool__targets` (changed) | + one 0/1 column per `utils.event_target.EVENT_TARGETS` — `up_5pct_5day`, `upany_5pct_5day`; NULL exactly on the last `h` sessions, asserted in the asset and the ingest | 11.7 s on VCB; 0 of 4,271 rows disagree with `return_5day >= 0.05` |
+| `gold/stocks_event_features` (new) | ~40 TRAILING channels per `(exchange, ticker, date)` over every ticker: `evt_*` own event rate / volatility / threshold in σ·√h, `sec_*` GICS industry group leave-one-out, `mkt_*` event breadth, `cal_*` calendar incl. Tết and VN30F expiry | 530 s (all tickers) |
+| `unified/pool__event_features` (new) | the gold table sliced to the partition, INNER on the key like `pool__ta` | 1.5 s on VCB, 43 columns |
+
+⚠️ **Change `EVENT_GAIN_PCT`/`EVENT_HORIZON` and all three must be re-materialised**, or the
+features describe a different event than the label. ⚠️ **A silver rebuild on today's bronze failed
+twice on `months`** (`FMO-1`, fixed) — bronze financials predate the column. ⚠️ **Do not read a
+unified table while `gold/stocks_ta` rebuilds on this 16 GB machine** (`WSB-1`): a 4,276-row read
+died on WSAENOBUFS while that asset held 6.45 GB. Full refresh on 2026-09-16: silver 1,362 s,
+gold 596 s + `stocks_ta` 2,651 s, filter 50 s, unified VCB 60 s + `pool__ta` 22 s.

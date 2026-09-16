@@ -36,6 +36,9 @@ from utils.enums import *
 from utils.exceptions import MissingSourceDataError, PipelineError
 from utils.utils import *
 from utils.switch_handler import SwitchHandler
+# The binary EVENT labels (`up_<g>pct_<h>day`, `upany_<g>pct_<h>day`) are defined there and
+# only there — `_ingest_unified_pool_targets` renders them, it does not spell them.
+from utils import event_target
 
 # ⚠️ THE FILTER LAYER'S REGISTRY, imported as a MODULE rather than by name. Every screen
 # and every condition lives in `filters.py`; this file executes them and owns nothing
@@ -2748,10 +2751,17 @@ class DataPreprocessor:
             ]
             share_cols = [c for c in self.CAFEF_FINANCIAL_SHARE_COLS if c in line_cols]
             decimal_line_cols = [c for c in line_cols if c not in share_cols]
+            # ⚠️ `months` (the span a statement's figures cover — 3, 6, 9, 12) exists only
+            # in a bronze table ingested AFTER the parser started writing it (`MTH-1`). A
+            # bronze table built before that has no such column, and casting a column
+            # that is not there raised `KeyError: 'months'` and failed the whole silver
+            # carry-up (measured 2026-09-16). It is cast when present and never invented:
+            # a span nobody recorded is not a span to fill.
+            span_cols = ["months"] if "months" in df.columns else []
             df = self._helper_cast_columns(
                 df,
                 decimal_cols=decimal_line_cols,
-                bigint_cols=["year", "quarter", "months", *share_cols],
+                bigint_cols=["year", "quarter", *span_cols, *share_cols],
             )
 
             self._database_driver.drop_table(SILVER_SCHEMA, table_name)
@@ -3195,7 +3205,15 @@ class DataPreprocessor:
         # ordinary quarterly filing — both 3 months — so blanking them would delete the
         # whole bank history to guard against a case none of them is in. The column is the
         # measurement; its absence is not evidence of the opposite (§5 rule 2).
-        span = pd.to_numeric(q.get("income_statement_months"), errors="coerce")
+        # ⚠️ And an ABSENT column is the same blank, one level up: a bronze table
+        # ingested before the parser wrote `months` carries no such column, `q.get`
+        # returns None, `pd.to_numeric(None)` is a scalar NaN, and `.notna()` on it
+        # raised `AttributeError` — failing the whole silver carry-up (2026-09-16).
+        span = pd.to_numeric(
+            q["income_statement_months"] if "income_statement_months" in q.columns
+            else pd.Series(np.nan, index=q.index),
+            errors="coerce",
+        )
         not_a_quarter = span.notna() & (span != 3)
         if not_a_quarter.any():
             for c in (self.BANK_FA_NET_INCOME, self.BANK_FA_PRETAX, self.BANK_FA_NII,
@@ -5419,6 +5437,250 @@ class DataPreprocessor:
         self._logger.log_info(
             f"gold.market_breadth: {rows} sessions ({first} → {last}), "
             f"cross-section width min {narrowest} / median {median_width}."
+        )
+
+    # ── GOLD — features conditioned on the EVENT label's own parameters ─────────
+    #
+    # Tết (Lunar New Year) dates. Deterministic and published years ahead, so a
+    # distance to the NEXT one is a calendar fact, not a look-ahead. Vietnamese Tết
+    # coincides with the Chinese date for every year in this range.
+    GOLD_TET_DATES = (
+        "2008-02-07", "2009-01-26", "2010-02-14", "2011-02-03", "2012-01-23",
+        "2013-02-10", "2014-01-31", "2015-02-19", "2016-02-08", "2017-01-28",
+        "2018-02-16", "2019-02-05", "2020-01-25", "2021-02-12", "2022-02-01",
+        "2023-01-22", "2024-02-10", "2025-01-29", "2026-02-17", "2027-02-06",
+        "2028-01-26",
+    )
+
+    def _ingest_gold_stocks_event_features(self) -> None:
+        """`silver.stocks_basic` over EVERY ticker → `gold.stocks_event_features`.
+
+        One row per `(exchange, ticker, date)`, ~40 channels built for the binary EVENT
+        label `utils.event_target.DEFAULT_EVENT` — *"does the close rise by at least g %
+        within the next h sessions?"* — and parameterised by the SAME `(g, h)`. Change
+        the event's parameters and this table must be rebuilt with them.
+
+        | prefix | what | why for this label |
+        |---|---|---|
+        | `evt_` | the ticker's own event history and volatility | a +g % move in h sessions is mostly a VOLATILITY question: `evt_thr_z_*` is the threshold `ln(1+g)` in units of `sigma·sqrt(h)`, and `evt_rate_up_*` is how often the move already happened in the trailing window |
+        | `sec_` | the GICS industry group (the bank sector for VCB), leave-one-out | a bank rarely jumps alone — sector bursts and breadth |
+        | `mkt_` | the whole cross-section | market-wide bursts |
+        | `cal_` | the calendar: weekday, month, quarter-end distance, Tết, VN30F expiry | earnings season and the pre-Tết run-up are known in advance |
+
+        ⚠️ **EVERY `evt_`/`sec_`/`mkt_` CHANNEL IS TRAILING.** A backward event flag at
+        row `s` reads `close[s]` and `close[s-h]`, both at or before `s`; every window
+        ends on the row's own date. The FORWARD label (`LEAD`) lives only in
+        `pool__targets`. The one thing the calendar block reads ahead is the Tết and
+        expiry schedule, which is fixed years in advance.
+
+        ⚠️ **A trailing rate needs half its window before it is emitted** — an event rate
+        over 3 sessions is noise, and a young listing would otherwise carry its first
+        days' 0/1 as a "rate".
+
+        ⚠️ **Screened at ±50 % per return**, the `market_breadth` rule: silver carries a
+        handful of corrupt closes whose implied return reaches −781, and one such row
+        would set its sector's mean for that date.
+
+        ⚠️ Survivorship: `silver.stocks_basic` holds no delisted name, so `sec_`/`mkt_`
+        rates are computed over survivors (`market_breadth` states the same).
+        """
+        event = event_target.DEFAULT_EVENT
+        h = int(event.horizon)
+        g = float(event.gain_pct) / 100.0
+        log_thr = float(np.log1p(g))
+        tet = ", ".join(f"('{d}'::date)" for d in self.GOLD_TET_DATES)
+        self._logger.log_info(
+            f"Ingesting gold.stocks_event_features (from silver.stocks_basic) for "
+            f"{event.column}: g={event.gain_pct}%, h={h}..."
+        )
+
+        def rate(col: str, n: int) -> str:
+            frame = f"(w ROWS BETWEEN {n - 1} PRECEDING AND CURRENT ROW)"
+            return (
+                f"CASE WHEN COUNT({col}) OVER {frame} >= {max(2, n // 2)} "
+                f"THEN AVG({col}) OVER {frame} END"
+            )
+
+        def sd(col: str, n: int) -> str:
+            frame = f"(w ROWS BETWEEN {n - 1} PRECEDING AND CURRENT ROW)"
+            return (
+                f"CASE WHEN COUNT({col}) OVER {frame} >= {max(3, n // 2)} "
+                f"THEN STDDEV_SAMP({col}) OVER {frame} END"
+            )
+
+        sql = f"""
+            CREATE TABLE gold_schema.stocks_event_features AS
+            WITH base AS (
+                SELECT exchange, ticker, date, industry_group_code AS grp,
+                       close_adjust::double precision AS px,
+                       LN(1.0 + GREATEST(COALESCE(value_matched, 0), 0))::double precision AS lval
+                FROM silver_schema.stocks_basic
+                WHERE close_adjust IS NOT NULL AND close_adjust > 0
+            ),
+            r AS (
+                SELECT *,
+                       LN(px / LAG(px, 1) OVER w) AS lr1,
+                       px / LAG(px, {h}) OVER w - 1.0 AS ret_h,
+                       date - LAG(date, 1) OVER w AS gap_days
+                FROM base
+                WINDOW w AS (PARTITION BY exchange, ticker ORDER BY date)
+            ),
+            clean AS (
+                SELECT exchange, ticker, date, grp, px, lval, gap_days,
+                       CASE WHEN ABS(lr1) <= 0.5 THEN lr1 END AS lr1,
+                       CASE WHEN ABS(ret_h) <= 0.5 THEN ret_h END AS ret_h
+                FROM r
+            ),
+            flags AS (
+                SELECT *,
+                       -- ⚠️ `::double precision` on the 0/1 flags: `1.0` is a NUMERIC
+                       -- literal, AVG over it returns numeric, and psycopg2 hands that
+                       -- back as Decimal -> pandas `object` (CLAUDE.md §5 rule 15).
+                       (CASE WHEN ret_h IS NULL THEN NULL
+                            WHEN ret_h >= {g} - 1e-12 THEN 1 ELSE 0 END)::double precision AS hit_up,
+                       (CASE WHEN ret_h IS NULL THEN NULL
+                            WHEN ret_h <= -{g} + 1e-12 THEN 1 ELSE 0 END)::double precision AS hit_dn,
+                       (CASE WHEN lr1 IS NULL THEN NULL
+                            WHEN lr1 > 0 THEN 1 ELSE 0 END)::double precision AS up_day
+                FROM clean
+            ),
+            own AS (
+                SELECT exchange, ticker, date, grp, px, ret_h, hit_up, gap_days,
+                       {rate('hit_up', 60)}  AS evt_rate_up_60,
+                       {rate('hit_up', 120)} AS evt_rate_up_120,
+                       {rate('hit_up', 250)} AS evt_rate_up_250,
+                       {rate('hit_dn', 120)} AS evt_rate_dn_120,
+                       {rate('up_day', 10)}  AS evt_up_day_frac_10,
+                       {sd('lr1', 10)}  AS evt_vol_10,
+                       {sd('lr1', 20)}  AS evt_vol_20,
+                       {sd('lr1', 60)}  AS evt_vol_60,
+                       {sd('lr1', 120)} AS evt_vol_120,
+                       MAX(ret_h) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) AS evt_max_ret_h_60,
+                       MIN(ret_h) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) AS evt_min_ret_h_60,
+                       (MAX(px) OVER (w ROWS BETWEEN {h - 1} PRECEDING AND CURRENT ROW)
+                        - MIN(px) OVER (w ROWS BETWEEN {h - 1} PRECEDING AND CURRENT ROW)) / px
+                           AS evt_range_h,
+                       px / MAX(px) OVER (w ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) - 1.0
+                           AS evt_dist_high_20,
+                       px / MIN(px) OVER (w ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) - 1.0
+                           AS evt_dist_low_20,
+                       (lval - AVG(lval) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW))
+                           / NULLIF(STDDEV_SAMP(lval) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW), 0)
+                           AS evt_turnover_z_60,
+                       SUM(COALESCE(hit_up, 0)) OVER (w ROWS UNBOUNDED PRECEDING) AS up_epoch
+                FROM flags
+                WINDOW w AS (PARTITION BY exchange, ticker ORDER BY date)
+            ),
+            since AS (
+                SELECT *,
+                       CASE WHEN up_epoch > 0 THEN LEAST(
+                           ROW_NUMBER() OVER (PARTITION BY exchange, ticker, up_epoch ORDER BY date) - 1,
+                           250) END AS evt_sessions_since_up
+                FROM own
+            ),
+            sector AS (
+                SELECT grp, date,
+                       COUNT(ret_h) AS n, SUM(ret_h) AS s_ret, SUM(hit_up) AS s_up,
+                       STDDEV_SAMP(ret_h) AS disp
+                FROM flags WHERE grp IS NOT NULL GROUP BY grp, date
+            ),
+            market AS (
+                SELECT date, AVG(hit_up) AS mkt_rate_up, AVG(hit_dn) AS mkt_rate_dn,
+                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ret_h) AS mkt_ret_h_median,
+                       STDDEV_SAMP(ret_h) AS mkt_disp_h
+                FROM flags GROUP BY date
+            ),
+            joined AS (
+                SELECT o.*,
+                       -- LEAVE-ONE-OUT: the ticker's own return is not its sector's.
+                       CASE WHEN c.n > 1 AND o.ret_h IS NOT NULL
+                            THEN (c.s_ret - o.ret_h) / (c.n - 1) END AS sec_ret_h,
+                       CASE WHEN c.n > 1 AND o.hit_up IS NOT NULL
+                            THEN (c.s_up - o.hit_up) / (c.n - 1) END AS sec_rate_up,
+                       c.disp AS sec_disp_h,
+                       c.n::double precision AS sec_n,
+                       m.mkt_rate_up, m.mkt_rate_dn, m.mkt_ret_h_median, m.mkt_disp_h
+                FROM since o
+                LEFT JOIN sector c ON c.grp = o.grp AND c.date = o.date
+                LEFT JOIN market m ON m.date = o.date
+            ),
+            tet AS (SELECT d FROM (VALUES {tet}) v(d)),
+            calendar AS (
+                SELECT d.date,
+                       (SELECT MIN(t.d) FROM tet t WHERE t.d >= d.date) - d.date AS days_to_tet,
+                       d.date - (SELECT MAX(t.d) FROM tet t WHERE t.d <= d.date) AS days_since_tet,
+                       (date_trunc('month', d.date)::date
+                        + ((4 - EXTRACT(ISODOW FROM date_trunc('month', d.date))::int + 7) % 7)
+                        + 14) AS this_exp,
+                       ((date_trunc('month', d.date) + INTERVAL '1 month')::date
+                        + ((4 - EXTRACT(ISODOW FROM date_trunc('month', d.date) + INTERVAL '1 month')::int + 7) % 7)
+                        + 14) AS next_exp
+                FROM (SELECT DISTINCT date FROM base) d
+            )
+            SELECT j.exchange, j.ticker, j.date,
+                   j.evt_rate_up_60, j.evt_rate_up_120, j.evt_rate_up_250, j.evt_rate_dn_120,
+                   j.evt_up_day_frac_10,
+                   j.evt_vol_10, j.evt_vol_20, j.evt_vol_60, j.evt_vol_120,
+                   {log_thr} / NULLIF(j.evt_vol_20 * SQRT({h}), 0) AS evt_thr_z_20,
+                   {log_thr} / NULLIF(j.evt_vol_60 * SQRT({h}), 0) AS evt_thr_z_60,
+                   j.evt_vol_20 / NULLIF(j.evt_vol_120, 0) AS evt_vol_ratio_20_120,
+                   j.ret_h AS evt_ret_h,
+                   j.evt_max_ret_h_60, j.evt_min_ret_h_60, j.evt_range_h,
+                   j.evt_dist_high_20, j.evt_dist_low_20, j.evt_turnover_z_60,
+                   j.evt_sessions_since_up::double precision AS evt_sessions_since_up,
+                   j.sec_ret_h, j.ret_h - j.sec_ret_h AS sec_rel_ret_h, j.sec_rate_up,
+                   AVG(j.sec_rate_up) OVER (PARTITION BY j.exchange, j.ticker ORDER BY j.date
+                       ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) AS sec_rate_up_60,
+                   -- ⚠️ No `sec_n`: the sector's WIDTH grows with listings, so a tree
+                   -- splitting on it reads the calendar (`mkt_n_names`, TODO P0-4).
+                   j.sec_disp_h,
+                   j.mkt_rate_up, j.mkt_rate_dn, j.mkt_ret_h_median, j.mkt_disp_h,
+                   AVG(j.mkt_rate_up) OVER (PARTITION BY j.exchange, j.ticker ORDER BY j.date
+                       ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) AS mkt_rate_up_60,
+                   SIN(2 * PI() * (EXTRACT(ISODOW FROM j.date) - 1) / 5.0) AS cal_dow_sin,
+                   COS(2 * PI() * (EXTRACT(ISODOW FROM j.date) - 1) / 5.0) AS cal_dow_cos,
+                   SIN(2 * PI() * (EXTRACT(MONTH FROM j.date) - 1) / 12.0) AS cal_month_sin,
+                   COS(2 * PI() * (EXTRACT(MONTH FROM j.date) - 1) / 12.0) AS cal_month_cos,
+                   ((date_trunc('month', j.date) + INTERVAL '1 month')::date - j.date)::double precision
+                       AS cal_days_to_month_end,
+                   (j.date - (date_trunc('quarter', j.date)::date - 1))::double precision
+                       AS cal_days_since_quarter_end,
+                   j.gap_days::double precision AS cal_gap_days,
+                   k.days_to_tet::double precision AS cal_days_to_tet,
+                   k.days_since_tet::double precision AS cal_days_since_tet,
+                   (CASE WHEN j.date <= k.this_exp THEN k.this_exp ELSE k.next_exp END - j.date)
+                       ::double precision AS cal_days_to_vn30f_expiry
+            FROM joined j
+            JOIN calendar k ON k.date = j.date
+            ORDER BY j.exchange, j.ticker, j.date
+        """
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute("DROP TABLE IF EXISTS gold_schema.stocks_event_features")
+            cur.execute(sql)
+            cur.execute(
+                "ALTER TABLE gold_schema.stocks_event_features "
+                "ADD PRIMARY KEY (date, exchange, ticker)"
+            )
+            cur.execute(
+                "COMMENT ON TABLE gold_schema.stocks_event_features IS %s",
+                (
+                    f"Trailing features for the event label {event.column} "
+                    f"({event.describe()}); built by "
+                    f"DataPreprocessor._ingest_gold_stocks_event_features",
+                ),
+            )
+            cur.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                "FROM gold_schema.stocks_event_features"
+            )
+            rows, tickers, first, last = cur.fetchone()
+        if not rows:
+            raise PipelineError(
+                "gold.stocks_event_features is EMPTY — build silver/stocks_basic first."
+            )
+        self._logger.log_info(
+            f"gold.stocks_event_features: {rows} rows, {tickers} tickers "
+            f"({first} → {last}) for {event.column}."
         )
 
     def _ingest_gold_news_daily_panel(self) -> None:
@@ -8271,7 +8533,12 @@ class DataPreprocessor:
         # three cannot drift apart: adding a horizon adds three columns, and there is no
         # way to end up with a `return_5day` whose forward price is the 10-day one.
         price_cols = {h: f"close_adjust_{h}day" for h in horizons}
-        longest = max(horizons)
+        # ⚠️ THE EVENT LABELS (added 2026-09-16). One column per `utils.event_target.
+        # EVENT_TARGETS` entry — the configured gain/horizon under both rules. Their
+        # horizon is THEIR OWN and need not be one of `UNIFIED_TARGET_HORIZONS`; the
+        # tail rule below is applied per column with that horizon.
+        event_cols = {e.column: e for e in event_target.EVENT_TARGETS}
+        longest = max(list(horizons) + [e.horizon for e in event_cols.values()])
         self._logger.log_info(
             f"Ingesting unified {schema}.pool__targets (from {schema}.pool__basic)..."
         )
@@ -8381,6 +8648,10 @@ class DataPreprocessor:
                     f"(LEAD(px, {h}) OVER w)::double precision AS {col}"
                     for h, col in price_cols.items()
                 ]
+                # ⚠️ Rendered by `EventTarget.sql` over the SAME `WINDOW w`, so an event
+                # label and `return_{h}day` cannot disagree about which session follows
+                # which. NULL exactly where `LEAD(px, h)` is NULL — the same tail.
+                + [f"{e.sql('px', 'w')} AS {col}" for col, e in event_cols.items()]
             )
             # Dropped as late as possible: a failure above leaves the old table intact.
             #
@@ -8417,6 +8688,7 @@ class DataPreprocessor:
                 list(target_cols.values())
                 + list(relative_cols.values())
                 + list(price_cols.values())
+                + list(event_cols)
             )
             counts = ", ".join(f"COUNT({col})" for col in ordered)
             cur.execute(f"SELECT COUNT(*), {counts} FROM {schema}.pool__targets")
@@ -8456,6 +8728,18 @@ class DataPreprocessor:
                         f"{series} series, the tail with no future) were expected. Check "
                         f"`pool__basic.close_adjust` for NULLs or zeros."
                     )
+        # ⚠️ An EVENT label is held to the same exact tail at its OWN horizon. The CASE
+        # emits only 0.0, 1.0 or NULL, so a NULL outside the tail is the one failure
+        # left — a NULL or zero close — and this count is what catches it.
+        for col, event in event_cols.items():
+            expected_tail = sum(min(event.horizon, n) for n in series_rows)
+            unlabelled = written - labelled_by_col[col]
+            if unlabelled != expected_tail:
+                raise PipelineError(
+                    f"{schema}.pool__targets has {unlabelled} NULL {col} values; "
+                    f"exactly {expected_tail} (the {event.horizon}-session tail) were "
+                    f"expected. Check `pool__basic.close_adjust` for NULLs or zeros."
+                )
         # ⚠️ The relative column loses its own tail PLUS every row a benchmark gap
         # touches: a missing `B[t]` kills row `t`, and a missing `B[t+h]` kills row
         # `t-h`. One gap DATE therefore costs up to `h + 1` rows IN EVERY SERIES. The
@@ -8494,6 +8778,7 @@ class DataPreprocessor:
     UNIFIED_TA_SOURCE = f"{GOLD_SCHEMA}.stocks_ta"
     UNIFIED_FA_SOURCE = f"{GOLD_SCHEMA}.stocks_financials_bank_fa"
     UNIFIED_NEWS_SOURCE = f"{GOLD_SCHEMA}.news_daily_panel"
+    UNIFIED_EVENT_FEATURES_SOURCE = f"{GOLD_SCHEMA}.stocks_event_features"
 
     # ⚠️ COLUMNS `gold.news_daily_panel` CARRIES THAT ARE PRICE, NOT NEWS. The panel
     # was built to be self-contained for the costed walk-forward, so it re-derives its
@@ -8689,6 +8974,28 @@ class DataPreprocessor:
             f"{100.0 * written / max(spine, 1):.1f}% of pool__basic's {spine}."
         )
         return written, len(columns)
+
+    def _ingest_unified_pool_event_features(self, ticker: str) -> None:
+        """`gold.stocks_event_features` → `unified_schema_<ticker>.pool__event_features`.
+
+        ~40 trailing channels built for the EVENT label (`utils.event_target`): the
+        ticker's own event history and volatility-scaled threshold, its GICS industry
+        group leave-one-out (the bank sector for VCB), the market's event breadth and
+        the calendar. Same shape and join as `pool__ta` — INNER on the whole key, so
+        the pool sits on `pool__basic`'s calendar by construction.
+        """
+        schema = self._helper_unified_schema(ticker)
+        self._logger.log_info(
+            f"Ingesting unified {schema}.pool__event_features "
+            f"(from {self.UNIFIED_EVENT_FEATURES_SOURCE})..."
+        )
+        rows, columns = self._helper_unified_pool_from_source(
+            ticker, "pool__event_features", self.UNIFIED_EVENT_FEATURES_SOURCE,
+            exclude=self.UNIFIED_POOL_IDENTITY + self.UNIFIED_POOL_PRICE_DUPES,
+        )
+        self._logger.log_info(
+            f"{schema}.pool__event_features: {rows} rows x {columns} columns."
+        )
 
     def _ingest_unified_pool_ta(self, ticker: str) -> None:
         """`gold.stocks_ta` → `unified_schema_<ticker>.pool__ta` — the technical block.

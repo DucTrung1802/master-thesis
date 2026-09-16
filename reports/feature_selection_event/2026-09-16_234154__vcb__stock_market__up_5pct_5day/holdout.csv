@@ -1,0 +1,5 @@
+feature_set,labels,n_channels,n_train,n_holdout,n_eff_holdout,ic,hit_rate
+selected,real,66,2946,1263,252.6,0.02423772489952155,
+selected,shuffled control,66,2946,1263,252.6,-0.012672294859368691,
+all channels,real,133,2946,1263,252.6,0.04177325258662595,
+all channels,shuffled control,133,2946,1263,252.6,0.024882669754812663,

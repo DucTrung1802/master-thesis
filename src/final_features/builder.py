@@ -170,6 +170,12 @@ SHAPES = (SHAPE_FINAL, SHAPE_SHORTLIST)
 # concerned.
 SHORTLIST_POOL_PREFIX = "pool__shortlist__"
 
+# ⚠️ **POSTGRESQL'S HARD LIMIT, AND THE REASON FEATURES LIVE IN GROUPS AT ALL** (WID-1).
+# A table holds at most 1,600 columns; `CREATE TABLE AS` over a wider union fails
+# half-way through a build with an error that names no channel. Checked on the PLAN,
+# before anything is dropped, so an over-wide union costs nothing but the message.
+MAX_TABLE_COLUMNS = 1600
+
 
 def _identifier(name: str, what: str) -> str:
     """`name`, or a `ValueError`. The rule is `contract.identifier`'s — one copy, and
@@ -523,6 +529,8 @@ def plan_from_reports(
     root: str = DEFAULT_REPORT_ROOT,
     scope: Optional[str] = None,
     shape: str = SHAPE_FINAL,
+    exclude_evidence: Sequence[str] = (),
+    include_tables: Optional[Sequence[str]] = None,
 ) -> List[FinalTablePlan]:
     """Group every run's `outstanding.csv` into one plan per (schema, target, setup).
 
@@ -547,6 +555,25 @@ def plan_from_reports(
     if shape not in SHAPES:
         raise ValueError(f"shape {shape!r} is not one of {SHAPES}.")
     rows = _read_outstanding(root)
+    # ⚠️ **AN OPT-IN, AND THE DEFAULT CHANGES NOTHING** (2026-09-16, `event_chain`). A run
+    # whose selection FAILED its own null (`evidence=failed_null`) still writes a
+    # shortlist, and the union took it. `exclude_evidence=("failed_null",)` drops those
+    # runs' rows before grouping, so the table is built only from pools that beat their
+    # shuffled labels — and the fingerprint moves with it, so a table built either way
+    # reports STALE against a plan built the other way.
+    # ⚠️ `include_tables` narrows the union to named POOLS — a scoped table built from part
+    # of a root. Pass `scope` with it, or the narrow build takes the wide table's name.
+    if include_tables:
+        if not scope:
+            raise ValueError("include_tables narrows the table — give it a --scope name.")
+        rows = rows[rows["source_table"].isin(list(include_tables))]
+    if exclude_evidence:
+        rows = rows[~rows["evidence"].isin(list(exclude_evidence))]
+        if rows.empty:
+            raise ValueError(
+                f"every run under {root} has evidence in {list(exclude_evidence)} — "
+                f"nothing is left to build a table from."
+            )
 
     if shape == SHAPE_SHORTLIST:
         # Safe to filter globally: a layer-2 run can never feed a shortlist pool in ANY
@@ -701,9 +728,11 @@ def build_all(
     replace: bool = False,
     scope: Optional[str] = None,
     shape: str = SHAPE_FINAL,
+    exclude_evidence: Sequence[str] = (),
+    include_tables: Optional[Sequence[str]] = None,
 ) -> pd.DataFrame:
     """Plan every table and, with `apply=True`, create it. Returns one row per plan."""
-    plans = plan_from_reports(root, scope, shape)
+    plans = plan_from_reports(root, scope, shape, exclude_evidence, include_tables)
     results = []
 
     by_schema: Dict[str, List[FinalTablePlan]] = {}
@@ -738,6 +767,18 @@ def build_all(
                         )
                     plan.stored_target = fallback
 
+                width = plan.n_features + len(KEY_COLS) + (1 if plan.stored_target else 0)
+                if width > MAX_TABLE_COLUMNS:
+                    widest = sorted(
+                        plan.columns_by_table.items(), key=lambda kv: -len(kv[1])
+                    )[:3]
+                    raise ValueError(
+                        f"{schema}.{plan.table} would hold {width} columns, over "
+                        f"PostgreSQL's {MAX_TABLE_COLUMNS}. Narrow the union — build the "
+                        f"groups under separate roots/--scope, or tighten the selection "
+                        f"cut. Widest: "
+                        + ", ".join(f"{t} ({len(c)})" for t, c in widest)
+                    )
                 sql = build_sql(plan)
                 row = {
                     "schema": plan.schema,

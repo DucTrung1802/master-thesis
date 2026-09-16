@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from typing import Dict, Optional, Sequence
 
 import numpy as np
@@ -232,6 +233,9 @@ def train(
         return None, None
 
     set_seed(config.get("seed", 42))
+    # ⚠️ WALL-CLOCK, recorded in the run (2026-09-17): `fit_seconds` is the fit alone,
+    # `run_seconds` the whole run including the 200-draw scoring — the trial log reads both.
+    run_started = time.perf_counter()
     device = resolve_device(config.get("device", "auto"))
     run = RunDir.create(base_dir=runs_dir, run_name=config["run_name"], config=config)
     run.update_metadata(
@@ -251,7 +255,9 @@ def train(
     trainer = Trainer(
         net, train_cfg, run, device, arch=arch, criterion=CRITERIA[task]()
     )
+    fit_started = time.perf_counter()
     history = trainer.fit(loaders["train"], loaders["val"])
+    fit_seconds = time.perf_counter() - fit_started
     pd.DataFrame(history).to_csv(
         os.path.join(run.results_dir, "loss_history.csv"), index_label="epoch"
     )
@@ -296,6 +302,10 @@ def train(
     )
     trainer.close()
 
+    run.update_metadata(timing={
+        "fit_seconds": round(fit_seconds, 3),
+        "run_seconds": round(time.perf_counter() - run_started, 3),
+    })
     append_run(runs_dir, _registry_row(run, dataset, task, model_type, scored))
 
     print(f"\n{table.to_string()}")
@@ -340,10 +350,15 @@ def train_estimator(
     task = config["task"]
     horizon = _horizon(lineage, config)
 
-    if task != M.REGRESSION:
+    # ⚠️ **CLASSIFICATION IS SUPPORTED ONLY BY AN ESTIMATOR THAT SAYS SO** (2026-09-16).
+    # `_write_predictions` turns the raw output into `y_prob` with a SIGMOID, so a
+    # classifier must hand back LOGITS — `predict_logit` — and never a probability, or
+    # the sigmoid would be applied twice and every AUC would survive it while every
+    # log-loss and Brier score would silently be wrong. An estimator without the method
+    # is refused below, after it is built, rather than guessed at.
+    if task not in (M.REGRESSION, M.CLASSIFICATION):
         raise ValueError(
-            f"{model_type} is regression-only; got task={task!r}. A classifier "
-            f"baseline needs its own predict_proba path and a `y_prob` column."
+            f"{model_type} supports regression and classification; got task={task!r}."
         )
 
     print(f"{'=' * 78}")
@@ -360,6 +375,9 @@ def train_estimator(
         return None, None
 
     set_seed(config.get("seed", 42))
+    # ⚠️ WALL-CLOCK, recorded in the run (2026-09-17): `fit_seconds` is the fit alone,
+    # `run_seconds` the whole run including the 200-draw scoring — the trial log reads both.
+    run_started = time.perf_counter()
     run = RunDir.create(base_dir=runs_dir, run_name=config["run_name"], config=config)
     run.update_metadata(dataset=dataset.reference(), device="cpu", lineage=lineage)
 
@@ -374,18 +392,39 @@ def train_estimator(
     # emitting 0.0 would inverse-transform to the train MEAN return, not to zero.
     if getattr(estimator, "needs_dataset", False):
         estimator.set_dataset(dataset)
+    classify = task == M.CLASSIFICATION
+    if classify:
+        if not callable(getattr(estimator, "predict_logit", None)):
+            raise ValueError(
+                f"{model_type} has no `predict_logit`, so it has no classification "
+                f"path — see this function's comment on the sigmoid."
+            )
+        if callable(getattr(estimator, "set_task", None)):
+            estimator.set_task(task)
 
     X_train = np.asarray(dataset.X_train, dtype=float)
     y_train = np.asarray(dataset.y_train, dtype=float).ravel()
+    if classify:
+        # The dataset holds the raw 0/1 (`_verify` refused a target scaler above).
+        y_train = (y_train >= 0.5).astype(int)
+    fit_started = time.perf_counter()
     estimator.fit(X_train, y_train)
+    fit_seconds = time.perf_counter() - fit_started
     n_params = int(getattr(estimator, "n_params", 0))
     print(f"device    cpu   parameters {n_params:,}")
 
+    raw = estimator.predict_logit if classify else estimator.predict
+
     def predict(split: str) -> np.ndarray:
         X = np.asarray(getattr(dataset, f"X_{split}"), dtype=float)
-        return np.asarray(estimator.predict(X), dtype=float).ravel()
+        return np.asarray(raw(X), dtype=float).ravel()
 
-    train_mse = float(np.mean((estimator.predict(X_train) - y_train) ** 2))
+    fitted = np.asarray(raw(X_train), dtype=float).ravel()
+    if classify:
+        prob = np.clip(1.0 / (1.0 + np.exp(-fitted)), 1e-7, 1 - 1e-7)
+        train_mse = float(-np.mean(y_train * np.log(prob) + (1 - y_train) * np.log(1 - prob)))
+    else:
+        train_mse = float(np.mean((fitted - y_train) ** 2))
     _write_predictions(predict, dataset, run, task)
 
     run.update_metadata(
@@ -395,7 +434,10 @@ def train_estimator(
             # path and a blank would read as "not measured".
             "best_epoch": 0,
             "best_val_loss": train_mse,
-            "criterion": "closed-form / single fit (no training loop)",
+            "criterion": (
+                "train log-loss, single fit (no training loop)" if classify
+                else "closed-form / single fit (no training loop)"
+            ),
             "fitted_on": "train split only",
         },
     )
@@ -403,6 +445,10 @@ def train_estimator(
     table = evaluate_run(run.dir, draws=config.get("null_draws", M.NULL_DRAWS))
     scored = {split: table.loc[split].to_dict() for split in table.index}
     run.update_metadata(metrics=scored)
+    run.update_metadata(timing={
+        "fit_seconds": round(fit_seconds, 3),
+        "run_seconds": round(time.perf_counter() - run_started, 3),
+    })
     append_run(runs_dir, _registry_row(run, dataset, task, model_type, scored))
 
     print(f"\n{table.to_string()}")

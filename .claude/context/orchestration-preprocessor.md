@@ -1468,3 +1468,12 @@ data and still hold:
   first — the gold `COPY` path assumes empty.
 - Regenerate this whole layer with a bronze drop + re-ingest (schema is fully
   derivable from `raw_data/`); counts will grow as the scrapers add history/tickers.
+
+## 9. The event methods (2026-09-16)
+
+| method | what |
+|---|---|
+| `_ingest_unified_pool_targets` (changed) | renders each `utils.event_target.EventTarget.sql()` over the SAME `WINDOW w` as the return labels; the `any` rule adds its own frame (`ROWS BETWEEN 1 FOLLOWING AND h FOLLOWING`), which PostgreSQL permits only on a window without one |
+| `_ingest_gold_stocks_event_features` (new) | one CTAS over `silver.stocks_basic`; ⚠️ the 0/1 flags are cast to `double precision` BEFORE `AVG` (a `1.0` literal is NUMERIC, AVG over it returns `Decimal`, pandas reads `object` — §5 rule 15, caught on the first test build); returns screened at ±50 %; a trailing rate needs half its window; no `sec_n` (it reads the calendar, `P0-4`) |
+| `_ingest_unified_pool_event_features` (new) | `_helper_unified_pool_from_source`, identity and price duplicates excluded |
+| `_ingest_silver_cafef_financials`, `_helper_build_bank_fundamental_indicators` (fixed) | `months` cast only when present; an absent `income_statement_months` is an all-NaN Series (`FMO-1`) |

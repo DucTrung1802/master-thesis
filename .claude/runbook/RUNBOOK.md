@@ -59,7 +59,7 @@ runtime that was MEASURED, never an estimate — an unmeasured cell reads `—`.
 |---|---|---|---|---|---|
 | **C0** | 0 · filter *(optional)* | `dagster asset materialize -f src/orchestration/definitions.py --select "filter/universe" --partition <SCREEN>` | `filter_schema.universe__<screen>` | ~1 s | — → ⚠️ **C1 does NOT follow by itself.** Rule 14: a fresh screen leaves a stale schema looking current |
 | **C1** | 1 · data | `dagster asset materialize -f src/orchestration/definitions.py --select "unified/pool__basic,unified/pool__targets" --partition <PART>` | `unified_schema_<part>.pool__*` | 7m 36s at 480 tickers | C0 → O3. ⚠️ **`--select "group:unified"` builds all TWELVE pools** — hours. Name the two you need |
-| **C2** | 2 · selection ⚠️ MANUAL | `python -m feature_selection.run --ticker <T> --pools <POOL> --target <TGT> --lookback <D> --horizon <H> --null-draws <N> --device cuda` | `reports/feature_selection/<run>/` | ~1 min per country pool · 29m 44s at 644 ch | C1 → §2.C2. ⚠️ **10 draws to FAIL, 20 to PASS.** A PROBE takes `--root ../reports/feature_selection_probes` |
+| **C2** | 2 · selection ⚠️ MANUAL | `python -m feature_selection.run --ticker <T> --pools <POOL> --target <TGT> --lookback <D> --horizon <H> --null-draws <N> --device cuda` | `reports/feature_selection/<run>/` | ~1 min per country pool · 29m 44s at 644 ch | C1 → §2.C2. ⚠️ **10 draws to FAIL, 20 to PASS.** A PROBE takes `--root reports/feature_selection_probes` (⚠️ anchored at the REPO root, not the CWD; `../reports/…` typed from `src/` lands outside the repo — `RTA-1`) |
 | **C3** | 3 · shortlist_pool | `python -m final_features --apply --shape shortlist --scope <SCOPE>` | `pool__shortlist__<tgt>__d<d>_h<h>` | seconds | C2 → ⚠️ the pool is **target-conditioned**; reusing it for another target is leakage |
 | **C4** | 4 · selection_2 ⚠️ MANUAL | `python -m feature_selection.run --pools pool__shortlist__<TGT>__d<D>_h<H> --null-draws <N>` | another run folder | 29m 44s at 644 ch | C3 → C5. ⚠️ reports `n/a` on a cross-sectional chain (`CSP-1`) |
 | **C5** | 5 · final_features | `python -m final_features --apply` | `<target>__final__d<d>_h<h>` | 0.8 s · 7.3 s at 624k rows | C2/C4 → ⚠️ read the fingerprints it prints **before** adding `--replace`; `--replace` DROPS the table and orphans every dataset below it |
@@ -79,6 +79,18 @@ runtime that was MEASURED, never an estimate — an unmeasured cell reads `—`.
 | **W5** | *does it beat three ranked columns?* | `python -m backtest.handscreen --run <RUN_ID> --top-k 20 --draws 200` | 1m 53s | C9 → run it **beside** the backtest, never instead of it |
 | **W6** | *does chain A beat chain B?* | `python -m backtest.head2head --a <RUN_A> --b <RUN_B> --top-k 15 --draws 200` | 2m 18s | two runs → priced on the INTERSECTION, paired |
 | **W7** | *which channels can a wide pool even OFFER?* | `python -m feature_selection.prune --ticker ALL --pool <POOL> --universe-from <TABLE> --budget 30 --out <JSON>` | ~1 min | before C2 on a wide pool → ⚠️ LABEL-FREE by construction, and that is the point |
+
+### G · The EVENT chain — "does the ticker rise ≥ g % within h sessions?" (`event_chain`)
+
+The parameters are `EVENT_GAIN_PCT` / `EVENT_HORIZON` / `EVENT_RULE` in `src/utils/event_target.py` and nowhere else. [../context/event_chain.md](../context/event_chain.md) is the depth.
+
+| ID | you want to… | command template | measured | before → after |
+|---|---|---|---|---|
+| **G0** | see the event chain's state | `python -m event_chain` | ~10 s | — → reads only; lists which pools ran, the table, the dataset |
+| **G1** | put a NEW gain/horizon into the data | edit `src/utils/event_target.py`, then `dagster asset materialize -f src/orchestration/definitions.py --select "unified/pool__targets" --partition <T>` and `--select "gold/stocks_event_features"` then `--select "unified/pool__event_features" --partition <T>` | 12 s · 8m 50s · 2 s (2026-09-16) | — → G0. ⚠️ **all three**, or the features describe a different event than the label |
+| **G2** | select one feature group per run | `python -m event_chain --apply --stages select --pools <POOL,...>` | 2m 46s (`news_daily`) … 7m 14s (`basic`) per pool at 10 draws | G1 → ⚠️ **never while `gold/stocks_ta` rebuilds** (`WSB-1`). The holdout is the dataset's val start, computed for you |
+| **G3** | table → dataset → models → report | `python -m event_chain --apply --stages final,dataset,train,report` | — | G2 → ⚠️ `final` drops pools that FAILED their null unless `--keep-failed`; read `reports/event_chain/<t>__<table>/report.md` |
+| **G4** | read the TRIAL LOG | `python -m event_chain.trial` · `--rebuild` · `--show <id prefix>` | ~2 s | G3 → ⚠️ one row per MODEL RUN of a complete trial, rebuilt from `trials/*/trial.json`; every `report` is logged automatically (`--notes` says why, `--no-trial` only for debugging). Quote a number beside the runs it was chosen from |
 
 ### D · Data — scrape, carry up, verify
 
@@ -146,7 +158,7 @@ ops:
 2. Decide the draw count: **10 to FAIL something, 20 to PASS it.** `SE(sd)` is 0.0083 at 10 draws
    and 0.0051 at 20, and `z` is the statistic — `p` sits at the `1/(n+1)` floor either way.
 3. Decide the ROOT. A run that measures the SELECTION is not a run that feeds the CHAIN:
-   `--root ../reports/feature_selection_probes`. ⚠️ **`--scope` does not fix this** — it suffixes
+   `--root reports/feature_selection_probes` (⚠️ anchored at the REPO root, not the CWD; `../reports/…` typed from `src/` lands outside the repo — `RTA-1`). ⚠️ **`--scope` does not fix this** — it suffixes
    both groups identically, and a probe left in the chain's root is either silently unioned or
    blocks all planning (`PRB-1`).
 4. Run it. A wide pool goes to Kaggle (**K1**→**K4**); this machine has 4.0 GiB of VRAM against a

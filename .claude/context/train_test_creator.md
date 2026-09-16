@@ -353,3 +353,15 @@ reader in the repo already passed `encoding="utf-8"`; now this one does too.
 builder of the old `unified_schema_*` layer — that job belongs to
 `orchestration/assets/unified.py` now, and the `<target>__lb<L>__final` views it made
 are gone. It is kept for the record and nothing imports it.
+
+## 11. ⚠️ A BINARY EVENT LABEL BUILDS A CLASSIFICATION DATASET BY ITSELF (2026-09-16)
+
+`TrainTestCreator(scale_target=None)` now resolves the default from the TABLE NAME: when the
+target parses as an event column (`utils.event_target`, e.g. `up_5pct_5day`) the dataset is built
+with `scale_target=False` and `metadata.json` carries `"task": "classification"` and a
+`label_recipe` of `kind: event` (rule, gain, horizon, definition, positives, base rate). ⚠️ An
+explicit `scale_target=True` on an event target RAISES (§5 rule 9), a table whose `h` differs from
+the event's own horizon RAISES (the purge would be computed for the wrong horizon), and a stored
+label holding anything but 0/1 RAISES. The label is READ, never recomputed here. Measured on
+`vcb__up_5pct_5day__final__d20_h5__tr70_val15_test15__std`: train 2,946 / val 617 / test 641
+samples, base rate 0.134 / 0.083 / 0.051, purge 24. Tests: `utils/test_event_target.py`.

@@ -88,7 +88,7 @@ from feature_selection.cross_sectional import cross_sectional_rank
 from feature_selection.outstanding import OUTSTANDING_FILENAME
 from feature_selection.report import DEFAULT_REPORT_ROOT
 from feature_selection.unified_reader import KEY_COLS, UnifiedSchemaReader
-from utils import chain, runtime
+from utils import chain, event_target, runtime
 
 # The tables `final_features` builds. ⚠️ `d` and `h` are parsed OUT of this, never
 # passed alongside it — see the module docstring.
@@ -340,7 +340,7 @@ class TrainTestCreator:
         table: str = "return_5day__final__d20_h5",
         train_ratio: float = 0.70,
         val_ratio: float = 0.15,
-        scale_target: bool = True,
+        scale_target: Optional[bool] = None,
         on_untrainable: str = "drop",
         purge: bool = True,
         report_root: Optional[str] = None,
@@ -362,7 +362,27 @@ class TrainTestCreator:
         self.target, self.lookback, self.horizon = parse_final_table(table)
         self.train_ratio = train_ratio
         self.val_ratio = val_ratio
+        # ⚠️ **A BINARY EVENT LABEL IS NEVER STANDARDISED, AND THE TABLE NAME DECIDES IT**
+        # (2026-09-16). `up_<g>pct_<h>day` is a 0/1 (`utils.event_target`), and
+        # CLAUDE.md §5 rule 9 forbids scaling one — so `None` resolves to False for an
+        # event target and True for everything else, and an explicit True on an event
+        # target RAISES rather than building a dataset `engine._verify` would refuse.
+        self.event = event_target.parse(self.target)
+        if self.event is not None and self.event.horizon != self.horizon:
+            raise ValueError(
+                f"{table!r} names h={self.horizon} but its event label "
+                f"{self.target!r} is defined over {self.event.horizon} sessions — the "
+                f"purge would be computed for the wrong horizon."
+            )
+        if scale_target is None:
+            scale_target = self.event is None
+        elif scale_target and self.event is not None:
+            raise ValueError(
+                f"{self.target!r} is a 0/1 event label; scale_target=True would "
+                f"standardise it (CLAUDE.md section 5 rule 9)."
+            )
         self.scale_target = scale_target
+        self.task = "classification" if self.event is not None else "regression"
         self.on_untrainable = on_untrainable
         self.purge = purge
         self.output_root = output_root
@@ -544,7 +564,26 @@ class TrainTestCreator:
         """
         values = pd.to_numeric(labelled[self.stored_target], errors="coerce")
         if not self._is_ranked():
-            return labelled, values, {"kind": "stored", "column": self.stored_target}
+            recipe = {"kind": "stored", "column": self.stored_target}
+            if self.event is not None:
+                # ⚠️ The label is READ, never recomputed here — `pool__targets` holds the
+                # one definition (`utils.event_target.EventTarget.sql`). This records it.
+                unexpected = sorted(set(values.dropna().unique()) - {0.0, 1.0})
+                if unexpected:
+                    raise ValueError(
+                        f"{self.stored_target!r} is an event label but holds "
+                        f"{unexpected[:5]} — a 0/1 column was expected."
+                    )
+                recipe.update(
+                    kind="event",
+                    rule=self.event.rule,
+                    gain_pct=self.event.gain_pct,
+                    horizon=self.event.horizon,
+                    definition=self.event.describe(),
+                    positives=int(values.sum()),
+                    base_rate=float(values.mean()),
+                )
+            return labelled, values, recipe
 
         ranked = cross_sectional_rank(
             values, labelled["date"], min_width=self.rank_min_width
@@ -953,6 +992,7 @@ class TrainTestCreator:
                 "rows_read": data.rows_read,
                 "rows_unlabelled_tail": data.rows_unlabelled,
             },
+            "task": self.task,
             "target": {
                 # ⚠️ **`column` IS WHAT `y` IS, and that changed with RNK-1** (2026-08-18).
                 # It used to hold the STORED column while `y` was that column and the
@@ -1088,6 +1128,13 @@ def _main(argv: Sequence[str], option) -> WindowedDataset:
             f"{r['from_column']!r} (RNK-1)\n"
             f"             min_width={r['min_width']}, {r['universe_size']} names x "
             f"{r['dates']:,} dates, {r['rows_unrankable']:,} rows too thin to rank"
+        )
+    if data.label_recipe.get("kind") == "event":
+        r = data.label_recipe
+        rates = " | ".join(f"{k} {float(np.mean(data.y[k])):.3f}" for k in ("train", "val", "test"))
+        print(
+            f"  label      {r['definition']}\n"
+            f"             task=classification, y unscaled; base rate {rates}"
         )
     if creator.stale_channels:
         # ⚠️ The table holds channels no CURRENT shortlist names, i.e. it predates the

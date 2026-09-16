@@ -1,0 +1,8 @@
+channel,coverage
+mkt_xs_disp5,1.0
+mkt_xs_skew5,1.0
+mkt_xs_kurt5,1.0
+mkt_xs_mean5,1.0
+mkt_hhi_turnover,1.0
+mkt_log_turnover,1.0
+mkt_turnover_z,1.0

@@ -1,0 +1,318 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-09-16T23:28:04+07:00",
+  "git_commit": "f1486a41+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8",
+    "torch": "2.5.1+cu121"
+  },
+  "execution": {
+    "started_at": "2026-09-16T23:25:15+07:00",
+    "finished_at": null,
+    "timezone": "GMT+7",
+    "runtime_seconds": 164.4,
+    "runtime": "2m 44s",
+    "device": "cuda",
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "count": 1,
+      "vram_total_mb": 4096,
+      "vram_free_mb": 2879,
+      "cuda": "12.1",
+      "torch": "2.5.1+cu121"
+    },
+    "host": "DESKTOP-TRDFIML",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_vcb",
+    "tables": [
+      "pool__market_breadth",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 4276,
+        "rows_after": 4276,
+        "columns_added": 11,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 4276,
+    "panel_columns": 21,
+    "columns_by_table": {
+      "pool__market_breadth": [
+        "mkt_xs_disp5",
+        "mkt_xs_skew5",
+        "mkt_xs_kurt5",
+        "mkt_xs_mean5",
+        "mkt_hhi_turnover",
+        "mkt_log_turnover",
+        "mkt_turnover_z"
+      ],
+      "pool__targets": [
+        "return_5day",
+        "return_10day",
+        "return_20day",
+        "return_rel_5day",
+        "return_rel_10day",
+        "return_rel_20day",
+        "close_adjust_5day",
+        "close_adjust_10day",
+        "close_adjust_20day",
+        "up_5pct_5day",
+        "upany_5pct_5day"
+      ]
+    },
+    "first_date": "2009-06-30",
+    "last_date": "2026-08-21",
+    "sessions": 4276,
+    "tickers": 1
+  },
+  "target": {
+    "name": "up_5pct_5day",
+    "horizon_days": 5,
+    "definition": "up_5pct_5day (see cross_sectional.py / DataPreprocessor for the definition)",
+    "labelled_rows": 4271,
+    "unlabelled_rows": 5,
+    "mean": 0.11566377897447905,
+    "sd": 0.3198587558549832,
+    "min": 0.0,
+    "max": 1.0
+  },
+  "setup": {
+    "target": "up_5pct_5day",
+    "horizon_h": 5,
+    "lookback_d": 20,
+    "normalize": "none",
+    "purge_gap_rows": 24,
+    "window_stats": "last, mean, slope, sd, min, max",
+    "dropped_by_normalize": 0,
+    "dev_samples": 2946,
+    "holdout_start": "2021-06-22",
+    "holdout_rows": 1282,
+    "purged_at_boundary": 24,
+    "channels": 7,
+    "design_columns": 42,
+    "kept": 7,
+    "device": "cuda",
+    "methods": "spearman, xgb_shap, permutation",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null,
+    "design_dtype": "float64",
+    "env_fingerprint": "cf51e65b3a15"
+  },
+  "results": {
+    "n_channels": 7,
+    "n_kept": 7,
+    "kept": [
+      "mkt_xs_skew5",
+      "mkt_xs_kurt5",
+      "mkt_log_turnover",
+      "mkt_xs_mean5",
+      "mkt_hhi_turnover",
+      "mkt_xs_disp5",
+      "mkt_turnover_z"
+    ],
+    "dropped_constant": [],
+    "dropped_correlated": {},
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "mkt_xs_skew5",
+      "mkt_xs_kurt5",
+      "mkt_log_turnover",
+      "mkt_xs_mean5",
+      "mkt_hhi_turnover",
+      "mkt_xs_disp5",
+      "mkt_turnover_z"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.02,
+      "spearman vs target (cuda)": 0.18,
+      "xgb gain + shap (cuda)": 0.98,
+      "permutation (cuda)": 1.41,
+      "channel corr matrix (cuda)": 0.01,
+      "stability (cuda)": 4.67,
+      "validation (cuda)": 9.89
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.012255964268315345,
+      "ic_trend_per_fold": 0.015462335747976265,
+      "ic_min": -0.08489750654092362,
+      "ic_max": 0.17481612234474483,
+      "ic_fold_sd": 0.10720526393733427,
+      "hit_rate": null,
+      "n_test_rows": 484.0,
+      "n_eff_per_fold": 96.8,
+      "se_ic_per_fold": 0.1022
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.021130711442178606,
+      "ic_trend_per_fold": 0.03358793311770793,
+      "ic_min": -0.08166915370495109,
+      "ic_max": 0.15585458526502383,
+      "ic_fold_sd": 0.09852321365530525,
+      "hit_rate": null,
+      "n_test_rows": 484.0,
+      "n_eff_per_fold": 96.8,
+      "se_ic_per_fold": 0.1022
+    }
+  },
+  "null": {
+    "label": "unified_schema_vcb / up_5pct_5day",
+    "observed_ic": 0.0123,
+    "null_mean": -0.0141,
+    "null_sd": 0.0294,
+    "null_p95_BAR": 0.0336,
+    "null_max": 0.0477,
+    "p_value": 0.2727,
+    "z_vs_null": 0.9,
+    "clears_bar": false,
+    "draws": 10,
+    "failed_draws": 0
+  },
+  "holdout": [
+    {
+      "feature_set": "selected",
+      "labels": "real",
+      "n_channels": 7,
+      "n_train": 2946,
+      "n_holdout": 1263,
+      "n_eff_holdout": 252.6,
+      "ic": -0.01408420116419519,
+      "hit_rate": null
+    },
+    {
+      "feature_set": "selected",
+      "labels": "shuffled control",
+      "n_channels": 7,
+      "n_train": 2946,
+      "n_holdout": 1263,
+      "n_eff_holdout": 252.6,
+      "ic": -0.054785450815675096,
+      "hit_rate": null
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "real",
+      "n_channels": 7,
+      "n_train": 2946,
+      "n_holdout": 1263,
+      "n_eff_holdout": 252.6,
+      "ic": -0.01408420116419519,
+      "hit_rate": null
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "shuffled control",
+      "n_channels": 7,
+      "n_train": 2946,
+      "n_holdout": 1263,
+      "n_eff_holdout": 252.6,
+      "ic": -0.040108597622293476,
+      "hit_rate": null
+    }
+  ],
+  "notes": "event_chain: 1 when close_adjust[t+5] >= (1 + 5%) x close_adjust[t], else 0; NULL for the last 5 sessions",
+  "run_id": "2026-09-16_232759__vcb__market_breadth__up_5pct_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 943
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 3038
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 879
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 282
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 1088
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 292
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 154
+    },
+    {
+      "file": "holdout.csv",
+      "bytes": 329
+    },
+    {
+      "file": "null_draws.csv",
+      "bytes": 254
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 63090
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 75037
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 57011
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 97585
+    },
+    {
+      "file": "figures/05_stat_profile.png",
+      "bytes": 91082
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 42618
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 58687
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 33283
+    },
+    {
+      "file": "figures/10_null.png",
+      "bytes": 50254
+    }
+  ],
+  "report_seconds": 17.87
+}

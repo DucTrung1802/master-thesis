@@ -3059,3 +3059,14 @@ Pass `--scope basic`, which is what §5c of `.claude/context/pipeline.md` alread
 Pinned by `tests/test_contract.py` (19 tests), including that a genuinely missing
 SETUP_KEY is still reported — the defaults table papers over exactly one thing and no
 more.
+
+## 20. ⚠️ EVENT LABELS ARE LABELS — `is_label` (2026-09-16)
+
+`pool__targets` gained binary event columns (`up_<g>pct_<h>day`, `upany_<g>pct_<h>day`, defined in
+`src/utils/event_target.py`). `ALL_TARGETS` appends the configured ones from that module, and
+`run.is_label(column)` also matches the PATTERN — so an event column left by an older parameter set
+is still refused as a feature, and the `unlisted` check against `information_schema` does not
+raise on it. A selection on a 0/1 target runs unchanged: the CV IC is a rank correlation with the
+label. ⚠️ `run_selection` anchors a RELATIVE `--root` at the repo root, not the CWD (`RTA-1`).
+The event chain's per-pool results are 📂 [single-stock.md](../findings/single-stock.md)
+§6-1-quinquies.

@@ -60,7 +60,7 @@ from feature_selection.unified_reader import (
     UnifiedSchemaReader,
     unified_schema_name,
 )
-from utils import runtime
+from utils import event_target, runtime
 
 # ⚠️ Identity and taxonomy columns are never candidates. On a single-ticker panel they
 # are constant and would be dropped anyway; naming them keeps that a decision rather
@@ -98,7 +98,17 @@ ALL_TARGETS = [
     "close_adjust_5day",
     "close_adjust_10day",
     "close_adjust_20day",
-]
+] + [e.column for e in event_target.EVENT_TARGETS]
+# ⚠️ **THE BINARY EVENT LABELS ARE APPENDED FROM `utils.event_target`, NOT SPELLED HERE**
+# (2026-09-16). `up_<g>pct_<h>day` is `1[close[t+h] >= (1+g)·close[t]]` — the answer as a
+# 0/1 — and its gain and horizon are parameters, so a literal list would drift the first
+# time they changed. `is_label` also matches the PATTERN, so an event column left in
+# `pool__targets` by an older parameter set is still refused as a feature.
+
+
+def is_label(column: str) -> bool:
+    """Is `column` a label of `pool__targets` — named in ALL_TARGETS or an event column?"""
+    return column in ALL_TARGETS or event_target.is_event_column(column)
 
 # The label table. Always joined, never named in the run id — the target is already the
 # last segment of the folder name (`report.default_run_id`).
@@ -383,7 +393,7 @@ def run_selection(
                 unlisted = [
                     c
                     for c in reader.column_types(TARGETS_TABLE)
-                    if c not in KEY_COLS and c not in ALL_TARGETS
+                    if c not in KEY_COLS and not is_label(c)
                 ]
             if unlisted:
                 raise ValueError(
@@ -413,7 +423,10 @@ def run_selection(
         if target not in panel.columns:
             raise ValueError(f"target {target!r} is not in the joined panel.")
 
-        exclude = IDENTITY + [c for c in ALL_TARGETS if c != target]
+        exclude = IDENTITY + [
+            c for c in dict.fromkeys(list(ALL_TARGETS) + list(panel.columns))
+            if is_label(c) and c != target
+        ]
 
         def build(frame: pd.DataFrame, holdout: Optional[str]) -> FeatureSelector:
             """One selector, built the same way for the run and for every draw.

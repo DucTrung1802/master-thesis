@@ -441,6 +441,56 @@ def gold_market_breadth(
 
 
 @asset(
+    name="stocks_event_features",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[AssetKey(["silver", "stocks_basic"])],
+    description=(
+        "silver.stocks_basic over EVERY ticker -> gold.stocks_event_features, PK "
+        "(date, exchange, ticker). ~40 TRAILING channels built for the binary EVENT label "
+        "of utils.event_target (default up_5pct_5day: close[t+5] >= 1.05 x close[t]) and "
+        "parameterised by the same gain/horizon: evt_* (own event rate, volatility, the "
+        "threshold in sigma*sqrt(h) units), sec_* (GICS industry group, leave-one-out - "
+        "the bank sector for VCB), mkt_* (event breadth of the whole cross-section), cal_* "
+        "(weekday, month, quarter-end distance, Tet, VN30F expiry). "
+        "⚠️ Re-materialise it whenever EVENT_GAIN_PCT / EVENT_HORIZON change. "
+        "⚠️ Every evt_/sec_/mkt_ window ends on the row's own date; the forward label "
+        "lives only in pool__targets."
+    ),
+)
+def gold_stocks_event_features(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        prep._ingest_gold_stocks_event_features()
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) "
+                "FROM gold_schema.stocks_event_features"
+            )
+            rows, tickers, first, last = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = "
+                "'gold_schema' AND table_name = 'stocks_event_features'"
+            )
+            columns = int(cur.fetchone()[0])
+    context.log.info(
+        f"gold.stocks_event_features: {rows} rows x {columns} columns, {tickers} "
+        f"tickers ({first} -> {last})"
+    )
+    return MaterializeResult(
+        metadata={
+            "rows": MetadataValue.int(int(rows)),
+            "columns": MetadataValue.int(columns),
+            "tickers": MetadataValue.int(int(tickers)),
+            "date_range": MetadataValue.text(f"{first} -> {last}"),
+            "source": MetadataValue.text("silver_schema.stocks_basic (all tickers)"),
+        }
+    )
+
+
+@asset(
     name="news_daily_panel",
     key_prefix=["gold"],
     group_name="gold",
@@ -890,4 +940,5 @@ assets: List[Callable] = [
     gold_news_weekly_panel,
     gold_news_daily_panel,
     gold_market_breadth,
+    gold_stocks_event_features,
 ]

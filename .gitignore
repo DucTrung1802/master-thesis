@@ -163,6 +163,17 @@ experiment/experiment_10/_cache/
 !reports/feature_selection__forex_return_5day/
 !reports/feature_selection__forex_return_5day/**
 #
+# ⚠️ **THE EVENT CHAIN'S TWO ROOTS NEED THEIR OWN PAIRS** (added 2026-09-16). Its selection
+# runs live under `reports/feature_selection_event/` (a root of its own, so `final_features`
+# cannot union them with other targets' shortlists) and its trial log under
+# `reports/event_chain/` (`trials.csv`, `trials/<id>/{trial.json,predictions.csv,...}`).
+# Without these the blanket `*.csv` takes every `outstanding.csv`, `leaderboard.csv` and
+# `predictions.csv`, and a trial would be committed without the numbers it logged.
+!reports/feature_selection_event/
+!reports/feature_selection_event/**
+!reports/event_chain/
+!reports/event_chain/**
+#
 # ⚠️ A LOOSE FILE DIRECTLY UNDER `reports/` NEEDS ITS OWN NEGATION TOO — the two pairs
 # above re-include SUBTREES, and neither matches a file sitting beside them. Added
 # 2026-08-14 for `forex_exchanges.csv`, a generated inventory of the 48 forex exchanges

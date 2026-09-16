@@ -1,4 +1,4 @@
-# The single-stock track — five defeats and one small effect
+# The single-stock track — six defeats and one small effect
 
 > **Moved out of `CLAUDE.md` on 2026-09-06, VERBATIM.** The hub had grown to 2,549 lines while its
 > own header called itself a map; [`.claude/rules/common.md`](../rules/common.md) R2 now caps it at
@@ -271,3 +271,50 @@ Two things it establishes and one it does not:
 `preprocessor.py` carries the warning). Before 2017 the "VN30" here is 9-16 names that
 happen to still be in the index in 2026. A within-date shuffle null is protected — every
 draw sees the same basket — and any CAGR read off this universe is not.
+
+### ⚠️ 6-1-quinquies. THE +5 % / 5-SESSION EVENT ON VCB — 36 MODEL RUNS, NOT ONE VAL-CHOSEN MODEL CLEARS ITS TEST NULL (2026-09-17)
+
+**Added 2026-09-17, not moved from the hub.** The question was a CLASSIFICATION one — *on which
+sessions will VCB's adjusted close be ≥ 5 % higher five sessions later?* — run end to end on the
+repo's stages by `src/event_chain/` ([context](../context/event_chain.md)). Label
+`up_5pct_5day` in `pool__targets`: **4,271 labelled sessions, base rate 0.116**, falling from
+0.134 in train to **0.083 in val and 0.051 in test** (2024: 0.032).
+
+| split | label dates | samples | positives |
+|---|---|---|---|
+| train | 2009-07-27 → 2021-05-18 | 2,946 | 395 |
+| val | 2021-06-22 → 2023-12-05 | 617 | 51 |
+| test | 2024-01-10 → 2026-08-14 | 641 | **33** (~128 independent observations at h=5) |
+
+**Selection, one feature group per run, rows before 2021-06-22 only, 10 block-shuffled draws:**
+
+| pool | channels | CV IC | null p95 | null max | z | verdict |
+|---|---|---|---|---|---|---|
+| `news_daily` | 14 | +0.0574 | +0.0250 | +0.0346 | +3.22 | cleared |
+| `event_features` (new, event-conditioned) | 40 | **+0.1186** | +0.0633 | +0.0701 | +2.58 | cleared |
+| `economy_vietnam` | 84 | +0.0471 | +0.0280 | +0.0297 | +2.53 | cleared |
+| `basic_bank` | 540 | +0.0784 | +0.0596 | +0.0636 | +1.57 | cleared |
+| `basic` | 78 | +0.0637 | +0.0602 | ⚠️ +0.0669 | +1.50 | cleared, null MAX above observed |
+| `stock_market` | 133 | +0.0657 | +0.0616 | ⚠️ +0.0696 | +1.36 | cleared, null MAX above observed |
+| `ta` | 932 | +0.0579 | +0.0681 | +0.0821 | +1.37 | FAILED |
+| `market_breadth` / `fa` / `bonds` / `funds` | 7 / 190 / 117 / 389 | +0.012 / +0.001 / −0.059 / −0.022 | | | +0.90 / +0.14 / −1.54 / −1.23 | FAILED |
+
+**Models** — the same 15-model grid on every table (prior, 3 logistic, 3 GBT, 3 bagged forests,
+LSTM, GRU, CNN, MLP, TCN; the debug trial ran 6), chosen on VAL ROC-AUC, test read once:
+
+| trial | table | best on val | val AUC | **test AUC** | test null p95 / max | test PR-AUC (base 0.051) |
+|---|---|---|---|---|---|---|
+| `20260916-235618` (6 models) | 82 channels, 5 pools | ExtraTrees leaf50 | 0.700 | **0.564** | 0.661 / 0.795 | 0.061 |
+| `20260917-010551` | 11 channels, `event_features` only | ExtraTrees leaf20 | 0.719 | **0.520** | 0.646 / 0.727 | 0.057 |
+| `20260917-013926` | 183 channels, the 6 cleared pools | RandomForest leaf30 | 0.694 | **0.549** | 0.661 / 0.747 | 0.088 |
+
+⚠️ **1 RUN OF 36 BEATS ITS OWN TEST NULL** — the debug LSTM, 0.6377 against 0.6349 — which is what
+chance gives at a 95th-percentile bar, and it was not the val-chosen model. ⚠️ **The val→test drop
+is 0.15-0.20 AUC in every trial**: the events are a VOLATILITY regime (train-only univariate AUC
+of `evt_vol_20` is 0.633) and 2024-2026 had few of them. Walk-forward, yearly expanding refits of
+the full table's RandomForest: **2021 0.546 · 2022 0.674 · 2023 0.573 · 2024 0.464 · 2025 0.576 ·
+2026 0.559**. ⚠️ **The 183-channel table broke the linear and neural models** (`EVD-1`).
+
+Every run is a row of [`reports/event_chain/trials.csv`](../../reports/event_chain/trials.csv) —
+data, features, target, split, model, hyperparameters, run time, device, results — and every trial
+folder carries `predictions.csv`, so these numbers survive the git-ignored run folders (`RPR-1`).

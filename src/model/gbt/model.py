@@ -40,8 +40,14 @@ class GBTRegressor:
                  n_estimators: int = 200, learning_rate: float = 0.05,
                  subsample: float = 0.8, colsample_bytree: float = 0.8,
                  min_child_weight: float = 5.0, reg_lambda: float = 1.0,
-                 random_state: int = 42):
+                 random_state: int = 42, gamma: float = 0.0,
+                 scale_pos_weight: float = 1.0):
         self.n_features = int(n_features)
+        # ⚠️ `task` is set by the ENGINE (`set_task`), never by the config: the config's
+        # own `task:` field is the one authority, and a second copy inside `model:` could
+        # disagree with it.
+        self.task = "regression"
+        self.scale_pos_weight = float(scale_pos_weight)
         self.params = dict(
             max_depth=int(max_depth),
             n_estimators=int(n_estimators),
@@ -50,6 +56,7 @@ class GBTRegressor:
             colsample_bytree=float(colsample_bytree),
             min_child_weight=float(min_child_weight),
             reg_lambda=float(reg_lambda),
+            gamma=float(gamma),
             random_state=int(random_state),
             # ⚠️ CPU, deliberately. See the module docstring.
             device="cpu",
@@ -60,10 +67,26 @@ class GBTRegressor:
         # ladder is the number of decision NODES, filled in after `fit`.
         self.n_params = 0
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "GBTRegressor":
-        from xgboost import XGBRegressor
+    def set_task(self, task: str) -> None:
+        """`classification` swaps in `XGBClassifier` (binary:logistic) on the same design."""
+        if task not in ("regression", "classification"):
+            raise ValueError(f"unknown task {task!r}")
+        self.task = task
 
-        self.model_ = XGBRegressor(**self.params).fit(window_statistics(X), y)
+    def fit(self, X: np.ndarray, y: np.ndarray) -> "GBTRegressor":
+        from xgboost import XGBClassifier, XGBRegressor
+
+        if self.task == "classification":
+            # ⚠️ `scale_pos_weight` re-weights the rare class and so DE-CALIBRATES the
+            # probability; left at 1.0 by default so log-loss and Brier stay readable.
+            self.model_ = XGBClassifier(
+                **self.params,
+                objective="binary:logistic",
+                eval_metric="logloss",
+                scale_pos_weight=self.scale_pos_weight,
+            ).fit(window_statistics(X), y)
+        else:
+            self.model_ = XGBRegressor(**self.params).fit(window_statistics(X), y)
         # ⚠️ `n_params` in `index.csv` is a CAPACITY column, so a tree model must put
         # something comparable in it or the ladder in §14 has a hole. A boosted ensemble
         # has no weights; its fitted degrees of freedom are the DECISION NODES (every
@@ -74,6 +97,20 @@ class GBTRegressor:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return self.model_.predict(window_statistics(X))
+
+    def predict_logit(self, X: np.ndarray) -> np.ndarray:
+        """The MARGIN (log-odds), which `engine._write_predictions` sigmoids once."""
+        if self.task != "classification":
+            raise RuntimeError("predict_logit on a regression GBT")
+        return self.model_.predict(window_statistics(X), output_margin=True)
+
+    def importances(self, feature_columns) -> "dict":
+        """`{stat__channel: gain}` — which window statistic of which channel the trees used."""
+        from model.common.features import stat_names
+
+        names = stat_names(feature_columns)
+        score = self.model_.get_booster().get_score(importance_type="gain")
+        return {names[int(k[1:])]: float(v) for k, v in score.items()}
 
 
 def build_model(n_features: int, lookback: int, **kwargs) -> GBTRegressor:

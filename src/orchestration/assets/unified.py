@@ -78,6 +78,7 @@ bootstrap()
 from orchestration import enabled
 from orchestration.preprocessor import filters as filter_registry
 from orchestration.resources import PreprocessorResource
+from utils import event_target
 
 # ⚠️ The two sentinels here must stay in step with
 # `DataPreprocessor.UNIFIED_MEMBER_FILTERS`; everything else is an ordinary ticker.
@@ -393,6 +394,10 @@ def unified_pool_targets(
             for group in (target_cols, relative_cols, price_cols)
             for h, c in group.items()
         }
+        # ⚠️ The binary EVENT labels come LAST, in `utils.event_target.EVENT_TARGETS`
+        # order — the builder's emission order, which the equality check below reads.
+        event_cols = {e.column: e.horizon for e in event_target.EVENT_TARGETS}
+        all_targets.update(event_cols)
         expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
         benchmark = f"{prep.UNIFIED_BENCHMARK_TABLE}.{prep.UNIFIED_BENCHMARK_COLUMN}"
 
@@ -482,9 +487,12 @@ def unified_pool_targets(
                 f"SELECT COUNT(*) FROM {schema}.pool__basic GROUP BY exchange, ticker"
             )
             series_rows = [int(row[0]) for row in cur.fetchall()]
-    for h in horizons:
+    checked = [(h, (target_cols[h], price_cols[h])) for h in horizons] + [
+        (h, (col,)) for col, h in event_cols.items()
+    ]
+    for h, cols in checked:
         expected_tail = sum(min(h, n) for n in series_rows)
-        for target_col in (target_cols[h], price_cols[h]):
+        for target_col in cols:
             tail = rows - int(stats[target_col][0])
             if tail != expected_tail:
                 raise ValueError(
@@ -1054,6 +1062,16 @@ def unified_pool_basic_bank(
 #
 # (asset name, gold source asset, what it is)
 FEATURE_POOLS: list[tuple[str, str, str]] = [
+    (
+        "pool__event_features",
+        "stocks_event_features",
+        "~40 TRAILING channels built for the binary EVENT label (utils.event_target, "
+        "default up_5pct_5day): the ticker's own event rate and volatility-scaled "
+        "threshold (evt_*), its GICS industry group leave-one-out - the bank sector for "
+        "VCB (sec_*), the market's event breadth (mkt_*) and the calendar incl. Tet and "
+        "VN30F expiry (cal_*). ⚠️ Built for ONE (gain, horizon); rebuild gold and this "
+        "pool together when the event parameters change.",
+    ),
     (
         "pool__ta",
         "stocks_ta",

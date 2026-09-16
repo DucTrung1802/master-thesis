@@ -1,0 +1,11 @@
+run_id,target,lookback_d,horizon_h,tables,holdout_start,channels,kept,ic,null_bar,null_max,z,clears,started_at
+2026-09-16_232028__vcb__basic__up_5pct_5day,up_5pct_5day,20,5,pool__basic,2021-06-22,78,55,0.0637,0.0602,0.0669,1.5,True,2026-09-16 23:20:28
+2026-09-16_232500__vcb__event_features__up_5pct_5day,up_5pct_5day,20,5,pool__event_features,2021-06-22,40,37,0.1186,0.0633,0.0701,2.58,True,2026-09-16 23:25:00
+2026-09-16_232759__vcb__market_breadth__up_5pct_5day,up_5pct_5day,20,5,pool__market_breadth,2021-06-22,7,7,0.0123,0.0336,0.0477,0.9,False,2026-09-16 23:27:59
+2026-09-16_233057__vcb__news_daily__up_5pct_5day,up_5pct_5day,20,5,pool__news_daily,2021-06-22,14,14,0.0574,0.025,0.0346,3.22,True,2026-09-16 23:30:57
+2026-09-16_234154__vcb__stock_market__up_5pct_5day,up_5pct_5day,20,5,pool__stock_market,2021-06-22,133,66,0.0657,0.0616,0.0696,1.36,True,2026-09-16 23:41:54
+2026-09-16_234826__vcb__economy_vietnam__up_5pct_5day,up_5pct_5day,20,5,pool__economy_vietnam,2021-06-22,84,45,0.0471,0.028,0.0297,2.53,True,2026-09-16 23:48:26
+2026-09-16_235725__vcb__bonds__up_5pct_5day,up_5pct_5day,20,5,pool__bonds,2021-06-22,117,44,-0.0593,0.0605,0.0723,-1.54,False,2026-09-16 23:57:25
+2026-09-17_000637__vcb__fa__up_5pct_5day,up_5pct_5day,20,5,pool__fa,2021-06-22,156,78,0.0012,0.0346,0.0391,0.14,False,2026-09-17 00:06:37
+2026-09-17_002334__vcb__funds__up_5pct_5day,up_5pct_5day,20,5,pool__funds,2021-06-22,133,58,-0.022,0.0246,0.0277,-1.23,False,2026-09-17 00:23:34
+2026-09-17_005122__vcb__basic_bank__up_5pct_5day,up_5pct_5day,20,5,pool__basic_bank,2021-06-22,443,232,0.0784,0.0596,0.0636,1.57,True,2026-09-17 00:51:22

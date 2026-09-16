@@ -457,3 +457,14 @@ python -m final_features --apply --shape final --replace
 `python -m pipeline` reports both as stages (`shortlist_pool`, `selection_2`), and
 `selection_2` prints `MANUAL — cannot be produced here` rather than doing something
 cheaper that looks the same.
+
+## 9. ⚠️ THE 1,600-COLUMN GUARD, AND TWO OPT-IN FILTERS (2026-09-16)
+
+| addition | what it does |
+|---|---|
+| `MAX_TABLE_COLUMNS = 1600` | `build_all` checks every plan's width (channels + keys + label) BEFORE anything is dropped and raises naming the three widest pools — PostgreSQL's hard limit would otherwise fail half-way through a `CREATE TABLE AS` with an error that names no channel (`WID-1`) |
+| `exclude_evidence=("failed_null",)` | drops the rows of runs whose selection failed its own null before grouping. ⚠️ Opt-in; the default changes nothing. The fingerprint moves with it, so a table built either way reports STALE against a plan built the other way |
+| `include_tables=[...]` + `scope` | a narrow table from part of a root; raises without a `scope` name, or the narrow build would take the wide table's name |
+
+Used by `event_chain` ([event_chain.md](event_chain.md)): its root `reports/feature_selection_event/`
+built `up_5pct_5day__final__d20_h5` (183 channels, 6 cleared pools) and `…__event` (11 channels).

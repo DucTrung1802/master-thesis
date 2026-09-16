@@ -767,3 +767,18 @@ on an unknown one.
   `train_test_creator` (never standardize a 0/1 label); the classification notebook
   asserts `dataset.target_scaler is None`. The dataset dir still ends in `_std`
   (features are still standardized) — the `task`/`target` fields disambiguate.
+
+## 17. ⚠️ CLASSIFICATION ON THE ESTIMATOR PATH, `model.forest`, AND RUN TIMING (2026-09-16/17)
+
+Built for the binary event chain ([event_chain.md](event_chain.md)).
+
+| change | where | rule |
+|---|---|---|
+| `train_estimator` accepts `task: classification` | `common/engine.py` | ⚠️ **the estimator must expose `predict_logit`** and is refused otherwise: `_write_predictions` applies a sigmoid ONCE, so an estimator returning a probability would be squashed twice — every AUC survives that and every log-loss and Brier is silently wrong. `set_task(task)` is called when present |
+| `GBTRegressor.set_task("classification")` | `gbt/model.py` | swaps in `XGBClassifier(binary:logistic)` on the same 6-statistic design; `predict_logit` is the margin; `scale_pos_weight` (default 1.0, which keeps the probability calibrated) and `gamma` are new knobs |
+| `prior`, `logistic_stats`, `logistic_channel` | `baseline/model.py` | the train base rate as a constant log-odds (the log-loss/Brier reference, no AUC); L2 logistic on the window statistics with a FIXED `C`; logistic on ONE channel resolved by NAME |
+| `model.forest` — `kind: et` / `rf` | `forest/` | bagged trees on the window statistics; `min_samples_leaf` is the capacity knob; `model_type` is `FOREST_ET` / `FOREST_RF` |
+| `timing: {fit_seconds, run_seconds}` in every run's `metadata.json` | `common/engine.py`, both paths | wall clock of the fit alone, and of the whole run including the 200-draw scoring. Smoke-tested 2026-09-17: prior 0.0 / 0.56 s, `mlp_h16` 0.80 / 2.32 s |
+
+⚠️ **For a classifier `result_evaluator`'s `dir_auc` is the AUC of `return_{h}day > 0`, not of the
+label** — the event chain computes the label's own AUC in `event_chain.report`.
