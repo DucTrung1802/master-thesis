@@ -2418,3 +2418,19 @@ On disk, no GPU: `TAC-1`'s moves (17 cells, eight tickers) and `LGS-1` — 92 ce
 ⚠️ **A text-layer replay of today's parser over the 91 holes no GPU batch was asking (`replay_text_layer.py`) won 11 statements and ONE open cell** (SHB Q1-2020's balance sheet): most of the 91 are scans, where OCR-off says nothing, and the other wins were statements already on disk or held by name. ⚠️ **And an exact-equality census found 191 flow cells equal to the same quarter a year earlier to the đồng** — whole rows on VIC Q3-2014 (14 of 14), VNM Q1-2012 (14 of 14), GVR Q1-2021 (14 of 16), which are `PYR-2`'s unrepaired rows, and VNM Q3-2016's profit before tax, current tax and profit after tax, which is what `HLI-1` holds VNM Q4-2016 for. Single-cell equalities are not evidence (VRE's finance-lease principal repeats by contract); 11 documents are queued for a `REPAIR` read.
 
 VN30 (2026-09-15, night): **4,985/5,214 = 95.61 %**, quarters 1,541/1,738 = 88.7 %, holes 151, one band **6/30** (MBB joins ACB BID CTG TCB VCB).
+
+### 2026-09-16 — the holes whose cash flow had no closing balance
+
+`CWN-1` came out of one document: MWG's FY-2011 closing balance is spelled `Tiền cuối năm` AND printed under the company seal, so `+red` read a figure it could not map and `+cashword` mapped a line it could not read. The census that followed — every HOLE cash flow whose newest run refused `no closing cash balance` — was **47 documents over 19 tickers**, run on the RTX 3050 in 453.8 min:
+
+| written | layer | checked against |
+|---|---|---|
+| MWG Q4-2011 | `onnx@200+cashword+red` | opening = Q4-2010's closing, sections = the printed net, closing = the balance sheet's cash — **MWG is one band** |
+| GAS Q4-2010 | `onnx@200+cashword` | sections add to the net, opening + net + fx = closing = the balance sheet's cash |
+| VNM Q2-2016 | `onnx@200+cashword+red` | opening = Q4-2015's closing, sections = the net, closing = the balance sheet's cash; **its `fx` cell was 2.9 bn out and was blanked** (`CFX-1`) |
+| VJC Q1-2020 | `onnx@200+cashword` | opening = Q4-2019's closing, closing = the balance sheet's cash; **`fx` 168.9 bn out, blanked** (`CFX-1`) |
+| SHB Q2-2012 | `onnx@300+alignpages` | opening = Q4-2011's closing, opening + net = closing |
+
+**+5 cells, holes 151 -> 147, one band 6 -> 7 of 30** — 42 of the 47 documents still refuse, which is the honest shape of a hole: each is its own defect.
+
+VN30 (2026-09-16): **4,990/5,214 = 95.70 %**, quarters 1,545/1,738 = 88.9 %, holes 147, one band **7/30** (MWG joins ACB BID CTG MBB TCB VCB).
