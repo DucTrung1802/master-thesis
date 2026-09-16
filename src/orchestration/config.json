@@ -153,7 +153,9 @@
             "// gold/market_breadth": "The whole cross-section compressed to ONE ROW PER SESSION - 8 date-keyed channels (dispersion xs_disp5/xs_skew5/xs_kurt5/xs_mean5, concentration hhi_turnover, flow log_turnover/turnover_z, plus the width n_names it was computed over). Exists so a SINGLE-COMPANY study can carry market information without carrying the market's COLUMNS: pivoting 781 tickers x 27 measures is 21,087 columns against PostgreSQL's 1,600 limit (WID-1), and VCB has only n_eff=852 independent observations - CLAUDE.md 5c measured 202 channels giving test IC -0.011 against 724 giving -0.072 on the same splits. Channel set chosen by MEASUREMENT 2026-08-16 over 826 non-overlapping observations against VCB's forward 5-day return: dispersion/flow family KEPT (xs_skew5 t=-2.29, xs_disp5 t=+1.64, turnover_z t=-1.46), breadth family DROPPED (breadth_pos5 t=+0.21, above_ma20 t=+0.29, n_active t=+0.34) because it measured ~0 and duplicates the index level pool__stock_market already carries. NOTHING here clears Bonferroni at |t|>2.69 - kept as the least-bad candidates at a cost of 8 columns, not because anything was demonstrated.",
             "gold/market_breadth": true,
             "// gold/stocks_event_features": "~40 TRAILING channels per (exchange, ticker, date) for the binary EVENT label of utils.event_target (default up_5pct_5day): evt_* own event rate / volatility / threshold in sigma*sqrt(h) units, sec_* GICS industry group leave-one-out, mkt_* market event breadth, cal_* weekday/month/quarter-end/Tet/VN30F expiry. Rebuild when EVENT_GAIN_PCT or EVENT_HORIZON change.",
-            "gold/stocks_event_features": true
+            "gold/stocks_event_features": true,
+            "// gold/market_context": "VN-Index/VN30 in stationary units (log returns, log volatility, range position, drawdown, scaled foreign flow), US risk (VIX, S&P 500, Dow, 10y, dollar, WTI) LAGGED ONE VN SESSION (TZL-1), VN 1/5/10y yield changes lagged one session. One row per VN session. Built for the event chain.",
+            "gold/market_context": true
         },
         "// ---- unified ----": "UNIFIED TABLES - silver_schema -> unified_schema_<universe>. One universe per partition, cut into feature groups.",
         "// filter": "THE FILTER LAYER (2026-08-22) -- silver/gold -> filter_schema.universe__<screen>. It sits BETWEEN gold and unified and produces no time series: one row per (exchange, ticker) with every condition's measured value and verdict. The screens themselves live in src/orchestration/preprocessor/filters.py; this group only says whether the asset loads.",
@@ -191,7 +193,9 @@
             "// unified/pool__basic_bank": "The BANK sector's pool__basic measures as PEER CHANNELS: silver.stocks_basic (GICS 401010) pivoted to {exchange}__{ticker}__{measure}, 20 banks x 15 measures = 300 columns, broadcast onto the spine. The only date-broadcast pool with no gold table behind it - the pivot is built on the fly. Membership is derived from GICS and is NOT point-in-time (survivors only). On unified_schema_vcb the schema's OWN ticker is one of the channels, so pool__basic joined to this holds each VCB measure twice.",
             "unified/pool__basic_bank": true,
             "// unified/pool__event_features": "gold.stocks_event_features sliced to the partition's universe, INNER on the key like pool__ta. The EVENT chain's own feature group (event_chain).",
-            "unified/pool__event_features": true
+            "unified/pool__event_features": true,
+            "// unified/pool__market_context": "gold.market_context broadcast onto the spine (date-level, LEFT JOIN). ~60 stationary market channels for the event chain; US series lagged one VN session (TZL-1).",
+            "unified/pool__market_context": true
         },
         "// ---- analysis ----": "ANALYSIS - unified_schema_<universe> -> reports/. The only group here that writes NO database table: feature_selection is read-only by package design, so its output is a run folder on disk that final_features later reads.",
         "analysis": {

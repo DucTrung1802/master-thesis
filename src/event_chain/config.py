@@ -92,3 +92,89 @@ MODELS = (
 
 # Draws for the event ROC-AUC null in the report (block = d + h). Cheap: a vector shuffle.
 REPORT_NULL_DRAWS = 1000
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# ⚠️ THE TABULAR SETUP (2026-09-17) — `python -m event_chain --setup tabular`
+#
+# d = 1: every model reads the LAST ROW, from a table that carries ALL channels of the pools
+# whose selection ran (`final_features` channels="all"), and three LINEAR estimators
+# (`model.event_linear`) answer the three questions the event is made of — how big the move,
+# which way, and the event itself — combined by a geometric mean fixed BEFORE the chain ran.
+#
+# ⚠️ WHY IT EXISTS, MEASURED: the windowed grid above (d=20, 15 models, 3 trials) put its
+# val-chosen model at test AUC 0.520-0.564. A research harness over the same data — 10-fold
+# rolling-origin CV, validation years 2014..2023, NO test row read — scored the window
+# networks and trees 0.52-0.63 and last-row linear models ~0.67, with the geometric mean of
+# the three kinds ~0.69 (`.claude/context/event_chain.md` §6). Every hyper-parameter below is
+# that CV's choice, frozen here before the tabular chain's own val or test was scored.
+# ══════════════════════════════════════════════════════════════════════════════════════
+TABULAR_LOOKBACK = 1
+TABULAR_SCOPE = "tab"
+TABULAR_POOLS = (
+    "pool__event_features",   # evt_/sec_/mkt_/cal_ + har_ (log vol) + px_ (range) + flow_ (~67)
+    "pool__basic",            # drv_* derived microstructure (~62) + raw levels the linear models skip
+    "pool__market_context",   # mctx_ VN-Index/VN30, glb_ US risk LAGGED one session, bond_ (~60)
+    "pool__market_breadth",   # cross-sectional dispersion (~7)
+    "pool__news_daily",       # disclosure counts (~14)
+)
+
+# The channel blocks, by NAME PREFIX (`model.event_linear` `columns`).
+# ⚠️ `mkt_` is spelt out: `pool__market_breadth` also names its channels `mkt_xs_*`, and the
+# CV that chose these blocks did not include them.
+_EVT = ("evt_", "sec_", "mkt_rate_", "mkt_ret_h", "mkt_disp_h", "cal_")
+_DRV = ("drv_",)
+_NOT_DRV = ("drv_vwap_raw",)   # a price LEVEL wearing a derived name
+_HAR = ("har_",)
+_PXFLOW = ("px_", "flow_")
+_GLOBAL = ("glb_", "bond_")
+
+TABULAR_MODELS = (
+    ("baseline", "_prior", {"type": "BASELINE", "kind": "prior"}, {}),
+    # magnitude: ridge on log|r_5| — CV10 0.667 on the pipeline's channels (har+evt+drv, alpha 100, 4-year half-life)
+    ("event_linear", "_mag_har_a100_hl4", {"type": "EVENT_LINEAR", "kind": "magnitude_ridge",
+                                           "columns": list(_HAR + _EVT + _DRV), "alpha": 100.0,
+                                           "half_life_years": 4.0, "exclude": list(_NOT_DRV)}, {}),
+    # magnitude without the har block — CV10 0.665
+    ("event_linear", "_mag_a10_hl4", {"type": "EVENT_LINEAR", "kind": "magnitude_ridge",
+                                      "columns": list(_EVT + _DRV), "alpha": 10.0,
+                                      "half_life_years": 4.0, "exclude": list(_NOT_DRV)}, {}),
+    # the event itself: L2 logistic — CV10 0.670 (C 0.03), 0.669 (C 0.1)
+    ("event_linear", "_evt_c003", {"type": "EVENT_LINEAR", "kind": "event_logit",
+                                   "columns": list(_EVT + _DRV), "C": 0.03,
+                                   "exclude": list(_NOT_DRV)}, {}),
+    ("event_linear", "_evt_c01", {"type": "EVENT_LINEAR", "kind": "event_logit",
+                                  "columns": list(_EVT + _DRV), "C": 0.1,
+                                  "exclude": list(_NOT_DRV)}, {}),
+    # direction given a >= 3 % move — CV10 0.607 as a stand-alone event score (0.638 in research, TZL-1)
+    ("event_linear", "_dir_c001", {"type": "EVENT_LINEAR", "kind": "direction_logit",
+                                   "columns": list(_EVT + _DRV + _PXFLOW + _GLOBAL), "C": 0.01,
+                                   "min_move": 0.03, "exclude": list(_NOT_DRV)}, {}),
+    # the tree families on the same last-row table, for comparison
+    ("gbt", "_d2", {"type": "GBT", "max_depth": 2, "n_estimators": 300, "learning_rate": 0.03,
+                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 20.0}, {}),
+    ("forest", "_et_leaf30", {"type": "FOREST", "kind": "et", "min_samples_leaf": 30,
+                              "max_features": 0.3, "n_estimators": 500}, {}),
+)
+
+# ⚠️ FIXED BEFORE THE CHAIN RAN: a geometric mean of member probabilities, members named by
+# run-name prefix. Not chosen on val, so it is eligible as "best on val" like any single run.
+#
+# ⚠️ RE-MEASURED ON THE PIPELINE'S OWN CHANNELS before the chain ran (CV10, 2014-2023): the
+# magnitude ridge 0.667, the event logit 0.670, the direction logit 0.607 — down from 0.638
+# in the research harness, whose US series were joined on the SAME DATE (`TZL-1`) — and the
+# geometric means geo3 0.682, geo2 0.683.
+TABULAR_ENSEMBLES = {
+    "ensemble_geo3": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003",
+                      "event_linear_dir_c001"),
+    "ensemble_geo2": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003"),
+}
+
+# The chain's two setups. `window` is every trial before 2026-09-17, unchanged.
+SETUPS = {
+    "window": dict(lookback=LOOKBACK, pools=POOLS, models=MODELS, scope=None, channels="shortlist",
+                   aux_targets=(), ensembles={}),
+    "tabular": dict(lookback=TABULAR_LOOKBACK, pools=TABULAR_POOLS, models=TABULAR_MODELS,
+                    scope=TABULAR_SCOPE, channels="all", aux_targets=("return_{h}day",),
+                    ensembles=TABULAR_ENSEMBLES),
+}

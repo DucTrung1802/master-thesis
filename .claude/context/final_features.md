@@ -466,5 +466,8 @@ cheaper that looks the same.
 | `exclude_evidence=("failed_null",)` | drops the rows of runs whose selection failed its own null before grouping. ⚠️ Opt-in; the default changes nothing. The fingerprint moves with it, so a table built either way reports STALE against a plan built the other way |
 | `include_tables=[...]` + `scope` | a narrow table from part of a root; raises without a `scope` name, or the narrow build would take the wide table's name |
 
+| `channels="all"` (+ `scope`) | every NUMERIC channel of each pool whose run is in the plan, labels and keys excluded — the selection still decides WHICH POOLS enter (with `exclude_evidence`), not the width inside one. ⚠️ Expanded inside `build_all` (it needs the database), so the COMMENT says `CHANNELS=ALL` and the fingerprint is the expanded set — `pipeline.status_final_features`, which fingerprints the SHORTLIST plan, reports such a table STALE. Raises without a `scope` and on `shape="shortlist"` (2026-09-17) |
+| `tables=[...]` | build only the named tables. ⚠️ A root holding two setups' runs (d=20 and d=1) plans both, and a chain building its own table must not rebuild the other (2026-09-17) |
+
 Used by `event_chain` ([event_chain.md](event_chain.md)): its root `reports/feature_selection_event/`
 built `up_5pct_5day__final__d20_h5` (183 channels, 6 cleared pools) and `…__event` (11 channels).

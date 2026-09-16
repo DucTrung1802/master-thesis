@@ -176,6 +176,15 @@ SHORTLIST_POOL_PREFIX = "pool__shortlist__"
 # before anything is dropped, so an over-wide union costs nothing but the message.
 MAX_TABLE_COLUMNS = 1600
 
+# ⚠️ WHAT A POOL CONTRIBUTES TO THE TABLE (2026-09-17, `event_chain` tabular mode).
+# `shortlist` (the default, and every table before this date): the channels the selection
+# KEPT. `all`: every numeric channel of each pool whose run is in the plan — the selection
+# still decides WHICH POOLS enter (its evidence, `exclude_evidence`), but not the width
+# inside one, because a regularised model does its own shrinkage and a measured cut made
+# for a tree ranker drops the channels a linear model needs (`.claude/context/event_chain.md` §6).
+CHANNEL_MODES = ("shortlist", "all")
+NUMERIC_TYPES = ("double precision", "real", "numeric", "bigint", "integer", "smallint")
+
 
 def _identifier(name: str, what: str) -> str:
     """`name`, or a `ValueError`. The rule is `contract.identifier`'s — one copy, and
@@ -309,6 +318,9 @@ class FinalTablePlan:
     # off `source_table`, never a flag: a run whose channels came out of a
     # `pool__shortlist__*` is layer 2 by definition, because that is what it ranked.
     layer: int = 1
+    # `shortlist` or `all` — see CHANNEL_MODES. Recorded in the COMMENT and, because the
+    # channel set differs, in the fingerprint.
+    channels: str = "shortlist"
 
     @property
     def n_features(self) -> int:
@@ -404,6 +416,11 @@ class FinalTablePlan:
             if self.shape == SHAPE_SHORTLIST
             else "Final feature table"
         )
+        if self.channels == "all":
+            note += (
+                " ⚠️ CHANNELS=ALL: every numeric channel of each pool whose selection run "
+                "is in the plan - the selection decided WHICH POOLS, not the width inside one."
+            )
         return (
             f"{headline} built by final_features from {len(self.runs)} "
             f"feature-selection run(s) sharing target={self.target!r} and setup "
@@ -730,9 +747,27 @@ def build_all(
     shape: str = SHAPE_FINAL,
     exclude_evidence: Sequence[str] = (),
     include_tables: Optional[Sequence[str]] = None,
+    channels: str = "shortlist",
+    tables: Optional[Sequence[str]] = None,
 ) -> pd.DataFrame:
-    """Plan every table and, with `apply=True`, create it. Returns one row per plan."""
+    """Plan every table and, with `apply=True`, create it. Returns one row per plan.
+
+    `tables` keeps the build to the named tables — a root holding two setups' runs (d=20
+    and d=1) plans both, and a chain building ITS table must not rebuild the other one.
+    """
+    if channels not in CHANNEL_MODES:
+        raise ValueError(f"channels {channels!r} is not one of {CHANNEL_MODES}.")
+    if channels == "all" and shape != SHAPE_FINAL:
+        raise ValueError("channels='all' builds a model's input table — shape must be 'final'.")
+    if channels == "all" and not scope:
+        # ⚠️ Same rule as `include_tables`: a different channel set under the wide table's
+        # name would --replace the shortlist table and orphan every dataset below it.
+        raise ValueError("channels='all' changes the table — give it a --scope name.")
     plans = plan_from_reports(root, scope, shape, exclude_evidence, include_tables)
+    if tables is not None:
+        plans = [p for p in plans if p.table in set(tables)]
+        if not plans:
+            raise ValueError(f"no plan under {root} builds any of {list(tables)}.")
     results = []
 
     by_schema: Dict[str, List[FinalTablePlan]] = {}
@@ -766,6 +801,17 @@ def build_all(
                             f"{TARGETS_TABLE}, which has {available}."
                         )
                     plan.stored_target = fallback
+
+                if channels == "all":
+                    from feature_selection.run import is_label
+
+                    for pool in list(plan.columns_by_table):
+                        types = reader.column_types(pool)
+                        plan.columns_by_table[pool] = [
+                            c for c, t in types.items()
+                            if t in NUMERIC_TYPES and c not in KEY_COLS and not is_label(c)
+                        ]
+                    plan.channels = "all"
 
                 width = plan.n_features + len(KEY_COLS) + (1 if plan.stored_target else 0)
                 if width > MAX_TABLE_COLUMNS:
@@ -915,7 +961,7 @@ def _main(
         print(f"  target   {plan.target}"
               + ("  (NOT stored — this is a pool)" if plan.shape == SHAPE_SHORTLIST
                  else ""))
-        print(f"  setup    " + ", ".join(f"{k}={plan.setup[k]}" for k in SETUP_KEYS))
+        print("  setup    " + ", ".join(f"{k}={plan.setup[k]}" for k in SETUP_KEYS))
         print(f"  runs     {len(plan.runs)}  evidence={plan.evidence}  "
               f"selection layer {plan.layer}")
         print(f"  features {plan.n_features} from {len(plan.columns_by_table)} pool(s)")

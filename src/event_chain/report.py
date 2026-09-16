@@ -14,6 +14,12 @@ label the run was trained on, from the run's own `predictions_{val,test}.csv`.
 | `p_at_10`, `p_at_5` | precision in the top 10 % / 5 % of scores | "if I act on the most confident days, how often does the event follow?" |
 | `brier_skill` | `1 - brier / brier(train base rate)` | calibration against the climatology a model had to beat |
 | `thr`, `test_precision`, `test_recall` | the VAL threshold maximising F1, applied to TEST once | a decision rule chosen without the test labels |
+| `refit_auc`, `refit_auc_bar` | TEST scored by the same estimator REFITTED on train + val (val's purge already sits before test) | the standard last step once the configuration is fixed: the val years are the closest to test and a train-only fit never saw them |
+
+⚠️ **AN ENSEMBLE (`config.SETUPS[...]["ensembles"]`) IS FIXED BEFORE THE CHAIN RUNS** — a
+geometric mean of its members' probabilities, members named by run-name prefix. It is not
+picked on val, so it competes for "best on val" like any single run; the top-3 `BLEND` is
+picked on val and never does.
 
 ⚠️ **NOTHING HERE PRICES THE SEARCH** (`NUL-1`): the null is per run, and the grid is
 ~15 runs. The best-on-val model's test row is the number to quote; the other rows are
@@ -36,6 +42,14 @@ from event_chain import config as C
 # Rows that can never be "the best model": a constant ranks nothing, and a blend's val
 # row is optimistic because its members were picked on val.
 NOT_ELIGIBLE = ("BASELINE_PRIOR", "BLEND")
+# Estimators the report can refit (no epochs, `build_model` + `fit`), by model_type prefix.
+REFITTABLE = ("GBT", "FOREST", "BASELINE_LOGISTIC", "EVENT_LINEAR")
+PACKAGE_OF = {"GBT": "gbt", "FOREST": "forest", "EVENT": "event_linear"}
+
+
+def _geo_mean(probs: List[np.ndarray]) -> np.ndarray:
+    stack = np.clip(np.vstack([np.asarray(p, dtype=float) for p in probs]), 1e-7, 1.0)
+    return np.exp(np.log(stack).mean(axis=0))
 
 
 # ------------------------------------------------------------------ metrics
@@ -169,7 +183,12 @@ def leaderboard(chain, runs_dir: Optional[str] = None) -> pd.DataFrame:
     if frame.empty:
         return frame
     frame = frame.sort_values("val_auc", ascending=False, na_position="last").reset_index(drop=True)
-    blend = _blend(frame, block, train_rate, chain.horizon, _runs_dir(runs_dir))
+    ensembles = _ensembles(chain, frame, block, train_rate, _runs_dir(runs_dir))
+    if ensembles:
+        frame = pd.concat([frame, pd.DataFrame(ensembles)], ignore_index=True)
+        frame = frame.sort_values("val_auc", ascending=False, na_position="last").reset_index(drop=True)
+    blend = _blend(frame[frame["model_type"] != "ENSEMBLE"], block, train_rate, chain.horizon,
+                   _runs_dir(runs_dir))
     if blend is not None:
         frame = pd.concat([frame, pd.DataFrame([blend])], ignore_index=True)
     return frame.sort_values("val_auc", ascending=False, na_position="last").reset_index(drop=True)
@@ -205,9 +224,137 @@ def _blend(frame: pd.DataFrame, block: int, train_rate: float, horizon: int, run
     return row
 
 
+def _members(frame: pd.DataFrame, prefixes) -> Optional[pd.DataFrame]:
+    rows = []
+    for prefix in prefixes:
+        hit = frame[frame["run_name"].str.split("__").str[0] == prefix]
+        if hit.empty:
+            return None
+        rows.append(hit.iloc[0])
+    return pd.DataFrame(rows)
+
+
+def _ensembles(chain, frame: pd.DataFrame, block: int, train_rate: float, runs_dir: str) -> List[Dict]:
+    """One row per FIXED ensemble whose members all ran on the current dataset."""
+    out = []
+    for name, prefixes in (getattr(chain, "ensembles", None) or {}).items():
+        members = _members(frame, prefixes)
+        if members is None:
+            print(f"ensemble {name}: a member has no run on this dataset — skipped")
+            continue
+        probs = {}
+        for split in ("val", "test"):
+            stack, y = [], None
+            for run_id in members["run_id"]:
+                pred = pd.read_csv(os.path.join(runs_dir, run_id, "results", f"predictions_{split}.csv"))
+                stack.append(pred["y_prob"].to_numpy(dtype=float))
+                y = pred["y_true"].to_numpy(dtype=float)
+            probs[split] = (y, _geo_mean(stack))
+        row = {"run_name": f"{name}__{chain.ticker.lower()}__{chain.table}", "model_type": "ENSEMBLE",
+               "n_params": float(pd.to_numeric(members["n_params"], errors="coerce").sum()),
+               "run_id": "", "ensemble_members": ",".join(members["run_name"]),
+               "ensemble_run_ids": ",".join(members["run_id"])}
+        for split, (y, p) in probs.items():
+            m = event_metrics(y, p, block, train_rate, horizon=chain.horizon)
+            row.update({f"{split}_{k}": v for k, v in m.items()})
+        thr = val_threshold(*probs["val"])
+        row["thr"] = thr
+        row.update({f"test_{k}_at_thr": v for k, v in at_threshold(*probs["test"], thr).items()})
+        out.append(row)
+    return out
+
+
 def best_on_val(board: pd.DataFrame) -> Optional[pd.Series]:
     eligible = board[~board["model_type"].isin(NOT_ELIGIBLE)]
     return None if eligible.empty else eligible.iloc[0]
+
+
+# ------------------------------------------------------------ refit helpers
+def _estimator(chain, board: pd.DataFrame, run_name: str, runs_dir: str, dataset):
+    """`(module, arch)` for a refittable run, or None."""
+    import importlib
+
+    import yaml
+
+    from model.common.engine import model_spec
+
+    row = board[board["run_name"] == run_name].iloc[0]
+    if not str(row["model_type"]).startswith(REFITTABLE) or not row.get("run_id"):
+        return None
+    path = os.path.join(runs_dir, row["run_id"], "config.yaml")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        cfg = yaml.safe_load(fh)
+    package = PACKAGE_OF.get(str(row["model_type"]).split("_")[0], "baseline")
+    module = importlib.import_module(f"model.{package}.model")
+    arch = module.arch_dict(n_features=dataset.n_features, lookback=dataset.lookback, **model_spec(cfg))
+    return module, arch
+
+
+def _stacked(dataset):
+    """All three splits concatenated in date order, with dates and every auxiliary target."""
+    X = np.concatenate([dataset.X_train, dataset.X_val, dataset.X_test]).astype(float)
+    y = np.concatenate([dataset.y_train, dataset.y_val, dataset.y_test]).astype(int)
+    dates = np.concatenate([dataset.dates_train, dataset.dates_val, dataset.dates_test])
+    split = np.array(["train"] * len(dataset.y_train) + ["val"] * len(dataset.y_val)
+                     + ["test"] * len(dataset.y_test))
+    aux = {c: np.concatenate([a["train"], a["val"], a["test"]]).astype(float)
+           for c, a in (getattr(dataset, "aux", {}) or {}).items()}
+    return X, y, dates, split, aux
+
+
+def _fit_score(module, arch, dataset, X, y, dates, aux, fit_mask, score_mask) -> np.ndarray:
+    """Fit a fresh estimator on `fit_mask` rows, return P(event) on `score_mask` rows."""
+    est = module.build_model(**arch["kwargs"])
+    if getattr(est, "needs_dataset", False):
+        est.set_dataset(dataset)
+    if hasattr(est, "set_task"):
+        est.set_task("classification")
+    if hasattr(est, "set_fit_context"):
+        column = getattr(est, "aux_target", None)
+        est.set_fit_context(dates=dates[fit_mask], aux=aux[column][fit_mask] if column in aux else None)
+    est.fit(X[fit_mask], y[fit_mask])
+    logit = np.asarray(est.predict_logit(X[score_mask]), dtype=float)
+    return 1.0 / (1.0 + np.exp(-logit))
+
+
+def refit_test(chain, board: pd.DataFrame, runs_dir: Optional[str] = None) -> pd.DataFrame:
+    """TEST AUC of every refittable run — and every fixed ensemble — refitted on train + val.
+
+    ⚠️ Nothing about a configuration is chosen here: each run's own `config.yaml` is refitted
+    on the rows before the test split and scored once. The val split already ends
+    `d + h - 1` samples before the test split starts (the dataset's purge), so no train+val
+    label reaches into test.
+    """
+    from model.common.data import load_dataset
+
+    runs_dir = _runs_dir(runs_dir)
+    dataset = load_dataset(chain.creator().name)
+    X, y, dates, split, aux = _stacked(dataset)
+    fit, test = split != "test", split == "test"
+    block = int(dataset.lookback + chain.horizon)
+    train_rate = float(np.mean(y[fit]))
+    probs: Dict[str, np.ndarray] = {}
+    rows = []
+    for run_name in board["run_name"]:
+        spec = _estimator(chain, board, run_name, runs_dir, dataset)
+        if spec is None:
+            continue
+        p = _fit_score(*spec, dataset, X, y, dates, aux, fit, test)
+        probs[run_name] = p
+        m = event_metrics(y[test], p, block, train_rate, horizon=chain.horizon)
+        rows.append({"run_name": run_name, "refit_auc": m.get("auc"), "refit_auc_bar": m.get("auc_bar"),
+                     "refit_auc_z": m.get("auc_z"), "refit_pr_auc": m.get("pr_auc")})
+    for _, ens in board[board["model_type"] == "ENSEMBLE"].iterrows():
+        members = str(ens["ensemble_members"]).split(",")
+        if all(mbr in probs for mbr in members):
+            p = _geo_mean([probs[mbr] for mbr in members])
+            m = event_metrics(y[test], p, block, train_rate, horizon=chain.horizon)
+            rows.append({"run_name": ens["run_name"], "refit_auc": m.get("auc"),
+                         "refit_auc_bar": m.get("auc_bar"), "refit_auc_z": m.get("auc_z"),
+                         "refit_pr_auc": m.get("pr_auc")})
+    return pd.DataFrame(rows)
 
 
 # -------------------------------------------------------------- walk-forward
@@ -219,21 +366,15 @@ def walk_forward(chain, board: pd.DataFrame, runs_dir: Optional[str] = None) -> 
     the dataset. The features stay the dataset's (train-slice scaler), so nothing in a fold
     was fitted on its own year.
     """
-    import importlib
-
-    import yaml
-
     from model.common.data import load_dataset
-    from model.common.engine import model_spec
 
     runs_dir = _runs_dir(runs_dir)
-    estimators = board[board["model_type"].str.startswith(("GBT", "FOREST", "BASELINE_LOGISTIC"))]
+    estimators = board[board["model_type"].str.startswith(REFITTABLE)]
     if estimators.empty:
         return pd.DataFrame()
     dataset = load_dataset(chain.creator().name)
-    X = np.concatenate([dataset.X_train, dataset.X_val, dataset.X_test]).astype(float)
-    y = np.concatenate([dataset.y_train, dataset.y_val, dataset.y_test]).astype(int)
-    dates = pd.to_datetime(np.concatenate([dataset.dates_train, dataset.dates_val, dataset.dates_test]))
+    X, y, dates_raw, _, aux = _stacked(dataset)
+    dates = pd.to_datetime(dates_raw)
     gap = int(dataset.lookback + chain.horizon - 1)
     holdout = pd.Timestamp(chain.holdout_start())
 
@@ -241,39 +382,49 @@ def walk_forward(chain, board: pd.DataFrame, runs_dir: Optional[str] = None) -> 
     channel = board[board["model_type"] == "BASELINE_LOGISTIC_CHANNEL"]
     if not channel.empty and channel.iloc[0]["run_name"] not in picks:
         picks.append(channel.iloc[0]["run_name"])
+    # ⚠️ Every FIXED ensemble walks forward too, member by member — it is the one row whose
+    # composition was decided before val, so its yearly profile is the least selected one.
+    ensembles = board[board["model_type"] == "ENSEMBLE"]
+    for members in ensembles.get("ensemble_members", pd.Series(dtype=str)):
+        picks += [m for m in str(members).split(",") if m not in picks]
 
     rows = []
+    yearly: Dict[str, Dict[int, np.ndarray]] = {}
+    years = sorted(set(dates[dates >= holdout].year))
     for run_name in picks:
-        run_id = board.loc[board["run_name"] == run_name, "run_id"].iloc[0]
-        path = os.path.join(runs_dir, run_id, "config.yaml")
-        if not os.path.exists(path):
+        spec = _estimator(chain, board, run_name, runs_dir, dataset)
+        if spec is None:
             continue
-        with open(path, encoding="utf-8") as fh:
-            cfg = yaml.safe_load(fh)
-        package = {"GBT": "gbt", "FOREST": "forest"}.get(
-            str(board.loc[board["run_name"] == run_name, "model_type"].iloc[0]).split("_")[0], "baseline")
-        module = importlib.import_module(f"model.{package}.model")
-        arch = module.arch_dict(n_features=dataset.n_features, lookback=dataset.lookback,
-                                **model_spec(cfg))
-        for year in sorted(set(dates[dates >= holdout].year)):
+        for year in years:
             start = max(pd.Timestamp(f"{year}-01-01"), holdout)
-            test = (dates >= start) & (dates < pd.Timestamp(f"{year + 1}-01-01"))
+            test = np.asarray((dates >= start) & (dates < pd.Timestamp(f"{year + 1}-01-01")))
             first = int(np.argmax(test))
             train = np.arange(len(y)) < max(0, first - gap)
             if test.sum() < 20 or y[test].sum() == 0 or y[train].sum() == 0:
                 continue
-            est = module.build_model(**arch["kwargs"])
-            if getattr(est, "needs_dataset", False):
-                est.set_dataset(dataset)
-            if hasattr(est, "set_task"):
-                est.set_task("classification")
-            est.fit(X[train], y[train])
-            score = est.predict_logit(X[test])
+            p = _fit_score(*spec, dataset, X, y, dates_raw, aux, train, test)
+            yearly.setdefault(run_name, {})[year] = p
             rows.append({
                 "model": run_name.split("__")[0], "year": year, "train_n": int(train.sum()),
                 "test_n": int(test.sum()), "positives": int(y[test].sum()),
-                "base_rate": float(y[test].mean()), "auc": float(roc_auc_score(y[test], score)),
-                "pr_auc": float(average_precision_score(y[test], score)),
+                "base_rate": float(y[test].mean()), "auc": float(roc_auc_score(y[test], p)),
+                "pr_auc": float(average_precision_score(y[test], p)),
+            })
+    for _, ens in ensembles.iterrows():
+        members = str(ens["ensemble_members"]).split(",")
+        for year in years:
+            if not all(year in yearly.get(m, {}) for m in members):
+                continue
+            start = max(pd.Timestamp(f"{year}-01-01"), holdout)
+            test = np.asarray((dates >= start) & (dates < pd.Timestamp(f"{year + 1}-01-01")))
+            first = int(np.argmax(test))
+            p = _geo_mean([yearly[m][year] for m in members])
+            rows.append({
+                "model": str(ens["run_name"]).split("__")[0], "year": year,
+                "train_n": int((np.arange(len(y)) < max(0, first - gap)).sum()),
+                "test_n": int(test.sum()), "positives": int(y[test].sum()),
+                "base_rate": float(y[test].mean()), "auc": float(roc_auc_score(y[test], p)),
+                "pr_auc": float(average_precision_score(y[test], p)),
             })
     return pd.DataFrame(rows)
 
@@ -308,6 +459,10 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
     wf = walk_forward(chain, board, runs_dir) if (walkforward and not board.empty) else pd.DataFrame()
     if not wf.empty:
         wf.to_csv(os.path.join(output_dir, "walkforward.csv"), index=False)
+    refit = refit_test(chain, board, runs_dir) if not board.empty else pd.DataFrame()
+    if not refit.empty:
+        board = board.merge(refit, on="run_name", how="left")
+        board.to_csv(os.path.join(output_dir, "leaderboard.csv"), index=False)
 
     split = meta.get("split", {})
     lines: List[str] = [
@@ -340,17 +495,20 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
         lines += [
             "## Leaderboard — sorted by VAL ROC-AUC (chosen on val, test read once)", "",
             "| model | val AUC | test AUC | test null p95 / max | test z | test PR-AUC (lift) | "
-            "test P@10% (lift) | test P@5% | Brier skill | val-thr signals / precision / recall |",
-            "|---|---|---|---|---|---|---|---|---|---|",
+            "test P@10% (lift) | test P@5% | Brier skill | val-thr signals / precision / recall | "
+            "test AUC, refit on train+val (null p95) |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for _, r in board.iterrows():
+            refit_cell = (f"{_fmt(r.get('refit_auc'))} ({_fmt(r.get('refit_auc_bar'))})"
+                          if pd.notna(r.get("refit_auc", np.nan)) else "—")
             lines.append(
                 f"| `{r['run_name'].split('__')[0]}` | {_fmt(r.get('val_auc'))} | **{_fmt(r.get('test_auc'))}** | "
                 f"{_fmt(r.get('test_auc_bar'))} / {_fmt(r.get('test_auc_null_max'))} | {_fmt(r.get('test_auc_z'), 2)} | "
                 f"{_fmt(r.get('test_pr_auc'))} ({_fmt(r.get('test_pr_lift'), 2)}x) | "
                 f"{_fmt(r.get('test_p_at_10'))} ({_fmt(r.get('test_p10_lift'), 2)}x) | {_fmt(r.get('test_p_at_5'))} | "
                 f"{_fmt(r.get('test_brier_skill'))} | {_fmt(r.get('test_signals_at_thr'))} / "
-                f"{_fmt(r.get('test_precision_at_thr'))} / {_fmt(r.get('test_recall_at_thr'))} |"
+                f"{_fmt(r.get('test_precision_at_thr'))} / {_fmt(r.get('test_recall_at_thr'))} | {refit_cell} |"
             )
         lines += [
             "",
@@ -359,9 +517,22 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
             f"{_fmt(best['test_auc_bar'])} (max {_fmt(best['test_auc_null_max'])}, z {_fmt(best['test_auc_z'], 2)}); "
             f"test PR-AUC {_fmt(best['test_pr_auc'])} on a base rate of {_fmt(best['test_base_rate'])}; "
             f"of the {_fmt(best['test_signals_at_thr'])} test sessions over the val threshold, "
-            f"{_fmt(best['test_precision_at_thr'])} were followed by the event.",
+            f"{_fmt(best['test_precision_at_thr'])} were followed by the event."
+            + (f" Refitted on train+val, its test AUC is {_fmt(best.get('refit_auc'))} "
+               f"(null p95 {_fmt(best.get('refit_auc_bar'))})." if pd.notna(best.get("refit_auc", np.nan)) else ""),
             "",
         ]
+        for _, ens in board[board["model_type"] == "ENSEMBLE"].iterrows():
+            lines += [
+                f"**Fixed ensemble** `{ens['run_name'].split('__')[0]}` (geometric mean of "
+                + ", ".join(f"`{m.split('__')[0]}`" for m in str(ens["ensemble_members"]).split(","))
+                + f", chosen before this chain ran): val AUC {_fmt(ens['val_auc'])}, test AUC "
+                f"**{_fmt(ens['test_auc'])}** (null p95 {_fmt(ens['test_auc_bar'])}, z {_fmt(ens['test_auc_z'], 2)})"
+                + (f"; refitted on train+val **{_fmt(ens.get('refit_auc'))}** (null p95 "
+                   f"{_fmt(ens.get('refit_auc_bar'))})" if pd.notna(ens.get("refit_auc", np.nan)) else "")
+                + ".",
+                "",
+            ]
     if not wf.empty:
         lines += ["## Walk-forward — yearly expanding refits over years the selection never read", "",
                   "| model | year | train n | test n | positives | base rate | AUC | PR-AUC |",
@@ -389,4 +560,5 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
         "board": board,
         "selection": runs,
         "walkforward": wf,
+        "refit": refit,
     }

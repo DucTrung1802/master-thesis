@@ -4,7 +4,7 @@
 > behind one package. Built 2026-09-16.
 
 > **The EVENT chain: which sessions is a ticker about to rise by at least g % within h
-> sessions?** A binary label, parameterised in ONE place (`src/utils/event_target.py`), run
+> sessions?** Two setups (`--setup window|tabular`, §6). A binary label, parameterised in ONE place (`src/utils/event_target.py`), run
 > end to end on the repo's own stages — Dagster for the data, `feature_selection` for the
 > selection, `final_features` for the table, `train_test_creator` for the tensors,
 > `model.<arch>` for the fits — with an event-specific report on top.
@@ -159,6 +159,7 @@ the same split (train 2,946 / val 617 / test 641 samples; positive rate 0.134 / 
 | `20260916-235618` debug (6 models) | 82: basic, economy_vietnam, event_features, news_daily, stock_market | ExtraTrees leaf50 | 0.700 | 0.564 | 0.661 |
 | `20260917-010551` compact | 11: event_features only | ExtraTrees leaf20 | 0.719 | 0.520 | 0.646 |
 | `20260917-013926` full | 183: the 6 pools that cleared their null (+ basic_bank) | RandomForest leaf30 | 0.694 | 0.549 | 0.661 |
+| `20260917-032538` **tabular** (§6) | 211 at d = 1: all channels of `event_features`, `basic`, `market_context`, `market_breadth` | **`ensemble_geo3`** (fixed) | 0.799 | **0.660** | 0.644 (max 0.795) |
 
 **Not one val-chosen model clears its test null**, and the val→test drop is 0.15-0.20 AUC in
 every trial. Across all 36 runs the only test AUC above its own p95 is the debug LSTM's
@@ -169,3 +170,79 @@ LEVELS (`hose__acb__close_adjust`, `hose__ssb__close_raw`, …) — measured on 
 channels put >1 % of TEST beyond 5 train-sigmas and 3 put ALL of it there** (`train_test_creator` §6) — which saturates a
 linear or neural score — `baseline_logistic_stats_c01` scores a constant (AUC exactly 0.500) and
 `mlp_h16` a Brier skill of −15.9. Trees are scale-free and survive it.
+
+## 6. ⚠️ THE TABULAR SETUP — d = 1, all channels, three linear kinds (2026-09-17)
+
+```
+python -m event_chain --setup tabular --apply --notes "<why>"      # RUNBOOK G5
+```
+
+| knob | `window` (§5's trials) | `tabular` |
+|---|---|---|
+| `d` | 20 | **1** — every model reads the last row |
+| pools | 11 raw groups | `pool__event_features` (now +27: `har_` log volatility, `px_` range, `flow_` scaled foreign flow), `pool__basic`, **`pool__market_context`** (new, US lagged one session), `pool__market_breadth`, `pool__news_daily` |
+| table | the selection's SHORTLISTS unioned | **every numeric channel** of the pools whose selection cleared its null (`final_features` `channels="all"`, scope `tab`) |
+| dataset | `y` only | `y` + the auxiliary target `return_5day` (`aux_*.npy`, [train_test_creator.md](train_test_creator.md) §12) |
+| models | 15 (baselines, GBT, forests, 5 networks) | `model.event_linear` — `magnitude_ridge`, `event_logit`, `direction_logit` ([model.md](model.md) §18) — plus prior, GBT d2, ExtraTrees |
+| ensembles | the top-3-on-val blend (never eligible) | **fixed before the run**: `ensemble_geo3` = geometric mean of magnitude, event and direction; `ensemble_geo2` = magnitude and event |
+| report | train-only fit | + **refit on train+val**, scored on test once; the walk-forward also refits every ensemble member |
+
+### 6a. How the setup was chosen — a research harness that never chose on a test row
+
+A scratch harness over the same VCB rows (2009-07-27 → 2026-08-14) cut **rolling-origin folds**: each
+fold validates one calendar year (2014 … 2023, the 2023 fold ending at the chain's val end
+2023-12-05), trains on every row before it, and purges 24 rows. Choices were made on the fold mean
+(`CV10`; an early scan used the 2019-2023 folds, `CV5`). Measured:
+
+| what | CV AUC | note |
+|---|---|---|
+| any model on the 183 channels of §5's full table | mean over 9 models 0.581 (CV5) | the level channels drift (`EVD-1`) |
+| `pool__ta` alone | mean over 9 models 0.565 (CV5) | |
+| last-row **event logit**, `evt_`+`drv_` | **0.684** CV5 (C 0.1) · 0.671 CV10 (C 0.03) | val range 0.787 |
+| + the levels of 6 macro/market pools as 250-day z-scores | mean over 9 models 0.597, best 0.626 (CV5) | more channels, less AUC |
+| event logit fitted on a denser label (`up3`, `up4`, `any5`) | ≤ 0.663 (CV5) | no gain |
+| channels chosen inside each fold by within-year AUC stability | ≤ 0.631 (CV5) | no gain |
+| **magnitude ridge** on `log|r_5|`, `evt_`+`drv_` (± VCB range/flow) | **0.705-0.716** CV5 (fold min 0.615-0.650) · 0.653 CV10 | the most STABLE single model; weak in 2014-2016 |
+| + HAR log-volatility (`har_`) and a 4-year half-life | 0.671 CV10 | |
+| direction logit (P(up \| ≥ 3 % move)) | 0.638 CV10 → **0.607** once US series were lagged (`TZL-1`) | the same-date join had been helping |
+| Student-t distributional regression, quantile transform, splines, L1, bagged XGB | ≤ 0.665 | no gain |
+| panel training scored on VCB: 20 banks (XGB d2) · VN30 (logit) · 228 liquid names (XGB d4) | 0.672 CV10 · 0.664 CV5 · 0.632 CV5 | wider is worse past the sector |
+| geometric mean of the family bests (magnitude, event, direction, bank panel) | **0.695** CV10 (0.698 without the event logit) | 0.689 without the bank panel |
+| the same three kinds re-measured on the PIPELINE's channels | geo3 **0.682**, geo2 0.683; magnitude 0.667, event 0.670, direction 0.607 | the numbers `config.TABULAR_*` cite |
+
+⚠️ **THE BANK PANEL WAS LEFT OUT FOR COST, NOT ON EVIDENCE** (−0.006 CV10): it needs a second
+schema's table and dataset aligned to VCB's split.
+⚠️ **THE RESEARCH HARNESS DID PRINT TEST AUCs** for a handful of blends after they were chosen on CV
+(train+val refit 0.64-0.67, walk-forward 0.61-0.64, every one with 2024 inverted at 0.14-0.43). No
+configuration was changed on them; the one decision taken after they were read is the bank panel's
+exclusion above. **So the chain's test number below is not a first read of 2024-2026** (`NUL-1`).
+
+### 6b. The first tabular trial — `20260917-032538__vcb__up_5pct_5day__final__d1_h5__tab`
+
+**Selection at d = 1** (10 draws, rows before 2021-06-22): `event_features` IC **+0.1126** (p95
++0.0354, max +0.0439, z **+4.73**), `market_context` +0.1190 (z +3.86), `basic` +0.0839 (z +3.03),
+`market_breadth` +0.0553 (z +2.69) cleared; `news_daily` **−0.0218 FAILED** and is not in the table.
+Table 218 channels, dataset 211 (7 constant in train), train 2,984 / val 636 / test 641 samples.
+
+| model | val AUC | **test AUC** | test null p95 / max | test z | test AUC, refit on train+val (p95) |
+|---|---|---|---|---|---|
+| **`ensemble_geo3`** — chosen on val | **0.799** | **0.660** | 0.644 / 0.795 | +1.84 | 0.659 (0.641) |
+| `ensemble_geo2` | 0.790 | 0.669 | 0.645 / 0.802 | +1.93 | 0.664 (0.645) |
+| `event_linear_evt_c01` | 0.795 | 0.614 | 0.645 / 0.774 | +1.31 | 0.620 (0.641) |
+| `event_linear_evt_c003` | 0.789 | 0.615 | 0.642 / 0.781 | +1.33 | 0.625 (0.640) |
+| `event_linear_mag_a10_hl4` | 0.771 | 0.669 | 0.639 / 0.816 | +1.91 | 0.635 (0.647) |
+| `event_linear_mag_har_a100_hl4` | 0.760 | **0.705** | 0.641 / 0.786 | **+2.35** | 0.688 (0.645) |
+| `gbt_d2` | 0.735 | 0.623 | 0.638 / 0.784 | +1.42 | 0.637 (0.639) |
+| `event_linear_dir_c001` | 0.702 | 0.401 | 0.639 / 0.721 | −1.27 | 0.475 (0.630) |
+| `forest_et_leaf30` | 0.689 | 0.565 | 0.653 / 0.767 | +0.75 | 0.610 (0.650) |
+
+⚠️ **THE VAL-CHOSEN MODEL CLEARS ITS PER-RUN p95 FOR THE FIRST TIME — AND THAT IS NOT A PASS.**
+0.660 > 0.644, but the null MAX is **0.795** (§5 rule 3), `z = +1.84`, the grid is 10 runs plus
+the research harness's search (`NUL-1`), and the test set holds **33 positives in a handful of
+episodes**. It is +0.096 over the windowed chain's best val-chosen 0.564.
+⚠️ **2024 IS INVERTED FOR EVERY KIND** — walk-forward AUC 2021 0.681 · 2022 0.798 · 2023 0.838 ·
+**2024 0.292** · 2025 0.725 · 2026 0.592 (`ensemble_geo3`); 2024 had 7 events at a base rate of
+0.029. ⚠️ **The best single test number is not the chosen one**: the HAR magnitude ridge scored
+0.705 and was fifth on val. ⚠️ Brier skill of the chosen ensemble is **−0.30**: a geometric mean of
+three probabilities ranks, it does not calibrate.
+

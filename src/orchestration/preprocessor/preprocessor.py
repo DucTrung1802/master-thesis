@@ -5466,6 +5466,9 @@ class DataPreprocessor:
         | `sec_` | the GICS industry group (the bank sector for VCB), leave-one-out | a bank rarely jumps alone — sector bursts and breadth |
         | `mkt_` | the whole cross-section | market-wide bursts |
         | `cal_` | the calendar: weekday, month, quarter-end distance, Tết, VN30F expiry | earnings season and the pre-Tết run-up are known in advance |
+        | `har_` | LOG volatility at 1-125 sessions (Parkinson range and close-to-close), the log absolute 1- and h-session move, up/down semivariance | the event is a MAGNITUDE question first: `log|r_h|` is close to linear in log volatility (the HAR model), so a linear model reads these where it cannot read `evt_vol_*` |
+        | `px_` | 20/60-session log return, position in and drawdown from the 60/250-session range, gap to the 20/200-session mean | where the price sits in its own range — rebounds and breakouts |
+        | `flow_` | 5/60 turnover ratio, foreign net value over 1/5/20 sessions scaled by its own trailing 250-session mean absolute, 20-session change in foreign room | who is buying, in units that travel across tickers and decades |
 
         ⚠️ **EVERY `evt_`/`sec_`/`mkt_` CHANNEL IS TRAILING.** A backward event flag at
         row `s` reads `close[s]` and `close[s-h]`, both at or before `s`; every window
@@ -5483,6 +5486,15 @@ class DataPreprocessor:
 
         ⚠️ Survivorship: `silver.stocks_basic` holds no delisted name, so `sec_`/`mkt_`
         rates are computed over survivors (`market_breadth` states the same).
+
+        ⚠️ **`har_`/`px_`/`flow_` were added 2026-09-17 by MEASUREMENT** — a 10-fold
+        rolling-origin CV over 2014-2023 on VCB that never read a test row: a ridge on
+        `log|r_5|` over these plus `evt_`/`drv_` scored CV AUC 0.671 against 0.653 without
+        the `har_` block (`.claude/context/event_chain.md` §6). ⚠️ The Parkinson range uses
+        the RAW `high`/`low`: a split rescales both, so their RATIO is unaffected, and a
+        range wider than `ln(H/L) > 0.5` is screened as a corrupt print. ⚠️ Every `LN` of a
+        variance carries `+1e-8` so a zero-range suspended day is a very small number and
+        never `-inf`.
         """
         event = event_target.DEFAULT_EVENT
         h = int(event.horizon)
@@ -5513,7 +5525,11 @@ class DataPreprocessor:
             WITH base AS (
                 SELECT exchange, ticker, date, industry_group_code AS grp,
                        close_adjust::double precision AS px,
-                       LN(1.0 + GREATEST(COALESCE(value_matched, 0), 0))::double precision AS lval
+                       LN(1.0 + GREATEST(COALESCE(value_matched, 0), 0))::double precision AS lval,
+                       NULLIF(value_matched, 0)::double precision AS val,
+                       high::double precision AS hi, low::double precision AS lo,
+                       foreign_net_value::double precision AS fnv,
+                       foreign_room_left::double precision AS froom
                 FROM silver_schema.stocks_basic
                 WHERE close_adjust IS NOT NULL AND close_adjust > 0
             ),
@@ -5521,14 +5537,23 @@ class DataPreprocessor:
                 SELECT *,
                        LN(px / LAG(px, 1) OVER w) AS lr1,
                        px / LAG(px, {h}) OVER w - 1.0 AS ret_h,
+                       LN(px / LAG(px, 20) OVER w) AS lr20,
+                       LN(px / LAG(px, 60) OVER w) AS lr60,
+                       froom - LAG(froom, 20) OVER w AS froom_chg20,
                        date - LAG(date, 1) OVER w AS gap_days
                 FROM base
                 WINDOW w AS (PARTITION BY exchange, ticker ORDER BY date)
             ),
             clean AS (
-                SELECT exchange, ticker, date, grp, px, lval, gap_days,
+                SELECT exchange, ticker, date, grp, px, lval, val, fnv, froom_chg20, gap_days,
                        CASE WHEN ABS(lr1) <= 0.5 THEN lr1 END AS lr1,
-                       CASE WHEN ABS(ret_h) <= 0.5 THEN ret_h END AS ret_h
+                       CASE WHEN ABS(ret_h) <= 0.5 THEN ret_h END AS ret_h,
+                       CASE WHEN ABS(lr20) <= 1.5 THEN lr20 END AS lr20,
+                       CASE WHEN ABS(lr60) <= 1.5 THEN lr60 END AS lr60,
+                       -- Parkinson's per-day variance, ln(H/L)^2 / (4 ln 2); a range wider
+                       -- than ln(H/L) = 0.5 is a corrupt print, not a session.
+                       CASE WHEN hi > 0 AND lo > 0 AND hi >= lo AND LN(hi / lo) <= 0.5
+                            THEN POWER(LN(hi / lo), 2) / (4.0 * LN(2.0)) END AS pk2
                 FROM r
             ),
             flags AS (
@@ -5567,12 +5592,42 @@ class DataPreprocessor:
                        (lval - AVG(lval) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW))
                            / NULLIF(STDDEV_SAMP(lval) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW), 0)
                            AS evt_turnover_z_60,
+                       CASE WHEN COUNT(pk2) OVER (w ROWS BETWEEN 0 PRECEDING AND CURRENT ROW) >= 1 THEN 0.5 * LN(AVG(pk2) OVER (w ROWS BETWEEN 0 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lpk_1,
+                       CASE WHEN COUNT(pk2) OVER (w ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) >= 2 THEN 0.5 * LN(AVG(pk2) OVER (w ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lpk_5,
+                       CASE WHEN COUNT(pk2) OVER (w ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) >= 5 THEN 0.5 * LN(AVG(pk2) OVER (w ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lpk_10,
+                       CASE WHEN COUNT(pk2) OVER (w ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) >= 11 THEN 0.5 * LN(AVG(pk2) OVER (w ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lpk_22,
+                       CASE WHEN COUNT(pk2) OVER (w ROWS BETWEEN 62 PRECEDING AND CURRENT ROW) >= 31 THEN 0.5 * LN(AVG(pk2) OVER (w ROWS BETWEEN 62 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lpk_63,
+                       CASE WHEN COUNT(pk2) OVER (w ROWS BETWEEN 124 PRECEDING AND CURRENT ROW) >= 62 THEN 0.5 * LN(AVG(pk2) OVER (w ROWS BETWEEN 124 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lpk_125,
+                       CASE WHEN COUNT(lr1) OVER (w ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) >= 2 THEN 0.5 * LN(AVG(lr1 * lr1) OVER (w ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lrv_5,
+                       CASE WHEN COUNT(lr1) OVER (w ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) >= 11 THEN 0.5 * LN(AVG(lr1 * lr1) OVER (w ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lrv_22,
+                       CASE WHEN COUNT(lr1) OVER (w ROWS BETWEEN 62 PRECEDING AND CURRENT ROW) >= 31 THEN 0.5 * LN(AVG(lr1 * lr1) OVER (w ROWS BETWEEN 62 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lrv_63,
+                       CASE WHEN COUNT(lr1) OVER (w ROWS BETWEEN 124 PRECEDING AND CURRENT ROW) >= 62 THEN 0.5 * LN(AVG(lr1 * lr1) OVER (w ROWS BETWEEN 124 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_lrv_125,
+                       LN(ABS(lr1) + 1e-4) AS har_labs_r1,
+                       LN(ABS(LN(1.0 + ret_h)) + 1e-3) AS har_labs_ret_h,
+                       CASE WHEN COUNT(lr1) OVER (w ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) >= 11 THEN 0.5 * LN(AVG(POWER(GREATEST(lr1, 0), 2)) OVER (w ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_semi_up_22,
+                       CASE WHEN COUNT(lr1) OVER (w ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) >= 11 THEN 0.5 * LN(AVG(POWER(LEAST(lr1, 0), 2)) OVER (w ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) + 1e-8) END AS har_semi_dn_22,
+                       lr20 AS px_ret_20, lr60 AS px_ret_60,
+                       CASE WHEN COUNT(px) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) >= 30 THEN (px - MIN(px) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW)) / NULLIF(MAX(px) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) - MIN(px) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW), 0) END AS px_pos_60,
+                       CASE WHEN COUNT(px) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) >= 30 THEN px / MAX(px) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) - 1.0 END AS px_dd_60,
+                       CASE WHEN COUNT(px) OVER (w ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) >= 125 THEN (px - MIN(px) OVER (w ROWS BETWEEN 249 PRECEDING AND CURRENT ROW)) / NULLIF(MAX(px) OVER (w ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) - MIN(px) OVER (w ROWS BETWEEN 249 PRECEDING AND CURRENT ROW), 0) END AS px_pos_250,
+                       CASE WHEN COUNT(px) OVER (w ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) >= 125 THEN px / MAX(px) OVER (w ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) - 1.0 END AS px_dd_250,
+                       CASE WHEN COUNT(px) OVER (w ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) >= 10 THEN px / AVG(px) OVER (w ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) - 1.0 END AS px_ma_gap_20,
+                       CASE WHEN COUNT(px) OVER (w ROWS BETWEEN 199 PRECEDING AND CURRENT ROW) >= 100 THEN px / AVG(px) OVER (w ROWS BETWEEN 199 PRECEDING AND CURRENT ROW) - 1.0 END AS px_ma_gap_200,
+                       AVG(val) OVER (w ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) / NULLIF(AVG(val) OVER (w ROWS BETWEEN 59 PRECEDING AND CURRENT ROW), 0) AS flow_turn_ratio_5_60,
+                       fnv AS fsum_1,
+                       SUM(fnv) OVER (w ROWS BETWEEN 4 PRECEDING AND CURRENT ROW) AS fsum_5,
+                       SUM(fnv) OVER (w ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) AS fsum_20,
+                       froom_chg20 AS fr20,
                        SUM(COALESCE(hit_up, 0)) OVER (w ROWS UNBOUNDED PRECEDING) AS up_epoch
                 FROM flags
                 WINDOW w AS (PARTITION BY exchange, ticker ORDER BY date)
             ),
             since AS (
                 SELECT *,
+                       CASE WHEN COUNT(fr20) OVER (PARTITION BY exchange, ticker ORDER BY date ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) >= 60 THEN fr20 / NULLIF(AVG(ABS(fr20)) OVER (PARTITION BY exchange, ticker ORDER BY date ROWS BETWEEN 249 PRECEDING AND CURRENT ROW), 0) END AS flow_froom_chg_20,
+                       CASE WHEN COUNT(fsum_1) OVER (PARTITION BY exchange, ticker ORDER BY date ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) >= 60 THEN fsum_1 / NULLIF(AVG(ABS(fsum_1)) OVER (PARTITION BY exchange, ticker ORDER BY date ROWS BETWEEN 249 PRECEDING AND CURRENT ROW), 0) END AS flow_fnet_1,
+                       CASE WHEN COUNT(fsum_5) OVER (PARTITION BY exchange, ticker ORDER BY date ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) >= 60 THEN fsum_5 / NULLIF(AVG(ABS(fsum_5)) OVER (PARTITION BY exchange, ticker ORDER BY date ROWS BETWEEN 249 PRECEDING AND CURRENT ROW), 0) END AS flow_fnet_5,
+                       CASE WHEN COUNT(fsum_20) OVER (PARTITION BY exchange, ticker ORDER BY date ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) >= 60 THEN fsum_20 / NULLIF(AVG(ABS(fsum_20)) OVER (PARTITION BY exchange, ticker ORDER BY date ROWS BETWEEN 249 PRECEDING AND CURRENT ROW), 0) END AS flow_fnet_20,
                        CASE WHEN up_epoch > 0 THEN LEAST(
                            ROW_NUMBER() OVER (PARTITION BY exchange, ticker, up_epoch ORDER BY date) - 1,
                            250) END AS evt_sessions_since_up
@@ -5649,7 +5704,14 @@ class DataPreprocessor:
                    k.days_to_tet::double precision AS cal_days_to_tet,
                    k.days_since_tet::double precision AS cal_days_since_tet,
                    (CASE WHEN j.date <= k.this_exp THEN k.this_exp ELSE k.next_exp END - j.date)
-                       ::double precision AS cal_days_to_vn30f_expiry
+                       ::double precision AS cal_days_to_vn30f_expiry,
+                   j.har_lpk_1, j.har_lpk_5, j.har_lpk_10, j.har_lpk_22,
+                   j.har_lpk_63, j.har_lpk_125, j.har_lrv_5, j.har_lrv_22,
+                   j.har_lrv_63, j.har_lrv_125, j.har_labs_r1, j.har_labs_ret_h,
+                   j.har_semi_up_22, j.har_semi_dn_22, j.px_ret_20, j.px_ret_60,
+                   j.px_pos_60, j.px_dd_60, j.px_pos_250, j.px_dd_250,
+                   j.px_ma_gap_20, j.px_ma_gap_200, j.flow_turn_ratio_5_60, j.flow_fnet_1,
+                   j.flow_fnet_5, j.flow_fnet_20, j.flow_froom_chg_20
             FROM joined j
             JOIN calendar k ON k.date = j.date
             ORDER BY j.exchange, j.ticker, j.date
@@ -5681,6 +5743,209 @@ class DataPreprocessor:
         self._logger.log_info(
             f"gold.stocks_event_features: {rows} rows, {tickers} tickers "
             f"({first} → {last}) for {event.column}."
+        )
+
+    # The two VN indices `gold.market_context` summarises, `gold.stock_market`'s names.
+    GOLD_MARKET_CONTEXT_INDICES = (("vn", "hose__vnindex"), ("vn30", "hose__vn30index"))
+    # FRED daily series (US-dated) and what each becomes. ⚠️ All are LAGGED one VN session.
+    GOLD_MARKET_CONTEXT_US = {
+        "vix": "usa__economy__money__fred__vixcls",
+        "spx": "usa__economy__prices__fred__sp500",
+        "djia": "usa__economy__prices__fred__djia",
+        "ust10": "usa__economy__money__fred__dgs10",
+        "usd": "usa__economy__trade__fred__dtwexbgs",
+        "oil": "usa__economy__prices__fred__dcoilwtico",
+    }
+    GOLD_MARKET_CONTEXT_BONDS = ("vn01y", "vn05y", "vn10y")
+
+    def _ingest_gold_market_context(self) -> None:
+        """VN indices, US risk and VN yields → `gold.market_context`, ONE ROW PER VN SESSION.
+
+        The date-level half of the EVENT chain's feature groups (`utils.event_target`),
+        in STATIONARY units a linear model can read — `pool__stock_market` and
+        `pool__economy_usa` carry the same series as LEVELS, which drift out of the train
+        range (`EVD-1`: 108 of 183 channels beyond 5 train-sigmas on the event table).
+
+        | prefix | what |
+        |---|---|
+        | `mctx_vn_` / `mctx_vn30_` | VN-Index / VN30: log return 1/5/20/60, log realised and Parkinson volatility 5/22/63, position in and drawdown from the 60/250-session range, gap to the 20/200-session mean, turnover z-score, foreign net value 5/20 scaled by its trailing mean absolute |
+        | `glb_` | VIX level, 5-day change and 250-day z; S&P 500 and Dow 1/5/20-day log return and 22-day log volatility; US 10-year yield 20-day change; broad dollar and WTI 20-day log return |
+        | `bond_` | VN 1/5/10-year yield 20/60-session change, and the 10y-1y slope |
+
+        ⚠️ **EVERY US SERIES IS LAGGED ONE VN SESSION** — the row for VN date `d` reads
+        the last US observation dated STRICTLY BEFORE `d`. A US close on date `d` prints at
+        ~04:00 Vietnam time on `d+1`, after the VN session of `d` has closed, so the
+        same-date join `pool__economy_usa` does is a ~13-hour look-ahead (`TZL-1`,
+        measured 2026-09-17: VN 2025-04-03 carries the S&P 500's 2025-04-03 close of
+        5,396.52, the tariff crash, which Hanoi could not see until 2025-04-04).
+        ⚠️ **VN yields are lagged one session too** — TradingView's `TVC` bond bars are a
+        vendor feed with no stated cut-off, and a day costs a 5-session label little.
+
+        ⚠️ **AN INDEX PRINT MORE THAN 20 % OUTSIDE ITS PREVIOUS 5 SESSIONS' RANGE IS
+        DROPPED** — `gold.stock_market` carries VN30 closes off by a factor of ~16 for a
+        day (log return ±2.77) and a VN30 low of 86.32 under a close of 872.21
+        (2019-07-09). No VN index can move 20 % in a session (HOSE's band is ±7 %), and
+        a range wider than `ln(H/L) > 0.2` or a close outside `[low, high]` is dropped.
+
+        ⚠️ The spine is `silver.stocks_basic`'s calendar, so a session the index source
+        lacks is a row of NULLs, never a missing row.
+        """
+        self._logger.log_info("Ingesting gold.market_context (VN indices, US risk, VN yields)...")
+
+        def w(n: int, order: str = "date") -> str:
+            return f"(ORDER BY {order} ROWS BETWEEN {n - 1} PRECEDING AND CURRENT ROW)"
+
+        ix_cols, ix_clean, ix_r, ix_feat, ix_final = [], [], [], [], []
+        for k, idx in self.GOLD_MARKET_CONTEXT_INDICES:
+            ix_cols += [
+                f"m.{idx}__close_adjust::double precision AS {k}_px_raw",
+                f"m.{idx}__high::double precision AS {k}_hi_raw",
+                f"m.{idx}__low::double precision AS {k}_lo_raw",
+                f"NULLIF(m.{idx}__value_matched, 0)::double precision AS {k}_val",
+                f"m.{idx}__foreign_net_value::double precision AS {k}_fnv",
+            ]
+            prev5 = "(ORDER BY date ROWS BETWEEN 5 PRECEDING AND 1 PRECEDING)"
+            ok_px = (
+                f"{k}_px_raw > 0 AND ({k}_px_raw <= 1.2 * MAX({k}_px_raw) OVER {prev5} "
+                f"OR MAX({k}_px_raw) OVER {prev5} IS NULL) AND ({k}_px_raw >= 0.8 * "
+                f"MIN({k}_px_raw) OVER {prev5} OR MIN({k}_px_raw) OVER {prev5} IS NULL)"
+            )
+            ix_clean += [
+                f"CASE WHEN {ok_px} THEN {k}_px_raw END AS {k}_px",
+                f"CASE WHEN {ok_px} AND {k}_hi_raw > 0 AND {k}_lo_raw > 0 "
+                f"AND {k}_lo_raw <= {k}_px_raw AND {k}_px_raw <= {k}_hi_raw "
+                f"AND LN({k}_hi_raw / {k}_lo_raw) <= 0.2 "
+                f"THEN POWER(LN({k}_hi_raw / {k}_lo_raw), 2) / (4.0 * LN(2.0)) END AS {k}_pk2",
+                f"{k}_val", f"{k}_fnv",
+            ]
+            ix_r += [
+                f"LN({k}_px / LAG({k}_px, 1) OVER (ORDER BY date)) AS {k}_r1",
+                f"LN({k}_px / LAG({k}_px, 5) OVER (ORDER BY date)) AS {k}_r5",
+                f"LN({k}_px / LAG({k}_px, 20) OVER (ORDER BY date)) AS {k}_r20",
+                f"LN({k}_px / LAG({k}_px, 60) OVER (ORDER BY date)) AS {k}_r60",
+                f"CASE WHEN {k}_val > 0 THEN LN({k}_val) END AS {k}_lval",
+                f"SUM({k}_fnv) OVER {w(5)} AS {k}_fs5",
+                f"SUM({k}_fnv) OVER {w(20)} AS {k}_fs20",
+            ]
+            p = f"mctx_{k}_"
+            feats = [f"{k}_r1 AS {p}ret_1", f"{k}_r5 AS {p}ret_5", f"{k}_r20 AS {p}ret_20",
+                     f"{k}_r60 AS {p}ret_60"]
+            for n in (5, 22, 63):
+                feats.append(f"CASE WHEN COUNT({k}_r1) OVER {w(n)} >= {max(3, n // 2)} THEN "
+                             f"0.5 * LN(AVG({k}_r1 * {k}_r1) OVER {w(n)} + 1e-8) END AS {p}lrv_{n}")
+                feats.append(f"CASE WHEN COUNT({k}_pk2) OVER {w(n)} >= {max(3, n // 2)} THEN "
+                             f"0.5 * LN(AVG({k}_pk2) OVER {w(n)} + 1e-8) END AS {p}lpk_{n}")
+            for n in (60, 250):
+                feats.append(f"CASE WHEN COUNT({k}_px) OVER {w(n)} >= {n // 2} THEN ({k}_px - "
+                             f"MIN({k}_px) OVER {w(n)}) / NULLIF(MAX({k}_px) OVER {w(n)} - "
+                             f"MIN({k}_px) OVER {w(n)}, 0) END AS {p}pos_{n}")
+                feats.append(f"CASE WHEN COUNT({k}_px) OVER {w(n)} >= {n // 2} THEN {k}_px / "
+                             f"MAX({k}_px) OVER {w(n)} - 1.0 END AS {p}dd_{n}")
+            for n in (20, 200):
+                feats.append(f"CASE WHEN COUNT({k}_px) OVER {w(n)} >= {n // 2} THEN {k}_px / "
+                             f"AVG({k}_px) OVER {w(n)} - 1.0 END AS {p}ma_gap_{n}")
+            feats.append(f"({k}_lval - AVG({k}_lval) OVER {w(60)}) / NULLIF(STDDEV_SAMP({k}_lval) "
+                         f"OVER {w(60)}, 0) AS {p}turn_z_60")
+            for n in (5, 20):
+                feats.append(f"CASE WHEN COUNT({k}_fs{n}) OVER {w(250)} >= 60 THEN {k}_fs{n} / "
+                             f"NULLIF(AVG(ABS({k}_fs{n})) OVER {w(250)}, 0) END AS {p}fnet_{n}")
+            ix_feat += feats
+            ix_final += [f.rsplit(" AS ", 1)[1] for f in feats]
+
+        us_cols = [f"{col}::double precision AS {k}" for k, col in self.GOLD_MARKET_CONTEXT_US.items()]
+        us_feat = [
+            "vix AS glb_vix",
+            "vix - LAG(vix, 5) OVER (ORDER BY date) AS glb_vix_chg_5",
+            f"(vix - AVG(vix) OVER {w(250)}) / NULLIF(STDDEV_SAMP(vix) OVER {w(250)}, 0) AS glb_vix_z_250",
+        ]
+        for k in ("spx", "djia"):
+            us_feat += [
+                f"CASE WHEN {k} > 0 AND LAG({k}, 1) OVER (ORDER BY date) > 0 "
+                f"THEN LN({k} / LAG({k}, 1) OVER (ORDER BY date)) END AS glb_{k}_ret_1",
+                f"CASE WHEN {k} > 0 AND LAG({k}, 5) OVER (ORDER BY date) > 0 "
+                f"THEN LN({k} / LAG({k}, 5) OVER (ORDER BY date)) END AS glb_{k}_ret_5",
+                f"CASE WHEN {k} > 0 AND LAG({k}, 20) OVER (ORDER BY date) > 0 "
+                f"THEN LN({k} / LAG({k}, 20) OVER (ORDER BY date)) END AS glb_{k}_ret_20",
+            ]
+        us_feat += [
+            "ust10 - LAG(ust10, 20) OVER (ORDER BY date) AS glb_ust10_chg_20",
+            "CASE WHEN usd > 0 AND LAG(usd, 20) OVER (ORDER BY date) > 0 "
+            "THEN LN(usd / LAG(usd, 20) OVER (ORDER BY date)) END AS glb_usd_ret_20",
+            # ⚠️ WTI settled at -37.63 on 2020-04-20: a log return of a non-positive price is undefined.
+            "CASE WHEN oil > 0 AND LAG(oil, 20) OVER (ORDER BY date) > 0 "
+            "THEN LN(oil / LAG(oil, 20) OVER (ORDER BY date)) END AS glb_oil_ret_20",
+        ]
+        us_final = [f.rsplit(" AS ", 1)[1] for f in us_feat] + ["glb_spx_lrv_22", "glb_djia_lrv_22"]
+        bond_cols = [f"tvc__{t}__value::double precision AS {t}" for t in self.GOLD_MARKET_CONTEXT_BONDS]
+        bond_feat = []
+        for t in self.GOLD_MARKET_CONTEXT_BONDS:
+            bond_feat += [f"{t} - LAG({t}, 20) OVER (ORDER BY date) AS bond_{t}_chg_20",
+                          f"{t} - LAG({t}, 60) OVER (ORDER BY date) AS bond_{t}_chg_60"]
+        bond_feat.append("vn10y - vn01y AS bond_slope_10_1")
+        bond_final = [f.rsplit(" AS ", 1)[1] for f in bond_feat]
+        sep = ",\n                       "
+        sql = f"""
+            CREATE TABLE gold_schema.market_context AS
+            WITH spine AS (SELECT DISTINCT date FROM silver_schema.stocks_basic),
+            ix_raw AS (
+                SELECT s.date, {sep.join(ix_cols)}
+                FROM spine s LEFT JOIN gold_schema.stock_market m ON m.date = s.date
+            ),
+            ix_clean AS (SELECT date, {sep.join(ix_clean)} FROM ix_raw),
+            ix_r AS (SELECT *, {sep.join(ix_r)} FROM ix_clean),
+            ix AS (SELECT date, {sep.join(ix_feat)} FROM ix_r),
+            us_raw AS (SELECT date, {sep.join(us_cols)} FROM gold_schema.economy_usa),
+            us_f AS (SELECT date, {sep.join(us_feat)} FROM us_raw),
+            us AS (
+                SELECT u.*,
+                       0.5 * LN(AVG(glb_spx_ret_1 * glb_spx_ret_1) OVER {w(22)} + 1e-8) AS glb_spx_lrv_22,
+                       0.5 * LN(AVG(glb_djia_ret_1 * glb_djia_ret_1) OVER {w(22)} + 1e-8) AS glb_djia_lrv_22
+                FROM us_f u
+            ),
+            bonds_raw AS (SELECT date, {sep.join(bond_cols)} FROM gold_schema.bonds),
+            bonds AS (SELECT date, {sep.join(bond_feat)} FROM bonds_raw),
+            -- ⚠️ STRICTLY BEFORE, as a running maximum rather than a correlated LIMIT 1 (which
+            -- rescans the source per VN date): on a tie the VN row sorts FIRST (`src` 0), so
+            -- the maximum it sees excludes a US or bond row of the SAME date.
+            cal AS (
+                SELECT date, 0 AS src FROM spine
+                UNION ALL SELECT date, 1 FROM us
+                UNION ALL SELECT date, 2 FROM bonds
+            ),
+            asof AS (
+                SELECT date, src,
+                       MAX(CASE WHEN src = 1 THEN date END) OVER o AS us_date,
+                       MAX(CASE WHEN src = 2 THEN date END) OVER o AS bond_date
+                FROM cal
+                WINDOW o AS (ORDER BY date, src ROWS UNBOUNDED PRECEDING)
+            )
+            SELECT s.date,
+                   {sep.join("ix." + c for c in ix_final)},
+                   {sep.join("uu." + c for c in us_final)},
+                   {sep.join("bb." + c for c in bond_final)}
+            FROM spine s
+            LEFT JOIN ix ON ix.date = s.date
+            JOIN asof a ON a.date = s.date AND a.src = 0
+            LEFT JOIN us uu ON uu.date = a.us_date
+            LEFT JOIN bonds bb ON bb.date = a.bond_date
+            ORDER BY s.date
+        """
+        with self._database_driver._cursor_ctx() as cur:
+            cur.execute("DROP TABLE IF EXISTS gold_schema.market_context")
+            cur.execute(sql)
+            cur.execute("ALTER TABLE gold_schema.market_context ADD PRIMARY KEY (date)")
+            cur.execute(
+                "COMMENT ON TABLE gold_schema.market_context IS %s",
+                ("VN-Index/VN30 in stationary units, US risk lagged one VN session, VN "
+                 "yields lagged one session; built by DataPreprocessor._ingest_gold_market_context",),
+            )
+            cur.execute("SELECT COUNT(*), MIN(date), MAX(date) FROM gold_schema.market_context")
+            rows, first, last = cur.fetchone()
+        if not rows:
+            raise PipelineError("gold.market_context is EMPTY — build silver/stocks_basic first.")
+        self._logger.log_info(
+            f"gold.market_context: {rows} sessions x {len(ix_final) + len(us_final) + len(bond_final)} "
+            f"channels ({first} → {last})."
         )
 
     def _ingest_gold_news_daily_panel(self) -> None:
@@ -7258,6 +7523,23 @@ class DataPreprocessor:
             noun="market series",
             relation=self.UNIFIED_MARKET_BREADTH_SOURCE,
             feature_columns=features,
+        )
+
+    UNIFIED_MARKET_CONTEXT_SOURCE = f"{GOLD_SCHEMA}.market_context"
+
+    def _ingest_unified_pool_market_context(self, ticker: str) -> dict:
+        """`gold.market_context` → `…​.pool__market_context` — the market in STATIONARY units.
+
+        ~60 date-keyed channels (VN-Index/VN30 returns, log volatility, range position,
+        flows; US risk lagged one VN session; VN yield changes), LEFT JOINed onto
+        `pool__basic` and broadcast across its tickers. See
+        `_ingest_gold_market_context` for every definition and ⚠️ `TZL-1` for the lag.
+        """
+        return self._helper_unified_pool_on_date_spine(
+            ticker,
+            "pool__market_context",
+            self.UNIFIED_MARKET_CONTEXT_SOURCE,
+            noun="market context series",
         )
 
     def _ingest_unified_pool_stock_market(self, ticker: str) -> dict:

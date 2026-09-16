@@ -83,7 +83,7 @@ MEANS — and are not [`current_state/`](README.md) snapshots, which hold what a
 | [cross-sectional.md](../findings/cross-sectional.md) | **8.5k** | quoting the headline result. §6-0-§6-0-ter — the walk-forward, seven architectures, the dataset sweep. ⚠️ **§6-0-c is the caveat list and is why the rest is readable** |
 | [model-chain.md](../findings/model-chain.md) | **6.9k** | running the chain end to end. §3b-§3d-bis + §4 — the eight stages, the two selection layers, Kaggle panel mode. ⚠️ the COMMANDS are the [runbook](../runbook/RUNBOOK.md)'s; this is the reasoning around them |
 | [data-layers.md](../findings/data-layers.md) | **5.6k** | asking where a column comes from. §3a-§3a-bis — the 83 assets, all ten `pool__*` tables and what each measured, the forex ingest, the FILTER layer |
-| [single-stock.md](../findings/single-stock.md) | **4.2k** | asked for a signal on ONE ticker. §5c, §5d, §6-1-§6-1-quater — eleven architectures inside one error bar, the BANK panel, the five-ticker h=10 run, the VN30 run whose POOLED answer flips |
+| [single-stock.md](../findings/single-stock.md) | **5.2k** | asked for a signal on ONE ticker. §5c, §5d, §6-1-§6-1-quater — eleven architectures inside one error bar, the BANK panel, the five-ticker h=10 run, the VN30 run whose POOLED answer flips |
 
 ### Thesis deliverables — `.claude/docs/`
 
@@ -144,7 +144,7 @@ the directory in the same commit.
 | [train_test_creator.md](../context/train_test_creator.md) | 5.0k | building a dataset, or the purge/impute/scale/window steps |
 | [result_evaluator.md](../context/result_evaluator.md) | 4.1k | scoring, the metric set, panel-vs-series grain. ⚠️ **STALE** — predates `index.py` and `NUL-3` |
 | [sentiment.md](../context/sentiment.md) | 3.4k | anything news / text / PhoBERT |
-| [event_chain.md](../context/event_chain.md) | 2.8k | the binary EVENT chain — *does VCB rise ≥ g % within h sessions?* — its parameters (`src/utils/event_target.py`), the new `pool__event_features`, the leakage guards, and ⚠️ **§5 THE TRIAL LOG** (`reports/event_chain/trials.csv`) — one row per model run of a COMPLETE trial: data, features, target, split, model, hyperparameters, run time, GPU, results |
+| [event_chain.md](../context/event_chain.md) | 4.6k | the binary EVENT chain — *does VCB rise ≥ g % within h sessions?* — its parameters (`src/utils/event_target.py`), the new `pool__event_features`, the leakage guards, and ⚠️ **§5 THE TRIAL LOG** (`reports/event_chain/trials.csv`) — one row per model run of a COMPLETE trial: data, features, target, split, model, hyperparameters, run time, GPU, results |
 
 ### Session tooling — `.claude/` (started 2026-09-06)
 
@@ -158,7 +158,7 @@ front of you.** ⚠️ **The runbook here is the only runbook.**
 | [../.claude/workflows/README.md](../workflows/README.md) | **1.1k** | starting any recurring JOB — it routes the nine step-by-step guides below |
 | `.claude/workflows/*.md` | **13.6k** total | *start a session* (0.7k — **one command, `O8`, then stop**; it takes NO arguments, ⚠️ **and §1b is the 2026-09-06 measurement that closed that question** — `TAB-1`) · *run the chain* (1.7k) · *run a selection* (1.8k) · *refresh the data* (1.7k) · *OCR a ticker* (1.8k) · *summarize ocr* (0.8k — reads ONE csv, opens nothing else) · *quote a number* (1.8k) · *record a finding* (1.7k) · *finish and commit* (1.5k). Re-measured 2026-09-06. ⚠️ **Each is the ORDER; the commands are cited by runbook row ID** so a flag changes in one place |
 | `.claude/commands/*.md` | **4.0k** total | you want to LAUNCH a workflow rather than read it. Ten Claude Code slash commands, one per job plus `/wf-list` — `/wf-<workflow-name>` reads `.claude/workflows/<name>.md` and executes it in order. ⚠️ **A launcher copies NOTHING**: it names the workflow, the way a workflow names a runbook row, so a step changes in one place. ⚠️ **Added 2026-09-06** — a file dropped in this folder becomes a slash command with no registration step, which is also how a stale one keeps being offered |
-| [.claude/runbook/RUNBOOK.md](../runbook/RUNBOOK.md) | **5.2k** | you want the COMMAND — ~40 templates as one table (`O`/`C`/`W`/`D`/`E`/`F` row IDs), each with what it writes, its measured cost, and the step that must follow it |
+| [.claude/runbook/RUNBOOK.md](../runbook/RUNBOOK.md) | **6.3k** | you want the COMMAND — ~40 templates as one table (`O`/`C`/`W`/`D`/`E`/`F` row IDs), each with what it writes, its measured cost, and the step that must follow it |
 | [../.claude/current_state/README.md](README.md) | **1.3k** | writing a measured SNAPSHOT (freshness, coverage, what exists). ⚠️ **Not a fifth register** — `CLAUDE.md` §6 holds what the state MEANS; this holds what a command PRINTED, with the command named |
 | `.claude/current_state/*.md` | — | the snapshots themselves. ⚠️ **Empty until someone measures something, and that is the correct state** |
 

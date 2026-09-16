@@ -692,6 +692,20 @@ DATE_SPINE_POOLS: list[tuple[str, str, str, str]] = [
         "is computed over the companies that survived to 2026 and is biased downward.",
     ),
     (
+        "pool__market_context",
+        "market_context",
+        "market context series",
+        "~60 date-keyed channels in STATIONARY units, built for the EVENT chain: VN-Index "
+        "and VN30 log returns (1/5/20/60), log realised and Parkinson volatility (5/22/63), "
+        "position in and drawdown from the 60/250-session range, gap to the 20/200-session "
+        "mean, turnover z and scaled foreign flow (mctx_*); VIX, S&P 500, Dow, US 10y, "
+        "broad dollar and WTI (glb_*); VN 1/5/10y yield changes and the 10y-1y slope "
+        "(bond_*). ⚠️ EVERY US SERIES IS LAGGED ONE VN SESSION and the VN yields one "
+        "session too - the same-date join pool__economy_usa does is a ~13-hour look-ahead "
+        "(TZL-1). ⚠️ The yields stop 2026-06-08 with gold.bonds, so the last ~45 spine "
+        "rows carry no bond_* value.",
+    ),
+    (
         "pool__stock_market",
         "stock_market",
         "index series",

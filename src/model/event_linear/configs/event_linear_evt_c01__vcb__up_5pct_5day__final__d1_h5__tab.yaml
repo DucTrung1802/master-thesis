@@ -1,0 +1,26 @@
+# Written by `python -m event_chain` for up_5pct_5day (1 when close_adjust[t+5] >= (1 + 5%) x close_adjust[t], else 0; NULL for the last 5 sessions).
+# The grid is event_chain/config.py SETUPS['tabular'].
+run_name: event_linear_evt_c01__vcb__up_5pct_5day__final__d1_h5__tab
+dataset: vcb__up_5pct_5day__final__d1_h5__tab__tr70_val15_test15__std
+dataset_hash: 8cae1d16d1530360
+task: classification
+lookback: 1
+n_features: 211
+model:
+  type: EVENT_LINEAR
+  kind: event_logit
+  columns:
+  - evt_
+  - sec_
+  - mkt_rate_
+  - mkt_ret_h
+  - mkt_disp_h
+  - cal_
+  - drv_
+  C: 0.1
+  exclude:
+  - drv_vwap_raw
+  aux_target: return_5day
+null_draws: 200
+seed: 42
+device: cpu

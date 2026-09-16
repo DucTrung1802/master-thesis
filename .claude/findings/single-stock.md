@@ -274,6 +274,16 @@ draw sees the same basket — and any CAGR read off this universe is not.
 
 ### ⚠️ 6-1-quinquies. THE +5 % / 5-SESSION EVENT ON VCB — 36 MODEL RUNS, NOT ONE VAL-CHOSEN MODEL CLEARS ITS TEST NULL (2026-09-17)
 
+⚠️ **UPDATED THE SAME DAY — A FOURTH TRIAL, THE TABULAR SETUP, PUTS THE VAL-CHOSEN MODEL ABOVE
+ITS p95 AND STILL SHORT OF A RESULT** (`20260917-032538`, [event_chain.md](../context/event_chain.md)
+§6): d = 1, 211 channels, three LINEAR kinds (the size of the 5-session move, its direction, the
+event) chosen by a 10-fold rolling-origin CV over 2014-2023. The val-chosen fixed ensemble scores
+val **0.799**, test **0.660** against p95 0.644 — ⚠️ null MAX **0.795**, `z = +1.84`, 2024 inverted
+(walk-forward **0.292**), 33 test positives. Refitted on train+val, **0.659**. The magnitude ridge
+alone reached **0.705** (`z = +2.35`) and was fifth on val. ⚠️ **A US series joined on the same
+date had been a 13-hour look-ahead** (`TZL-1`) and lifted a research CV by 0.03 before it was lagged.
+The sentence below stands for the WINDOWED grid; the verdict — no demonstrated skill — stands for both.
+
 **Added 2026-09-17, not moved from the hub.** The question was a CLASSIFICATION one — *on which
 sessions will VCB's adjusted close be ≥ 5 % higher five sessions later?* — run end to end on the
 repo's stages by `src/event_chain/` ([context](../context/event_chain.md)). Label

@@ -18,6 +18,11 @@ reports/event_chain/
     python -m event_chain.trial --rebuild       # regenerate trials.csv from the trial folders
     python -m event_chain.trial --show <id>     # print one trial's headline
 
+⚠️ **A FIXED ENSEMBLE IS A ROW; THE TOP-3 BLEND IS NOT** (2026-09-17). An ensemble named in
+`config.SETUPS` is a model whose composition was decided before the chain ran, so it is
+logged like a run (its `run_seconds` is the sum of its members'); the blend is picked on val
+and stays in `trial.json` only.
+
 ⚠️ **A TRIAL IS LOGGED ONLY WHEN IT COMPLETED** (decided 2026-09-17): the `report` stage ran on
 a dataset with trained models. Probes, crashed attempts and data refreshes are NOT rows —
 they have no data/feature/target/split/model/result to record.
@@ -68,6 +73,7 @@ CODE_FILES = (
     "src/model/baseline/model.py",
     "src/model/gbt/model.py",
     "src/model/forest/model.py",
+    "src/model/event_linear/model.py",
     "src/model/lstm/model.py",
     "src/model/gru/model.py",
     "src/model/cnn/model.py",
@@ -98,6 +104,7 @@ LOG_COLUMNS = [
     "run_seconds", "fit_seconds", "device", "gpu",
     # results
     "val_auc", "test_auc", "test_auc_null_p95", "test_auc_z", "test_beats_null",
+    "test_auc_refit_train_val", "test_auc_refit_null_p95",
     "test_pr_auc", "test_precision_top10pct", "test_brier_skill",
     "test_precision_at_val_threshold", "test_recall_at_val_threshold", "chosen_on_val",
 ]
@@ -432,6 +439,9 @@ def record(chain, built: Dict, notes: str = "",
                   "test_start_date": split_meta.get("test_start_date"),
                   "purge_gap_rows": split_meta.get("purge_gap_rows"),
                   "purge_rule": split_meta.get("purge_rule"), "splits": splits},
+        "setup": {"name": getattr(chain, "setup", "window"), "channels": getattr(chain, "channels", "shortlist"),
+                  "aux_targets": list(getattr(chain, "aux_targets", ()) or []),
+                  "ensembles": {k: list(v) for k, v in (getattr(chain, "ensembles", {}) or {}).items()}},
         "selection": {"root": _rel(chain.root), "lookback": chain.lookback,
                       "null_draws_configured": chain.null_draws,
                       "pools_offered": list(chain.pools), "runs": selection},
@@ -447,7 +457,9 @@ def record(chain, built: Dict, notes: str = "",
                     "shapes": meta.get("shapes"), "created_at": meta.get("created_at_tz")},
         "report_config": {"null_draws": C.REPORT_NULL_DRAWS,
                           "null_block": int(dataset.lookback + chain.horizon),
-                          "best_rule": "max VAL ROC-AUC, excluding BASELINE_PRIOR and BLEND",
+                          "best_rule": "max VAL ROC-AUC, excluding BASELINE_PRIOR and BLEND "
+                                       "(a FIXED ensemble is eligible)",
+                          "refit_rule": "the run's own config refitted on train+val, test scored once",
                           "threshold_rule": "VAL threshold maximising F1, applied once to TEST"},
         "models": _models(board, runs_dir),
         "best": _row_dict(best) if best is not None else None,
@@ -499,17 +511,30 @@ def log_rows(body: Dict) -> List[Dict]:
     dataset = body.get("dataset") or {}
     test_ratio = 1 - split["train_ratio"] - split["val_ratio"]
     ratio = f"train {split['train_ratio']:.0%} / val {split['val_ratio']:.0%} / test {test_ratio:.0%}"
+    by_name = {m.get("run_name"): m for m in body.get("models", [])}
     rows = []
     for m in body.get("models", []):
-        if m.get("model_type") == "BLEND" or not m.get("run_id"):
+        ensemble = m.get("model_type") == "ENSEMBLE"
+        if m.get("model_type") == "BLEND" or not (m.get("run_id") or ensemble):
             continue
         em = m.get("event_metrics") or {}
         config = m.get("config") or {}
         timing = m.get("timing") or {}
         device = m.get("device") or config.get("device")
+        run_id = m.get("run_id")
+        if ensemble:
+            members = [by_name.get(n) or {} for n in str(em.get("ensemble_members", "")).split(",") if n]
+            run_id = f"{m.get('run_name')}__{body['trial']['id']}"
+            config = {"model": {"combine": "geometric mean of member probabilities",
+                                "members": [str(x.get("run_name", "")).split("__")[0] for x in members]}}
+            member_timing = [x.get("timing") or {} for x in members]
+            timing = {k: round(sum((t.get(k) or 0) for t in member_timing), 3)
+                      for k in ("run_seconds", "fit_seconds")}
+            devices = {str(x.get("device") or (x.get("config") or {}).get("device")) for x in members}
+            device = "+".join(sorted(devices)) if devices else "cpu"
         gpu = ((m.get("env") or {}).get("cuda_device") or machine_gpu) if str(device).startswith("cuda") else ""
         rows.append({
-            "run_id": m["run_id"], "trial_id": body["trial"]["id"],
+            "run_id": run_id, "trial_id": body["trial"]["id"],
             "started_at": m.get("created_at") or body["trial"]["started_at"],
             "ticker": body["universe"]["ticker"],
             "data_table": f"{body['universe']['schema']}.{final.get('table')}",
@@ -535,15 +560,17 @@ def log_rows(body: Dict) -> List[Dict]:
             "model": m.get("model_type"),
             "model_variant": str(m.get("run_name", "")).split("__")[0],
             "hyperparameters": _hyperparameters(config),
-            "n_params": (m.get("model") or {}).get("n_params"),
+            "n_params": (m.get("model") or {}).get("n_params") if not ensemble else em.get("n_params"),
             "best_epoch": (m.get("training") or {}).get("best_epoch"),
-            "seed": config.get("seed"),
+            "seed": config.get("seed") if not ensemble else None,
             "run_seconds": timing.get("run_seconds"), "fit_seconds": timing.get("fit_seconds"),
             "device": device, "gpu": gpu or "not used",
             "val_auc": _r(em.get("val_auc")), "test_auc": _r(em.get("test_auc")),
             "test_auc_null_p95": _r(em.get("test_auc_bar")), "test_auc_z": _r(em.get("test_auc_z"), 2),
             "test_beats_null": (None if em.get("test_auc") is None or em.get("test_auc_bar") is None
                                 else bool(em["test_auc"] > em["test_auc_bar"])),
+            "test_auc_refit_train_val": _r(em.get("refit_auc")),
+            "test_auc_refit_null_p95": _r(em.get("refit_auc_bar")),
             "test_pr_auc": _r(em.get("test_pr_auc")),
             "test_precision_top10pct": _r(em.get("test_p_at_10")),
             "test_brier_skill": _r(em.get("test_brier_skill")),

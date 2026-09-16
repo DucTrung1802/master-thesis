@@ -365,3 +365,15 @@ the event's own horizon RAISES (the purge would be computed for the wrong horizo
 label holding anything but 0/1 RAISES. The label is READ, never recomputed here. Measured on
 `vcb__up_5pct_5day__final__d20_h5__tr70_val15_test15__std`: train 2,946 / val 617 / test 641
 samples, base rate 0.134 / 0.083 / 0.051, purge 24. Tests: `utils/test_event_target.py`.
+
+## 12. AUXILIARY TARGETS — a second label of the same rows, never a feature (2026-09-17)
+
+`TrainTestCreator(aux_targets=("return_5day",))` reads those `pool__targets` columns on the whole key
+(LEFT join, so a missing value is NaN in place and never a dropped row that would shift every later
+sample), windows them with exactly the sample positions `y` gets, and saves
+`aux_<column>_<split>.npy` beside the six tensors; `metadata.json` lists them under `aux_targets`.
+⚠️ **Never scaled and never a feature.** They reach as far forward as `y` does, so the same `d + h - 1`
+purge covers them. ⚠️ **`model.common.data.hash_dataset` hashes them after the six tensors when
+present**, so a model fitted on an auxiliary label verifies against it; a dataset without them
+hashes exactly as before. `load_dataset` exposes them as `dataset.aux[column][split]`. Built for
+`model.event_linear` ([model.md](model.md) §18).

@@ -782,3 +782,19 @@ Built for the binary event chain ([event_chain.md](event_chain.md)).
 
 ⚠️ **For a classifier `result_evaluator`'s `dir_auc` is the AUC of `return_{h}day > 0`, not of the
 label** — the event chain computes the label's own AUC in `event_chain.report`.
+
+## 18. `model.event_linear` — three linear kinds for a binary event (2026-09-17)
+
+`kind: event_logit | magnitude_ridge | direction_logit`, `model_type` `EVENT_LINEAR_<KIND>`, fitted
+on the LAST ROW of the window (the tabular event chain has d=1). ⚠️ **`columns`/`exclude` select
+channels by NAME PREFIX** from the dataset's `feature_columns`, so one table feeds three blocks; a
+prefix matching nothing RAISES rather than fitting an intercept. ⚠️ **`magnitude_ridge` and
+`direction_logit` fit on the AUXILIARY target** `return_{h}day` (`train_test_creator`
+`aux_targets`, [train_test_creator.md](train_test_creator.md) §12), never on the database:
+`log(|log(1+r)| + eps)` for the ridge, whose score is mapped to P(event) by a 1-D logistic on the
+same rows (monotone — it cannot change the model's own AUC, it only makes the probability
+combinable); `1{r > 0}` on rows with `|log(1+r)| >= min_move` for the direction logit.
+`half_life_years` weights rows by recency. ⚠️ `set_fit_context(dates, aux)` must be called before a
+REFIT on rows other than the train split — `event_chain.report` does it for train+val and for each
+walk-forward year, and a length mismatch RAISES. The design is clipped to ±`clip` train-sigmas
+(`EVD-1`). Tests: `model/event_linear/test_model.py` (4, synthetic, no database).

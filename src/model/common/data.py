@@ -47,6 +47,8 @@ class Dataset:
     dates_test: Optional[np.ndarray] = None
     feature_scaler: object = field(default=None, repr=False)
     target_scaler: object = field(default=None, repr=False)
+    # `{column: {split: array}}` — `train_test_creator`'s auxiliary targets, if saved.
+    aux: dict = field(default_factory=dict, repr=False)
 
     @property
     def n_features(self) -> int:
@@ -80,10 +82,20 @@ class Dataset:
         ).ravel()
 
 
+def _aux_files(dataset_dir: str) -> list:
+    """`aux_<column>_<split>.npy`, sorted — hashed after the six tensors when present."""
+    return sorted(f for f in os.listdir(dataset_dir) if f.startswith("aux_") and f.endswith(".npy"))
+
+
 def hash_dataset(dataset_dir: str) -> str:
-    """Deterministic content hash of the six tensor files (order-fixed)."""
+    """Deterministic content hash of the six tensor files (order-fixed).
+
+    ⚠️ The auxiliary targets (`aux_*.npy`) are hashed AFTER the six when a dataset has
+    them, so a model fitted on an auxiliary label verifies against it too; a dataset
+    without them hashes exactly as it always did.
+    """
     h = hashlib.sha256()
-    for fn in _TENSOR_FILES:
+    for fn in list(_TENSOR_FILES) + _aux_files(dataset_dir):
         p = os.path.join(dataset_dir, fn)
         with open(p, "rb") as f:
             for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -132,6 +144,12 @@ def load_dataset(dataset: str, expected_hash: Optional[str] = None) -> Dataset:
     fs_p = os.path.join(d, "feature_scaler.pkl")
     ts_p = os.path.join(d, "target_scaler.pkl")
 
+    aux: dict = {}
+    for fn in _aux_files(d):
+        stem = fn[len("aux_"):-len(".npy")]
+        column, _, split = stem.rpartition("_")
+        aux.setdefault(column, {})[split] = np.load(os.path.join(d, fn), allow_pickle=False)
+
     return Dataset(
         name=os.path.basename(d.rstrip("/\\")),
         dir=d,
@@ -145,4 +163,5 @@ def load_dataset(dataset: str, expected_hash: Optional[str] = None) -> Dataset:
         dates_test=_load("dates_test.npy"),
         feature_scaler=joblib.load(fs_p) if os.path.exists(fs_p) else None,
         target_scaler=joblib.load(ts_p) if os.path.exists(ts_p) else None,
+        aux=aux,
     )

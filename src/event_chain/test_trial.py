@@ -1,7 +1,6 @@
 """`event_chain.trial` — the log of COMPLETE runs. No database."""
 
 import json
-import os
 
 import pandas as pd
 
@@ -37,6 +36,10 @@ def _body(trial_id: str, kind: str = "trial", models=None) -> dict:
              "event_metrics": {"val_auc": 0.6, "test_auc": 0.7, "test_auc_bar": 0.66}},
             {"run_id": "", "run_name": "blend_top3__a+b", "model_type": "BLEND",
              "event_metrics": {"val_auc": 0.72}},
+            {"run_id": "", "run_name": "ensemble_geo3__vcb__x", "model_type": "ENSEMBLE",
+             "event_metrics": {"val_auc": 0.71, "test_auc": 0.66, "test_auc_bar": 0.65,
+                               "refit_auc": 0.67, "refit_auc_bar": 0.64, "n_params": 7,
+                               "ensemble_members": "gbt_d2__vcb__x,lstm_h16__vcb__x"}},
         ],
     }
 
@@ -59,14 +62,16 @@ def test_the_log_holds_one_row_per_model_run_of_a_complete_trial(monkeypatch, tm
     _write(tmp_path, _body("20260916-231000__crash", models=[]))       # nothing was scored
     log = trial.rebuild_log()
     assert list(log.columns) == trial.LOG_COLUMNS
-    assert list(log["model_variant"]) == ["gbt_d2", "lstm_h16"]        # the blend is not a run
-    assert pd.read_csv(tmp_path / "trials.csv").shape == (2, len(trial.LOG_COLUMNS))
+    # the val-picked blend is not a row; the FIXED ensemble is
+    assert sorted(log["model_variant"]) == ["ensemble_geo3", "gbt_d2", "lstm_h16"]
+    assert pd.read_csv(tmp_path / "trials.csv").shape == (3, len(trial.LOG_COLUMNS))
 
 
 def test_a_row_names_its_data_features_target_split_model_time_hardware_and_result(monkeypatch, tmp_path):
     _redirect(monkeypatch, tmp_path)
     _write(tmp_path, _body("20260917-010000__vcb__t"))
-    gbt, lstm = trial.rebuild_log().to_dict(orient="records")
+    rows = {r["model_variant"]: r for r in trial.rebuild_log().to_dict(orient="records")}
+    gbt, lstm, ensemble = rows["gbt_d2"], rows["lstm_h16"], rows["ensemble_geo3"]
     assert gbt["data_table"] == "unified_schema_vcb.up_5pct_5day__final__d20_h5"
     assert gbt["feature_pools"] == "basic+event_features" and gbt["n_features"] == 30
     assert gbt["target"] == "up_5pct_5day" and gbt["split_ratio"] == "train 70% / val 15% / test 15%"
@@ -75,12 +80,15 @@ def test_a_row_names_its_data_features_target_split_model_time_hardware_and_resu
     assert gbt["chosen_on_val"] is True and gbt["test_beats_null"] is False
     assert lstm["gpu"] == "NVIDIA GeForce RTX 3050 Laptop GPU" and lstm["test_beats_null"] is True
     assert json.loads(lstm["hyperparameters"])["train"] == {"lr": 0.001}
+    assert ensemble["model"] == "ENSEMBLE" and ensemble["run_id"].endswith("__20260917-010000__vcb__t")
+    assert json.loads(ensemble["hyperparameters"])["model"]["members"] == ["gbt_d2", "lstm_h16"]
+    assert ensemble["run_seconds"] == 4.2 and ensemble["test_auc_refit_train_val"] == 0.67
 
 
 def test_deleting_a_trial_folder_removes_its_rows(monkeypatch, tmp_path):
     _redirect(monkeypatch, tmp_path)
     _write(tmp_path, _body("20260917-010000__vcb__t"))
-    assert len(trial.rebuild_log()) == 2
+    assert len(trial.rebuild_log()) == 3
     import shutil
 
     shutil.rmtree(tmp_path / "trials" / "20260917-010000__vcb__t")

@@ -441,6 +441,57 @@ def gold_market_breadth(
 
 
 @asset(
+    name="market_context",
+    key_prefix=["gold"],
+    group_name="gold",
+    compute_kind="postgres",
+    deps=[
+        AssetKey(["silver", "stocks_basic"]),
+        AssetKey(["gold", "stock_market"]),
+        AssetKey(["gold", "economy"]),
+        AssetKey(["gold", "bonds"]),
+    ],
+    description=(
+        "VN-Index/VN30 (gold.stock_market), US risk (gold.economy_usa: VIX, S&P 500, Dow, "
+        "10y yield, broad dollar, WTI) and VN 1/5/10y yields (gold.bonds) -> "
+        "gold.market_context, PK (date), one row per VN session, in STATIONARY units: log "
+        "returns, log volatility, range position, drawdown, flow scaled by its own trailing "
+        "mean absolute, yield changes. Built for the EVENT chain (event_chain), where the "
+        "LEVEL pools drift out of the train range (EVD-1). "
+        "⚠️ EVERY US SERIES IS LAGGED ONE VN SESSION - the US close of date d prints after "
+        "the VN session of d, so the same-date join pool__economy_usa does is a ~13-hour "
+        "look-ahead (TZL-1). VN yields are lagged one session as well. "
+        "⚠️ An index print more than 20 % outside its previous 5 sessions' range is dropped "
+        "(gold.stock_market carries VN30 closes off by ~16x for a day)."
+    ),
+)
+def gold_market_context(
+    context: AssetExecutionContext, preprocessor: PreprocessorResource
+) -> MaterializeResult:
+    with preprocessor.session(schema="gold_schema") as prep:
+        prep._ingest_gold_market_context()
+        with prep._database_driver._cursor_ctx() as cur:
+            cur.execute("SELECT COUNT(*), MIN(date), MAX(date) FROM gold_schema.market_context")
+            rows, first, last = cur.fetchone()
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = "
+                "'gold_schema' AND table_name = 'market_context'"
+            )
+            columns = int(cur.fetchone()[0])
+    context.log.info(f"gold.market_context: {rows} sessions x {columns} columns ({first} -> {last})")
+    return MaterializeResult(
+        metadata={
+            "rows": MetadataValue.int(int(rows)),
+            "columns": MetadataValue.int(columns),
+            "date_range": MetadataValue.text(f"{first} -> {last}"),
+            "source": MetadataValue.text(
+                "gold_schema.stock_market, gold_schema.economy_usa, gold_schema.bonds"
+            ),
+        }
+    )
+
+
+@asset(
     name="stocks_event_features",
     key_prefix=["gold"],
     group_name="gold",
@@ -941,4 +992,5 @@ assets: List[Callable] = [
     gold_news_daily_panel,
     gold_market_breadth,
     gold_stocks_event_features,
+    gold_market_context,
 ]

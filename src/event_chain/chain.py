@@ -4,6 +4,7 @@
     python -m event_chain --apply                      # run every stale stage
     python -m event_chain --apply --stages train,report
     python -m event_chain --apply --stages select --pools pool__basic,pool__ta
+    python -m event_chain --setup tabular --apply     # d=1, all channels, linear kinds + ensemble
 
 ⚠️ **NOTHING HERE DEFINES A LABEL, A FEATURE, A SPLIT OR A METRIC.** Each stage calls the
 package that owns it — `feature_selection.run`, `final_features.builder`,
@@ -59,6 +60,25 @@ class EventChain:
     scope_pools: Optional[Sequence[str]] = None
     # `final`'s policy on pools whose selection FAILED its null — recorded by every trial.
     keep_failed: bool = False
+    # ⚠️ THE SETUP (`config.SETUPS`) decides d, the pools, the model grid, the table's scope,
+    # `final_features`' channel mode, the auxiliary targets and the fixed ensembles — one
+    # name, so a trial can say which experiment it is. `window` is every trial before
+    # 2026-09-17; `tabular` is the d=1 linear chain.
+    setup: str = "window"
+    channels: str = "shortlist"
+    models: Sequence = C.MODELS
+    aux_targets: Sequence[str] = ()
+    ensembles: Dict = field(default_factory=dict)
+
+    @classmethod
+    def from_setup(cls, name: str = "window", **overrides) -> "EventChain":
+        if name not in C.SETUPS:
+            raise ValueError(f"unknown setup {name!r}; have {sorted(C.SETUPS)}")
+        spec = dict(C.SETUPS[name])
+        event = overrides.get("event") or event_target.DEFAULT_EVENT
+        spec["aux_targets"] = tuple(a.format(h=int(event.horizon)) for a in spec["aux_targets"])
+        spec.update({k: v for k, v in overrides.items() if v is not None})
+        return cls(setup=name, **spec)
 
     # ------------------------------------------------------------------ names
     @property
@@ -80,7 +100,7 @@ class EventChain:
 
         return TrainTestCreator(
             ticker=self.ticker.lower(), table=self.table, train_ratio=C.TRAIN_RATIO,
-            val_ratio=C.VAL_RATIO, report_root=self.root,
+            val_ratio=C.VAL_RATIO, report_root=self.root, aux_targets=tuple(self.aux_targets),
         )
 
     @property
@@ -200,16 +220,23 @@ class EventChain:
             )
             if p.schema == self.schema and p.table == self.table
         ]
+        # ⚠️ The root also holds the OTHER setup's runs (d=20 beside d=1): they are a separate
+        # plan, and `tables=` keeps this build to the chain's own table.
+        pools = set(self.pools)
+        missing = sorted(pools - set(plans[0].columns_by_table)) if plans else []
         if not plans:
             raise ValueError(f"no selection run under {self.root} plans {self.schema}.{self.table}")
         plan = plans[0]
-        print(f"{self.schema}.{self.table}: {plan.n_features} channels from "
-              f"{len(plan.columns_by_table)} pool(s), evidence {plan.evidence}")
+        print(f"{self.schema}.{self.table}: {len(plan.columns_by_table)} pool(s) "
+              f"({self.channels} channels), evidence {plan.evidence}")
         for table in plan.source_tables:
-            print(f"    {len(plan.columns_by_table[table]):>4}  {table}")
+            print(f"    {len(plan.columns_by_table[table]):>4}  {table}  (shortlist)")
+        if missing:
+            print(f"    not in the table (no run, or its selection failed the null): {missing}")
         result = builder.build_all(
             root=self.root, apply=True, replace=True, scope=self.scope,
             exclude_evidence=exclude, include_tables=self.scope_pools,
+            channels=self.channels, tables=[self.table],
         )
         print(result.to_string(index=False))
 
@@ -241,6 +268,8 @@ class EventChain:
         name = self.creator().name
         dataset = load_dataset(name)
         model = dict(model)
+        if package == "event_linear" and self.aux_targets:
+            model.setdefault("aux_target", self.aux_targets[0])
         if model.get("kind") == "logistic_channel":
             columns = (dataset.meta or {}).get("features", {}).get("feature_columns", [])
             chosen = next((c for c in C.BASELINE_CHANNELS if c in columns), None)
@@ -257,7 +286,7 @@ class EventChain:
             "model": model,
             "null_draws": 200,
             "seed": 42,
-            "device": "auto" if package not in ("baseline", "gbt", "forest") else "cpu",
+            "device": "auto" if package not in ("baseline", "gbt", "forest", "event_linear") else "cpu",
             **extra,
         }
         return config
@@ -271,10 +300,10 @@ class EventChain:
         dataset = load_dataset(self.creator().name)
         index = os.path.join(RUNS_DIR, "index.csv")
         done = pd.read_csv(index) if os.path.exists(index) else pd.DataFrame()
-        for i, (package, variant, model, extra) in enumerate(C.MODELS, 1):
+        for i, (package, variant, model, extra) in enumerate(self.models, 1):
             config = self._config(package, variant, model, extra, {})
             if not config:
-                print(f"[train {i}/{len(C.MODELS)}] {package}{variant}: no candidate channel, skipped")
+                print(f"[train {i}/{len(self.models)}] {package}{variant}: no candidate channel, skipped")
                 continue
             if only and not any(o in config["run_name"] for o in only):
                 continue
@@ -284,16 +313,16 @@ class EventChain:
                      & (done["dataset_hash"].astype(str) == dataset.hash)).any()
             )
             if already and not force:
-                print(f"[train {i}/{len(C.MODELS)}] {config['run_name']}: already trained on {dataset.hash}")
+                print(f"[train {i}/{len(self.models)}] {config['run_name']}: already trained on {dataset.hash}")
                 continue
             path = os.path.join(C.REPO_ROOT, "src", "model", package, "configs", f"{config['run_name']}.yaml")
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(
                     f"# Written by `python -m event_chain` for {self.event.column} "
-                    f"({self.event.describe()}).\n# The grid is event_chain/config.py MODELS.\n"
+                    f"({self.event.describe()}).\n# The grid is event_chain/config.py SETUPS[{self.setup!r}].\n"
                 )
                 yaml.safe_dump(config, fh, sort_keys=False, allow_unicode=True)
-            print(f"\n[train {i}/{len(C.MODELS)}] {config['run_name']}")
+            print(f"\n[train {i}/{len(self.models)}] {config['run_name']}")
             binding = importlib.import_module(f"model.{package}.train")
             binding.train(config)
 
@@ -308,7 +337,8 @@ class EventChain:
         from feature_selection.unified_reader import UnifiedSchemaReader
 
         print(f"{'=' * 78}\nevent   {self.event.column} — {self.event.describe()}")
-        print(f"ticker  {self.ticker}   d={self.lookback}  h={self.horizon}   root {self.root}")
+        print(f"setup   {self.setup}   ticker {self.ticker}   d={self.lookback}  h={self.horizon}   "
+              f"channels {self.channels}   root {self.root}")
         try:
             dates, labelled = self.labelled_dates()
             print(f"label   {len(dates)} labelled sessions {dates.iloc[0].date()} -> "
@@ -327,7 +357,9 @@ class EventChain:
 
         exists = os.path.isdir(os.path.join(DEFAULT_OUTPUT_ROOT, self.creator().name))
         print(f"  {'ok  ' if exists else 'TODO'} dataset {self.creator().name}")
-        print(f"  ---- train   {len(C.MODELS)} model configs (event_chain/config.py)")
+        print(f"  ---- train   {len(self.models)} model configs (event_chain/config.py SETUPS[{self.setup!r}])")
+        for name, members in (self.ensembles or {}).items():
+            print(f"  ---- ensemble {name} = geometric mean of {', '.join(members)}")
         print(f"  ---- report  {self.output_dir}")
 
 
@@ -337,6 +369,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--apply", action="store_true", help="run the stages (default: plan only)")
     parser.add_argument("--stages", default=",".join(STAGES))
     parser.add_argument("--ticker", default=C.TICKER)
+    parser.add_argument("--setup", default="window", choices=sorted(C.SETUPS),
+                        help="window: d=20 shortlist chain; tabular: d=1, all channels, linear kinds")
     parser.add_argument("--pools", default=None, help="comma-separated subset of config.POOLS")
     parser.add_argument("--null-draws", type=int, default=C.NULL_DRAWS)
     parser.add_argument("--device", default="cuda")
@@ -357,8 +391,10 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     scope_pools = [p.strip() for p in args.scope_pools.split(",")] if args.scope_pools else None
     if bool(args.scope) != bool(scope_pools):
         raise SystemExit("--scope and --scope-pools go together")
-    chain = EventChain(ticker=args.ticker, null_draws=args.null_draws, device=args.device,
-                       scope=args.scope, scope_pools=scope_pools, keep_failed=args.keep_failed)
+    chain = EventChain.from_setup(
+        args.setup, ticker=args.ticker, null_draws=args.null_draws, device=args.device,
+        scope=args.scope, scope_pools=scope_pools, keep_failed=args.keep_failed,
+    )
     started = pd.Timestamp.now()
     chain.status()
     if not args.apply:

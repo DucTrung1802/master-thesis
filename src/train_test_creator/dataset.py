@@ -294,6 +294,12 @@ class WindowedDataset:
     stored_target: str = ""
     label_recipe: Dict = field(default_factory=dict)
     rows_unrankable: int = 0
+    # ⚠️ AUXILIARY TARGETS — `pool__targets` columns carried beside `y`, never scaled and
+    # never a feature: `{column: {split: array}}`, aligned sample for sample with `y`.
+    # They exist for a model that is SCORED on `y` but FITTED on another label of the same
+    # rows (`model.event_linear`'s magnitude ridge fits `log|r_h|` and is scored on the
+    # event). They reach as far forward as `y` does, so the same purge covers them.
+    aux: Dict[str, Dict[str, np.ndarray]] = field(default_factory=dict)
 
     @property
     def n_features(self) -> int:
@@ -346,6 +352,7 @@ class TrainTestCreator:
         report_root: Optional[str] = None,
         output_root: str = DEFAULT_OUTPUT_ROOT,
         rank_min_width: int = 5,
+        aux_targets: Sequence[str] = (),
     ):
         if not 0 < train_ratio < 1 or not 0 < val_ratio < 1:
             raise ValueError("train_ratio and val_ratio must each be in (0, 1).")
@@ -411,6 +418,8 @@ class TrainTestCreator:
         # Table columns that no current shortlist names as a channel and that are
         # not labels — i.e. the table is older than the shortlists. Reported.
         self.stale_channels: List[str] = []
+        # `pool__targets` columns saved beside `y` as `aux_<column>_<split>.npy`.
+        self.aux_targets = tuple(aux_targets)
 
     # ------------------------------------------------------------------ naming
 
@@ -696,7 +705,8 @@ class TrainTestCreator:
             y_full = target.values
 
         drift = self._drift(features, labelled, bounds, scale_cols)
-        X, y, dates, tickers = self._window(features, y_full, labelled, bounds)
+        aux_full = self._aux(labelled)
+        X, y, dates, tickers, aux = self._window(features, y_full, labelled, bounds, aux_full)
 
         return WindowedDataset(
             name=self.name,
@@ -728,7 +738,34 @@ class TrainTestCreator:
             source_comment=comment,
             rows_read=rows_read,
             rows_unlabelled=rows_unlabelled,
+            aux=aux,
         )
+
+    def _aux(self, labelled: pd.DataFrame) -> Dict[str, np.ndarray]:
+        """`{column: values}` for `aux_targets`, aligned to `labelled`'s rows.
+
+        ⚠️ Read from `pool__targets` on the whole key and LEFT-joined, so a row keeps its
+        position: an auxiliary label missing on a row is NaN there, never a dropped row —
+        dropping one would shift every later sample against `y`.
+        """
+        if not self.aux_targets:
+            return {}
+        with UnifiedSchemaReader(self.ticker) as reader:
+            available = set(reader.column_types(TARGETS_TABLE))
+            missing = [c for c in self.aux_targets if c not in available]
+            if missing:
+                raise ValueError(f"aux_targets {missing} are not columns of {TARGETS_TABLE}.")
+            targets = reader.read(TARGETS_TABLE, order_by=KEY_COLS)
+        keys = list(KEY_COLS)
+        targets = targets[keys + list(self.aux_targets)].copy()
+        targets["date"] = pd.to_datetime(targets["date"])
+        left = labelled[keys].copy()
+        left["date"] = pd.to_datetime(left["date"])
+        merged = left.merge(targets, on=keys, how="left", validate="one_to_one")
+        if len(merged) != len(labelled):
+            raise ValueError("aux_targets changed the row count — the key is not unique.")
+        return {c: pd.to_numeric(merged[c], errors="coerce").to_numpy(dtype=np.float64)
+                for c in self.aux_targets}
 
     # ------------------------------------------------------------------ splits
 
@@ -882,7 +919,8 @@ class TrainTestCreator:
         y_full: np.ndarray,
         labelled: pd.DataFrame,
         bounds: SplitBounds,
-    ) -> Tuple[Dict, Dict, Dict, Dict]:
+        aux_full: Optional[Dict[str, np.ndarray]] = None,
+    ) -> Tuple[Dict, Dict, Dict, Dict, Dict]:
         """Stack `(d, n)` windows per ticker, then concatenate in date order.
 
         ⚠️ Windowed PER TICKER. A single global stride over a multi-ticker panel would
@@ -906,7 +944,9 @@ class TrainTestCreator:
                     rows = positions[i - self.lookback + 1 : i + 1]
                     chunks[split].append((date_str[positions[i]], rows, positions[i]))
 
+        aux_full = aux_full or {}
         X, y, dates, tickers = {}, {}, {}, {}
+        aux: Dict[str, Dict[str, np.ndarray]] = {c: {} for c in aux_full}
         for split, items in chunks.items():
             if not items:
                 raise ValueError(
@@ -919,7 +959,11 @@ class TrainTestCreator:
             y[split] = y_full[[pos for _, _, pos in items]].astype(np.float32)
             dates[split] = np.array([d for d, _, _ in items])
             tickers[split] = ticker_arr[[pos for _, _, pos in items]]
-        return X, y, dates, tickers
+            # ⚠️ NOT `values`: that name is the feature matrix, and shadowing it here turned
+            # every LATER split's X into the auxiliary column (caught 2026-09-17, X_val (636, 1)).
+            for column, column_values in aux_full.items():
+                aux[column][split] = column_values[[pos for _, _, pos in items]].astype(np.float32)
+        return X, y, dates, tickers, aux
 
     # ------------------------------------------------------------------- save
 
@@ -945,6 +989,8 @@ class TrainTestCreator:
             np.save(os.path.join(directory, f"y_{split}.npy"), data.y[split])
             np.save(os.path.join(directory, f"dates_{split}.npy"), data.dates[split])
             np.save(os.path.join(directory, f"tickers_{split}.npy"), data.tickers[split])
+            for column, arrays in data.aux.items():
+                np.save(os.path.join(directory, f"aux_{column}_{split}.npy"), arrays[split])
 
         joblib.dump(data.feature_scaler, os.path.join(directory, "feature_scaler.pkl"))
         if data.target_scaler is not None:
@@ -1007,6 +1053,14 @@ class TrainTestCreator:
                 "horizon_h": data.horizon,
                 "scaled": data.target_scaler is not None,
                 "scaler": "StandardScaler" if data.target_scaler is not None else None,
+            },
+            "aux_targets": {
+                column: {
+                    "source": f"{TARGETS_TABLE}.{column}",
+                    "files": [f"aux_{column}_{s}.npy" for s in ("train", "val", "test")],
+                    "note": "never scaled, never a feature; aligned with y sample for sample",
+                }
+                for column in data.aux
             },
             "window": {
                 "lookback_d": data.lookback,
