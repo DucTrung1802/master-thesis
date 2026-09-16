@@ -160,6 +160,7 @@ the same split (train 2,946 / val 617 / test 641 samples; positive rate 0.134 / 
 | `20260917-010551` compact | 11: event_features only | ExtraTrees leaf20 | 0.719 | 0.520 | 0.646 |
 | `20260917-013926` full | 183: the 6 pools that cleared their null (+ basic_bank) | RandomForest leaf30 | 0.694 | 0.549 | 0.661 |
 | `20260917-032538` **tabular** (§6) | 211 at d = 1: all channels of `event_features`, `basic`, `market_context`, `market_breadth` | **`ensemble_geo3`** (fixed) | 0.799 | **0.660** | 0.644 (max 0.795) |
+| `20260917-041045` **tabular v2** (§6d) | the same 211, + 20 BANK names as training rows for one member | **`ensemble_geo4`** (fixed) | 0.803 | **0.670** | 0.639 (max 0.785) |
 
 **Not one val-chosen model clears its test null**, and the val→test drop is 0.15-0.20 AUC in
 every trial. Across all 36 runs the only test AUC above its own p95 is the debug LSTM's
@@ -183,8 +184,8 @@ python -m event_chain --setup tabular --apply --notes "<why>"      # RUNBOOK G5
 | pools | 11 raw groups | `pool__event_features` (now +27: `har_` log volatility, `px_` range, `flow_` scaled foreign flow), `pool__basic`, **`pool__market_context`** (new, US lagged one session), `pool__market_breadth`, `pool__news_daily` |
 | table | the selection's SHORTLISTS unioned | **every numeric channel** of the pools whose selection cleared its null (`final_features` `channels="all"`, scope `tab`) |
 | dataset | `y` only | `y` + the auxiliary target `return_5day` (`aux_*.npy`, [train_test_creator.md](train_test_creator.md) §12) |
-| models | 15 (baselines, GBT, forests, 5 networks) | `model.event_linear` — `magnitude_ridge`, `event_logit`, `direction_logit` ([model.md](model.md) §18) — plus prior, GBT d2, ExtraTrees |
-| ensembles | the top-3-on-val blend (never eligible) | **fixed before the run**: `ensemble_geo3` = geometric mean of magnitude, event and direction; `ensemble_geo2` = magnitude and event |
+| models | 15 (baselines, GBT, forests, 5 networks) | `model.event_linear` — `magnitude_ridge`, `event_logit`, `direction_logit` ([model.md](model.md) §18) — `model.event_panel` (XGBoost on the 20 BANK names, [model.md](model.md) §19, from v2), plus prior, GBT d2, ExtraTrees |
+| ensembles | the top-3-on-val blend (never eligible) | **fixed before the run**: `ensemble_geo3` = geometric mean of magnitude, event and direction; `ensemble_geo2` = magnitude and event; from v2 `ensemble_geo4` = geo3 + the bank panel, `ensemble_geo3p` = geo2 + the bank panel |
 | report | train-only fit | + **refit on train+val**, scored on test once; the walk-forward also refits every ensemble member |
 
 ### 6a. How the setup was chosen — a research harness that never chose on a test row
@@ -211,7 +212,8 @@ fold validates one calendar year (2014 … 2023, the 2023 fold ending at the cha
 | the same three kinds re-measured on the PIPELINE's channels | geo3 **0.682**, geo2 0.683; magnitude 0.667, event 0.670, direction 0.607 | the numbers `config.TABULAR_*` cite |
 
 ⚠️ **THE BANK PANEL WAS LEFT OUT FOR COST, NOT ON EVIDENCE** (−0.006 CV10): it needs a second
-schema's table and dataset aligned to VCB's split.
+schema's table and dataset aligned to VCB's split. ⚠️ **It went in with v2** (§6c), without a
+second table: `model.event_panel` reads the peers from `unified_schema_bank` at fit time.
 ⚠️ **THE RESEARCH HARNESS DID PRINT TEST AUCs** for a handful of blends after they were chosen on CV
 (train+val refit 0.64-0.67, walk-forward 0.61-0.64, every one with 2024 inverted at 0.14-0.43). No
 configuration was changed on them; the one decision taken after they were read is the bank panel's
@@ -245,4 +247,57 @@ episodes**. It is +0.096 over the windowed chain's best val-chosen 0.564.
 0.029. ⚠️ **The best single test number is not the chosen one**: the HAR magnitude ridge scored
 0.705 and was fifth on val. ⚠️ Brier skill of the chosen ensemble is **−0.30**: a geometric mean of
 three probabilities ranks, it does not calibrate.
+
+### 6c. The second research round — ~100 candidates on CV10, after the first tabular trial (2026-09-17)
+
+Same harness, same folds, the pipeline's own channel names; every candidate wrote its test folds
+to disk and **none was printed**. Measured (CV10 mean · worst fold):
+
+| what | CV10 | verdict |
+|---|---|---|
+| the frozen members, for reference: magnitude · event · direction · `geo3` | 0.667 · 0.670 · 0.607 · **0.682** (0.504) | — |
+| the three kinds trained on the **20 BANK names** (`unified_schema_bank` rows ≤ the fold's cut) | magnitude ridge 0.624-0.636 · event logit 0.656-0.663 · direction 0.579-0.609 | worse than VCB-only |
+| **XGBoost on the BANK panel**, 17 settings (depth 1-3, 300-1,500 trees, blocks, half-life, VCB weight ×5, labels `up3`/`dir3`) | 0.600-**0.679**; d2 n600 on `har_`+`evt_`+`drv_`+`px_`/`flow_`+`mctx_`+`glb_`/`bond_` **0.675** (0.525) | the best single model; its weak years are not the linear kinds' |
+| **`geo4`** = `geo3` + that XGBoost · **`geo3p`** = `geo2` + it | **0.695** (0.534) · 0.697 (0.532) — 7 of 10 folds up; every XGBoost setting gives 0.689-0.697 | ✅ went into the chain |
+| greedy forward selection over the whole pool (with replacement) | 0.703 in-sample, **0.647 leave-one-year-out** | ❌ selection overfits by 0.056 — no weights were fitted |
+| the kinds bagged over their neighbours (alpha, C, blocks) | `geo3` 0.682 → 0.682 | no gain |
+| new blocks in each kind: USD/VND and CNY/VND changes (lagged one session, `TZL-1`), VN-Index/VN30 order imbalance, HNX/UPCOM state, bank-sector medians (leave-VCB-out) | every one −0.013 … +0.003 | no gain |
+| log Rogers-Satchell/Garman-Klass vol (`lvol_`) | event 0.674, magnitude 0.670 | noise |
+| vol-only designs (HAR + index vol, no `drv_`/`evt_` rates) | magnitude 0.605-0.622 · event 0.540-0.558 | ❌ the non-vol channels carry ~0.05 |
+| other training labels for a ranking model: `soft` sigmoid of the move, upper partial moment, `up3`, XGBoost regression of `log|r_5|` | 0.617-0.659 | no gain |
+| event and direction logits with a recency half-life (2/4/8 y), balanced class weight, C 0.01; direction at 0/2/4 % | 0.568-0.666 | no gain |
+| **calendar bumps** — pre-Tet (event rate **0.34** in the 20 days before Tet vs 0.10, 12 of 14 years ≥ 0.15, mean 5-session return +2.9 % vs +0.2 %), post-Tet, month dummies — inside each kind, or as a calendar-only member | inside: −0.016 … +0.002; alone 0.569-0.594; as a member −0.006 | ❌ a real effect the CV cannot use: ~13 sessions a year |
+| causal EWM smoothing of the scores (span 2-10) | ≤ the raw score | no gain |
+| the best single channel, sign fixed per fold | `drv_rogers_satchell_21` 0.640 | the ensemble adds ~0.055 |
+
+⚠️ **THIS ROUND STARTED AFTER THE FIRST TABULAR TRIAL'S TEST NUMBERS WERE READ** (§6b: geo3
+0.660, geo2 0.669, magnitude 0.705, direction 0.401). The panel member and both new ensembles
+are CV choices, but `geo3p` also drops the member that was worst on test — so **v2 is the SECOND
+read of 2024-2026, not an independent one** (`NUL-1`). The chain's own val picked `geo4`, which
+keeps it.
+
+### 6d. The second tabular trial — `20260917-041045__vcb__up_5pct_5day__final__d1_h5__tab`
+
+`python -m event_chain --setup tabular --apply --stages train,report`: the dataset and its hash
+(`8cae1d16d1530360`) are unchanged, so **8 runs are reused from §6b by run id** and one is new;
+the BANK pools were materialised first (RUNBOOK G6, 13 s + 12 s + 12 s).
+
+| model | val AUC | **test AUC** | test null p95 / max | test z | test PR-AUC (lift) | refit on train+val (p95) |
+|---|---|---|---|---|---|---|
+| **`ensemble_geo4`** — chosen on val | **0.803** | **0.670** | 0.639 / 0.785 | +1.93 | 0.130 (2.53×) | **0.680** (0.642) |
+| `ensemble_geo3` | 0.799 | 0.660 | 0.644 / 0.795 | +1.84 | 0.104 (2.01×) | 0.659 (0.641) |
+| `ensemble_geo3p` | 0.796 | 0.676 | 0.645 / 0.788 | +2.00 | 0.135 (2.63×) | 0.683 (0.644) |
+| `event_linear_evt_c01` | 0.795 | 0.614 | 0.645 / 0.774 | +1.31 | 0.109 | 0.620 |
+| `ensemble_geo2` | 0.790 | 0.669 | 0.645 / 0.802 | +1.93 | 0.126 | 0.664 |
+| `event_panel_xgb_d2_n600` | 0.759 | 0.637 | 0.644 / 0.788 | +1.53 | 0.126 (P@10 % 3.34×) | 0.654 (0.645) |
+
+Walk-forward, `ensemble_geo4`: 2021 0.688 · 2022 0.788 · 2023 0.836 · **2024 0.333** · 2025 0.742 ·
+2026 0.641; the panel member alone 0.514 · 0.730 · 0.771 · **0.523** · 0.642 · 0.652.
+
+⚠️ **+0.010 ON TEST AND +0.021 REFITTED, AND STILL NOT A PASS.** The val-chosen number rose
+0.660 → 0.670 and the refit 0.659 → 0.680, but the null MAX (0.785) is above both, `z < 2`, the
+test holds 33 positives, and this is the second read (§6c). A +0.013 CV gain is inside the test's
+standard error (~0.05). ⚠️ **2024 is still inverted** (0.333); the panel member is the only kind
+above 0.5 there. ⚠️ **The peer rows are not in the dataset hash** (`PEH-1`): a refit reads the
+BANK pools as they are on that day.
 

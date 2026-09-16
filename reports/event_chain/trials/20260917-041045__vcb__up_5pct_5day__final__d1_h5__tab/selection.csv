@@ -1,0 +1,6 @@
+run_id,target,lookback_d,horizon_h,tables,holdout_start,channels,kept,ic,null_bar,null_max,z,clears,started_at
+2026-09-17_031041__vcb__event_features__up_5pct_5day,up_5pct_5day,1,5,pool__event_features,2021-06-22,67,57,0.1126,0.0354,0.0439,4.73,True,2026-09-17 03:10:41
+2026-09-17_031347__vcb__basic__up_5pct_5day,up_5pct_5day,1,5,pool__basic,2021-06-22,78,55,0.0839,0.0386,0.0456,3.03,True,2026-09-17 03:13:47
+2026-09-17_031629__vcb__market_context__up_5pct_5day,up_5pct_5day,1,5,pool__market_context,2021-06-22,59,35,0.119,0.041,0.0486,3.86,True,2026-09-17 03:16:29
+2026-09-17_031844__vcb__market_breadth__up_5pct_5day,up_5pct_5day,1,5,pool__market_breadth,2021-06-22,7,7,0.0553,0.0259,0.0334,2.69,True,2026-09-17 03:18:44
+2026-09-17_032053__vcb__news_daily__up_5pct_5day,up_5pct_5day,1,5,pool__news_daily,2021-06-22,14,14,-0.0218,0.0142,0.0167,-1.03,False,2026-09-17 03:20:53

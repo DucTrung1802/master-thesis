@@ -286,7 +286,7 @@ class EventChain:
             "model": model,
             "null_draws": 200,
             "seed": 42,
-            "device": "auto" if package not in ("baseline", "gbt", "forest", "event_linear") else "cpu",
+            "device": "auto" if package not in ("baseline", "gbt", "forest", "event_linear", "event_panel") else "cpu",
             **extra,
         }
         return config

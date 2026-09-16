@@ -128,6 +128,7 @@ _NOT_DRV = ("drv_vwap_raw",)   # a price LEVEL wearing a derived name
 _HAR = ("har_",)
 _PXFLOW = ("px_", "flow_")
 _GLOBAL = ("glb_", "bond_")
+_MCTX = ("mctx_",)
 
 TABULAR_MODELS = (
     ("baseline", "_prior", {"type": "BASELINE", "kind": "prior"}, {}),
@@ -150,6 +151,15 @@ TABULAR_MODELS = (
     ("event_linear", "_dir_c001", {"type": "EVENT_LINEAR", "kind": "direction_logit",
                                    "columns": list(_EVT + _DRV + _PXFLOW + _GLOBAL), "C": 0.01,
                                    "min_move": 0.03, "exclude": list(_NOT_DRV)}, {}),
+    # ⚠️ ADDED 2026-09-17, AFTER THE FIRST TABULAR TRIAL, ON CV EVIDENCE ONLY (§6c): XGBoost
+    # fitted on the 20 BANK names (`model.event_panel`, peers read from unified_schema_bank)
+    # and scored on VCB — CV10 0.675, the best single model of a 70-candidate second search;
+    # its fold errors sit in other years than the linear kinds'. RUNBOOK G6 builds its pools.
+    ("event_panel", "_xgb_d2_n600", {"type": "EVENT_PANEL_XGB", "universe": "BANK",
+                                     "columns": list(_HAR + _EVT + _DRV + _PXFLOW + _MCTX + _GLOBAL),
+                                     "exclude": list(_NOT_DRV), "n_estimators": 600,
+                                     "max_depth": 2, "learning_rate": 0.03, "subsample": 0.8,
+                                     "colsample_bytree": 0.5, "min_child_weight": 20.0}, {}),
     # the tree families on the same last-row table, for comparison
     ("gbt", "_d2", {"type": "GBT", "max_depth": 2, "n_estimators": 300, "learning_rate": 0.03,
                     "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 20.0}, {}),
@@ -168,6 +178,13 @@ TABULAR_ENSEMBLES = {
     "ensemble_geo3": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003",
                       "event_linear_dir_c001"),
     "ensemble_geo2": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003"),
+    # ⚠️ ADDED 2026-09-17 with the panel member, on CV10 alone: geo4 0.695 (fold min 0.534),
+    # geo3p 0.697 (0.532), against geo3 0.682 (0.504). A greedy search over the same pool
+    # reached 0.703 in-sample and 0.647 leave-one-year-out, so no weights were fitted.
+    "ensemble_geo4": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003",
+                      "event_linear_dir_c001", "event_panel_xgb_d2_n600"),
+    "ensemble_geo3p": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003",
+                       "event_panel_xgb_d2_n600"),
 }
 
 # The chain's two setups. `window` is every trial before 2026-09-17, unchanged.

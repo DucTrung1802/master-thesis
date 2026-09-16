@@ -43,8 +43,18 @@ from event_chain import config as C
 # row is optimistic because its members were picked on val.
 NOT_ELIGIBLE = ("BASELINE_PRIOR", "BLEND")
 # Estimators the report can refit (no epochs, `build_model` + `fit`), by model_type prefix.
-REFITTABLE = ("GBT", "FOREST", "BASELINE_LOGISTIC", "EVENT_LINEAR")
-PACKAGE_OF = {"GBT": "gbt", "FOREST": "forest", "EVENT": "event_linear"}
+REFITTABLE = ("GBT", "FOREST", "BASELINE_LOGISTIC", "EVENT_LINEAR", "EVENT_PANEL")
+# model_type prefix -> package. ⚠️ The LONGEST matching prefix wins: `EVENT_PANEL_XGB` and
+# `EVENT_LINEAR_*` share `EVENT`, and a first-word lookup refitted the panel as a linear model.
+PACKAGE_OF = {"GBT": "gbt", "FOREST": "forest", "EVENT_LINEAR": "event_linear",
+              "EVENT_PANEL": "event_panel", "BASELINE": "baseline"}
+
+
+def _package(model_type: str) -> str:
+    matches = [p for p in PACKAGE_OF if str(model_type).startswith(p)]
+    if not matches:
+        raise ValueError(f"no package refits model_type {model_type!r}")
+    return PACKAGE_OF[max(matches, key=len)]
 
 
 def _geo_mean(probs: List[np.ndarray]) -> np.ndarray:
@@ -286,7 +296,7 @@ def _estimator(chain, board: pd.DataFrame, run_name: str, runs_dir: str, dataset
         return None
     with open(path, encoding="utf-8") as fh:
         cfg = yaml.safe_load(fh)
-    package = PACKAGE_OF.get(str(row["model_type"]).split("_")[0], "baseline")
+    package = _package(row["model_type"])
     module = importlib.import_module(f"model.{package}.model")
     arch = module.arch_dict(n_features=dataset.n_features, lookback=dataset.lookback, **model_spec(cfg))
     return module, arch

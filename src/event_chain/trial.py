@@ -74,6 +74,7 @@ CODE_FILES = (
     "src/model/gbt/model.py",
     "src/model/forest/model.py",
     "src/model/event_linear/model.py",
+    "src/model/event_panel/model.py",
     "src/model/lstm/model.py",
     "src/model/gru/model.py",
     "src/model/cnn/model.py",

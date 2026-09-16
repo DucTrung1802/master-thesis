@@ -427,8 +427,12 @@ def train_estimator(
         train_mse = float(np.mean((fitted - y_train) ** 2))
     _write_predictions(predict, dataset, run, task)
 
+    # ⚠️ An estimator that trains on rows OUTSIDE the dataset (`model.event_panel`'s peers)
+    # says what they were here — the dataset hash cannot.
+    provenance = getattr(estimator, "provenance", None)
+    extra = {"provenance": provenance()} if callable(provenance) else {}
     run.update_metadata(
-        model={"type": model_type, **arch["kwargs"], "n_params": n_params},
+        model={"type": model_type, **arch["kwargs"], "n_params": n_params, **extra},
         training={
             # ⚠️ Not epochs. See the docstring — the schema is shared with the torch
             # path and a blank would read as "not measured".

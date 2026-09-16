@@ -282,7 +282,13 @@ val **0.799**, test **0.660** against p95 0.644 — ⚠️ null MAX **0.795**, `
 (walk-forward **0.292**), 33 test positives. Refitted on train+val, **0.659**. The magnitude ridge
 alone reached **0.705** (`z = +2.35`) and was fifth on val. ⚠️ **A US series joined on the same
 date had been a 13-hour look-ahead** (`TZL-1`) and lifted a research CV by 0.03 before it was lagged.
-The sentence below stands for the WINDOWED grid; the verdict — no demonstrated skill — stands for both.
+⚠️ **A FIFTH TRIAL** (`20260917-041045`, §6c-§6d there) adds XGBoost trained on the 20 BANK names
+as a fourth member, chosen on CV10 (0.682 → 0.695) after the fourth trial's test numbers were
+read: val-chosen `ensemble_geo4` val **0.803**, test **0.670** vs p95 0.639 — null MAX **0.785**,
+`z = +1.93`, 2024 at 0.333 — and **0.680** refitted on train+val. About 100 further research
+candidates (currency, order imbalance, sector medians, calendar bumps, other labels, smoothing,
+greedy blends) moved CV10 by nothing; a greedy blend's 0.703 is 0.647 leave-one-year-out.
+The sentence below stands for the WINDOWED grid; the verdict — no demonstrated skill — stands for all five.
 
 **Added 2026-09-17, not moved from the hub.** The question was a CLASSIFICATION one — *on which
 sessions will VCB's adjusted close be ≥ 5 % higher five sessions later?* — run end to end on the

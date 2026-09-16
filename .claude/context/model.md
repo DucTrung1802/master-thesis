@@ -798,3 +798,20 @@ combinable); `1{r > 0}` on rows with `|log(1+r)| >= min_move` for the direction 
 REFIT on rows other than the train split — `event_chain.report` does it for train+val and for each
 walk-forward year, and a length mismatch RAISES. The design is clipped to ±`clip` train-sigmas
 (`EVD-1`). Tests: `model/event_linear/test_model.py` (4, synthetic, no database).
+
+## 19. `model.event_panel` — the event fitted on a PEER PANEL, scored on the dataset's ticker (2026-09-17)
+
+`model_type` `EVENT_PANEL_XGB`: XGBoost on the last row, trained on the dataset's own train rows
+PLUS every other ticker of `universe` (`BANK` by default), read from
+`unified_schema_<universe>`'s `pool__targets` / `pool__event_features` / `pool__basic` /
+`pool__market_context` at fit time. ⚠️ **Peers are cut at the last date of the rows `fit`
+receives** (`set_fit_context`) — a peer label looks as far ahead as an own label of the same
+date — and the own ticker's panel rows are dropped. ⚠️ **Scaled with the DATASET's scaler**
+(`feature_scaler` + `scaled_columns`), so a tree threshold means the same thing on both; peer
+NaNs stay NaN for XGBoost, own rows arrive imputed. ⚠️ **The peer rows are NOT in the dataset
+hash** (`PEH-1`): `provenance()` — universe, tickers, rows, positives, date range, a digest of
+the peer matrix — is written into `metadata.json` `model.provenance` by `engine.train_estimator`,
+which now records it for any estimator that has one. Refitted by `event_chain.report`, whose
+`PACKAGE_OF` matches the LONGEST model-type prefix (a first-word lookup would have refitted
+`EVENT_PANEL_XGB` as `event_linear`). Needs RUNBOOK G6. Tests: `model/event_panel/test_model.py`
+(3, synthetic, the reader replaced).
