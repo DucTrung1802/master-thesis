@@ -378,3 +378,24 @@ drift between them. `ROLLING_REFIT_SESSIONS` (21) was fixed before any rolling n
 ⚠️ **Test was read three times for MBB** — trial 1, trial 2 and its re-report with the rolling
 column (the first trial-2 folder, `20260917-112154`, was replaced by `112502`: same runs, same
 numbers, one column more). No configuration was changed after a test number was read.
+
+### 7c. ⚠️ The push for 0.8 — five more rounds, ~80 candidates, NOTHING above 0.741 (2026-09-17)
+
+Same harness, same folds, no test row read; the chain's grid was NOT changed.
+
+| round | candidates | CV10 · worst fold |
+|---|---|---|
+| other panel learners on `_PANEL` | HistGradientBoosting 0.721 · 0.552; RandomForest 0.697; ExtraTrees 0.686; spline logit 0.693; MLP 0.657 | none above the XGBoost/logit pair |
+| threshold augmentation (each row stacked at +3…+7 %, the threshold a feature, scored at +5 %) | depth 2 0.712, depth 3 0.728 | no gain |
+| market-RELATIVE channels (own `har_`/`px_` minus VN-Index's) | XGBoost 0.715, logit 0.714 · **0.596** | best worst fold, no gain in the mean |
+| the market blocks with `min_child_weight` 500 | 0.611 | regularising does not stop the date memorisation (`PDL-1`) |
+| scale-free `pool__ta` channels (RSI, stochastics, ROC, …; a `--keep-failed` probe table, dropped) | 0.714-0.718; TA alone 0.686 | no gain — and TA failed its null |
+| a DATE-LEVEL market component: ridge on the BANK sector's event RATE (19 labels a day) | 0.677 alone (alpha 3); in the ensemble 0.714-0.730 | the panel already carries it |
+| the touch rule `upany_5pct_5day` as label (base 0.136) | panel 0.703, pair 0.708 | the other reading of the phrase is NOT easier |
+| ensembles of the above with `ensemble_pxl` | 0.714-**0.741** (`+` market-relative logit) | +0.002, inside the noise |
+
+⚠️ **THE CEILING IS THE LABEL, NOT THE MODEL.** Every family lands at 0.70-0.74 and the fold
+standard error is ~0.02. A +5 % close five sessions out is a MAGNITUDE question (predictable from
+volatility, the Tet calendar and breadth) times a DIRECTION question (the repo's verdict, §2), and
+no channel here moved the direction part. **0.8 was not reached on CV, val or test**, and no
+configuration was changed on a test number.
