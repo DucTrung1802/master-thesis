@@ -14,6 +14,7 @@ label the run was trained on, from the run's own `predictions_{val,test}.csv`.
 | `p_at_10`, `p_at_5` | precision in the top 10 % / 5 % of scores | "if I act on the most confident days, how often does the event follow?" |
 | `brier_skill` | `1 - brier / brier(train base rate)` | calibration against the climatology a model had to beat |
 | `thr`, `test_precision`, `test_recall` | the VAL threshold maximising F1, applied to TEST once | a decision rule chosen without the test labels |
+| `rolling_auc`, `rolling_auc_bar` | TEST scored block by block, the estimator refitted every `ROLLING_REFIT_SESSIONS` sessions on all rows before the block (purged `d + h - 1`) | how the model is USED: a train-only fit is frozen years before the last test row |
 | `refit_auc`, `refit_auc_bar` | TEST scored by the same estimator REFITTED on train + val (val's purge already sits before test) | the standard last step once the configuration is fixed: the val years are the closest to test and a train-only fit never saw them |
 
 ⚠️ **AN ENSEMBLE (`config.SETUPS[...]["ensembles"]`) IS FIXED BEFORE THE CHAIN RUNS** — a
@@ -157,6 +158,9 @@ def model_runs(chain, runs_dir: Optional[str] = None) -> pd.DataFrame:
     rows = index[(index["dataset_name"] == name)
                  & (index["dataset_hash"].astype(str) == current)].copy()
     rows["run_name"] = rows["run_id"].str.rsplit("__", n=1).str[0]
+    names = getattr(chain, "run_names", None)
+    if names:
+        rows = rows[rows["run_name"].isin(names)]
     rows = rows.sort_values("created_at").groupby("run_name").tail(1)
     rows["dir"] = rows["run_id"].map(lambda r: os.path.join(runs_dir, r))
     return rows[rows["dir"].map(os.path.isdir)].reset_index(drop=True)
@@ -367,6 +371,55 @@ def refit_test(chain, board: pd.DataFrame, runs_dir: Optional[str] = None) -> pd
     return pd.DataFrame(rows)
 
 
+def rolling_test(chain, board: pd.DataFrame, runs_dir: Optional[str] = None,
+                 every: int = C.ROLLING_REFIT_SESSIONS) -> pd.DataFrame:
+    """TEST AUC of every refittable run — and every fixed ensemble — under a ROLLING refit.
+
+    The test split is cut into blocks of `every` sessions; before each block the run's own
+    config is refitted on every row that ends `d + h - 1` samples before the block starts
+    (train, val and the earlier test blocks — labels that were known by then), and scores the
+    block. The blocks' scores are pooled into one AUC. ⚠️ Nothing is chosen here: `every` is
+    fixed in `config`, and the run's config is its own.
+    """
+    from model.common.data import load_dataset
+
+    runs_dir = _runs_dir(runs_dir)
+    dataset = load_dataset(chain.creator().name)
+    X, y, dates, split, aux = _stacked(dataset)
+    test_idx = np.flatnonzero(split == "test")
+    gap = int(dataset.lookback + chain.horizon - 1)
+    block = int(dataset.lookback + chain.horizon)
+    train_rate = float(np.mean(y[split == "train"]))
+    starts = range(0, len(test_idx), int(every))
+    probs: Dict[str, np.ndarray] = {}
+    rows = []
+
+    def _row(run_name, p):
+        m = event_metrics(y[test_idx], p, block, train_rate, horizon=chain.horizon)
+        return {"run_name": run_name, "rolling_auc": m.get("auc"), "rolling_auc_bar": m.get("auc_bar"),
+                "rolling_auc_z": m.get("auc_z"), "rolling_pr_auc": m.get("pr_auc"),
+                "rolling_refits": len(starts)}
+
+    for run_name in board["run_name"]:
+        spec = _estimator(chain, board, run_name, runs_dir, dataset)
+        if spec is None:
+            continue
+        p = np.empty(len(test_idx))
+        for k in starts:
+            part = test_idx[k:k + int(every)]
+            fit = np.arange(len(y)) < part[0] - gap
+            score = np.zeros(len(y), dtype=bool)
+            score[part] = True
+            p[k:k + len(part)] = _fit_score(*spec, dataset, X, y, dates, aux, fit, score)
+        probs[run_name] = p
+        rows.append(_row(run_name, p))
+    for _, ens in board[board["model_type"] == "ENSEMBLE"].iterrows():
+        members = str(ens["ensemble_members"]).split(",")
+        if all(mbr in probs for mbr in members):
+            rows.append(_row(ens["run_name"], _geo_mean([probs[mbr] for mbr in members])))
+    return pd.DataFrame(rows)
+
+
 # -------------------------------------------------------------- walk-forward
 def walk_forward(chain, board: pd.DataFrame, runs_dir: Optional[str] = None) -> pd.DataFrame:
     """Expanding-window yearly refits of the val-best ESTIMATOR, over the post-holdout years.
@@ -472,6 +525,10 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
     refit = refit_test(chain, board, runs_dir) if not board.empty else pd.DataFrame()
     if not refit.empty:
         board = board.merge(refit, on="run_name", how="left")
+    rolling = rolling_test(chain, board, runs_dir) if (walkforward and not board.empty) else pd.DataFrame()
+    if not rolling.empty:
+        board = board.merge(rolling, on="run_name", how="left")
+    if not (refit.empty and rolling.empty):
         board.to_csv(os.path.join(output_dir, "leaderboard.csv"), index=False)
 
     split = meta.get("split", {})
@@ -506,19 +563,22 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
             "## Leaderboard — sorted by VAL ROC-AUC (chosen on val, test read once)", "",
             "| model | val AUC | test AUC | test null p95 / max | test z | test PR-AUC (lift) | "
             "test P@10% (lift) | test P@5% | Brier skill | val-thr signals / precision / recall | "
-            "test AUC, refit on train+val (null p95) |",
-            "|---|---|---|---|---|---|---|---|---|---|---|",
+            "test AUC, refit on train+val (null p95) | test AUC, rolling refit every "
+            f"{C.ROLLING_REFIT_SESSIONS} sessions (null p95) |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for _, r in board.iterrows():
             refit_cell = (f"{_fmt(r.get('refit_auc'))} ({_fmt(r.get('refit_auc_bar'))})"
                           if pd.notna(r.get("refit_auc", np.nan)) else "—")
+            rolling_cell = (f"{_fmt(r.get('rolling_auc'))} ({_fmt(r.get('rolling_auc_bar'))})"
+                            if pd.notna(r.get("rolling_auc", np.nan)) else "—")
             lines.append(
                 f"| `{r['run_name'].split('__')[0]}` | {_fmt(r.get('val_auc'))} | **{_fmt(r.get('test_auc'))}** | "
                 f"{_fmt(r.get('test_auc_bar'))} / {_fmt(r.get('test_auc_null_max'))} | {_fmt(r.get('test_auc_z'), 2)} | "
                 f"{_fmt(r.get('test_pr_auc'))} ({_fmt(r.get('test_pr_lift'), 2)}x) | "
                 f"{_fmt(r.get('test_p_at_10'))} ({_fmt(r.get('test_p10_lift'), 2)}x) | {_fmt(r.get('test_p_at_5'))} | "
                 f"{_fmt(r.get('test_brier_skill'))} | {_fmt(r.get('test_signals_at_thr'))} / "
-                f"{_fmt(r.get('test_precision_at_thr'))} / {_fmt(r.get('test_recall_at_thr'))} | {refit_cell} |"
+                f"{_fmt(r.get('test_precision_at_thr'))} / {_fmt(r.get('test_recall_at_thr'))} | {refit_cell} | {rolling_cell} |"
             )
         lines += [
             "",
@@ -529,7 +589,9 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
             f"of the {_fmt(best['test_signals_at_thr'])} test sessions over the val threshold, "
             f"{_fmt(best['test_precision_at_thr'])} were followed by the event."
             + (f" Refitted on train+val, its test AUC is {_fmt(best.get('refit_auc'))} "
-               f"(null p95 {_fmt(best.get('refit_auc_bar'))})." if pd.notna(best.get("refit_auc", np.nan)) else ""),
+               f"(null p95 {_fmt(best.get('refit_auc_bar'))})." if pd.notna(best.get("refit_auc", np.nan)) else "")
+            + (f" Refitted every {C.ROLLING_REFIT_SESSIONS} test sessions, {_fmt(best.get('rolling_auc'))} "
+               f"(null p95 {_fmt(best.get('rolling_auc_bar'))})." if pd.notna(best.get("rolling_auc", np.nan)) else ""),
             "",
         ]
         for _, ens in board[board["model_type"] == "ENSEMBLE"].iterrows():
@@ -571,4 +633,5 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
         "selection": runs,
         "walkforward": wf,
         "refit": refit,
+        "rolling": rolling,
     }

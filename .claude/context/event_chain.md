@@ -4,7 +4,7 @@
 > behind one package. Built 2026-09-16.
 
 > **The EVENT chain: which sessions is a ticker about to rise by at least g % within h
-> sessions?** Two setups (`--setup window|tabular`, §6). A binary label, parameterised in ONE place (`src/utils/event_target.py`), run
+> sessions?** Three setups (`--setup window|tabular|tabular_mbb`, §6-§7), two tickers (VCB, MBB). A binary label, parameterised in ONE place (`src/utils/event_target.py`), run
 > end to end on the repo's own stages — Dagster for the data, `feature_selection` for the
 > selection, `final_features` for the table, `train_test_creator` for the tensors,
 > `model.<arch>` for the fits — with an event-specific report on top.
@@ -132,14 +132,18 @@ with its folder and deleting a folder deletes its rows.
 
 | group | columns |
 |---|---|
+| which stock — ⚠️ FIRST (2026-09-17, the log holds VCB and MBB) | `exchange` (read from the labelled rows, oldest first, `HNX>HOSE` for a mover), `ticker` |
 | key | `run_id`, `trial_id`, `started_at` |
-| data | `ticker`, `data_table`, `data_from`, `data_to` |
+| data | `data_table`, `data_from`, `data_to` |
 | features | `feature_pools`, `n_features`, `lookback_d`, `feature_selection` |
 | target | `target`, `target_definition` |
 | split | `split_ratio`, `purge_gap`, `train/val/test_period`, `train/val/test_samples`, `train/val/test_positive_rate` |
 | model | `model`, `model_variant`, `hyperparameters` (JSON: the `model:` block minus `type`, plus `train:`), `n_params`, `best_epoch`, `seed` |
 | run time, hardware | `run_seconds`, `fit_seconds`, `device`, `gpu` |
-| results | `val_auc`, `test_auc`, `test_auc_null_p95`, `test_auc_z`, `test_beats_null`, `test_pr_auc`, `test_precision_top10pct`, `test_brier_skill`, `test_precision/recall_at_val_threshold`, `chosen_on_val` |
+| results | `val_auc`, `test_auc`, `test_auc_null_p95`, `test_auc_z`, `test_beats_null`, `test_auc_refit_train_val` (+ p95), `test_auc_rolling_refit` (+ p95, §7b), `test_pr_auc`, `test_precision_top10pct`, `test_brier_skill`, `test_precision/recall_at_val_threshold`, `chosen_on_val` |
+
+⚠️ **The five VCB `trial.json` files were BACKFILLED with `universe.exchange = "HOSE"`**
+(2026-09-17), read from `unified_schema_vcb.pool__targets` — the only edit to a logged trial.
 
 ⚠️ **`run_seconds` has two sources**: `model.common.engine` records `timing: {fit_seconds,
 run_seconds}` in every run's `metadata.json` since 2026-09-17; the two trials before that read it
@@ -301,3 +305,76 @@ standard error (~0.05). ⚠️ **2024 is still inverted** (0.333); the panel mem
 above 0.5 there. ⚠️ **The peer rows are not in the dataset hash** (`PEH-1`): a refit reads the
 BANK pools as they are on that day.
 
+## 7. ⚠️ MBB — the same chain on a second ticker, and a grid tuned for it (2026-09-17)
+
+```
+python -m event_chain --setup tabular --ticker MBB --apply --notes "<why>"   # VCB's grid on MBB
+python -m event_chain --setup tabular_mbb --apply --notes "<why>"           # RUNBOOK G7 — MBB's grid
+```
+
+**Data**: `unified_schema_mbb` had `pool__basic`/`pool__targets` only; `pool__targets`,
+`pool__event_features`, `pool__market_context`, `pool__market_breadth`, `pool__news_daily` and
+(for a probe) `pool__ta` were materialised through Dagster for partition `MBB`, 12-14 s each.
+MBB trades on HOSE from **2011-11-01**, so its split is its own: train 2011-11-01 → 2022-02-28
+(2,575 samples, 288 events, base 0.112), val 2022-03-08 → 2024-05-17 (548, 55, 0.100), test
+2024-05-27 → 2026-08-14 (553, **49**, 0.089). The selection holdout is 2022-03-08.
+
+**Selection at d = 1** (10 draws): `event_features` z **+5.14**, `market_context` **+7.86**,
+`market_breadth` +2.19 cleared; ⚠️ **`basic` FAILED (z −0.18) and so did `news_daily` (+0.54) and
+`pool__ta` (+0.42, a probe)** — VCB's `basic` cleared, so MBB's table has **no `drv_` block**: 133
+channels against VCB's 211. ⚠️ Two defects the second ticker exposed, both fixed before it logged
+a trial: `RSC-1` (the selection lookup ignored the ticker) and `LBS-1` (a leaderboard scored every
+run on the dataset hash, so two setups on one table would have been one search).
+
+### 7a. The tuning CV — train+val rows only, validation years 2015-2024
+
+A scratch harness cut one fold per calendar year (train = every row ending `d + h − 1` before
+the year) plus the chain's own train→val split, and fitted the repo's OWN estimators
+(`model.event_linear`, `model.event_panel`), so a config moves into the chain unchanged. It
+reproduced the first trial's val AUCs to the third digit. ⚠️ Its 2022-2024 folds overlap the
+chain's val split, so **every val AUC below is optimistic for the configuration chosen on it**.
+
+| candidate | CV10 · worst fold · val |
+|---|---|
+| VCB's grid as it is: `event_panel_xgb_d2_n600` · `ensemble_geo4` | 0.665 · 0.443 · 0.698 — 0.665 · 0.453 · 0.677 |
+| own-ticker linear kinds, ~150 settings (blocks, alpha/C, half-life, `min_move`) | best 0.664 (event logit on `har_ evt_ px_ flow_`, C 0.03, 4 y); magnitude 0.648; direction ≤ 0.60 |
+| ⚠️ **the panel WITHOUT `mctx_`/`glb_`/`bond_`** (`har_ evt_ sec_ mkt_ cal_ px_ flow_`) | **0.723 · 0.491 · 0.742** — `PDL-1` |
+| ... without `cal_` · without the two Tet channels · without `mkt_` · without `sec_`/`flow_`/`har_` | 0.613 · 0.688 · 0.705 · 0.717-0.722 |
+| ... + VN-Index volatility · + its returns/position · + VIX | 0.708 · 0.687-0.702 · 0.728 |
+| ... depth 1-5, 300-1,800 trees, `own_weight` 3-10, half-life 2-8 y, colsample, min_child_weight | 0.702-0.733; depth 3 **0.733**, its seeds 1-3 **0.719-0.729** |
+| ... peers VN30 · BANK+VN30 · BANK without the state banks · without EVF/ABB/NAB · 7 oldest · 12 newest | 0.689 · 0.683-0.691 · 0.711 · 0.722 · 0.701 · 0.667 |
+| ... with `pool__basic`'s `drv_` (a `--keep-failed` table, `…__tabk`, dropped afterwards) | 0.726 — noise, and it failed its null |
+| **L2 logit on the same panel rows** (`kind: logit`), C 0.03, 4-year half-life | 0.718 · **0.559** · 0.73 — the best worst fold |
+| geometric mean: depth-3 tree + logit (`ensemble_pxl`) · + the depth-2 tree (`ensemble_px2l`) | **0.739** · 0.565 · 0.74 — 0.735 · 0.536 · 0.74 |
+| ... + the own-ticker linear kinds · + `gbt_d2` · + VCB's panel | 0.709-0.722 · 0.700 · 0.701 |
+
+⚠️ **WHY THE MARKET BLOCKS HURT HERE AND NOT FOR VCB'S OWN LINEAR KINDS**: a channel that is the
+same for all 20 banks on a day lets a tree isolate DATES and learn their event rate; a linear
+score cannot. `cal_` is date-level too and is the exception, because a season recurs. ⚠️ **VCB's
+panel member was not re-measured without them** (`PDL-1`).
+
+### 7b. The two MBB trials
+
+| trial | grid | val-chosen | val AUC | **test AUC** | null p95 / max · z | refit train+val | rolling refit (21 sessions) |
+|---|---|---|---|---|---|---|---|
+| `20260917-102945` | `tabular` (VCB's) | `event_panel_xgb_d2_n600` | 0.698 | **0.608** | 0.613 / 0.731 · +1.58 | 0.691 | — (not computed then) |
+| `20260917-112502` | `tabular_mbb` | **`ensemble_px2l`** | **0.743** | **0.630** | 0.616 / 0.719 · +1.85 | **0.675** | 0.648 (p95 0.612) |
+
+Trial 2, every row (val · test · refit · rolling): `ensemble_pxl` 0.743 · 0.639 · 0.676 · 0.650 —
+`xgb_pan_d2_n600` 0.742 · 0.612 · 0.662 · 0.640 — `logit_pan_c003_hl4` 0.737 · 0.586 · 0.634 · 0.620 —
+`xgb_pan_d3_n600` 0.730 · **0.665** · 0.689 · 0.659 — `evt_hep_c003_hl4` 0.698 · 0.604 · 0.551 · 0.517 —
+VCB's panel 0.698 · 0.608 · 0.691 · 0.663 — `mag_hepm_a100_hl4` 0.689 · 0.541 · 0.558 · 0.555 —
+`forest_et_leaf30` 0.659 · 0.635 · 0.653 · 0.641 — `gbt_d2` 0.630 · 0.649 · 0.662 · 0.639.
+Walk-forward, `ensemble_px2l`: 2022 0.823 · 2023 0.685 · **2024 0.600** · 2025 0.686 · 2026 0.735.
+
+⚠️ **THE TUNING MOVED VAL +0.045 AND TEST +0.022 — AND NOTHING CLEARS ITS NULL MAX.** 0.630 is
+above the per-run p95 (0.616) and below the max (0.719), `z < 2`, the test holds 49 events, and
+the search behind it is ~250 CV candidates plus 20 chain runs (`NUL-1`). **The 0.75 the tuning
+aimed at was reached on CV (0.739) and val (0.743), not on test.** The val→test drop is 0.11, as
+for VCB; 2024 is again the weakest year. ⚠️ **The best test number is not the chosen one**: the
+depth-3 tree scored 0.665 and was fifth on val. ⚠️ **A ROLLING REFIT SCORES BELOW ONE REFIT**
+(0.648 vs 0.675): pooling 27 blocks pools 27 base-rate levels, and a pooled AUC pays for the
+drift between them. `ROLLING_REFIT_SESSIONS` (21) was fixed before any rolling number was read.
+⚠️ **Test was read three times for MBB** — trial 1, trial 2 and its re-report with the rolling
+column (the first trial-2 folder, `20260917-112154`, was replaced by `112502`: same runs, same
+numbers, one column more). No configuration was changed after a test number was read.

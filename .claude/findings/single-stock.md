@@ -334,3 +334,13 @@ the full table's RandomForest: **2021 0.546 · 2022 0.674 · 2023 0.573 · 2024 
 Every run is a row of [`reports/event_chain/trials.csv`](../../reports/event_chain/trials.csv) —
 data, features, target, split, model, hyperparameters, run time, device, results — and every trial
 folder carries `predictions.csv`, so these numbers survive the git-ignored run folders (`RPR-1`).
+
+### MBB — the tabular event chain on a second bank, tuned for it (2026-09-17)
+
+📂 [`.claude/context/event_chain.md`](../context/event_chain.md) §7. `+5 % within 5 sessions` on
+MBB (HOSE, from 2011-11), train/val/test 2,575 / 548 / 553 samples, 49 test events. VCB's grid
+as it is: val-chosen panel **test 0.608** (p95 0.613). A grid tuned on a rolling-origin CV
+over 2015-2024 (CV 0.665 → **0.739**, mostly by dropping the date-level market blocks from the
+bank panel, `PDL-1`): val-chosen `ensemble_px2l` val **0.743**, **test 0.630** (p95 0.616, max
+0.719, z +1.85), refit on train+val 0.675, monthly rolling refit 0.648. ⚠️ **Above the per-run
+bar, below the null max — not a pass**, and the 0.75 aimed for was reached on CV and val only.

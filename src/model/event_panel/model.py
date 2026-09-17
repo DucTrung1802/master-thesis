@@ -22,6 +22,12 @@ sessions past d, exactly like an own row dated d, so peers are kept only up to t
 DATE of the rows `fit` receives (`set_fit_context`) — never past it. The own ticker's rows
 in the peer universe are dropped: they arrive through `X`.
 
+⚠️ **TWO KINDS** (2026-09-17, MBB): `kind: xgb` is the tree model above; `kind: logit` is an L2
+logistic on the same panel rows, the design clipped to ±`clip` dataset-sigmas with a peer NaN
+set to 0 (the dataset's train mean) — measured on MBB's rolling-origin CV at 0.72 with a worst
+fold of 0.57 against the tree's 0.49, which is what makes it a second member rather than a
+duplicate. `model_type` is `EVENT_PANEL_<KIND>`.
+
 ⚠️ **SCALED WITH THE DATASET'S SCALER, NOT IMPUTED.** A scaled channel of a peer row gets
 the dataset's own affine map, so a tree threshold learned on peers means the same thing on
 the own rows. A peer NaN stays NaN (XGBoost routes it); the own rows arrive imputed with
@@ -38,6 +44,7 @@ import pandas as pd
 
 KEY = ("date", "exchange", "ticker")
 DEFAULT_POOLS = ("pool__event_features", "pool__basic", "pool__market_context")
+KINDS = ("xgb", "logit")
 
 # (universe, own ticker, columns, label, pools) -> frame; kept for the life of the process
 # because `event_chain.report` refits one model several times on growing date cuts.
@@ -80,7 +87,7 @@ class EventPanel:
 
     needs_dataset = True
 
-    def __init__(self, n_features: int, lookback: int, universe: str = "BANK",
+    def __init__(self, n_features: int, lookback: int, universe: str = "BANK", kind: str = "xgb",
                  columns: Optional[Sequence[str]] = None,
                  exclude: Optional[Sequence[str]] = None,
                  pools: Sequence[str] = DEFAULT_POOLS,
@@ -88,7 +95,12 @@ class EventPanel:
                  subsample: float = 0.8, colsample_bytree: float = 0.5,
                  min_child_weight: float = 20.0, reg_lambda: float = 1.0, max_bin: int = 64,
                  own_weight: float = 1.0, half_life_years: Optional[float] = None,
+                 C: float = 0.03, clip: float = 5.0, max_iter: int = 5000,
                  n_jobs: int = 4, seed: int = 42):
+        if kind not in KINDS:
+            raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
+        self.kind = kind
+        self.C, self.clip, self.max_iter = float(C), float(clip), int(max_iter)
         self.universe = str(universe).upper()
         self.columns = tuple(columns) if columns else ()
         self.exclude = tuple(exclude) if exclude else ()
@@ -164,6 +176,11 @@ class EventPanel:
     def _design(self, X: np.ndarray) -> np.ndarray:
         return np.asarray(X, dtype=float)[:, -1, :][:, self.index_]
 
+    def _linear(self, Z: np.ndarray) -> np.ndarray:
+        """The logit's design: NaN -> 0 (the dataset's train mean), clipped to ±clip sigmas."""
+        return np.clip(np.nan_to_num(Z, nan=0.0, posinf=self.clip, neginf=-self.clip),
+                       -self.clip, self.clip)
+
     def _age_weights(self, dates: np.ndarray, end: np.datetime64) -> np.ndarray:
         if self.half_life_years is None:
             return np.ones(len(dates))
@@ -172,6 +189,7 @@ class EventPanel:
 
     # ---------------------------------------------------------------- fit
     def fit(self, X: np.ndarray, y: np.ndarray) -> "EventPanel":
+        from sklearn.linear_model import LogisticRegression
         from xgboost import XGBClassifier
 
         if self.peers_ is None:
@@ -192,22 +210,29 @@ class EventPanel:
         dates = np.concatenate([own_dates, peers["date"].to_numpy().astype("datetime64[D]")])
         w = self._age_weights(dates, cut)
         w[:len(own)] *= self.own_weight
-        self.model_ = XGBClassifier(**self.params)
-        self.model_.fit(Z, target, sample_weight=w)
+        if self.kind == "xgb":
+            self.model_ = XGBClassifier(**self.params)
+            self.model_.fit(Z, target, sample_weight=w)
+            self.n_params = int(self.params["n_estimators"] * (2 ** (self.params["max_depth"] + 1) - 1))
+        else:
+            self.model_ = LogisticRegression(C=self.C, max_iter=self.max_iter)
+            self.model_.fit(self._linear(Z), target, sample_weight=w)
+            self.n_params = int(Z.shape[1] + 1)
         digest = hashlib.sha256(np.ascontiguousarray(np.nan_to_num(Xp, nan=-9e9)).tobytes())
         self.fit_summary_ = {
-            "universe": self.universe, "own_ticker": self.own_, "label": self.label_,
+            "kind": self.kind, "universe": self.universe, "own_ticker": self.own_, "label": self.label_,
             "channels": len(self.names_), "own_rows": int(len(own)),
             "peer_rows": int(len(peers)), "peer_tickers": int(peers["ticker"].nunique()),
             "peer_positives": int(yp.sum()),
             "peer_dates": [str(peers["date"].min().date()), str(peers["date"].max().date())] if len(peers) else None,
             "peer_digest": digest.hexdigest()[:16], "date_cut": str(cut),
         }
-        self.n_params = int(self.params["n_estimators"] * (2 ** (self.params["max_depth"] + 1) - 1))
         return self
 
     # ------------------------------------------------------------ predict
     def predict_logit(self, X: np.ndarray) -> np.ndarray:
+        if self.kind == "logit":
+            return self.model_.decision_function(self._linear(self._design(X)))
         return self.model_.predict(self._design(X), output_margin=True)
 
     predict = predict_logit

@@ -1,0 +1,336 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-09-17T10:37:30+07:00",
+  "git_commit": "e201de6d+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8",
+    "torch": "2.5.1+cu121"
+  },
+  "execution": {
+    "started_at": "2026-09-17T10:36:10+07:00",
+    "finished_at": null,
+    "timezone": "GMT+7",
+    "runtime_seconds": 77.99,
+    "runtime": "1m 18s",
+    "device": "cuda",
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "count": 1,
+      "vram_total_mb": 4096,
+      "vram_free_mb": 3235,
+      "cuda": "12.1",
+      "torch": "2.5.1+cu121"
+    },
+    "host": "DESKTOP-TRDFIML",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_mbb",
+    "tables": [
+      "pool__news_daily",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 3691,
+        "rows_after": 3691,
+        "columns_added": 11,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 3691,
+    "panel_columns": 28,
+    "columns_by_table": {
+      "pool__news_daily": [
+        "n_docs_5d",
+        "n_editorial_5d",
+        "n_docs_named_5d",
+        "n_earnings_5d",
+        "relevance_max_5d",
+        "if_news_5d",
+        "if_editorial_5d",
+        "n_docs_10d",
+        "n_editorial_10d",
+        "n_docs_named_10d",
+        "n_earnings_10d",
+        "relevance_max_10d",
+        "if_news_10d",
+        "if_editorial_10d"
+      ],
+      "pool__targets": [
+        "return_5day",
+        "return_10day",
+        "return_20day",
+        "return_rel_5day",
+        "return_rel_10day",
+        "return_rel_20day",
+        "close_adjust_5day",
+        "close_adjust_10day",
+        "close_adjust_20day",
+        "up_5pct_5day",
+        "upany_5pct_5day"
+      ]
+    },
+    "first_date": "2011-11-01",
+    "last_date": "2026-08-21",
+    "sessions": 3691,
+    "tickers": 1
+  },
+  "target": {
+    "name": "up_5pct_5day",
+    "horizon_days": 5,
+    "definition": "up_5pct_5day (see cross_sectional.py / DataPreprocessor for the definition)",
+    "labelled_rows": 3686,
+    "unlabelled_rows": 5,
+    "mean": 0.10634834508952794,
+    "sd": 0.30832477226122057,
+    "min": 0.0,
+    "max": 1.0
+  },
+  "setup": {
+    "target": "up_5pct_5day",
+    "horizon_h": 5,
+    "lookback_d": 1,
+    "normalize": "none",
+    "purge_gap_rows": 5,
+    "window_stats": "last",
+    "dropped_by_normalize": 0,
+    "dev_samples": 2575,
+    "holdout_start": "2022-03-08",
+    "holdout_rows": 1106,
+    "purged_at_boundary": 5,
+    "channels": 14,
+    "design_columns": 14,
+    "kept": 11,
+    "device": "cuda",
+    "methods": "spearman, xgb_shap, permutation",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null,
+    "design_dtype": "float64",
+    "env_fingerprint": "cf51e65b3a15"
+  },
+  "results": {
+    "n_channels": 14,
+    "n_kept": 11,
+    "kept": [
+      "n_docs_5d",
+      "n_docs_10d",
+      "if_news_5d",
+      "if_editorial_5d",
+      "n_earnings_10d",
+      "relevance_max_10d",
+      "relevance_max_5d",
+      "n_editorial_10d",
+      "if_editorial_10d",
+      "n_earnings_5d",
+      "if_news_10d"
+    ],
+    "dropped_constant": [],
+    "dropped_correlated": {
+      "n_docs_named_10d": "n_docs_10d",
+      "n_editorial_5d": "if_editorial_5d",
+      "n_docs_named_5d": "n_docs_5d"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "n_docs_5d",
+      "n_docs_10d",
+      "n_docs_named_10d",
+      "if_news_5d",
+      "if_editorial_5d",
+      "n_earnings_10d",
+      "n_editorial_5d",
+      "relevance_max_10d",
+      "n_docs_named_5d",
+      "relevance_max_5d"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.0,
+      "spearman vs target (cuda)": 0.01,
+      "xgb gain + shap (cuda)": 0.93,
+      "permutation (cuda)": 0.78,
+      "channel corr matrix (cuda)": 0.0,
+      "stability (cuda)": 3.0,
+      "validation (cuda)": 5.55
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.009679703446987823,
+      "ic_trend_per_fold": -0.04700584275703245,
+      "ic_min": -0.09719141233002691,
+      "ic_max": 0.13328166245874853,
+      "ic_fold_sd": 0.09542987451207849,
+      "hit_rate": null,
+      "n_test_rows": 414.0,
+      "n_eff_per_fold": 82.8,
+      "se_ic_per_fold": 0.1106
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.008297307582715767,
+      "ic_trend_per_fold": -0.042349406693643524,
+      "ic_min": -0.11902333704668668,
+      "ic_max": 0.1289764128732381,
+      "ic_fold_sd": 0.09815051432984555,
+      "hit_rate": null,
+      "n_test_rows": 414.0,
+      "n_eff_per_fold": 82.8,
+      "se_ic_per_fold": 0.1106
+    }
+  },
+  "null": {
+    "label": "unified_schema_mbb / up_5pct_5day",
+    "observed_ic": 0.0097,
+    "null_mean": -0.0042,
+    "null_sd": 0.0254,
+    "null_p95_BAR": 0.0346,
+    "null_max": 0.0351,
+    "p_value": 0.2727,
+    "z_vs_null": 0.54,
+    "clears_bar": false,
+    "draws": 10,
+    "failed_draws": 0
+  },
+  "holdout": [
+    {
+      "feature_set": "selected",
+      "labels": "real",
+      "n_channels": 11,
+      "n_train": 2575,
+      "n_holdout": 1106,
+      "n_eff_holdout": 221.2,
+      "ic": 0.038136507625704565,
+      "hit_rate": null
+    },
+    {
+      "feature_set": "selected",
+      "labels": "shuffled control",
+      "n_channels": 11,
+      "n_train": 2575,
+      "n_holdout": 1106,
+      "n_eff_holdout": 221.2,
+      "ic": 0.04707270483038224,
+      "hit_rate": null
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "real",
+      "n_channels": 14,
+      "n_train": 2575,
+      "n_holdout": 1106,
+      "n_eff_holdout": 221.2,
+      "ic": 0.016407278993492706,
+      "hit_rate": null
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "shuffled control",
+      "n_channels": 14,
+      "n_train": 2575,
+      "n_holdout": 1106,
+      "n_eff_holdout": 221.2,
+      "ic": -0.019182253441830326,
+      "hit_rate": null
+    }
+  ],
+  "notes": "event_chain: 1 when close_adjust[t+5] >= (1 + 5%) x close_adjust[t], else 0; NULL for the last 5 sessions",
+  "run_id": "2026-09-17_103728__mbb__news_daily__up_5pct_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 1785
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 960
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 886
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 531
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 3971
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 568
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 503
+    },
+    {
+      "file": "holdout.csv",
+      "bytes": 331
+    },
+    {
+      "file": "null_draws.csv",
+      "bytes": 253
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 84882
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 111364
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 77882
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 183893
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 43014
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 83856
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 62235
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 36501
+    },
+    {
+      "file": "figures/10_null.png",
+      "bytes": 53270
+    }
+  ],
+  "report_seconds": 2.18
+}

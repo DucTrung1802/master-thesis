@@ -801,7 +801,10 @@ walk-forward year, and a length mismatch RAISES. The design is clipped to ±`cli
 
 ## 19. `model.event_panel` — the event fitted on a PEER PANEL, scored on the dataset's ticker (2026-09-17)
 
-`model_type` `EVENT_PANEL_XGB`: XGBoost on the last row, trained on the dataset's own train rows
+`model_type` `EVENT_PANEL_<KIND>` — `kind: xgb` (default) or ⚠️ **`kind: logit`** (2026-09-17, MBB): an L2
+logistic on the same panel rows, design clipped to ±`clip` dataset-sigmas, a peer NaN set to 0 (the
+train mean); on MBB's CV 0.718 with a worst fold of 0.559 against the tree's 0.491
+([event_chain.md](event_chain.md) §7a). `xgb`: XGBoost on the last row, trained on the dataset's own train rows
 PLUS every other ticker of `universe` (`BANK` by default), read from
 `unified_schema_<universe>`'s `pool__targets` / `pool__event_features` / `pool__basic` /
 `pool__market_context` at fit time. ⚠️ **Peers are cut at the last date of the rows `fit`
@@ -814,4 +817,5 @@ the peer matrix — is written into `metadata.json` `model.provenance` by `engin
 which now records it for any estimator that has one. Refitted by `event_chain.report`, whose
 `PACKAGE_OF` matches the LONGEST model-type prefix (a first-word lookup would have refitted
 `EVENT_PANEL_XGB` as `event_linear`). Needs RUNBOOK G6. Tests: `model/event_panel/test_model.py`
-(3, synthetic, the reader replaced).
+(4, synthetic, the reader replaced). ⚠️ **A date-level channel (`mctx_`, `glb_`, `bond_`) lets the tree
+memorise dates across the panel** — MBB CV 0.665 with them, 0.723 without (`PDL-1`).

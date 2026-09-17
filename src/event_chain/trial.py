@@ -87,10 +87,12 @@ CODE_FILES = (
 # ONE ROW PER MODEL RUN. Grouped: key | data | features | target | split | model | run time
 # and hardware | results. Nothing else belongs in the log; the rest is in `trial.json`.
 LOG_COLUMNS = [
+    # which stock — FIRST, because the log holds more than one ticker since 2026-09-17 (MBB)
+    "exchange", "ticker",
     # key
     "run_id", "trial_id", "started_at",
     # data
-    "ticker", "data_table", "data_from", "data_to",
+    "data_table", "data_from", "data_to",
     # features
     "feature_pools", "n_features", "lookback_d", "feature_selection",
     # target
@@ -106,6 +108,7 @@ LOG_COLUMNS = [
     # results
     "val_auc", "test_auc", "test_auc_null_p95", "test_auc_z", "test_beats_null",
     "test_auc_refit_train_val", "test_auc_refit_null_p95",
+    "test_auc_rolling_refit", "test_auc_rolling_refit_null_p95",
     "test_pr_auc", "test_precision_top10pct", "test_brier_skill",
     "test_precision_at_val_threshold", "test_recall_at_val_threshold", "chosen_on_val",
 ]
@@ -236,6 +239,19 @@ def _pool_stats(chain, pools: Sequence[str]) -> Dict:
                             (f"{chain.schema}.{chain.table}",))
                 comment = cur.fetchone()[0]
     return {"pools": out, "final_table_comment": comment}
+
+
+def exchange(chain) -> Optional[str]:
+    """The exchange(s) the ticker's labelled rows were listed on, oldest first (`HOSE`).
+
+    ⚠️ Read from the rows the label was computed on, not from a listing table: a ticker that
+    moved (HNX -> HOSE) carries both, joined by `>`, in the order it traded on them.
+    """
+    _, labelled = chain.labelled_dates()
+    if "exchange" not in labelled.columns:
+        return None
+    first = labelled.groupby("exchange")["date"].min().sort_values()
+    return ">".join(str(e) for e in first.index) or None
 
 
 def _label_stats(chain) -> Dict:
@@ -432,7 +448,7 @@ def record(chain, built: Dict, notes: str = "",
                   "horizon": chain.event.horizon, "rule": chain.event.rule,
                   "definition": chain.event.describe(),
                   "defined_in": "src/utils/event_target.py"},
-        "universe": {"ticker": chain.ticker, "schema": chain.schema},
+        "universe": {"exchange": exchange(chain), "ticker": chain.ticker, "schema": chain.schema},
         "data": {**data, "label": _label_stats(chain)},
         "split": {"train_ratio": C.TRAIN_RATIO, "val_ratio": C.VAL_RATIO,
                   "holdout_start": chain.holdout_start(),
@@ -461,6 +477,8 @@ def record(chain, built: Dict, notes: str = "",
                           "best_rule": "max VAL ROC-AUC, excluding BASELINE_PRIOR and BLEND "
                                        "(a FIXED ensemble is eligible)",
                           "refit_rule": "the run's own config refitted on train+val, test scored once",
+                          "rolling_rule": f"refitted every {C.ROLLING_REFIT_SESSIONS} test sessions on all rows "
+                                          "ending d+h-1 samples before the block; blocks pooled",
                           "threshold_rule": "VAL threshold maximising F1, applied once to TEST"},
         "models": _models(board, runs_dir),
         "best": _row_dict(best) if best is not None else None,
@@ -535,9 +553,10 @@ def log_rows(body: Dict) -> List[Dict]:
             device = "+".join(sorted(devices)) if devices else "cpu"
         gpu = ((m.get("env") or {}).get("cuda_device") or machine_gpu) if str(device).startswith("cuda") else ""
         rows.append({
+            "exchange": body["universe"].get("exchange"),
+            "ticker": body["universe"]["ticker"],
             "run_id": run_id, "trial_id": body["trial"]["id"],
             "started_at": m.get("created_at") or body["trial"]["started_at"],
-            "ticker": body["universe"]["ticker"],
             "data_table": f"{body['universe']['schema']}.{final.get('table')}",
             "data_from": splits["train"]["first_label_date"],
             "data_to": splits["test"]["last_label_date"],
@@ -572,6 +591,8 @@ def log_rows(body: Dict) -> List[Dict]:
                                 else bool(em["test_auc"] > em["test_auc_bar"])),
             "test_auc_refit_train_val": _r(em.get("refit_auc")),
             "test_auc_refit_null_p95": _r(em.get("refit_auc_bar")),
+            "test_auc_rolling_refit": _r(em.get("rolling_auc")),
+            "test_auc_rolling_refit_null_p95": _r(em.get("rolling_auc_bar")),
             "test_pr_auc": _r(em.get("test_pr_auc")),
             "test_precision_top10pct": _r(em.get("test_p_at_10")),
             "test_brier_skill": _r(em.get("test_brier_skill")),
@@ -631,7 +652,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                                                      "best", "verdict")}, indent=2,
                          ensure_ascii=False)[:20000])
         return
-    cols = ["started_at", "model_variant", "feature_pools", "n_features", "target", "split_ratio",
+    cols = ["exchange", "ticker", "started_at", "model_variant", "feature_pools", "n_features", "target", "split_ratio",
             "device", "run_seconds", "val_auc", "test_auc", "test_auc_null_p95", "test_beats_null",
             "chosen_on_val"]
     with pd.option_context("display.width", 250, "display.max_colwidth", 50):

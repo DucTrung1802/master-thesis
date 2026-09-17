@@ -1,0 +1,442 @@
+{
+  "report_schema_version": "1.0",
+  "generated_at": "2026-09-17T10:31:26+07:00",
+  "git_commit": "e201de6d+dirty",
+  "environment": {
+    "python": "3.12.10",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scipy": "1.17.1",
+    "sklearn": "1.7.2",
+    "xgboost": "2.1.1",
+    "matplotlib": "3.10.8",
+    "torch": "2.5.1+cu121"
+  },
+  "execution": {
+    "started_at": "2026-09-17T10:29:49+07:00",
+    "finished_at": null,
+    "timezone": "GMT+7",
+    "runtime_seconds": 94.19,
+    "runtime": "1m 34s",
+    "device": "cuda",
+    "gpu": {
+      "available": true,
+      "probe": "torch",
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "count": 1,
+      "vram_total_mb": 4096,
+      "vram_free_mb": 3235,
+      "cuda": "12.1",
+      "torch": "2.5.1+cu121"
+    },
+    "host": "DESKTOP-TRDFIML",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "input": {
+    "database": "database_main_v2",
+    "schema": "unified_schema_mbb",
+    "tables": [
+      "pool__event_features",
+      "pool__targets"
+    ],
+    "join_log": [
+      {
+        "table": "pool__targets",
+        "join_keys": "date, exchange, ticker",
+        "how": "inner",
+        "rows_before": 3691,
+        "rows_after": 3691,
+        "columns_added": 11,
+        "duplicate_columns_dropped": ""
+      }
+    ],
+    "panel_rows": 3691,
+    "panel_columns": 81,
+    "columns_by_table": {
+      "pool__event_features": [
+        "evt_rate_up_60",
+        "evt_rate_up_120",
+        "evt_rate_up_250",
+        "evt_rate_dn_120",
+        "evt_up_day_frac_10",
+        "evt_vol_10",
+        "evt_vol_20",
+        "evt_vol_60",
+        "evt_vol_120",
+        "evt_thr_z_20",
+        "evt_thr_z_60",
+        "evt_vol_ratio_20_120",
+        "evt_ret_h",
+        "evt_max_ret_h_60",
+        "evt_min_ret_h_60",
+        "evt_range_h",
+        "evt_dist_high_20",
+        "evt_dist_low_20",
+        "evt_turnover_z_60",
+        "evt_sessions_since_up",
+        "sec_ret_h",
+        "sec_rel_ret_h",
+        "sec_rate_up",
+        "sec_rate_up_60",
+        "sec_disp_h",
+        "mkt_rate_up",
+        "mkt_rate_dn",
+        "mkt_ret_h_median",
+        "mkt_disp_h",
+        "mkt_rate_up_60",
+        "cal_dow_sin",
+        "cal_dow_cos",
+        "cal_month_sin",
+        "cal_month_cos",
+        "cal_days_to_month_end",
+        "cal_days_since_quarter_end",
+        "cal_gap_days",
+        "cal_days_to_tet",
+        "cal_days_since_tet",
+        "cal_days_to_vn30f_expiry",
+        "har_lpk_1",
+        "har_lpk_5",
+        "har_lpk_10",
+        "har_lpk_22",
+        "har_lpk_63",
+        "har_lpk_125",
+        "har_lrv_5",
+        "har_lrv_22",
+        "har_lrv_63",
+        "har_lrv_125",
+        "har_labs_r1",
+        "har_labs_ret_h",
+        "har_semi_up_22",
+        "har_semi_dn_22",
+        "px_ret_20",
+        "px_ret_60",
+        "px_pos_60",
+        "px_dd_60",
+        "px_pos_250",
+        "px_dd_250",
+        "px_ma_gap_20",
+        "px_ma_gap_200",
+        "flow_turn_ratio_5_60",
+        "flow_fnet_1",
+        "flow_fnet_5",
+        "flow_fnet_20",
+        "flow_froom_chg_20"
+      ],
+      "pool__targets": [
+        "return_5day",
+        "return_10day",
+        "return_20day",
+        "return_rel_5day",
+        "return_rel_10day",
+        "return_rel_20day",
+        "close_adjust_5day",
+        "close_adjust_10day",
+        "close_adjust_20day",
+        "up_5pct_5day",
+        "upany_5pct_5day"
+      ]
+    },
+    "first_date": "2011-11-01",
+    "last_date": "2026-08-21",
+    "sessions": 3691,
+    "tickers": 1
+  },
+  "target": {
+    "name": "up_5pct_5day",
+    "horizon_days": 5,
+    "definition": "up_5pct_5day (see cross_sectional.py / DataPreprocessor for the definition)",
+    "labelled_rows": 3686,
+    "unlabelled_rows": 5,
+    "mean": 0.10634834508952794,
+    "sd": 0.30832477226122057,
+    "min": 0.0,
+    "max": 1.0
+  },
+  "setup": {
+    "target": "up_5pct_5day",
+    "horizon_h": 5,
+    "lookback_d": 1,
+    "normalize": "none",
+    "purge_gap_rows": 5,
+    "window_stats": "last",
+    "dropped_by_normalize": 0,
+    "dev_samples": 2575,
+    "holdout_start": "2022-03-08",
+    "holdout_rows": 1106,
+    "purged_at_boundary": 5,
+    "channels": 67,
+    "design_columns": 67,
+    "kept": 57,
+    "device": "cuda",
+    "methods": "spearman, xgb_shap, permutation",
+    "max_features": null,
+    "corr_threshold": 0.9,
+    "n_splits": 5,
+    "min_train": 500,
+    "random_state": 18,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "permutation_repeats": 10,
+    "device_preference": "cuda",
+    "selector_class": "FeatureSelector",
+    "panel_col": null,
+    "feature_normalize": null,
+    "design_dtype": "float64",
+    "env_fingerprint": "cf51e65b3a15"
+  },
+  "results": {
+    "n_channels": 67,
+    "n_kept": 57,
+    "kept": [
+      "har_semi_up_22",
+      "px_ret_60",
+      "px_ma_gap_200",
+      "har_lpk_22",
+      "evt_sessions_since_up",
+      "sec_rate_up_60",
+      "evt_range_h",
+      "evt_vol_10",
+      "har_lrv_63",
+      "cal_days_since_tet",
+      "sec_disp_h",
+      "har_semi_dn_22",
+      "har_lrv_5",
+      "cal_days_to_vn30f_expiry",
+      "evt_vol_ratio_20_120",
+      "mkt_disp_h",
+      "sec_rel_ret_h",
+      "evt_rate_up_120",
+      "flow_fnet_20",
+      "px_pos_60",
+      "har_labs_ret_h",
+      "evt_max_ret_h_60",
+      "har_lpk_5",
+      "evt_rate_up_60",
+      "evt_dist_low_20",
+      "px_ma_gap_20",
+      "flow_fnet_5",
+      "px_pos_250",
+      "px_dd_250",
+      "evt_up_day_frac_10",
+      "evt_turnover_z_60",
+      "flow_turn_ratio_5_60",
+      "cal_days_to_month_end",
+      "evt_rate_up_250",
+      "evt_vol_120",
+      "px_ret_20",
+      "har_lpk_1",
+      "mkt_rate_dn",
+      "evt_dist_high_20",
+      "sec_rate_up",
+      "mkt_rate_up",
+      "evt_min_ret_h_60",
+      "cal_days_since_quarter_end",
+      "flow_froom_chg_20",
+      "mkt_rate_up_60",
+      "sec_ret_h",
+      "har_labs_r1",
+      "cal_month_cos",
+      "px_dd_60",
+      "evt_rate_dn_120",
+      "cal_month_sin",
+      "mkt_ret_h_median",
+      "flow_fnet_1",
+      "cal_dow_sin",
+      "evt_ret_h",
+      "cal_dow_cos",
+      "cal_gap_days"
+    ],
+    "dropped_constant": [],
+    "dropped_correlated": {
+      "har_lpk_10": "har_lpk_22",
+      "har_lpk_63": "har_lrv_63",
+      "evt_vol_20": "har_lpk_22",
+      "evt_thr_z_20": "har_lpk_22",
+      "har_lrv_22": "har_semi_up_22",
+      "evt_vol_60": "har_lrv_63",
+      "evt_thr_z_60": "har_lrv_63",
+      "har_lpk_125": "evt_vol_120",
+      "har_lrv_125": "evt_vol_120",
+      "cal_days_to_tet": "cal_days_since_tet"
+    },
+    "dead_methods": [],
+    "top_10_by_ensemble": [
+      "har_semi_up_22",
+      "px_ret_60",
+      "px_ma_gap_200",
+      "har_lpk_22",
+      "evt_sessions_since_up",
+      "sec_rate_up_60",
+      "evt_range_h",
+      "evt_vol_10",
+      "har_lpk_10",
+      "har_lrv_63"
+    ],
+    "timings_seconds": {
+      "window design (cpu)": 0.01,
+      "spearman vs target (cuda)": 0.13,
+      "xgb gain + shap (cuda)": 0.78,
+      "permutation (cuda)": 1.61,
+      "channel corr matrix (cuda)": 0.03,
+      "stability (cuda)": 3.23,
+      "validation (cuda)": 6.15
+    },
+    "ic_summary": {
+      "folds": 5.0,
+      "ic_mean": 0.12653566149660786,
+      "ic_trend_per_fold": 0.04042595551843459,
+      "ic_min": -0.007657597375533471,
+      "ic_max": 0.26093295624572155,
+      "ic_fold_sd": 0.10708856413494901,
+      "hit_rate": null,
+      "n_test_rows": 414.0,
+      "n_eff_per_fold": 82.8,
+      "se_ic_per_fold": 0.1106
+    },
+    "ic_summary_all_channels": {
+      "folds": 5.0,
+      "ic_mean": 0.17992722535054959,
+      "ic_trend_per_fold": 0.00915688128836809,
+      "ic_min": 0.1179067145570551,
+      "ic_max": 0.25081391220172106,
+      "ic_fold_sd": 0.051784820373655054,
+      "hit_rate": null,
+      "n_test_rows": 414.0,
+      "n_eff_per_fold": 82.8,
+      "se_ic_per_fold": 0.1106
+    }
+  },
+  "null": {
+    "label": "unified_schema_mbb / up_5pct_5day",
+    "observed_ic": 0.1265,
+    "null_mean": 0.0053,
+    "null_sd": 0.0236,
+    "null_p95_BAR": 0.0418,
+    "null_max": 0.0418,
+    "p_value": 0.0909,
+    "z_vs_null": 5.14,
+    "clears_bar": true,
+    "draws": 10,
+    "failed_draws": 0
+  },
+  "holdout": [
+    {
+      "feature_set": "selected",
+      "labels": "real",
+      "n_channels": 57,
+      "n_train": 2575,
+      "n_holdout": 1106,
+      "n_eff_holdout": 221.2,
+      "ic": 0.1481382788354505,
+      "hit_rate": null
+    },
+    {
+      "feature_set": "selected",
+      "labels": "shuffled control",
+      "n_channels": 57,
+      "n_train": 2575,
+      "n_holdout": 1106,
+      "n_eff_holdout": 221.2,
+      "ic": 0.06462857449062981,
+      "hit_rate": null
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "real",
+      "n_channels": 67,
+      "n_train": 2575,
+      "n_holdout": 1106,
+      "n_eff_holdout": 221.2,
+      "ic": 0.16496247162433386,
+      "hit_rate": null
+    },
+    {
+      "feature_set": "all channels",
+      "labels": "shuffled control",
+      "n_channels": 67,
+      "n_train": 2575,
+      "n_holdout": 1106,
+      "n_eff_holdout": 221.2,
+      "ic": -0.004977399596711168,
+      "hit_rate": null
+    }
+  ],
+  "notes": "event_chain: 1 when close_adjust[t+5] >= (1 + 5%) x close_adjust[t], else 0; NULL for the last 5 sessions",
+  "run_id": "2026-09-17_103124__mbb__event_features__up_5pct_5day",
+  "artifacts": [
+    {
+      "file": "feature_importance.csv",
+      "bytes": 8722
+    },
+    {
+      "file": "design_scores.csv",
+      "bytes": 4890
+    },
+    {
+      "file": "validation.csv",
+      "bytes": 878
+    },
+    {
+      "file": "target_correlation.csv",
+      "bytes": 2387
+    },
+    {
+      "file": "channel_correlation.csv",
+      "bytes": 91696
+    },
+    {
+      "file": "stability.csv",
+      "bytes": 2676
+    },
+    {
+      "file": "coverage.csv",
+      "bytes": 1971
+    },
+    {
+      "file": "holdout.csv",
+      "bytes": 328
+    },
+    {
+      "file": "null_draws.csv",
+      "bytes": 251
+    },
+    {
+      "file": "figures/01_ensemble_ranking.png",
+      "bytes": 133580
+    },
+    {
+      "file": "figures/02_method_heatmap.png",
+      "bytes": 191118
+    },
+    {
+      "file": "figures/03_target_correlation.png",
+      "bytes": 118310
+    },
+    {
+      "file": "figures/04_channel_correlation.png",
+      "bytes": 240351
+    },
+    {
+      "file": "figures/06_validation.png",
+      "bytes": 46344
+    },
+    {
+      "file": "figures/07_stability.png",
+      "bytes": 171328
+    },
+    {
+      "file": "figures/08_coverage.png",
+      "bytes": 152200
+    },
+    {
+      "file": "figures/09_target_distribution.png",
+      "bytes": 36501
+    },
+    {
+      "file": "figures/10_null.png",
+      "bytes": 55297
+    }
+  ],
+  "report_seconds": 2.92
+}

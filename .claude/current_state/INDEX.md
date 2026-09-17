@@ -144,7 +144,7 @@ the directory in the same commit.
 | [train_test_creator.md](../context/train_test_creator.md) | 5.0k | building a dataset, or the purge/impute/scale/window steps |
 | [result_evaluator.md](../context/result_evaluator.md) | 4.1k | scoring, the metric set, panel-vs-series grain. ⚠️ **STALE** — predates `index.py` and `NUL-3` |
 | [sentiment.md](../context/sentiment.md) | 3.4k | anything news / text / PhoBERT |
-| [event_chain.md](../context/event_chain.md) | 6.0k | the binary EVENT chain — *does VCB rise ≥ g % within h sessions?* — its parameters (`src/utils/event_target.py`), the new `pool__event_features`, the leakage guards, and ⚠️ **§5 THE TRIAL LOG** (`reports/event_chain/trials.csv`) — one row per model run of a COMPLETE trial: data, features, target, split, model, hyperparameters, run time, GPU, results |
+| [event_chain.md](../context/event_chain.md) | 7.6k | the binary EVENT chain (VCB and, §7, MBB) — *does VCB rise ≥ g % within h sessions?* — its parameters (`src/utils/event_target.py`), the new `pool__event_features`, the leakage guards, and ⚠️ **§5 THE TRIAL LOG** (`reports/event_chain/trials.csv`) — one row per model run of a COMPLETE trial: data, features, target, split, model, hyperparameters, run time, GPU, results |
 
 ### Session tooling — `.claude/` (started 2026-09-06)
 

@@ -85,3 +85,15 @@ def test_it_ranks_the_own_rows_and_selects_by_prefix(setup):
     assert roc_auc_score(y[600:], est.predict_logit(X[600:])) > 0.7
     with pytest.raises(ValueError, match="no feature column"):
         M.EventPanel(2, 1, columns=["zzz_"]).set_dataset(ds)
+
+
+def test_the_logit_kind_ranks_on_the_same_rows_and_survives_a_peer_nan(setup):
+    ds, X, y, _, _ = setup
+    est = M.EventPanel(2, 1, kind="logit", C=1.0)
+    est.set_dataset(ds)
+    est.peers_.loc[est.peers_.index[:50], "har_x"] = np.nan   # a peer gap is 0 = the train mean
+    est.fit(X[:600], y[:600])
+    assert est.n_params == 3 and est.provenance()["kind"] == "logit"
+    assert roc_auc_score(y[600:], est.predict_logit(X[600:])) > 0.7
+    with pytest.raises(ValueError, match="kind must be one of"):
+        M.EventPanel(2, 1, kind="forest")

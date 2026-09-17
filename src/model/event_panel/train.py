@@ -4,7 +4,7 @@
     python -m model.event_panel --config <path> --dry-run
 
 No training logic here — `model/common/engine.py`'s estimator path. `model_type` is
-`EVENT_PANEL_XGB`. ⚠️ The peer universe's `pool__*` tables must exist (RUNBOOK G6).
+`EVENT_PANEL_<KIND>` (`XGB` by default, `LOGIT`). ⚠️ The peer universe's `pool__*` tables must exist (RUNBOOK G6).
 """
 
 from __future__ import annotations
@@ -21,12 +21,19 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_DIR = os.path.join(_HERE, "configs")
 MODEL_TYPE = "EVENT_PANEL_XGB"
 
+
+def model_type(config: Dict) -> str:
+    kind = str(config["model"].get("kind", "xgb")).strip()
+    if kind not in event_panel_model.KINDS:
+        raise ValueError(f"model.kind must be one of {event_panel_model.KINDS}, got {kind!r}")
+    return f"EVENT_PANEL_{kind.upper()}"
+
 __all__ = ["CONFIG_DIR", "MODEL_TYPE", "RUNS_DIR", "load_config", "main", "train"]
 
 
 def train(config: Dict, runs_dir: str = RUNS_DIR, dry_run: bool = False):
     return engine.train_estimator(
-        config, model_module=event_panel_model, model_type=MODEL_TYPE,
+        config, model_module=event_panel_model, model_type=model_type(config),
         runs_dir=runs_dir, dry_run=dry_run,
     )
 

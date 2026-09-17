@@ -141,6 +141,7 @@
     "defined_in": "src/utils/event_target.py"
   },
   "universe": {
+    "exchange": "HOSE",
     "ticker": "VCB",
     "schema": "unified_schema_vcb"
   },

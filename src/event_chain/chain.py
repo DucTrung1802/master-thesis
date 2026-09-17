@@ -5,6 +5,7 @@
     python -m event_chain --apply --stages train,report
     python -m event_chain --apply --stages select --pools pool__basic,pool__ta
     python -m event_chain --setup tabular --apply     # d=1, all channels, linear kinds + ensemble
+    python -m event_chain --setup tabular_mbb --apply # the same chain on MBB, with MBB's grid
 
 ⚠️ **NOTHING HERE DEFINES A LABEL, A FEATURE, A SPLIT OR A METRIC.** Each stage calls the
 package that owns it — `feature_selection.run`, `final_features.builder`,
@@ -104,6 +105,17 @@ class EventChain:
         )
 
     @property
+    def run_names(self) -> List[str]:
+        """The run names this setup's grid writes — the only runs its report scores.
+
+        ⚠️ Two setups can share a table (`tabular` and `tabular_mbb` on MBB), so the dataset
+        hash alone would put one setup's grid on the other's leaderboard, and its best-on-val
+        pick would be taken over a search the setup never declared.
+        """
+        return [f"{package}{variant}__{self.ticker.lower()}__{self.table}"
+                for package, variant, _, _ in self.models]
+
+    @property
     def output_dir(self) -> str:
         return os.path.join(C.OUTPUT_ROOT, f"{self.ticker.lower()}__{self.table}")
 
@@ -145,6 +157,7 @@ class EventChain:
             rows.append(
                 {
                     "run_id": os.path.basename(os.path.dirname(path)),
+                    "schema": inputs.get("schema"),
                     "target": setup.get("target"),
                     "lookback_d": setup.get("lookback_d"),
                     "horizon_h": setup.get("horizon_h"),
@@ -168,8 +181,12 @@ class EventChain:
         frame["started_at"] = pd.to_datetime(
             frame["run_id"].str.slice(0, 17), format="%Y-%m-%d_%H%M%S", errors="coerce"
         )
+        # ⚠️ THE ROOT HOLDS EVERY TICKER'S RUNS (VCB and MBB share it since 2026-09-17), so a
+        # run is this chain's only when it read this chain's schema — without the filter a
+        # second ticker's `select` skipped every pool as "already run" on the first's runs.
         frame = frame[
-            (frame["target"] == self.event.column)
+            (frame["schema"] == self.schema)
+            & (frame["target"] == self.event.column)
             & (frame["lookback_d"] == self.lookback)
             & (frame["horizon_h"] == self.horizon)
         ]
@@ -368,7 +385,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m event_chain")
     parser.add_argument("--apply", action="store_true", help="run the stages (default: plan only)")
     parser.add_argument("--stages", default=",".join(STAGES))
-    parser.add_argument("--ticker", default=C.TICKER)
+    parser.add_argument("--ticker", default=None,
+                        help=f"default: the setup's own ticker, else {C.TICKER}")
     parser.add_argument("--setup", default="window", choices=sorted(C.SETUPS),
                         help="window: d=20 shortlist chain; tabular: d=1, all channels, linear kinds")
     parser.add_argument("--pools", default=None, help="comma-separated subset of config.POOLS")

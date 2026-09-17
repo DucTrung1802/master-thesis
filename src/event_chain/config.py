@@ -93,6 +93,13 @@ MODELS = (
 # Draws for the event ROC-AUC null in the report (block = d + h). Cheap: a vector shuffle.
 REPORT_NULL_DRAWS = 1000
 
+# ⚠️ THE ROLLING REFIT (2026-09-17): every refittable run is refitted every this many TEST
+# sessions on all rows before the block (purged `d + h - 1`), and the blocks' scores are
+# pooled into one test AUC — how the model would be used, where the train-only fit is
+# frozen two years before the test starts. Fixed at one month BEFORE any rolling number
+# was computed; it selects nothing.
+ROLLING_REFIT_SESSIONS = 21
+
 
 # ══════════════════════════════════════════════════════════════════════════════════════
 # ⚠️ THE TABULAR SETUP (2026-09-17) — `python -m event_chain --setup tabular`
@@ -187,11 +194,76 @@ TABULAR_ENSEMBLES = {
                        "event_panel_xgb_d2_n600"),
 }
 
-# The chain's two setups. `window` is every trial before 2026-09-17, unchanged.
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# ⚠️ THE MBB SETUP (2026-09-17) — `python -m event_chain --setup tabular_mbb`
+#
+# The tabular chain on MBB (HOSE), with a grid chosen for MBB by the same kind of
+# rolling-origin CV (validation years 2015-2024 of the train+val rows, no test row read):
+# `.claude/context/event_chain.md` §7. The first MBB trial ran `tabular` unchanged — VCB's
+# grid — and its val-chosen panel scored CV 0.665. Measured, in CV10 order:
+#
+# | change | CV10 |
+# |---|---|
+# | VCB's panel member (`har/evt/drv/px/flow` + `mctx_` + `glb_`/`bond_`) | 0.665 |
+# | the same panel WITHOUT `mctx_`/`glb_`/`bond_` (`_PANEL`) | **0.723** |
+# | ... depth 3 | 0.733 (seeds 1-3: 0.719-0.729) |
+# | an L2 logit on the same panel rows, C 0.03, 4-year half-life | 0.718 (worst fold 0.559) |
+# | geometric mean of the depth-3 tree and the logit | **0.739** |
+#
+# ⚠️ WHY THE MARKET BLOCKS HURT A PANEL: a date-level channel is identical for all 20 banks
+# on a day, so a tree can isolate DATES and learn their event rate — memorising the calendar
+# of rallies rather than a state that recurs. The own-ticker linear kinds keep them.
+# ⚠️ `cal_` is date-level too and is NOT removable: without it CV 0.613, without the two Tet
+# channels 0.688 — a seasonal effect that recurs every year, unlike a rally's date.
+# ⚠️ Measured and REJECTED: VN30 or BANK+VN30 as peers (0.683-0.691), dropping the
+# state-owned or the recent listings (0.667-0.717), `own_weight` 3-10, half-lives, depth 1,
+# `pool__basic`'s `drv_` block (it FAILED MBB's selection null; with it 0.726, noise),
+# `pool__ta` (failed its null, z +0.42), the own-ticker linear kinds in the ensemble
+# (0.709-0.722, below the panel pair alone).
+# ══════════════════════════════════════════════════════════════════════════════════════
+_PANEL = _HAR + _EVT + _DRV + _PXFLOW
+_PANEL_XGB = {"type": "EVENT_PANEL_XGB", "kind": "xgb", "universe": "BANK", "columns": list(_PANEL),
+              "exclude": list(_NOT_DRV), "n_estimators": 600, "max_depth": 2, "learning_rate": 0.03,
+              "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 20.0}
+
+MBB_MODELS = (
+    ("baseline", "_prior", {"type": "BASELINE", "kind": "prior"}, {}),
+    # the tuned panel members — CV10 0.723, 0.733, 0.718
+    ("event_panel", "_xgb_pan_d2_n600", dict(_PANEL_XGB), {}),
+    ("event_panel", "_xgb_pan_d3_n600", dict(_PANEL_XGB, max_depth=3), {}),
+    ("event_panel", "_logit_pan_c003_hl4", {"type": "EVENT_PANEL_LOGIT", "kind": "logit", "universe": "BANK",
+                                           "columns": list(_PANEL), "exclude": list(_NOT_DRV), "C": 0.03,
+                                           "half_life_years": 4.0}, {}),
+    # the own-ticker linear kinds at their MBB optimum — CV10 0.664, 0.648
+    ("event_linear", "_evt_hep_c003_hl4", {"type": "EVENT_LINEAR", "kind": "event_logit",
+                                           "columns": list(_PANEL), "C": 0.03, "half_life_years": 4.0,
+                                           "exclude": list(_NOT_DRV)}, {}),
+    ("event_linear", "_mag_hepm_a100_hl4", {"type": "EVENT_LINEAR", "kind": "magnitude_ridge",
+                                            "columns": list(_PANEL + _MCTX), "alpha": 100.0,
+                                            "half_life_years": 4.0, "exclude": list(_NOT_DRV)}, {}),
+    # REFERENCE, identical to `tabular`'s rows (reused by run id): VCB's panel and the trees
+    TABULAR_MODELS[6],
+    TABULAR_MODELS[7],
+    TABULAR_MODELS[8],
+)
+
+# ⚠️ FIXED BEFORE THE MBB CHAIN RAN, from the CV above; no weights fitted.
+MBB_ENSEMBLES = {
+    "ensemble_pxl": ("event_panel_xgb_pan_d3_n600", "event_panel_logit_pan_c003_hl4"),          # CV10 0.739
+    "ensemble_px2l": ("event_panel_xgb_pan_d2_n600", "event_panel_xgb_pan_d3_n600",
+                      "event_panel_logit_pan_c003_hl4"),                                         # CV10 0.735
+}
+
+# The chain's setups. `window` is every trial before 2026-09-17, unchanged. A setup that
+# names a `ticker` runs on it unless `--ticker` says otherwise.
 SETUPS = {
     "window": dict(lookback=LOOKBACK, pools=POOLS, models=MODELS, scope=None, channels="shortlist",
                    aux_targets=(), ensembles={}),
     "tabular": dict(lookback=TABULAR_LOOKBACK, pools=TABULAR_POOLS, models=TABULAR_MODELS,
                     scope=TABULAR_SCOPE, channels="all", aux_targets=("return_{h}day",),
                     ensembles=TABULAR_ENSEMBLES),
+    "tabular_mbb": dict(ticker="MBB", lookback=TABULAR_LOOKBACK, pools=TABULAR_POOLS, models=MBB_MODELS,
+                        scope=TABULAR_SCOPE, channels="all", aux_targets=("return_{h}day",),
+                        ensembles=MBB_ENSEMBLES),
 }

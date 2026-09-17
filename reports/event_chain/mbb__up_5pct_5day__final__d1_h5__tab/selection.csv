@@ -1,0 +1,7 @@
+run_id,schema,target,lookback_d,horizon_h,tables,holdout_start,channels,kept,ic,null_bar,null_max,z,clears,started_at
+2026-09-17_103124__mbb__event_features__up_5pct_5day,unified_schema_mbb,up_5pct_5day,1,5,pool__event_features,2022-03-08,67,57,0.1265,0.0418,0.0418,5.14,True,2026-09-17 10:31:24
+2026-09-17_103311__mbb__basic__up_5pct_5day,unified_schema_mbb,up_5pct_5day,1,5,pool__basic,2022-03-08,78,52,-0.0041,0.0526,0.072,-0.18,False,2026-09-17 10:33:11
+2026-09-17_103447__mbb__market_context__up_5pct_5day,unified_schema_mbb,up_5pct_5day,1,5,pool__market_context,2022-03-08,59,34,0.1474,0.0307,0.0354,7.86,True,2026-09-17 10:34:47
+2026-09-17_103605__mbb__market_breadth__up_5pct_5day,unified_schema_mbb,up_5pct_5day,1,5,pool__market_breadth,2022-03-08,7,7,0.0581,0.0363,0.0442,2.19,True,2026-09-17 10:36:05
+2026-09-17_103728__mbb__news_daily__up_5pct_5day,unified_schema_mbb,up_5pct_5day,1,5,pool__news_daily,2022-03-08,14,11,0.0097,0.0346,0.0351,0.54,False,2026-09-17 10:37:28
+2026-09-17_111756__mbb__ta__up_5pct_5day,unified_schema_mbb,up_5pct_5day,1,5,pool__ta,2022-03-08,717,412,0.0115,0.031,0.0355,0.42,False,2026-09-17 11:17:56
