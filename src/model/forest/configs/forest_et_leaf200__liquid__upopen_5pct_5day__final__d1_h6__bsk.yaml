@@ -1,0 +1,17 @@
+# Written by `python -m event_chain` for upopen_5pct_5day (1 when close_adjust[t+6] >= (1 + 5%) x open_adjust[t+1] — bought at the OPEN of t+1 and sold 5 sessions later — else 0; NULL for the last 6 sessions).
+# The grid is event_chain/config.py SETUPS['basket'].
+run_name: forest_et_leaf200__liquid__upopen_5pct_5day__final__d1_h6__bsk
+dataset: liquid__upopen_5pct_5day__final__d1_h6__bsk__tr70_val15_test15__std
+dataset_hash: 53228aec2e679487
+task: classification
+lookback: 1
+n_features: 151
+model:
+  type: FOREST
+  kind: et
+  min_samples_leaf: 200
+  max_features: 0.3
+  n_estimators: 200
+null_draws: 200
+seed: 42
+device: cpu

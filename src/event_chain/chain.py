@@ -6,6 +6,8 @@
     python -m event_chain --apply --stages select --pools pool__basic,pool__ta
     python -m event_chain --setup tabular --apply     # d=1, all channels, linear kinds + ensemble
     python -m event_chain --setup tabular_mbb --apply # the same chain on MBB, with MBB's grid
+    python -m event_chain --setup basket --apply      # WHICH names to buy: top-X of a panel per session
+    python -m event_chain.basket --pick 2026-08-14    # the basket for one session
 
 ⚠️ **NOTHING HERE DEFINES A LABEL, A FEATURE, A SPLIT OR A METRIC.** Each stage calls the
 package that owns it — `feature_selection.run`, `final_features.builder`,
@@ -48,11 +50,11 @@ def _utf8() -> None:
 
 @dataclass
 class EventChain:
-    ticker: str = C.TICKER
+    ticker: str = C.BASKET_TICKER
     event: event_target.EventTarget = field(default_factory=lambda: event_target.DEFAULT_EVENT)
-    lookback: int = C.LOOKBACK
+    lookback: int = C.BASKET_LOOKBACK
     root: str = C.REPORT_ROOT
-    pools: Sequence[str] = C.POOLS
+    pools: Sequence[str] = C.BASKET_POOLS
     null_draws: int = C.NULL_DRAWS
     device: str = "cuda"
     # A NARROW table built from part of the root: `scope` names it
@@ -67,9 +69,17 @@ class EventChain:
     # 2026-09-17; `tabular` is the d=1 linear chain.
     setup: str = "window"
     channels: str = "shortlist"
-    models: Sequence = C.MODELS
+    models: Sequence = C.BASKET_MODELS
     aux_targets: Sequence[str] = ()
     ensembles: Dict = field(default_factory=dict)
+    # ⚠️ A BASKET SETUP (`config.SETUPS["basket"]`): the chain runs on a PANEL universe and its
+    # report cuts each session's `top_k` highest scores into that day's basket
+    # (`event_chain.basket`). `None` is every single-ticker setup.
+    top_k: Optional[int] = None
+
+    @property
+    def is_basket(self) -> bool:
+        return self.top_k is not None
 
     @classmethod
     def from_setup(cls, name: str = "window", **overrides) -> "EventChain":
@@ -87,6 +97,12 @@ class EventChain:
         return int(self.event.horizon)
 
     @property
+    def purge_horizon(self) -> int:
+        """The sessions a LABEL spans — `h`, and `h + 1` for the `open` rule, which is
+        decided on N and entered at the open of N+1. Every purge is computed from this."""
+        return int(self.event.unlabelled)
+
+    @property
     def schema(self) -> str:
         return f"unified_schema_{self.ticker.lower()}"
 
@@ -94,7 +110,13 @@ class EventChain:
     def table(self) -> str:
         from final_features.builder import table_name
 
-        return table_name(self.event.column, self.lookback, self.horizon, self.scope)
+        # ⚠️ **THE `h` IN A TABLE NAME IS THE LABEL'S SPAN, NOT THE HOLDING** (2026-09-18):
+        # every purge in this repo is `d + h - 1` READ OFF THE TABLE NAME (§5 rule 6), and an
+        # `open`-rule label reaches h + 1 sessions (decided on N, entered at the open of N+1,
+        # sold at the close of N+h). Naming it `h6` is what keeps `train_test_creator`'s purge
+        # correct without a second convention; `event.describe()` is where the 5-session
+        # holding is stated.
+        return table_name(self.event.column, self.lookback, self.purge_horizon, self.scope)
 
     def creator(self):
         from train_test_creator.dataset import TrainTestCreator
@@ -188,7 +210,7 @@ class EventChain:
             (frame["schema"] == self.schema)
             & (frame["target"] == self.event.column)
             & (frame["lookback_d"] == self.lookback)
-            & (frame["horizon_h"] == self.horizon)
+            & (frame["horizon_h"] == self.purge_horizon)
         ]
         if before is not None:
             frame = frame[frame["started_at"] < pd.Timestamp(before)]
@@ -215,7 +237,7 @@ class EventChain:
             print(f"\n{head}: holdout from {holdout}, {self.null_draws} null draws")
             run_selection(
                 ticker=self.ticker, pools=[pool], target=self.event.column,
-                lookback=self.lookback, horizon=self.horizon, null_draws=self.null_draws,
+                lookback=self.lookback, horizon=self.purge_horizon, null_draws=self.null_draws,
                 holdout_start=holdout, root=self.root, device=self.device,
                 notes=f"event_chain: {self.event.describe()}",
             )
@@ -253,7 +275,7 @@ class EventChain:
         result = builder.build_all(
             root=self.root, apply=True, replace=True, scope=self.scope,
             exclude_evidence=exclude, include_tables=self.scope_pools,
-            channels=self.channels, tables=[self.table],
+            channels=self.channels, tables=[self.table], schemas=[self.schema],
         )
         print(result.to_string(index=False))
 
@@ -285,7 +307,7 @@ class EventChain:
         name = self.creator().name
         dataset = load_dataset(name)
         model = dict(model)
-        if package == "event_linear" and self.aux_targets:
+        if package in ("event_linear", "event_boost") and self.aux_targets:
             model.setdefault("aux_target", self.aux_targets[0])
         if model.get("kind") == "logistic_channel":
             columns = (dataset.meta or {}).get("features", {}).get("feature_columns", [])
@@ -303,7 +325,8 @@ class EventChain:
             "model": model,
             "null_draws": 200,
             "seed": 42,
-            "device": "auto" if package not in ("baseline", "gbt", "forest", "event_linear", "event_panel") else "cpu",
+            "device": "auto" if package not in ("baseline", "gbt", "forest", "event_linear",
+                                                 "event_boost") else "cpu",
             **extra,
         }
         return config
@@ -345,6 +368,10 @@ class EventChain:
 
     def report(self, walkforward: bool = True, runs_dir: Optional[str] = None) -> Dict:
         """Score, write the report, and return the numbers (see `report.write`)."""
+        if self.is_basket:
+            from event_chain import basket
+
+            return basket.write(self, walkforward=walkforward, runs_dir=runs_dir)
         from event_chain import report
 
         return report.write(self, walkforward=walkforward, runs_dir=runs_dir)
@@ -355,7 +382,8 @@ class EventChain:
 
         print(f"{'=' * 78}\nevent   {self.event.column} — {self.event.describe()}")
         print(f"setup   {self.setup}   ticker {self.ticker}   d={self.lookback}  h={self.horizon}   "
-              f"channels {self.channels}   root {self.root}")
+              f"channels {self.channels}   root {self.root}"
+              + (f"   BASKET top {self.top_k} per session" if self.is_basket else ""))
         try:
             dates, labelled = self.labelled_dates()
             print(f"label   {len(dates)} labelled sessions {dates.iloc[0].date()} -> "
@@ -386,7 +414,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--apply", action="store_true", help="run the stages (default: plan only)")
     parser.add_argument("--stages", default=",".join(STAGES))
     parser.add_argument("--ticker", default=None,
-                        help=f"default: the setup's own ticker, else {C.TICKER}")
+                        help=f"default: the setup's own ticker, else {C.BASKET_TICKER}")
     parser.add_argument("--setup", default="window", choices=sorted(C.SETUPS),
                         help="window: d=20 shortlist chain; tabular: d=1, all channels, linear kinds")
     parser.add_argument("--pools", default=None, help="comma-separated subset of config.POOLS")
@@ -403,15 +431,20 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--notes", default="", help="report: a sentence logged with the trial")
     parser.add_argument("--no-trial", action="store_true",
                         help="report: do NOT log this report as a trial (debugging only)")
+    parser.add_argument("--top-k", type=int, default=None,
+                        help="basket setups: names per session's basket (default config.BASKET_SIZE)")
     args = parser.parse_args(list(sys.argv[1:] if argv is None else argv))
     argv_list = list(sys.argv if argv is None else ["python -m event_chain", *argv])
 
     scope_pools = [p.strip() for p in args.scope_pools.split(",")] if args.scope_pools else None
     if bool(args.scope) != bool(scope_pools):
         raise SystemExit("--scope and --scope-pools go together")
+    if args.top_k is not None and "top_k" not in C.SETUPS[args.setup]:
+        raise SystemExit(f"--top-k applies to a basket setup; {args.setup!r} is not one")
     chain = EventChain.from_setup(
         args.setup, ticker=args.ticker, null_draws=args.null_draws, device=args.device,
         scope=args.scope, scope_pools=scope_pools, keep_failed=args.keep_failed,
+        top_k=args.top_k,
     )
     started = pd.Timestamp.now()
     chain.status()

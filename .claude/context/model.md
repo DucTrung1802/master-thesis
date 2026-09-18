@@ -799,23 +799,27 @@ REFIT on rows other than the train split — `event_chain.report` does it for tr
 walk-forward year, and a length mismatch RAISES. The design is clipped to ±`clip` train-sigmas
 (`EVD-1`). Tests: `model/event_linear/test_model.py` (4, synthetic, no database).
 
-## 19. `model.event_panel` — the event fitted on a PEER PANEL, scored on the dataset's ticker (2026-09-17)
+## 19. `model.event_panel` — DELETED 2026-09-18 with the VCB/MBB event setups
 
-`model_type` `EVENT_PANEL_<KIND>` — `kind: xgb` (default) or ⚠️ **`kind: logit`** (2026-09-17, MBB): an L2
-logistic on the same panel rows, design clipped to ±`clip` dataset-sigmas, a peer NaN set to 0 (the
-train mean); on MBB's CV 0.718 with a worst fold of 0.559 against the tree's 0.491
-([event_chain.md](event_chain.md) §7a). `xgb`: XGBoost on the last row, trained on the dataset's own train rows
-PLUS every other ticker of `universe` (`BANK` by default), read from
-`unified_schema_<universe>`'s `pool__targets` / `pool__event_features` / `pool__basic` /
-`pool__market_context` at fit time. ⚠️ **Peers are cut at the last date of the rows `fit`
-receives** (`set_fit_context`) — a peer label looks as far ahead as an own label of the same
-date — and the own ticker's panel rows are dropped. ⚠️ **Scaled with the DATASET's scaler**
-(`feature_scaler` + `scaled_columns`), so a tree threshold means the same thing on both; peer
-NaNs stay NaN for XGBoost, own rows arrive imputed. ⚠️ **The peer rows are NOT in the dataset
-hash** (`PEH-1`): `provenance()` — universe, tickers, rows, positives, date range, a digest of
-the peer matrix — is written into `metadata.json` `model.provenance` by `engine.train_estimator`,
-which now records it for any estimator that has one. Refitted by `event_chain.report`, whose
-`PACKAGE_OF` matches the LONGEST model-type prefix (a first-word lookup would have refitted
-`EVENT_PANEL_XGB` as `event_linear`). Needs RUNBOOK G6. Tests: `model/event_panel/test_model.py`
-(4, synthetic, the reader replaced). ⚠️ **A date-level channel (`mctx_`, `glb_`, `bond_`) lets the tree
-memorise dates across the panel** — MBB CV 0.665 with them, 0.723 without (`PDL-1`).
+The BANK-peer XGBoost (`EVENT_PANEL_XGB`) and its logistic twin were built for the single-ticker
+event chain, whose three setups were deleted when their close-to-close label was
+([event_chain.md](event_chain.md) §6). Nothing calls it now: the basket fits the panel directly.
+**What it measured, so the deletion does not erase it**: peers cut at the last date the fit rows
+carry, scaled with the dataset's own scaler, peer rows outside the dataset hash (`PEH-1`, the
+reason `provenance()` is written into `metadata.json` for any estimator that has one), and
+⚠️ **a date-level channel (`mctx_`, `glb_`, `bond_`) lets a tree memorise dates across a panel** —
+MBB CV 0.665 with them, 0.723 without (`PDL-1`), which is why the basket's pools carry none.
+`git show c845f440 -- src/model/event_panel` restores the package and its four tests.
+
+## 20. `model.event_boost` — XGBoost on a panel's last row, GPU (2026-09-17)
+
+`python -m model.event_boost --config <run>.yaml`. Three kinds: `xgb` (the event, `binary:logistic`),
+`rank` (`rank:pairwise`, one query per session — scores do not travel across sessions) and
+`magnitude` (`log|log(1+r_h)|` regressed with a tree and mapped to P(event) by a 1-D logistic on the
+same rows, `event_linear`'s magnitude ridge with a tree). ⚠️ **Why not `model.gbt`**: it turns a
+window into six statistics per channel, which at `d = 1` is five copies and zeros — 906 columns for
+151 channels, 3.4 GB as float64 on 420k rows. ⚠️ **The device is the model's** (`device: cuda`); the
+engine still records the run as `cpu`, `provenance()` says where the fit ran, and prediction runs on
+the CPU. ⚠️ A ranker takes no row weights (XGBoost weights a ranking objective per query) and
+raises on `half_life_years`. Chosen by the basket CV (`event_chain.md` §6): depth 8, 800 trees,
+lr 0.02, colsample 0.4, `min_child_weight` 500 — CV AUC 0.668. Tests: `model/event_boost/test_model.py`.

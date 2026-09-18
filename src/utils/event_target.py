@@ -15,6 +15,13 @@ of those READS this module; none re-spells a column name.
 |---|---|---|
 | `close` | `up_5pct_5day` | `close[t+h] >= (1 + g) · close[t]` — the price h sessions out is g % higher |
 | `any` | `upany_5pct_5day` | `max(close[t+1 .. t+h]) >= (1 + g) · close[t]` — some close inside the window touches +g % |
+| `open` | `upopen_5pct_5day` | `close[t+h+1] >= (1 + g) · open_adjust[t+1]` — ⚠️ **THE ONE A DECISION MADE AFTER THE CLOSE OF `t` CAN TRADE**: bought at the OPEN of the next session and sold at the close h sessions later |
+
+⚠️ **THE `open` RULE EXISTS BECAUSE THE CLOSE OF `t` IS NOT A FILL** (2026-09-18): a signal
+computed from session `t`'s own close can first be traded the next morning, and the picks of a
+close-to-close model gap up +1.7 % overnight (+4.4 % on the names at their ceiling), which is
+most of what it was paid for (`event_chain.md` §6-§7, `EXE-1`). Its label is NULL for the last `h + 1`
+sessions of a series, one more than the other two rules, because it reads one session further.
 
 Both are carried in `pool__targets` for the configured `(g, h)`; `EVENT_RULE` picks the
 one the chain trains on. `any ⊇ close` by construction, so its base rate is higher.
@@ -39,14 +46,14 @@ from typing import Optional, Tuple
 # ---------------------------------------------------------------- THE PARAMETERS
 EVENT_GAIN_PCT: float = 5.0   # percent, > 0
 EVENT_HORIZON: int = 5        # trading sessions, >= 1
-EVENT_RULE: str = "close"     # "close" | "any" — see the module docstring
+EVENT_RULE: str = "open"      # "close" | "any" | "open" — see the module docstring
 # -------------------------------------------------------------------------------
 
-RULE_PREFIX = {"close": "up", "any": "upany"}
+RULE_PREFIX = {"close": "up", "any": "upany", "open": "upopen"}
 PREFIX_RULE = {v: k for k, v in RULE_PREFIX.items()}
 
 EVENT_COLUMN = re.compile(
-    r"^(?P<prefix>upany|up)_(?P<pct>\d+(?:p\d+)?)pct_(?P<horizon>\d+)day$"
+    r"^(?P<prefix>upany|upopen|up)_(?P<pct>\d+(?:p\d+)?)pct_(?P<horizon>\d+)day$"
 )
 
 
@@ -80,14 +87,30 @@ class EventTarget:
         at the tick boundary (20,000 -> 21,000 is exactly +5 % and must label 1)."""
         return f"{1.0 + float(self.gain_pct) / 100.0:.10f}".rstrip("0")
 
-    def sql(self, px: str = "px", window: str = "w") -> str:
+    @property
+    def unlabelled(self) -> int:
+        """Rows at the END of a series that cannot carry this label — `h`, and `h + 1`
+        for the `open` rule, which enters one session later than it is decided."""
+        return int(self.horizon) + (1 if self.rule == "open" else 0)
+
+    def sql(self, px: str = "px", window: str = "w", op: str = "op") -> str:
         """The label as one SQL expression over a named `WINDOW` ordered by date.
 
         `window` must be `PARTITION BY exchange, ticker ORDER BY date` with NO frame
         clause — the `any` rule adds its own frame, which PostgreSQL permits only on a
-        window that has none.
+        window that has none. `op` is the ADJUSTED open, which only the `open` rule reads.
         """
         h = int(self.horizon)
+        if self.rule == "open":
+            # ⚠️ Entry is the next session's open and exit the close h sessions after it,
+            # so the row is unlabelled for one session more than the other two rules.
+            entry = f"LEAD({op}, 1) OVER {window}"
+            exit_ = f"LEAD({px}, {h + 1}) OVER {window}"
+            return (
+                f"(CASE WHEN {exit_} IS NULL OR {entry} IS NULL OR {entry} = 0 THEN NULL "
+                f"WHEN {exit_} >= {entry} * {self.multiplier} THEN 1.0 ELSE 0.0 END)"
+                f"::double precision"
+            )
         future = f"LEAD({px}, {h}) OVER {window}"
         if self.rule == "close":
             hit = f"{future} >= {px} * {self.multiplier}"
@@ -102,6 +125,12 @@ class EventTarget:
         )
 
     def describe(self) -> str:
+        if self.rule == "open":
+            return (
+                f"1 when close_adjust[t+{self.horizon + 1}] >= (1 + {self.gain_pct:g}%) x "
+                f"open_adjust[t+1] — bought at the OPEN of t+1 and sold {self.horizon} "
+                f"sessions later — else 0; NULL for the last {self.horizon + 1} sessions"
+            )
         if self.rule == "close":
             return (
                 f"1 when close_adjust[t+{self.horizon}] >= (1 + {self.gain_pct:g}%) x "

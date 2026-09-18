@@ -98,6 +98,10 @@ ALL_TARGETS = [
     "close_adjust_5day",
     "close_adjust_10day",
     "close_adjust_20day",
+    # ⚠️ the TRADEABLE return (`open_adjust[t+1] -> close[t+h+1]`, 2026-09-18)
+    "return_open_5day",
+    "return_open_10day",
+    "return_open_20day",
 ] + [e.column for e in event_target.EVENT_TARGETS]
 # ⚠️ **THE BINARY EVENT LABELS ARE APPENDED FROM `utils.event_target`, NOT SPELLED HERE**
 # (2026-09-16). `up_<g>pct_<h>day` is `1[close[t+h] >= (1+g)·close[t]]` — the answer as a
@@ -194,6 +198,7 @@ def run_selection(
     target: str = "return_5day",
     lookback: int = 20,
     horizon: int = 5,
+    purge_horizon: Optional[int] = None,
     normalize: str = "none",
     design_dtype: str = "float64",
     max_features: Optional[int] = None,
@@ -274,6 +279,13 @@ def run_selection(
     # PREFERENCE at this point; `selector.device` replaces it below once the selector
     # has resolved one, because `auto` is not an answer and the two differ on 14 of the
     # 19 country pools (`gpu.py` §1).
+    # ⚠️ **THE PURGE IS THE LABEL'S SPAN, THE NAME IS ITS HORIZON** (2026-09-18). `horizon`
+    # is what the run is CALLED — it names the `__final__d{d}_h{h}__` table this selection
+    # plans — while `purge_horizon` is how many sessions the label actually REACHES over,
+    # which is `h + 1` for an `open`-rule event (`utils.event_target`: decided on N, entered
+    # at the open of N+1). Every gap below — the walk-forward's `d + h - 1`, the block
+    # shuffle's block, `n_eff` — is computed from the SPAN; only the name uses `horizon`.
+    gap_horizon = int(purge_horizon or horizon)
     with runtime.RunTimer(
         f"feature_selection.run  {ticker} / {'+'.join(pools)} -> {target} "
         f"(d={lookback}, h={horizon}, null_draws={null_draws})",
@@ -449,7 +461,7 @@ def run_selection(
                 methods=methods,
                 max_features=max_features,
                 corr_threshold=corr_threshold,
-                horizon=horizon,
+                horizon=gap_horizon,
                 lookback=lookback,
                 window_stats=windows.WINDOW_STATS,
                 normalize=normalize,
@@ -477,7 +489,7 @@ def run_selection(
         # what was asked for. This is CLAUDE.md §5 rule 10 at the hardware: a request
         # is not evidence of what happened.
         timer.set_device(selector.device)
-        summary = evaluation.ic_summary(result.validation, horizon)
+        summary = evaluation.ic_summary(result.validation, gap_horizon)
         print(
             f"kept {len(result.kept)} channels; ic_mean {summary['ic_mean']:+.4f}, "
             f"trend {summary['ic_trend_per_fold']:+.4f}"
@@ -498,7 +510,7 @@ def run_selection(
                 target=target,
                 factory=lambda frame: build(frame, None).run(stability=False),
                 observed=summary["ic_mean"],
-                horizon=horizon,
+                horizon=gap_horizon,
                 lookback=lookback,
                 n_draws=null_draws,
                 seed=NULL_SEED,

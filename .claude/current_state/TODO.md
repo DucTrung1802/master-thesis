@@ -126,6 +126,14 @@ the price side.
 
 ### ⚠️ FUNDAMENTALS CANNOT REACH 781 TICKERS — three walls, all measured, none a code problem
 
+⚠️ **AND FOR THE 5-SESSION BASKET THEY ARE NOT THE LEVER, MEASURED 2026-09-17** (`survey_ocr_value.py`,
+[data-state.md](../findings/data-state.md) last section): on VN30, where 30 of 30 names carry parsed
+profits, YoY profit growth FAILS a ticker-permutation null, YoY revenue growth ranks the +5 % event
+at +0.062 against +0.094/−0.133 for free price channels, and adding both to an event logit moved the
+out-of-sample daily AUC by **−0.005 [−0.010, −0.0003]**. The group-0 parser rows below are about the
+corpus being RIGHT; this measurement is about what the corpus is WORTH to a short horizon — the row
+order was not changed on it, which is the user's call.
+
 | wall | measured | what it means |
 |---|---|---|
 | **disk** | ⚠️ re-measured 2026-08-23 **from CafeF**, not extrapolated: 784 codes list **84,076 documents ≈ 555 GiB**; `D:` extended to 636 GiB, 461 free | the whole corpus does not fit, but **≤2020 is 286 GiB and does**. Disk stopped being a reason to sample TICKERS and became a reason to phase YEARS (`P2`) |

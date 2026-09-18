@@ -44,11 +44,11 @@ from event_chain import config as C
 # row is optimistic because its members were picked on val.
 NOT_ELIGIBLE = ("BASELINE_PRIOR", "BLEND")
 # Estimators the report can refit (no epochs, `build_model` + `fit`), by model_type prefix.
-REFITTABLE = ("GBT", "FOREST", "BASELINE_LOGISTIC", "EVENT_LINEAR", "EVENT_PANEL")
+REFITTABLE = ("GBT", "FOREST", "BASELINE_LOGISTIC", "EVENT_LINEAR", "EVENT_BOOST")
 # model_type prefix -> package. ⚠️ The LONGEST matching prefix wins: `EVENT_PANEL_XGB` and
 # `EVENT_LINEAR_*` share `EVENT`, and a first-word lookup refitted the panel as a linear model.
 PACKAGE_OF = {"GBT": "gbt", "FOREST": "forest", "EVENT_LINEAR": "event_linear",
-              "EVENT_PANEL": "event_panel", "BASELINE": "baseline"}
+              "EVENT_BOOST": "event_boost", "BASELINE": "baseline"}
 
 
 def _package(model_type: str) -> str:
@@ -511,8 +511,16 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
     from model.common.data import load_dataset
 
     output_dir = output_dir or chain.output_dir
-    os.makedirs(output_dir, exist_ok=True)
     dataset = load_dataset(chain.creator().name)
+    # ⚠️ ONE TICKER ONLY (`PNP-1`). Every refit here purges `d + h - 1` SAMPLES and cuts rolling
+    # blocks of SAMPLES — on a panel that is a fraction of one session, a leak that looks like a
+    # result. A panel dataset is scored per session by `event_chain.basket` (`--setup basket`).
+    tickers = np.load(os.path.join(dataset.dir, "tickers_test.npy"))
+    if len(np.unique(tickers)) > 1:
+        raise ValueError(
+            f"{dataset.name} is a PANEL ({len(np.unique(tickers))} tickers on test) — this report "
+            f"purges samples, not sessions. Score it with a basket setup (`event_chain.basket`).")
+    os.makedirs(output_dir, exist_ok=True)
     meta = dataset.meta or {}
     board = leaderboard(chain, runs_dir)
     board.to_csv(os.path.join(output_dir, "leaderboard.csv"), index=False)

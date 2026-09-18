@@ -2447,3 +2447,61 @@ Censused per report, so a plan can be aimed rather than sized (`is_holes.py`, `c
 | cash flows refusing `no closing cash balance` | 47 documents | `CWN-1`'s batch: 5 written, 42 still refused |
 
 ⚠️ **A text-layer replay cannot adjudicate a hole whose statement pages are IMAGES inside a text filing.** VHM Q4-2017's balance sheet refuses `1 figure split across two boxes` with OCR off — its pages 9 and 14 carry a GARBLED embedded text layer the replay reads and a real run never does — and with OCR on the same statement refuses `no total to balance against` instead. **The two refusals are different defects on one cell**, and only the second one exists in production.
+
+### ⚠️ 2026-09-17 — IS FINISHING THE OCR WORTH IT FOR A 5-SESSION BASKET? MEASURED: NOT FIRST
+
+`python .claude/tools/survey_ocr_value.py` (~3 min, read-only, no GPU). The question is the
+basket chain's (`event_chain --setup basket`, `.claude/context/event_chain.md` §7): *which names
+rise ≥ 5 % in 5 sessions?* The rows where parsed statements and that label both exist are the
+VN30 panel (`unified_schema_vn30`, 95,279 name-sessions, 30 names, all 30 with a parsed profit on
+**76.4 %** of their rows). Point-in-time by the filing's own `publish_date` + 1 session (45 days
+after the quarter end when it is missing); only `months == 3` rows count as a quarter.
+
+**Reach — what the OCR corpus touches in the basket universe (LIQUID, 228 names):**
+
+| | |
+|---|---|
+| LIQUID names with a parsed quarterly profit | **34 of 228** |
+| LIQUID name-sessions holding a point-in-time profit | **10.6 %** of 710,683 |
+| the first basket trial's 3,295 test picks that fall on a parsed name | **2.8 %** — the basket buys volatile mid-caps (KSV, L40, SMC, MSR, VGI), the corpus is VN30 |
+| LIQUID filings listed · OCR'd | 9,652 · **1,631 (16.9 %)** — ~8,000 to go, ≈ 350 T4-hours at FPT's 2.6 min/filing, before any parser work for the templates beyond VN30 (`TPL-1`, `CRP-1`) |
+
+**Content — the within-session Spearman IC against the event** (sessions with ≥ 8 covered names).
+⚠️ **Two nulls, and only the second is honest for a quarterly figure**: a within-session shuffle
+treats every session as independent, while a profit figure is constant for ~60 sessions — so the
+**ticker-permutation null** (each name's whole feature history handed to another name) is the one
+that keeps that persistence.
+
+| channel | IC | sessions | within-session null p95 · z | **ticker-permutation null p95 · z** |
+|---|---|---|---|---|
+| YoY profit-before-tax growth | +0.020 | 2,124 | +0.009 · +3.43 | **+0.022 · +1.59 — FAILS** |
+| YoY revenue growth | **+0.062** | 1,184 | +0.015 · +7.34 | **+0.028 · +3.26** (null max \|0.053\|) |
+| sessions since the last filing | −0.026 | 2,995 | +0.006 · −5.84 | ±0.02 · −2.19 |
+| profit growth, names that published 1-5 sessions ago (earnings drift) | −0.005 | 236 | +0.057 · −0.11 | — |
+| *yardstick:* `har_lpk_1` (log range, free) | **+0.094** | 3,132 | · +23.2 | **· +8.65** |
+| *yardstick:* `evt_thr_z_20` (vol-scaled threshold, free) | **−0.133** | 3,121 | · −30.9 | **· −9.43** |
+
+**Dates — the event rate in the 5 sessions after a filing, against the same session's other
+names:** **+1.6 pp** on a 13.1 % base (z +2.76 over all 1,910 sessions), **+2.1 pp, z +1.70 on
+every 5th session** — the sample that does not overlap the 5-session label — and the 5-session
+return +0.38 pp (z +2.40 on the same thinned sample). A small effect, **not established**.
+
+**Increment — does a model gain?** An L2 event logit on the free `evt_`/`har_`/`px_` channels,
+fitted before 2021-05-04 and scored after it (1,318 sessions), against the same logit plus YoY
+profit, YoY revenue and sessions-since-filing (missing flags included), paired by session with a
+5-session block bootstrap:
+
+| | event features | + fundamentals | difference [95 % CI] |
+|---|---|---|---|
+| top-5 hit rate (base 0.119) | 0.193 | 0.191 | **−0.002 [−0.008, +0.003]** |
+| daily AUC | 0.647 | 0.642 | **−0.005 [−0.010, −0.0003]** |
+
+⚠️ **THE ANSWER FOR THIS TARGET IS "NOT FIRST"**: the one parsed figure that survives an honest
+null (revenue growth) ranks the event at **two-thirds of the IC of a free price channel**, and
+adding it to a model **lowered** the out-of-sample daily AUC. A 5-session +5 % move is a
+volatility question (§6 of the event chain) and a quarterly number moves four times a year.
+⚠️ **What this does NOT say**: 30 names is below the ~100-name width at which a rank signal was
+measured to survive (CLAUDE.md §2), so the IC's error bar is wide; nothing here tests a LONGER
+horizon (h = 20+, where value and quality factors live), the cross-sectional rank chain, or a
+valuation ratio (the per-share cells are `EPS-1`-scaled and were not used). **Where the corpus
+earns its keep is the long horizon and the audit trail, not this basket.**

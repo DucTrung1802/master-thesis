@@ -9,11 +9,6 @@ import os
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-TICKER = "VCB"
-# `d`, the window a sample reads. ⚠️ It enters the purge (`d + h - 1`) and the table name.
-LOOKBACK = 20
-# The date split `train_test_creator` cuts. The selection's holdout is the val start, so
-# the feature ranking never reads a val or a test row.
 TRAIN_RATIO = 0.70
 VAL_RATIO = 0.15
 
@@ -28,66 +23,10 @@ NULL_DRAWS = 10
 REPORT_ROOT = os.path.join(REPO_ROOT, "reports", "feature_selection_event")
 OUTPUT_ROOT = os.path.join(REPO_ROOT, "reports", "event_chain")
 
-# The FEATURE GROUPS offered to the selection, one run each. ⚠️ ONE POOL PER RUN is what
-# keeps every run under PostgreSQL's 1,600-column limit and the design matrix inside the
-# 4 GB card; the survivors are then unioned into ONE table by `final_features`, which
-# refuses a union wider than the limit.
-#
-# Ordered narrow → wide, so a partial run has done the cheap, VCB-specific groups first.
-POOLS = (
-    "pool__basic",            # own price, volume, orders, foreign and prop flow (~90)
-    "pool__event_features",   # the event's own history, vol-scaled threshold, bank sector, calendar (~45)
-    "pool__market_breadth",   # the cross-section compressed to one row a day (~7)
-    "pool__news_daily",       # news / disclosure counts (~14)
-    "pool__stock_market",     # the six VN indices x 27 measures (~160)
-    "pool__economy_vietnam",  # VN macro (~88)
-    "pool__bonds",            # VN government yields (~117)
-    "pool__fa",               # bank fundamentals, on publish_date (~190)
-    "pool__funds",            # HOSE ETFs (~389)
-    "pool__basic_bank",       # the 20 banks as peer channels (~540)
-    "pool__ta",               # technical indicators (~930)
-)
-
 # Channels the one-feature logistic baseline tries, first present wins.
 BASELINE_CHANNELS = (
     "evt_thr_z_20", "evt_vol_20", "drv_realized_vol_10", "drv_parkinson_21",
     "drv_garman_klass_21",
-)
-
-_TRAIN = dict(batch_size=64, lr=0.001, weight_decay=0.0001, max_epochs=100,
-              patience=15, grad_clip=1.0, lr_factor=0.5, lr_patience=5, log_every=10)
-
-# (package, variant, `model:` block, extra top-level keys). ⚠️ The GRID IS FIXED BEFORE
-# ANY TEST SCORE IS READ; the best model is chosen on VAL ROC-AUC and its test number is
-# reported beside every other row, never alone.
-MODELS = (
-    ("baseline", "_prior", {"type": "BASELINE", "kind": "prior"}, {}),
-    ("baseline", "_logistic_channel", {"type": "BASELINE", "kind": "logistic_channel",
-                                       "target_channel": None, "C": 1.0}, {}),
-    ("baseline", "_logistic_stats_c001", {"type": "BASELINE", "kind": "logistic_stats", "C": 0.01}, {}),
-    ("baseline", "_logistic_stats_c01", {"type": "BASELINE", "kind": "logistic_stats", "C": 0.1}, {}),
-    ("gbt", "_d2", {"type": "GBT", "max_depth": 2, "n_estimators": 400, "learning_rate": 0.02,
-                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 20.0}, {}),
-    ("gbt", "_d3", {"type": "GBT", "max_depth": 3, "n_estimators": 300, "learning_rate": 0.03,
-                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 10.0}, {}),
-    ("gbt", "_d4", {"type": "GBT", "max_depth": 4, "n_estimators": 200, "learning_rate": 0.03,
-                    "subsample": 0.7, "colsample_bytree": 0.3, "min_child_weight": 20.0,
-                    "gamma": 1.0}, {}),
-    ("forest", "_et_leaf20", {"type": "FOREST", "kind": "et", "min_samples_leaf": 20,
-                              "max_features": 0.3, "n_estimators": 500}, {}),
-    ("forest", "_et_leaf50", {"type": "FOREST", "kind": "et", "min_samples_leaf": 50,
-                              "max_features": 0.3, "n_estimators": 500}, {}),
-    ("forest", "_rf_leaf30", {"type": "FOREST", "kind": "rf", "min_samples_leaf": 30,
-                              "max_features": 0.2, "n_estimators": 500}, {}),
-    ("lstm", "_h16", {"type": "LSTM", "hidden_size": 16, "num_layers": 1, "dropout": 0.2},
-     {"train": _TRAIN}),
-    ("gru", "_h16", {"type": "GRU", "hidden_size": 16, "num_layers": 1, "dropout": 0.2},
-     {"train": _TRAIN}),
-    ("cnn", "_c16", {"type": "CNN", "channels": 16, "kernel_size": 3, "num_layers": 2,
-                     "dropout": 0.2}, {"train": _TRAIN}),
-    ("mlp", "_h16", {"type": "MLP", "hidden_size": 16, "dropout": 0.2}, {"train": _TRAIN}),
-    ("tcn", "_c16", {"type": "TCN", "channels": 16, "kernel_size": 3, "num_layers": 2,
-                     "dropout": 0.2}, {"train": _TRAIN}),
 )
 
 # Draws for the event ROC-AUC null in the report (block = d + h). Cheap: a vector shuffle.
@@ -116,16 +55,7 @@ ROLLING_REFIT_SESSIONS = 21
 # the three kinds ~0.69 (`.claude/context/event_chain.md` §6). Every hyper-parameter below is
 # that CV's choice, frozen here before the tabular chain's own val or test was scored.
 # ══════════════════════════════════════════════════════════════════════════════════════
-TABULAR_LOOKBACK = 1
-TABULAR_SCOPE = "tab"
-TABULAR_POOLS = (
-    "pool__event_features",   # evt_/sec_/mkt_/cal_ + har_ (log vol) + px_ (range) + flow_ (~67)
-    "pool__basic",            # drv_* derived microstructure (~62) + raw levels the linear models skip
-    "pool__market_context",   # mctx_ VN-Index/VN30, glb_ US risk LAGGED one session, bond_ (~60)
-    "pool__market_breadth",   # cross-sectional dispersion (~7)
-    "pool__news_daily",       # disclosure counts (~14)
-)
-
+BASKET_LOOKBACK = 1
 # The channel blocks, by NAME PREFIX (`model.event_linear` `columns`).
 # ⚠️ `mkt_` is spelt out: `pool__market_breadth` also names its channels `mkt_xs_*`, and the
 # CV that chose these blocks did not include them.
@@ -135,65 +65,6 @@ _NOT_DRV = ("drv_vwap_raw",)   # a price LEVEL wearing a derived name
 _HAR = ("har_",)
 _PXFLOW = ("px_", "flow_")
 _GLOBAL = ("glb_", "bond_")
-_MCTX = ("mctx_",)
-
-TABULAR_MODELS = (
-    ("baseline", "_prior", {"type": "BASELINE", "kind": "prior"}, {}),
-    # magnitude: ridge on log|r_5| — CV10 0.667 on the pipeline's channels (har+evt+drv, alpha 100, 4-year half-life)
-    ("event_linear", "_mag_har_a100_hl4", {"type": "EVENT_LINEAR", "kind": "magnitude_ridge",
-                                           "columns": list(_HAR + _EVT + _DRV), "alpha": 100.0,
-                                           "half_life_years": 4.0, "exclude": list(_NOT_DRV)}, {}),
-    # magnitude without the har block — CV10 0.665
-    ("event_linear", "_mag_a10_hl4", {"type": "EVENT_LINEAR", "kind": "magnitude_ridge",
-                                      "columns": list(_EVT + _DRV), "alpha": 10.0,
-                                      "half_life_years": 4.0, "exclude": list(_NOT_DRV)}, {}),
-    # the event itself: L2 logistic — CV10 0.670 (C 0.03), 0.669 (C 0.1)
-    ("event_linear", "_evt_c003", {"type": "EVENT_LINEAR", "kind": "event_logit",
-                                   "columns": list(_EVT + _DRV), "C": 0.03,
-                                   "exclude": list(_NOT_DRV)}, {}),
-    ("event_linear", "_evt_c01", {"type": "EVENT_LINEAR", "kind": "event_logit",
-                                  "columns": list(_EVT + _DRV), "C": 0.1,
-                                  "exclude": list(_NOT_DRV)}, {}),
-    # direction given a >= 3 % move — CV10 0.607 as a stand-alone event score (0.638 in research, TZL-1)
-    ("event_linear", "_dir_c001", {"type": "EVENT_LINEAR", "kind": "direction_logit",
-                                   "columns": list(_EVT + _DRV + _PXFLOW + _GLOBAL), "C": 0.01,
-                                   "min_move": 0.03, "exclude": list(_NOT_DRV)}, {}),
-    # ⚠️ ADDED 2026-09-17, AFTER THE FIRST TABULAR TRIAL, ON CV EVIDENCE ONLY (§6c): XGBoost
-    # fitted on the 20 BANK names (`model.event_panel`, peers read from unified_schema_bank)
-    # and scored on VCB — CV10 0.675, the best single model of a 70-candidate second search;
-    # its fold errors sit in other years than the linear kinds'. RUNBOOK G6 builds its pools.
-    ("event_panel", "_xgb_d2_n600", {"type": "EVENT_PANEL_XGB", "universe": "BANK",
-                                     "columns": list(_HAR + _EVT + _DRV + _PXFLOW + _MCTX + _GLOBAL),
-                                     "exclude": list(_NOT_DRV), "n_estimators": 600,
-                                     "max_depth": 2, "learning_rate": 0.03, "subsample": 0.8,
-                                     "colsample_bytree": 0.5, "min_child_weight": 20.0}, {}),
-    # the tree families on the same last-row table, for comparison
-    ("gbt", "_d2", {"type": "GBT", "max_depth": 2, "n_estimators": 300, "learning_rate": 0.03,
-                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 20.0}, {}),
-    ("forest", "_et_leaf30", {"type": "FOREST", "kind": "et", "min_samples_leaf": 30,
-                              "max_features": 0.3, "n_estimators": 500}, {}),
-)
-
-# ⚠️ FIXED BEFORE THE CHAIN RAN: a geometric mean of member probabilities, members named by
-# run-name prefix. Not chosen on val, so it is eligible as "best on val" like any single run.
-#
-# ⚠️ RE-MEASURED ON THE PIPELINE'S OWN CHANNELS before the chain ran (CV10, 2014-2023): the
-# magnitude ridge 0.667, the event logit 0.670, the direction logit 0.607 — down from 0.638
-# in the research harness, whose US series were joined on the SAME DATE (`TZL-1`) — and the
-# geometric means geo3 0.682, geo2 0.683.
-TABULAR_ENSEMBLES = {
-    "ensemble_geo3": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003",
-                      "event_linear_dir_c001"),
-    "ensemble_geo2": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003"),
-    # ⚠️ ADDED 2026-09-17 with the panel member, on CV10 alone: geo4 0.695 (fold min 0.534),
-    # geo3p 0.697 (0.532), against geo3 0.682 (0.504). A greedy search over the same pool
-    # reached 0.703 in-sample and 0.647 leave-one-year-out, so no weights were fitted.
-    "ensemble_geo4": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003",
-                      "event_linear_dir_c001", "event_panel_xgb_d2_n600"),
-    "ensemble_geo3p": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003",
-                       "event_panel_xgb_d2_n600"),
-}
-
 
 # ══════════════════════════════════════════════════════════════════════════════════════
 # ⚠️ THE MBB SETUP (2026-09-17) — `python -m event_chain --setup tabular_mbb`
@@ -222,48 +93,149 @@ TABULAR_ENSEMBLES = {
 # `pool__ta` (failed its null, z +0.42), the own-ticker linear kinds in the ensemble
 # (0.709-0.722, below the panel pair alone).
 # ══════════════════════════════════════════════════════════════════════════════════════
-_PANEL = _HAR + _EVT + _DRV + _PXFLOW
-_PANEL_XGB = {"type": "EVENT_PANEL_XGB", "kind": "xgb", "universe": "BANK", "columns": list(_PANEL),
-              "exclude": list(_NOT_DRV), "n_estimators": 600, "max_depth": 2, "learning_rate": 0.03,
-              "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 20.0}
+# ══════════════════════════════════════════════════════════════════════════════════════
+# ⚠️ THE BASKET SETUP (2026-09-17) — `python -m event_chain --setup basket`
+#
+# The question changes from "will THIS ticker rise +g % in h sessions?" to "WHICH names
+# should I buy at the close of day N — at most `BASKET_SIZE` of them — so that each is
+# +g % at the close of N+h?". The same label, the same stages, on a PANEL universe
+# (`unified_schema_liquid`, 228 tradeable names), scored per DATE: the top `BASKET_SIZE`
+# scores of a session are its basket (`event_chain.basket`).
+#
+# ⚠️ WHY LIQUID AND NOT VN30: CLAUDE.md §2 measured the cross-sectional rank failing at
+# 30 names and clearing at 100+; LIQUID is the narrowest screen above that line whose
+# every name trades (1 bn VND median turnover). ⚠️ It is a SURVIVOR universe
+# (`STILL_TRADING_2026_06`) and its membership is not point-in-time (§2c).
+#
+# ⚠️ EVERY KNOB BELOW WAS FIXED BEFORE ANY BASKET NUMBER WAS READ — the model kinds and
+# their hyper-parameters are the VCB tabular CV's (§6), carried over unchanged, because a
+# panel CV of 700k rows per fold was not run. The one change is scale: the forest's leaf
+# floor grows with the row count (30 rows of 3k -> 200 rows of 500k).
+# ══════════════════════════════════════════════════════════════════════════════════════
+BASKET_TICKER = "LIQUID"
+# X — how many names a session's basket holds. ⚠️ A PARAMETER, `--top-k` overrides it; the
+# model is fitted once and the basket is cut from its scores, so X moves no fit.
+BASKET_SIZE = 5
+BASKET_SCOPE = "bsk"
+# ⚠️ NO DATE-LEVEL POOL (`pool__market_context`, `pool__market_breadth`): a panel selection
+# ranks every channel WITHIN a session (`feature_normalize="cs_rank"`), where a channel equal for
+# every name is a constant — it cannot rank names by itself and cannot clear a null, so offering
+# it would spend ~15 min of selection per pool on a foregone answer. Both are materialised for
+# LIQUID (RUNBOOK G8) should a tree-interaction test want them.
+BASKET_POOLS = (
+    "pool__event_features",   # evt_/sec_/mkt_/cal_/har_/px_/flow_ — the event's own state
+    "pool__basic",            # drv_* microstructure
+)
+# ⚠️ A NAME AT ITS CEILING ON N IS BUYABLE (the user's decision, 2026-09-17): an order at the
+# ceiling price can still fill when sellers remain, so the basket does NOT drop those names.
+# `True` restores the repo's `PRF-0` entry screen (`backtest.portfolio.mark_ceiling`); the flag
+# is still carried per row (`at_ceiling_n`) so a report can say how many picks were at the ceiling.
+BASKET_EXCLUDE_CEILING = False
+# The within-date shuffle null of the basket hit rate (picks drawn at random from the
+# same session's buyable names). 200 = the headline chain's convention (CLAUDE.md §6).
+BASKET_NULL_DRAWS = 200
+# ⚠️ ONE REFIT A QUARTER, NOT A MONTH: a panel refit fits ~600k rows, ~100x a
+# single-ticker one, so the monthly schedule of `ROLLING_REFIT_SESSIONS` would cost hours
+# per model. Fixed before any rolling number was computed; it selects nothing.
+BASKET_REFIT_SESSIONS = 63
+# The round-trip cost the trading track charges, and the sweep beside it — the repo's
+# own constants (`backtest.portfolio.ROUND_TRIP_COST` 50 bps, `COST_SWEEP`).
+BASKET_COSTS = (0.0, 0.0030, 0.0050)
+# Estimators too slow to refit ~9 times on 600k rows; refitted once on train+val only.
+BASKET_NO_ROLLING = ("FOREST",)
+# ⚠️ THE CHOICE RULE (2026-09-17): the first basket trial chose on val hit@X; from the second
+# trial on the user asked for the best AUC, so the row with the highest VAL POOLED ROC-AUC is
+# chosen (ties: val within-session AUC, then val hit@X) — the rule of the VCB/MBB chains.
+# ⚠️ CHANGED AFTER THE FIRST BASKET TRIAL'S TEST NUMBERS WERE READ (NUL-1): record it as such.
+BASKET_CHOOSE_ON = "val_auc"   # "val_auc" | "val_daily_auc" | "val_hit"
+# ⚠️ A BASKET MAY HOLD FEWER THAN X NAMES (2026-09-17, the user's request): a session's basket
+# is its top X names whose P(event) is at least `min_prob`, and a session none of whose top X
+# reaches the cut holds CASH. The cut is chosen on VAL (the chosen row's frozen val scores) over
+# `BASKET_MIN_PROB_GRID`, among cuts that trade at least `BASKET_MIN_ACTIVE` val sessions, by
+# `BASKET_MIN_PROB_ON`:
+#   "ev" — the mean net h-session return per SESSION (a cash session returns 0) at the last
+#          `BASKET_COSTS` round trip; ties go to the lower cut (the fuller basket).
+# ⚠️ A SECOND RULE WAS DECLARED BESIDE IT AND READ ON TEST — the largest one-sided 95 % lower
+# bound of the per-session hit rate, n_eff = active sessions / h. It chose 0.59, which traded 4-5
+# TEST sessions (one basket), and was dropped for that: two rules were read on test (NUL-1,
+# `event_chain.md` §6-§7). `--min-prob` overrides the cut at pick time.
+# ⚠️ WHEN THE BASKET IS BOUGHT (2026-09-18, the user's execution): "close" prices every basket at
+# the CLOSE of session N — the label's own price, and a fill nobody who reads the close can get —
+# while "next_open" prices it at the OPEN of N+1 and sells at the close of N+h, which is what an
+# evening scrape and a morning order can actually trade. It moves the MONEY metrics only: the
+# label, the AUCs and the model choice are close-to-close either way (`event_chain.md` §7; `EXE-1`).
+# ⚠️ THE PICKS GAP UP OVERNIGHT (+1.7 % on average, +4.4 % on the names at their ceiling), so the
+# two pricings are not a detail: "next_open" also wants `BASKET_EXCLUDE_CEILING = True`.
+BASKET_ENTRY = "next_open"   # "close" | "next_open"
+BASKET_MIN_PROB_GRID = tuple(round(0.10 + 0.01 * i, 2) for i in range(51))   # 0.10 .. 0.60
+BASKET_MIN_PROB_ON = "ev"
+BASKET_MIN_ACTIVE = 25   # 5 non-overlapping baskets at h = 5
 
-MBB_MODELS = (
+# ⚠️ XGBoost on the panel's last row (`model.event_boost`), chosen by a rolling-origin CV over
+# the LIQUID train+val rows (validation years 2016-2023, the CV of the deleted close-priced flow, `event_chain.md` §6; no test row read):
+# depth 4/6/8/10 gave pooled AUC 0.667/0.666/0.668/0.665; lr 0.01 x 1,600 trees, a 4-year
+# half-life, lambda 5 and 128 bins moved it by <= 0.002; date-level pools LOWERED it (0.661, the
+# date memorisation of `PDL-1`), within-session ranks and exchange-band / limit-hit channels
+# added nothing (0.664, 0.668), and a pairwise/ndcg ranker scored 0.650 pooled, 0.659-0.662 within.
+_BOOST = {"type": "EVENT_BOOST", "kind": "xgb", "max_depth": 8, "n_estimators": 800,
+          "learning_rate": 0.02, "subsample": 0.8, "colsample_bytree": 0.4,
+          "min_child_weight": 500.0, "device": "cuda", "seed": 42}
+
+BASKET_MODELS = (
     ("baseline", "_prior", {"type": "BASELINE", "kind": "prior"}, {}),
-    # the tuned panel members — CV10 0.723, 0.733, 0.718
-    ("event_panel", "_xgb_pan_d2_n600", dict(_PANEL_XGB), {}),
-    ("event_panel", "_xgb_pan_d3_n600", dict(_PANEL_XGB, max_depth=3), {}),
-    ("event_panel", "_logit_pan_c003_hl4", {"type": "EVENT_PANEL_LOGIT", "kind": "logit", "universe": "BANK",
-                                           "columns": list(_PANEL), "exclude": list(_NOT_DRV), "C": 0.03,
-                                           "half_life_years": 4.0}, {}),
-    # the own-ticker linear kinds at their MBB optimum — CV10 0.664, 0.648
-    ("event_linear", "_evt_hep_c003_hl4", {"type": "EVENT_LINEAR", "kind": "event_logit",
-                                           "columns": list(_PANEL), "C": 0.03, "half_life_years": 4.0,
-                                           "exclude": list(_NOT_DRV)}, {}),
-    ("event_linear", "_mag_hepm_a100_hl4", {"type": "EVENT_LINEAR", "kind": "magnitude_ridge",
-                                            "columns": list(_PANEL + _MCTX), "alpha": 100.0,
-                                            "half_life_years": 4.0, "exclude": list(_NOT_DRV)}, {}),
-    # REFERENCE, identical to `tabular`'s rows (reused by run id): VCB's panel and the trees
-    TABULAR_MODELS[6],
-    TABULAR_MODELS[7],
-    TABULAR_MODELS[8],
+    # ⚠️ THE THREE LINEAR KINDS, chosen on a VCB CV10 before any test row was read (0.667 /
+    # 0.670 / 0.607) and kept through every basket trial since. Their channel blocks are the
+    # `_EVT` / `_DRV` / `_HAR` / `_PXFLOW` / `_GLOBAL` prefixes above.
+    ("event_linear", "_mag_har_a100_hl4", {"type": "EVENT_LINEAR", "kind": "magnitude_ridge",
+                                           "columns": list(_HAR + _EVT + _DRV), "alpha": 100.0,
+                                           "half_life_years": 4.0, "exclude": list(_NOT_DRV)}, {}),
+    ("event_linear", "_evt_c003", {"type": "EVENT_LINEAR", "kind": "event_logit",
+                                   "columns": list(_EVT + _DRV), "C": 0.03,
+                                   "exclude": list(_NOT_DRV)}, {}),
+    ("event_linear", "_dir_c001", {"type": "EVENT_LINEAR", "kind": "direction_logit",
+                                   "columns": list(_EVT + _DRV + _PXFLOW + _GLOBAL), "C": 0.01,
+                                   "min_move": 0.03, "exclude": list(_NOT_DRV)}, {}),
+    # the tree families on the panel's last row
+    ("gbt", "_d2", {"type": "GBT", "max_depth": 2, "n_estimators": 300, "learning_rate": 0.03,
+                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 200.0}, {}),
+    ("gbt", "_d4", {"type": "GBT", "max_depth": 4, "n_estimators": 300, "learning_rate": 0.03,
+                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 200.0}, {}),
+    ("forest", "_et_leaf200", {"type": "FOREST", "kind": "et", "min_samples_leaf": 200,
+                               "max_features": 0.3, "n_estimators": 200}, {}),
+    # ⚠️ ADDED FOR THE SECOND BASKET TRIAL on the CV above — CV pooled AUC 0.668 / within 0.666
+    ("event_boost", "_xgb_d8", dict(_BOOST), {}),
+    # the size of the move with a tree — CV 0.652 / 0.643 alone, the member that lifts the ensemble
+    ("event_boost", "_mag_d8", dict(_BOOST, kind="magnitude"), {}),
 )
 
-# ⚠️ FIXED BEFORE THE MBB CHAIN RAN, from the CV above; no weights fitted.
-MBB_ENSEMBLES = {
-    "ensemble_pxl": ("event_panel_xgb_pan_d3_n600", "event_panel_logit_pan_c003_hl4"),          # CV10 0.739
-    "ensemble_px2l": ("event_panel_xgb_pan_d2_n600", "event_panel_xgb_pan_d3_n600",
-                      "event_panel_logit_pan_c003_hl4"),                                         # CV10 0.735
+# ⚠️ FIXED BEFORE THE CHAIN RAN, no weights fitted: VCB's `geo3`/`geo2`, and the same two
+# with the depth-4 tree as a member (a panel is where interactions have rows to be learned).
+BASKET_ENSEMBLES = {
+    # ⚠️ FIXED BEFORE ANY CHAIN RAN, no weights fitted (VCB CV10: geo3 0.682, geo2 0.683)
+    "ensemble_geo3": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003",
+                      "event_linear_dir_c001"),
+    "ensemble_geo2": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003"),
+    "ensemble_geo2t": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003", "gbt_d4"),
+    # ⚠️ ADDED FOR THE SECOND BASKET TRIAL, on CV alone (pooled AUC · within-session AUC). A
+    # member LISTED TWICE COUNTS TWICE in the geometric mean — the weights are the CV's
+    # (xgb 1/2, event logit 1/4, tree magnitude 1/4), fixed before the chain scored them.
+    "ensemble_boost": ("event_boost_xgb_d8", "event_boost_xgb_d8", "event_linear_evt_c003",
+                       "event_boost_mag_d8"),                                   # CV 0.6745 · 0.6667
+    "ensemble_boost_eq": ("event_boost_xgb_d8", "event_linear_evt_c003",
+                          "event_boost_mag_d8"),                                # CV 0.6731 · 0.6641
+    "ensemble_xl": ("event_boost_xgb_d8", "event_boost_xgb_d8",
+                    "event_linear_evt_c003"),                                   # CV ~0.672 · 0.667
 }
 
-# The chain's setups. `window` is every trial before 2026-09-17, unchanged. A setup that
-# names a `ticker` runs on it unless `--ticker` says otherwise.
+# The chain's setup. It names its `ticker` (the LIQUID panel) and runs on it unless
+# `--ticker` says otherwise.
 SETUPS = {
-    "window": dict(lookback=LOOKBACK, pools=POOLS, models=MODELS, scope=None, channels="shortlist",
-                   aux_targets=(), ensembles={}),
-    "tabular": dict(lookback=TABULAR_LOOKBACK, pools=TABULAR_POOLS, models=TABULAR_MODELS,
-                    scope=TABULAR_SCOPE, channels="all", aux_targets=("return_{h}day",),
-                    ensembles=TABULAR_ENSEMBLES),
-    "tabular_mbb": dict(ticker="MBB", lookback=TABULAR_LOOKBACK, pools=TABULAR_POOLS, models=MBB_MODELS,
-                        scope=TABULAR_SCOPE, channels="all", aux_targets=("return_{h}day",),
-                        ensembles=MBB_ENSEMBLES),
+    # ⚠️ ONE SETUP SINCE 2026-09-18. `window`, `tabular` and `tabular_mbb` — VCB and MBB,
+    # close-to-close — were deleted with the label they were trained on (`event_chain.md` §6:
+    # the close of N is not a fill). `top_k` is what makes a setup a BASKET: its report is
+    # `event_chain.basket`, scored per date, at most `top_k` names and cash below the cut.
+    "basket": dict(ticker=BASKET_TICKER, lookback=BASKET_LOOKBACK, pools=BASKET_POOLS,
+                   models=BASKET_MODELS, scope=BASKET_SCOPE, channels="all",
+                   aux_targets=("return_open_{h}day",), ensembles=BASKET_ENSEMBLES,
+                   top_k=BASKET_SIZE),
 }

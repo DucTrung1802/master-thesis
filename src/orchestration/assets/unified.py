@@ -385,18 +385,19 @@ def unified_pool_targets(
         target_cols = {h: f"return_{h}day" for h in horizons}
         relative_cols = {h: f"return_rel_{h}day" for h in horizons}
         price_cols = {h: f"close_adjust_{h}day" for h in horizons}
+        open_cols = {h: f"return_open_{h}day" for h in horizons}
         # ⚠️ Keyed by COLUMN NAME, in the builder's own emission order. It used to be
         # keyed by horizon with the relative twin under `-h`, which worked for exactly
         # two families and had no room for a third — `close_adjust_{h}day` would have
         # needed a second escape convention to avoid colliding with `return_{h}day`.
         all_targets = {
             c: h
-            for group in (target_cols, relative_cols, price_cols)
+            for group in (target_cols, relative_cols, price_cols, open_cols)
             for h, c in group.items()
         }
         # ⚠️ The binary EVENT labels come LAST, in `utils.event_target.EVENT_TARGETS`
         # order — the builder's emission order, which the equality check below reads.
-        event_cols = {e.column: e.horizon for e in event_target.EVENT_TARGETS}
+        event_cols = {e.column: e for e in event_target.EVENT_TARGETS}
         all_targets.update(event_cols)
         expected_key = tuple(prep.UNIFIED_PRIMARY_KEY)
         benchmark = f"{prep.UNIFIED_BENCHMARK_TABLE}.{prep.UNIFIED_BENCHMARK_COLUMN}"
@@ -487,19 +488,23 @@ def unified_pool_targets(
                 f"SELECT COUNT(*) FROM {schema}.pool__basic GROUP BY exchange, ticker"
             )
             series_rows = [int(row[0]) for row in cur.fetchall()]
-    checked = [(h, (target_cols[h], price_cols[h])) for h in horizons] + [
-        (h, (col,)) for col, h in event_cols.items()
-    ]
-    for h, cols in checked:
+    # ⚠️ An `open`-rule label and every `return_open_{h}day` enter at the NEXT session's
+    # OPEN, so their tail is `h + 1` and a missing scraped open is an honest extra NULL:
+    # they are held to a FLOOR with a 2 % ceiling, the two close rules to an equality.
+    checked = [(h, (target_cols[h], price_cols[h]), True) for h in horizons] + [
+        (e.unlabelled, (col,), e.rule != "open") for col, e in event_cols.items()
+    ] + [(h + 1, (open_cols[h],), False) for h in horizons]
+    for h, cols, exact in checked:
         expected_tail = sum(min(h, n) for n in series_rows)
         for target_col in cols:
             tail = rows - int(stats[target_col][0])
-            if tail != expected_tail:
+            short = tail < expected_tail
+            if (tail != expected_tail) if exact else (short or tail > expected_tail + 0.02 * rows):
                 raise ValueError(
                     f"{schema}.pool__targets.{target_col} has a {tail}-row unlabelled "
                     f"tail; expected {expected_tail} (sum of min({h}, series length) "
-                    f"over {tickers} series). More would mean NULL or zero closes "
-                    f"putting silent holes in the labels."
+                    f"over {tickers} series){'' if exact else ' and at most 2 % more'}. "
+                    f"More would mean NULL or zero prices putting silent holes in the labels."
                 )
 
     context.log.info(

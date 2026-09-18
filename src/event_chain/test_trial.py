@@ -105,3 +105,25 @@ def test_the_code_digest_ignores_line_endings(monkeypatch, tmp_path):
         if name == "a":
             first = trial.code_digest()["digest"]
     assert trial.code_digest()["digest"] == first
+
+
+def test_a_basket_trial_logs_its_hit_rate_and_judges_the_null_on_it(monkeypatch, tmp_path):
+    _redirect(monkeypatch, tmp_path)
+    body = _body("20260917-140000__liquid__t", models=[
+        {"run_id": "gbt_d4__liquid__x__20260917-140000", "run_name": "gbt_d4__liquid__x",
+         "model_type": "GBT", "device": "cpu", "config": {"model": {"type": "GBT"}, "seed": 42},
+         "event_metrics": {"val_auc": 0.7, "test_auc": 0.68, "val_hit": 0.40, "test_hit": 0.31,
+                           "test_base": 0.16, "test_hit_bar": 0.19, "test_hit_null_max": 0.2,
+                           "test_hit_z": 12.0, "test_bret": 0.011, "test_uret": 0.002,
+                           "test_sharpe_50": 0.8, "rolling_hit": 0.33}}])
+    body["basket"] = {"top_k": 5, "best": "gbt_d4__liquid__x"}
+    body["best"] = {"run_name": "gbt_d4__liquid__x"}
+    _write(tmp_path, body)
+    _write(tmp_path, _body("20260917-010000__vcb__t"))
+    log = trial.rebuild_log()
+    basket = log[log["ticker"].notna() & (log["model_variant"] == "gbt_d4")].iloc[0]
+    assert basket["top_k"] == 5 and basket["test_hit_at_k"] == 0.31
+    assert basket["test_hit_null_p95"] == 0.19 and bool(basket["test_beats_null"]) is True
+    assert basket["test_hit_rolling_refit"] == 0.33
+    single = log[log["model_variant"] == "gbt_d2"].iloc[0]
+    assert pd.isna(single["top_k"]) and bool(single["test_beats_null"]) is False

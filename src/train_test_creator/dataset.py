@@ -300,6 +300,11 @@ class WindowedDataset:
     # rows (`model.event_linear`'s magnitude ridge fits `log|r_h|` and is scored on the
     # event). They reach as far forward as `y` does, so the same purge covers them.
     aux: Dict[str, Dict[str, np.ndarray]] = field(default_factory=dict)
+    # ⚠️ THE TRAIN-SLICE MEDIANS the features were imputed with, per KEPT channel. Saved as
+    # `feature_medians.csv` (2026-09-17) because scoring a row the dataset never held — a
+    # session whose label does not exist yet (`event_chain.basket --pick`) — needs the
+    # imputation the model was trained under, and the scaler alone cannot give it back.
+    medians: Optional[pd.Series] = None
 
     @property
     def n_features(self) -> int:
@@ -375,10 +380,13 @@ class TrainTestCreator:
         # event target and True for everything else, and an explicit True on an event
         # target RAISES rather than building a dataset `engine._verify` would refuse.
         self.event = event_target.parse(self.target)
-        if self.event is not None and self.event.horizon != self.horizon:
+        # ⚠️ The table's `h` is the label's SPAN — `h` for a close rule and `h + 1` for an
+        # `open` rule, which enters at the next session's open — because every purge here is
+        # `d + h - 1` off the NAME (§5 rule 6).
+        if self.event is not None and self.event.unlabelled != self.horizon:
             raise ValueError(
                 f"{table!r} names h={self.horizon} but its event label "
-                f"{self.target!r} is defined over {self.event.horizon} sessions — the "
+                f"{self.target!r} spans {self.event.unlabelled} sessions — the "
                 f"purge would be computed for the wrong horizon."
             )
         if scale_target is None:
@@ -431,7 +439,11 @@ class TrainTestCreator:
         sample's own input window inside the training set — see
         `feature_selection.PurgedWalkForward`.
         """
-        return self.lookback + self.horizon - 1 if self.purge else 0
+        # ⚠️ An `open`-rule event label spans h + 1 sessions (it enters at the NEXT
+        # open), so the purge is that span, not the table's h.
+        event = getattr(self, "event", None)   # a creator built field by field has none yet
+        span = event.unlabelled if event is not None else self.horizon
+        return self.lookback + span - 1 if self.purge else 0
 
     @property
     def name(self) -> str:
@@ -739,6 +751,7 @@ class TrainTestCreator:
             rows_read=rows_read,
             rows_unlabelled=rows_unlabelled,
             aux=aux,
+            medians=median[keep],
         )
 
     def _aux(self, labelled: pd.DataFrame) -> Dict[str, np.ndarray]:
@@ -998,6 +1011,11 @@ class TrainTestCreator:
 
         data.coverage.to_csv(os.path.join(directory, "coverage.csv"), index_label="channel")
         data.drift.to_csv(os.path.join(directory, "drift.csv"), index_label="channel")
+        if data.medians is not None:
+            # Not hashed (`model.common.data.hash_dataset` reads the tensors only), so a
+            # dataset saved before this file existed keeps its hash.
+            data.medians.rename("median").to_csv(
+                os.path.join(directory, "feature_medians.csv"), index_label="channel")
 
         with open(os.path.join(directory, "metadata.json"), "w", encoding="utf-8") as fh:
             json.dump(self.metadata(data), fh, indent=2, ensure_ascii=False)
@@ -1078,7 +1096,8 @@ class TrainTestCreator:
                 "test_start_date": str(data.bounds.val_end_date.date()),
                 "distinct_dates": data.bounds.n_dates,
                 "purge_gap_rows": data.purge_gap,
-                "purge_rule": "lookback + horizon - 1 (feature_selection.PurgedWalkForward)",
+                "purge_rule": "lookback + label span - 1 (feature_selection.PurgedWalkForward; "
+                              "the span is h, or h + 1 for an `open`-rule event label)",
                 "date_ranges": {
                     split: [str(data.dates[split][0]), str(data.dates[split][-1])]
                     for split in ("train", "val", "test")

@@ -8815,12 +8815,17 @@ class DataPreprocessor:
         # three cannot drift apart: adding a horizon adds three columns, and there is no
         # way to end up with a `return_5day` whose forward price is the 10-day one.
         price_cols = {h: f"close_adjust_{h}day" for h in horizons}
+        # ⚠️ THE TRADEABLE RETURN (added 2026-09-18): `open_adjust[t+1] -> close[t+h+1]`,
+        # what a decision taken after the close of `t` can actually earn. Its tail is
+        # `h + 1` rows per series, one more than `return_{h}day`'s.
+        open_cols = {h: f"return_open_{h}day" for h in horizons}
         # ⚠️ THE EVENT LABELS (added 2026-09-16). One column per `utils.event_target.
         # EVENT_TARGETS` entry — the configured gain/horizon under both rules. Their
         # horizon is THEIR OWN and need not be one of `UNIFIED_TARGET_HORIZONS`; the
         # tail rule below is applied per column with that horizon.
         event_cols = {e.column: e for e in event_target.EVENT_TARGETS}
-        longest = max(list(horizons) + [e.horizon for e in event_cols.values()])
+        longest = max(list(horizons) + [h + 1 for h in horizons]
+                      + [e.unlabelled for e in event_cols.values()])
         self._logger.log_info(
             f"Ingesting unified {schema}.pool__targets (from {schema}.pool__basic)..."
         )
@@ -8930,10 +8935,20 @@ class DataPreprocessor:
                     f"(LEAD(px, {h}) OVER w)::double precision AS {col}"
                     for h, col in price_cols.items()
                 ]
+                # ⚠️ Bought at the next session's OPEN, carried over by the row's own
+                # adjustment factor (`pool__basic.open` is the RAW price and
+                # `close_adjust` the adjusted one, so the two are never compared across
+                # a split without it), and sold h sessions after the entry.
+                + [
+                    f"(LEAD(px, {h + 1}) OVER w"
+                    f" / NULLIF(LEAD(op, 1) OVER w, 0) - 1.0)"
+                    f"::double precision AS {col}"
+                    for h, col in open_cols.items()
+                ]
                 # ⚠️ Rendered by `EventTarget.sql` over the SAME `WINDOW w`, so an event
                 # label and `return_{h}day` cannot disagree about which session follows
                 # which. NULL exactly where `LEAD(px, h)` is NULL — the same tail.
-                + [f"{e.sql('px', 'w')} AS {col}" for col, e in event_cols.items()]
+                + [f"{e.sql('px', 'w', 'op')} AS {col}" for col, e in event_cols.items()]
             )
             # Dropped as late as possible: a failure above leaves the old table intact.
             #
@@ -8953,6 +8968,8 @@ class DataPreprocessor:
                 f"CREATE TABLE {schema}.pool__targets AS "
                 f"WITH joined AS ("
                 f"  SELECT b.date, b.exchange, b.ticker, b.close_adjust AS px, "
+                f"         (b.open * b.close_adjust "
+                f"          / NULLIF(b.close_raw, 0))::double precision AS op, "
                 f"         m.{self.UNIFIED_BENCHMARK_COLUMN} AS bm "
                 f"  FROM {schema}.pool__basic b "
                 f"  LEFT JOIN {self.UNIFIED_BENCHMARK_TABLE} m ON m.date = b.date"
@@ -8970,6 +8987,7 @@ class DataPreprocessor:
                 list(target_cols.values())
                 + list(relative_cols.values())
                 + list(price_cols.values())
+                + list(open_cols.values())
                 + list(event_cols)
             )
             counts = ", ".join(f"COUNT({col})" for col in ordered)
@@ -9014,13 +9032,57 @@ class DataPreprocessor:
         # emits only 0.0, 1.0 or NULL, so a NULL outside the tail is the one failure
         # left — a NULL or zero close — and this count is what catches it.
         for col, event in event_cols.items():
-            expected_tail = sum(min(event.horizon, n) for n in series_rows)
+            expected_tail = sum(min(event.unlabelled, n) for n in series_rows)
             unlabelled = written - labelled_by_col[col]
+            if event.rule == "open":
+                # ⚠️ The `open` rule reads the NEXT session's OPEN, a scraped price that
+                # `close_adjust` does not vouch for, so a missing or zero open is an
+                # honest extra NULL and the tail is a floor with a ceiling — not the
+                # equality the two close rules are held to. LIQUID: 1,374 against a
+                # 1,368-row tail, six rows with no usable open (2026-09-18).
+                if unlabelled < expected_tail:
+                    raise PipelineError(
+                        f"{schema}.pool__targets has {unlabelled} NULL {col} values, "
+                        f"fewer than the {expected_tail} of its {event.unlabelled}-session "
+                        f"tail — the LEAD ran over a different ordering."
+                    )
+                if unlabelled > expected_tail + 0.02 * written:
+                    raise PipelineError(
+                        f"{schema}.pool__targets has {unlabelled} NULL {col} values "
+                        f"against a {expected_tail}-row tail: more than 2 % of rows have "
+                        f"no usable `pool__basic.open` / `close_raw`."
+                    )
+                if unlabelled > expected_tail:
+                    self._logger.log_info(
+                        f"{schema}.pool__targets: {unlabelled - expected_tail} row(s) "
+                        f"beyond the {event.unlabelled}-session tail carry no {col} — "
+                        f"their next session has no usable open."
+                    )
+                continue
             if unlabelled != expected_tail:
                 raise PipelineError(
                     f"{schema}.pool__targets has {unlabelled} NULL {col} values; "
-                    f"exactly {expected_tail} (the {event.horizon}-session tail) were "
+                    f"exactly {expected_tail} (the {event.unlabelled}-session tail) were "
                     f"expected. Check `pool__basic.close_adjust` for NULLs or zeros."
+                )
+        # ⚠️ The tradeable return reads one session further than `return_{h}day` and is
+        # ALSO NULL wherever the next session's open is missing or zero, so its tail is
+        # a floor rather than an equality — `pool__basic.open` is a scraped price and
+        # `close_raw` its denominator.
+        for h, col in open_cols.items():
+            floor = sum(min(h + 1, n) for n in series_rows)
+            unlabelled = written - labelled_by_col[col]
+            if unlabelled < floor:
+                raise PipelineError(
+                    f"{schema}.pool__targets has {unlabelled} NULL {col} values, fewer "
+                    f"than the {floor} of the {h + 1}-session tail — the LEAD ran over a "
+                    f"different ordering."
+                )
+            if unlabelled > floor + 0.02 * written:
+                raise PipelineError(
+                    f"{schema}.pool__targets has {unlabelled} NULL {col} values against "
+                    f"a {floor}-row tail: more than 2 % of rows have no usable "
+                    f"`pool__basic.open` / `close_raw`."
                 )
         # ⚠️ The relative column loses its own tail PLUS every row a benchmark gap
         # touches: a missing `B[t]` kills row `t`, and a missing `B[t+h]` kills row

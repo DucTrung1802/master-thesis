@@ -749,11 +749,17 @@ def build_all(
     include_tables: Optional[Sequence[str]] = None,
     channels: str = "shortlist",
     tables: Optional[Sequence[str]] = None,
+    schemas: Optional[Sequence[str]] = None,
 ) -> pd.DataFrame:
     """Plan every table and, with `apply=True`, create it. Returns one row per plan.
 
     `tables` keeps the build to the named tables — a root holding two setups' runs (d=20
     and d=1) plans both, and a chain building ITS table must not rebuild the other one.
+
+    ⚠️ `schemas` keeps it to the named schemas (`FNS-1`). A table NAME carries the target,
+    `d`, `h` and the scope but no ticker, so a root holding VCB's, MBB's and LIQUID's runs
+    plans the same name in all three schemas — and a LIQUID build with `tables=` alone
+    created `unified_schema_vcb/mbb.…__bsk` beside its own (2026-09-17).
     """
     if channels not in CHANNEL_MODES:
         raise ValueError(f"channels {channels!r} is not one of {CHANNEL_MODES}.")
@@ -768,6 +774,10 @@ def build_all(
         plans = [p for p in plans if p.table in set(tables)]
         if not plans:
             raise ValueError(f"no plan under {root} builds any of {list(tables)}.")
+    if schemas is not None:
+        plans = [p for p in plans if p.schema in set(schemas)]
+        if not plans:
+            raise ValueError(f"no plan under {root} builds a table in {list(schemas)}.")
     results = []
 
     by_schema: Dict[str, List[FinalTablePlan]] = {}

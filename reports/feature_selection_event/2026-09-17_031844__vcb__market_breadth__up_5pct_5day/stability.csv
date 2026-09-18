@@ -1,8 +1,0 @@
-channel,fold 1,fold 2,fold 3,fold 4,fold 5
-mkt_xs_kurt5,7.0,4.0,4.0,1.0,1.0
-mkt_log_turnover,4.0,1.0,2.0,3.0,2.0
-mkt_xs_disp5,5.0,2.0,1.0,5.0,4.0
-mkt_xs_skew5,3.0,7.0,6.0,7.0,6.0
-mkt_hhi_turnover,2.0,6.0,5.0,6.0,7.0
-mkt_turnover_z,6.0,5.0,7.0,4.0,5.0
-mkt_xs_mean5,1.0,3.0,3.0,2.0,3.0

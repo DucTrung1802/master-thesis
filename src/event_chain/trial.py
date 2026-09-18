@@ -75,6 +75,7 @@ CODE_FILES = (
     "src/model/forest/model.py",
     "src/model/event_linear/model.py",
     "src/model/event_panel/model.py",
+    "src/model/event_boost/model.py",
     "src/model/lstm/model.py",
     "src/model/gru/model.py",
     "src/model/cnn/model.py",
@@ -82,6 +83,7 @@ CODE_FILES = (
     "src/model/tcn/model.py",
     "src/result_evaluator/*.py",
     "src/orchestration/preprocessor/preprocessor.py",
+    "src/backtest/portfolio.py",
 )
 
 # ONE ROW PER MODEL RUN. Grouped: key | data | features | target | split | model | run time
@@ -111,6 +113,16 @@ LOG_COLUMNS = [
     "test_auc_rolling_refit", "test_auc_rolling_refit_null_p95",
     "test_pr_auc", "test_precision_top10pct", "test_brier_skill",
     "test_precision_at_val_threshold", "test_recall_at_val_threshold", "chosen_on_val",
+    # ⚠️ BASKET setups only (2026-09-17, `event_chain.basket`) — blank for a single-ticker trial:
+    # the share of each session's top-k that hit, its buyable base rate, the random-basket null,
+    # the basket's h-session return against the universe's, and the non-overlapping track.
+    "top_k", "val_hit_at_k", "test_hit_at_k", "test_base_rate_buyable", "test_hit_null_p95",
+    "test_hit_null_max", "test_hit_z", "test_all_hit", "test_basket_return", "test_universe_return",
+    "test_daily_auc", "test_sharpe_50bps", "test_cagr_50bps", "test_hit_refit_train_val",
+    "test_hit_rolling_refit", "test_sharpe_50bps_rolling_refit",
+    # the val-chosen P(event) cut (at most k names, possibly none), on the chosen row only
+    "min_prob", "test_cut_active_share", "test_cut_precision", "test_cut_basket_return",
+    "test_cut_sharpe_50bps", "test_cut_precision_rolling_refit", "test_cut_sharpe_50bps_rolling_refit",
 ]
 
 
@@ -415,7 +427,19 @@ def record(chain, built: Dict, notes: str = "",
 
     significant = None
     verdict = "no eligible model"
-    if best is not None:
+    basket = built.get("basket")
+    if best is not None and basket:
+        significant = bool(best.get("test_hit", np.nan) > best.get("test_hit_bar", np.nan))
+        verdict = (
+            f"best on val `{best['run_name'].split('__')[0]}`: val hit@{basket['top_k']} "
+            f"{best['val_hit']:.3f}, test hit {best['test_hit']:.3f} vs buyable base "
+            f"{best['test_base']:.3f} and a random-basket null p95 {best['test_hit_bar']:.3f} "
+            f"(max {best['test_hit_null_max']:.3f}, z {best['test_hit_z']:+.2f}); basket return "
+            f"{best['test_bret']:+.4f} vs universe {best['test_uret']:+.4f} per {chain.horizon} sessions — "
+            + ("CLEARS the per-run null (the grid is not priced, NUL-1)." if significant
+               else "does NOT clear the null: no demonstrated skill on test.")
+        )
+    elif best is not None:
         significant = bool(best.get("test_auc", np.nan) > best.get("test_auc_bar", np.nan))
         verdict = (
             f"best on val `{best['run_name'].split('__')[0]}`: val AUC {best['val_auc']:.3f}, "
@@ -472,6 +496,14 @@ def record(chain, built: Dict, notes: str = "",
                     "target": meta.get("target"), "features": meta.get("features"),
                     "imputation": meta.get("imputation"), "drift": meta.get("drift"),
                     "shapes": meta.get("shapes"), "created_at": meta.get("created_at_tz")},
+        "basket": ({**basket, "null_draws": C.BASKET_NULL_DRAWS,
+                    "refit_sessions": C.BASKET_REFIT_SESSIONS, "costs": list(C.BASKET_COSTS),
+                    "best_rule": f"max {C.BASKET_CHOOSE_ON} (the other val metrics break a tie), "
+                                 f"excluding BASELINE_PRIOR",
+                    "entry_screen": ("no name at its exchange ceiling on N (PRF-0)" if C.BASKET_EXCLUDE_CEILING
+                                     else "none: a name at its ceiling on N is bought"),
+                    "min_prob_rule": (f"max val {C.BASKET_MIN_PROB_ON} over {len(C.BASKET_MIN_PROB_GRID)} cuts, "
+                                      f">= {C.BASKET_MIN_ACTIVE} active val sessions")} if basket else None),
         "report_config": {"null_draws": C.REPORT_NULL_DRAWS,
                           "null_block": int(dataset.lookback + chain.horizon),
                           "best_rule": "max VAL ROC-AUC, excluding BASELINE_PRIOR and BLEND "
@@ -494,7 +526,14 @@ def record(chain, built: Dict, notes: str = "",
     if isinstance(wf, pd.DataFrame) and not wf.empty:
         wf.to_csv(os.path.join(folder, "walkforward.csv"), index=False)
     predictions = _predictions(board, runs_dir)
-    if not predictions.empty:
+    if basket and not predictions.empty:
+        # ⚠️ A PANEL'S PREDICTIONS ARE ~2M ROWS LONG: one column per run, gzipped, so the
+        # trial still outlives its run folders (`RPR-1`) without a 60 MB file in git.
+        wide = predictions.assign(run=predictions["run_name"].str.split("__").str[0]).pivot_table(
+            index=["split", "date", "ticker", "y_true"], columns="run", values="y_prob", aggfunc="first")
+        wide.reset_index().to_csv(os.path.join(folder, "predictions_wide.csv.gz"), index=False,
+                                  float_format="%.5g", compression="gzip")
+    elif not predictions.empty:
         # 6 significant digits: re-scorable to 1e-6, and half the bytes of repr floats.
         predictions.to_csv(os.path.join(folder, "predictions.csv"), index=False,
                            float_format="%.6g")
@@ -542,10 +581,13 @@ def log_rows(body: Dict) -> List[Dict]:
         device = m.get("device") or config.get("device")
         run_id = m.get("run_id")
         if ensemble:
-            members = [by_name.get(n) or {} for n in str(em.get("ensemble_members", "")).split(",") if n]
+            listed = [n for n in str(em.get("ensemble_members", "")).split(",") if n]
+            # ⚠️ A member listed twice is WEIGHTED twice; its time is counted once.
+            members = [by_name.get(n) or {} for n in dict.fromkeys(listed)]
             run_id = f"{m.get('run_name')}__{body['trial']['id']}"
-            config = {"model": {"combine": "geometric mean of member probabilities",
-                                "members": [str(x.get("run_name", "")).split("__")[0] for x in members]}}
+            config = {"model": {"combine": "geometric mean of member probabilities (a member listed "
+                                           "twice counts twice)",
+                                "members": [n.split("__")[0] for n in listed]}}
             member_timing = [x.get("timing") or {} for x in members]
             timing = {k: round(sum((t.get(k) or 0) for t in member_timing), 3)
                       for k in ("run_seconds", "fit_seconds")}
@@ -599,8 +641,40 @@ def log_rows(body: Dict) -> List[Dict]:
             "test_precision_at_val_threshold": _r(em.get("test_precision_at_thr")),
             "test_recall_at_val_threshold": _r(em.get("test_recall_at_thr")),
             "chosen_on_val": m.get("run_name") == best.get("run_name"),
+            **_basket_cells(body, em, m.get("run_name") == best.get("run_name")),
         })
     return rows
+
+
+def _basket_cells(body: Dict, em: Dict, chosen: bool = False) -> Dict:
+    if not body.get("basket"):
+        return {}
+    summary = body["basket"].get("min_prob_summary") or {}
+    frozen, rolling = summary.get("frozen") or {}, summary.get("rolling") or {}
+    cut = ({"min_prob": body["basket"].get("min_prob"),
+            "test_cut_active_share": _r(frozen.get("active_share")),
+            "test_cut_precision": _r(frozen.get("precision")),
+            "test_cut_basket_return": _r(frozen.get("bret"), 5),
+            "test_cut_sharpe_50bps": _r(frozen.get("sharpe"), 3),
+            "test_cut_precision_rolling_refit": _r(rolling.get("precision")),
+            "test_cut_sharpe_50bps_rolling_refit": _r(rolling.get("sharpe"), 3)} if chosen and summary else {})
+    return {
+        **cut,
+        "top_k": body["basket"].get("top_k"),
+        "val_hit_at_k": _r(em.get("val_hit")), "test_hit_at_k": _r(em.get("test_hit")),
+        "test_base_rate_buyable": _r(em.get("test_base")),
+        "test_hit_null_p95": _r(em.get("test_hit_bar")), "test_hit_null_max": _r(em.get("test_hit_null_max")),
+        "test_hit_z": _r(em.get("test_hit_z"), 2), "test_all_hit": _r(em.get("test_all_hit")),
+        "test_basket_return": _r(em.get("test_bret"), 5), "test_universe_return": _r(em.get("test_uret"), 5),
+        "test_daily_auc": _r(em.get("test_daily_auc")),
+        "test_sharpe_50bps": _r(em.get("test_sharpe_50"), 3), "test_cagr_50bps": _r(em.get("test_cagr_50")),
+        "test_hit_refit_train_val": _r(em.get("refit_hit")),
+        "test_hit_rolling_refit": _r(em.get("rolling_hit")),
+        "test_sharpe_50bps_rolling_refit": _r(em.get("rolling_sharpe_50"), 3),
+        # a basket's `test_beats_null` is its hit rate against the random-basket null
+        "test_beats_null": (None if em.get("test_hit") is None or em.get("test_hit_bar") is None
+                            else bool(em["test_hit"] > em["test_hit_bar"])),
+    }
 
 
 def rebuild_log() -> pd.DataFrame:
