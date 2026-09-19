@@ -365,8 +365,19 @@ def _frozen_rounds(runs_dir: str, row) -> Optional[int]:
 
 
 def _stacked(dataset):
-    """All three splits concatenated in date order, with dates and every auxiliary target."""
-    X = np.concatenate([dataset.X_train, dataset.X_val, dataset.X_test]).astype(float)
+    """All three splits concatenated in date order, with dates and every auxiliary target.
+
+    ⚠️ **THE DATASET'S OWN DTYPE, AND ITS SPLITS RE-POINTED AT THE STACK** (2026-09-19). This
+    used to `.astype(float)` the concatenation — **7.9 GiB at d=10** beside the 3.95 GiB of
+    float32 splits it was built from, on a 15.6 GB machine. The stack keeps the dataset's
+    float32 (each estimator casts what it needs: a tree rounds to float32 anyway, a linear
+    model casts its last row), and `dataset.X_*` become VIEWS into it so the originals can
+    be freed — the same bytes in the same order, held once instead of twice.
+    """
+    X = np.concatenate([dataset.X_train, dataset.X_val, dataset.X_test])
+    n_tr, n_va = len(dataset.X_train), len(dataset.X_val)
+    dataset.X_train, dataset.X_val, dataset.X_test = (
+        X[:n_tr], X[n_tr:n_tr + n_va], X[n_tr + n_va:])
     y = np.concatenate([dataset.y_train, dataset.y_val, dataset.y_test]).astype(int)
     dates = np.concatenate([dataset.dates_train, dataset.dates_val, dataset.dates_test])
     split = np.array(["train"] * len(dataset.y_train) + ["val"] * len(dataset.y_val)
@@ -374,6 +385,19 @@ def _stacked(dataset):
     aux = {c: np.concatenate([a["train"], a["val"], a["test"]]).astype(float)
            for c, a in (getattr(dataset, "aux", {}) or {}).items()}
     return X, y, dates, split, aux
+
+
+def _rows(a: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """`a[mask]`, as a VIEW when the mask is one contiguous run of rows.
+
+    ⚠️ Every mask in this module is one — train+val is a prefix, a rolling block and the
+    test split are contiguous — and a boolean index COPIES: at d=10 the train+val window
+    alone is 3.1 GiB. A view hands the estimator the same rows in the same order.
+    """
+    idx = np.flatnonzero(mask)
+    if len(idx) and idx[-1] - idx[0] + 1 == len(idx):
+        return a[idx[0]:idx[-1] + 1]
+    return a[mask]
 
 
 def _fit_score(module, arch, dataset, X, y, dates, aux, fit_mask, score_mask) -> np.ndarray:
@@ -386,8 +410,8 @@ def _fit_score(module, arch, dataset, X, y, dates, aux, fit_mask, score_mask) ->
     if hasattr(est, "set_fit_context"):
         column = getattr(est, "aux_target", None)
         est.set_fit_context(dates=dates[fit_mask], aux=aux[column][fit_mask] if column in aux else None)
-    est.fit(X[fit_mask], y[fit_mask])
-    logit = np.asarray(est.predict_logit(X[score_mask]), dtype=float)
+    est.fit(_rows(X, fit_mask), y[fit_mask])
+    logit = np.asarray(est.predict_logit(_rows(X, score_mask)), dtype=float)
     return 1.0 / (1.0 + np.exp(-logit))
 
 

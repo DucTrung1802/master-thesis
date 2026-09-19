@@ -23,9 +23,17 @@ import numpy as np
 WINDOW_STATS = ("last", "mean", "slope", "sd", "min", "max")
 
 
-def window_statistics(X: np.ndarray) -> np.ndarray:
+def window_statistics(X: np.ndarray, dtype=None, chunk_rows: int = 16384) -> np.ndarray:
     """`(n, d, f)` → `(n, f*6)`: last, mean, slope, sd, min, max per channel — and
     `(n, f)` at `d = 1`, where the six collapse to one.
+
+    `dtype` is the OUTPUT's; `None` keeps float64 (every caller before 2026-09-19).
+    ⚠️ **A TREE ASKS FOR `np.float32`, AND THAT CHANGES NO NUMBER IT SEES**: XGBoost stores
+    features as float32 and sklearn's trees cast `X` to float32 before splitting, so a
+    float64 design handed to either was rounded to float32 on the way in. Rounding here
+    instead — numpy and both libraries round to nearest-even — hands the trees the same
+    values at half the memory, and `test_features` pins that the two designs agree bit for
+    bit after the cast. A LINEAR model does not cast, so it keeps the float64 default.
 
     ⚠️ **AT `d = 1` THE SIX STATISTICS ARE ONE** (`WST-1`, fixed 2026-09-19). A one-row
     window has no dispersion and no trend: `last`, `mean`, `min` and `max` are the same
@@ -46,24 +54,40 @@ def window_statistics(X: np.ndarray) -> np.ndarray:
     n, d, f = X.shape
     if d == 1:
         # see the docstring: the other five statistics are this column, 0, or undefined
-        return X[:, -1, :]
+        last = X[:, -1, :]
+        return last if dtype is None else np.asarray(last, dtype=dtype)
     t = np.arange(d, dtype=float)
     t_centred = t - t.mean()
     denom = float((t_centred ** 2).sum()) or 1.0
-    slope = np.tensordot(
-        X - X.mean(axis=1, keepdims=True), t_centred, axes=([1], [0])
-    ) / denom
-    return np.concatenate(
-        [
-            X[:, -1, :],
-            X.mean(axis=1),
-            slope,
-            X.std(axis=1),
-            X.min(axis=1),
-            X.max(axis=1),
-        ],
-        axis=1,
-    )
+    # ⚠️ **ROW BLOCKS INTO A PREALLOCATED OUTPUT, AND THE ARITHMETIC IS STILL float64.**
+    # The one-shot version held FOUR full-size copies at once — the caller's float64 `X`,
+    # `X - mean` (a second), `tensordot`'s transposed reshape (a third) and the six stats
+    # before `concatenate` joined them into a fourth — and on the d=10 basket panel
+    # (416,135 x 10 x 151) that is `Unable to allocate 4.68 GiB` on a 15.6 GB machine
+    # (2026-09-19, the forest's fit). Every statistic here is computed PER ROW, so a block
+    # of rows gives the same numbers as the whole array; each block is upcast to float64
+    # first, so float32 input computes exactly what a float64 cast of it did.
+    out_dtype = np.float64 if dtype is None else dtype
+    out = np.empty((n, f * len(WINDOW_STATS)), dtype=out_dtype)
+    for start in range(0, n, chunk_rows):
+        stop = min(start + chunk_rows, n)
+        block = np.asarray(X[start:stop], dtype=np.float64)
+        mean = block.mean(axis=1)
+        # ⚠️ **AN EXPLICIT SUM IN A FIXED ORDER, NOT `tensordot`** (2026-09-19). `tensordot`
+        # hands the sum to BLAS, whose accumulation order depends on the MATRIX SIZE: the
+        # same row's slope came out different in the last bits on a 16,384-row block and
+        # on the whole array (up to 5.6e-17 absolute, where the slope nearly cancels). So
+        # the old one-shot version was never a pure function of the row either — a row
+        # scored inside `train` and again inside `train + val` (the report's refit) could
+        # differ. Summing `t_centred[i] * (x_i - mean)` over `i` in index order makes it one.
+        slope = np.zeros_like(mean)
+        for i in range(d):
+            slope += t_centred[i] * (block[:, i, :] - mean)
+        slope /= denom
+        for k, stat in enumerate((block[:, -1, :], mean, slope, block.std(axis=1),
+                                  block.min(axis=1), block.max(axis=1))):
+            out[start:stop, k * f:(k + 1) * f] = stat
+    return out
 
 
 def stat_names(feature_columns) -> list:

@@ -56,6 +56,12 @@ KINDS = ("et", "rf", "xgbrf")
 class ForestWindow:
     """`.fit(X, y)` / `.predict(X)` / `.predict_logit(X)` over `(n, lookback, n_features)`."""
 
+    # ⚠️ The engine hands this model its window in the DATASET's float32 rather than a
+    # float64 copy (4.68 GiB at d=10). A tree rounds its input to float32 anyway, and
+    # `window_statistics` upcasts each row block to float64 before any arithmetic, so the
+    # copy bought nothing but the out-of-memory on 2026-09-19.
+    input_dtype = np.float32
+
     def __init__(self, n_features: int, lookback: int, kind: str = "et",
                  n_estimators: int = 500, min_samples_leaf: int = 20,
                  max_features: float = 0.3, max_depth=None, class_weight=None,
@@ -116,7 +122,7 @@ class ForestWindow:
         else:
             cls = ExtraTreesRegressor if self.kind == "et" else RandomForestRegressor
             self.model_ = cls(**self.params)
-        self.model_.fit(window_statistics(X), y)
+        self.model_.fit(window_statistics(X, dtype=np.float32), y)
         # Decision nodes, the same capacity measure `model.gbt` reports.
         self.n_params = int(sum(t.tree_.node_count - t.tree_.n_leaves
                                 for t in self.model_.estimators_))
@@ -127,7 +133,7 @@ class ForestWindow:
 
         if self.task != "classification":
             raise RuntimeError("kind 'xgbrf' is a classifier; the basket grid is the only caller")
-        Z = window_statistics(X)
+        Z = window_statistics(X, dtype=np.float32)
         self.model_ = xgb.XGBClassifier(objective="binary:logistic", eval_metric="logloss",
                                         **self.params)
         self.model_.fit(Z, np.asarray(y).ravel())
@@ -140,13 +146,13 @@ class ForestWindow:
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        return self.model_.predict(window_statistics(X))
+        return self.model_.predict(window_statistics(X, dtype=np.float32))
 
     def predict_logit(self, X: np.ndarray) -> np.ndarray:
         """Log-odds of the forest's vote share, clipped so a unanimous leaf is finite."""
         if self.task != "classification":
             raise RuntimeError("predict_logit on a regression forest")
-        p = np.clip(self.model_.predict_proba(window_statistics(X))[:, 1], 1e-4, 1 - 1e-4)
+        p = np.clip(self.model_.predict_proba(window_statistics(X, dtype=np.float32))[:, 1], 1e-4, 1 - 1e-4)
         return np.log(p / (1.0 - p))
 
     def provenance(self) -> dict:

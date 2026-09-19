@@ -223,3 +223,18 @@ def test_a_pooled_auc_can_be_paid_for_timing_the_within_session_one_cannot():
     per = B.sessions(frame, 5)
     assert out["auc_null_mean"] > 0.6          # the pooled null itself is paid for timing
     assert float(np.nanmean(per["daily_auc"])) == pytest.approx(0.5, abs=1e-9)
+
+
+def test_rows_is_a_view_on_a_contiguous_mask_and_a_copy_otherwise():
+    """⚠️ At d=10 the train+val window alone is 3.1 GiB, and a boolean index COPIES it."""
+    import numpy as np
+
+    from event_chain.report import _rows
+
+    a = np.arange(40.0).reshape(10, 4)
+    prefix = np.arange(10) < 6
+    view = _rows(a, prefix)
+    assert np.shares_memory(view, a) and np.array_equal(view, a[prefix])
+    gappy = np.array([True, False] * 5)
+    assert not np.shares_memory(_rows(a, gappy), a)
+    assert np.array_equal(_rows(a, gappy), a[gappy])

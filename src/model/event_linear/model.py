@@ -111,7 +111,10 @@ class EventLinear:
 
     # ------------------------------------------------------------- design
     def _design(self, X: np.ndarray) -> np.ndarray:
-        Z = np.asarray(X, dtype=float)[:, -1, :][:, self.index_]
+        # ⚠️ SLICE, THEN CAST: casting the whole `(n, d, f)` window first built a float64 copy
+        # of every row's history to read its LAST row (4.68 GiB at d=10, train only). The
+        # cast is exact per element, so the order changes the memory and no number.
+        Z = np.asarray(np.asarray(X)[:, -1, :], dtype=float)[:, self.index_]
         return np.clip(np.nan_to_num(Z, nan=0.0, posinf=self.clip, neginf=-self.clip),
                        -self.clip, self.clip)
 

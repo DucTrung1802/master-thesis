@@ -47,6 +47,12 @@ class GBTRegressor:
     # `set_dataset` says what that costs.
     needs_dataset = True
 
+    # ⚠️ The engine hands this model its window in the DATASET's float32 rather than a
+    # float64 copy (4.68 GiB at d=10). A tree rounds its input to float32 anyway, and
+    # `window_statistics` upcasts each row block to float64 before any arithmetic, so the
+    # copy bought nothing but the out-of-memory on 2026-09-19.
+    input_dtype = np.float32
+
     def __init__(self, n_features: int, lookback: int, max_depth: int = 3,
                  n_estimators: int = 200, learning_rate: float = 0.05,
                  subsample: float = 0.8, colsample_bytree: float = 0.8,
@@ -137,10 +143,10 @@ class GBTRegressor:
     def fit(self, X: np.ndarray, y: np.ndarray) -> "GBTRegressor":
         from xgboost import XGBClassifier, XGBRegressor
 
-        design = window_statistics(X)
+        design = window_statistics(X, dtype=np.float32)
         fit_kwargs = {}
         if self._val_X is not None and self.early_stopping_rounds:
-            self._val_design = window_statistics(np.asarray(self._val_X, dtype=float))
+            self._val_design = window_statistics(self._val_X, dtype=np.float32)
             y_val = (self._val_y >= 0.5).astype(int) if self.task == "classification" \
                 else self._val_y
             # ⚠️ TRAIN FIRST, VAL SECOND: `evals_result` keys on position
@@ -171,13 +177,13 @@ class GBTRegressor:
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        return self.model_.predict(window_statistics(X))
+        return self.model_.predict(window_statistics(X, dtype=np.float32))
 
     def predict_logit(self, X: np.ndarray) -> np.ndarray:
         """The MARGIN (log-odds), which `engine._write_predictions` sigmoids once."""
         if self.task != "classification":
             raise RuntimeError("predict_logit on a regression GBT")
-        return self.model_.predict(window_statistics(X), output_margin=True)
+        return self.model_.predict(window_statistics(X, dtype=np.float32), output_margin=True)
 
     def importances(self, feature_columns) -> "dict":
         """`{stat__channel: gain}` — which window statistic of which channel the trees used."""

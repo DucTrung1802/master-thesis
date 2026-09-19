@@ -84,3 +84,35 @@ def test_a_one_row_window_is_the_row_itself_on_both_implementations():
     # and a real window is untouched: six statistics, in the documented order
     wide = window_statistics(rng.normal(size=(64, 5, 7)))
     assert wide.shape == (64, 42)
+
+
+def test_window_statistics_is_a_pure_function_of_the_row():
+    """⚠️ The `tensordot` version summed in BLAS order, which depends on the MATRIX SIZE.
+
+    Measured 2026-09-19: a 16,384-row block and the whole array disagreed in the last bits
+    of `slope` (up to 5.6e-17) — so a row scored inside `train` and again inside
+    `train + val` (the report's refit) was not guaranteed the same design. The fixed-order
+    sum makes chunk size and neighbours irrelevant, bit for bit.
+    """
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(5_003, 10, 7)).astype(np.float32)
+    whole = window_statistics(X, chunk_rows=5_003)
+    for rows in (1, 7, 1024):
+        assert np.array_equal(window_statistics(X, chunk_rows=rows), whole)
+    assert np.array_equal(window_statistics(X[100:300]), whole[100:300])
+
+
+def test_float32_design_is_the_float64_design_rounded():
+    """A tree asks for float32 — which is what XGBoost and sklearn round its input to."""
+    rng = np.random.default_rng(1)
+    X = rng.normal(size=(2_000, 10, 5)).astype(np.float32)
+    assert np.array_equal(window_statistics(X, dtype=np.float32),
+                          window_statistics(X).astype(np.float32))
+    assert window_statistics(X, dtype=np.float32).dtype == np.float32
+
+
+def test_float32_input_computes_what_a_float64_cast_of_it_did():
+    """Each row block is upcast before any arithmetic, so the engine's copy bought nothing."""
+    rng = np.random.default_rng(2)
+    X = rng.normal(size=(3_000, 10, 6)).astype(np.float32)
+    assert np.array_equal(window_statistics(X), window_statistics(X.astype(np.float64)))

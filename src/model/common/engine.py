@@ -423,7 +423,13 @@ def train_estimator(
         if callable(getattr(estimator, "set_task", None)):
             estimator.set_task(task)
 
-    X_train = np.asarray(dataset.X_train, dtype=float)
+    # ⚠️ **THE WINDOW'S DTYPE IS THE ESTIMATOR'S CALL** (`input_dtype`, default float64 as
+    # before). A tree declares float32: it rounds its input to float32 inside XGBoost or
+    # sklearn regardless, and the float64 copy made here was 4.68 GiB at d=10 — the first
+    # half of the out-of-memory that killed the basket forest on 2026-09-19. A linear
+    # model keeps float64 because it does its arithmetic in whatever it is handed.
+    in_dtype = getattr(estimator, "input_dtype", float)
+    X_train = np.asarray(dataset.X_train, dtype=in_dtype)
     y_train = np.asarray(dataset.y_train, dtype=float).ravel()
     if classify:
         # The dataset holds the raw 0/1 (`_verify` refused a target scaler above).
@@ -437,7 +443,7 @@ def train_estimator(
     raw = estimator.predict_logit if classify else estimator.predict
 
     def predict(split: str) -> np.ndarray:
-        X = np.asarray(getattr(dataset, f"X_{split}"), dtype=float)
+        X = np.asarray(getattr(dataset, f"X_{split}"), dtype=in_dtype)
         return np.asarray(raw(X), dtype=float).ravel()
 
     fitted = np.asarray(raw(X_train), dtype=float).ravel()
