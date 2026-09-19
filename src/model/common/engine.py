@@ -379,13 +379,21 @@ def train_estimator(
     # `run_seconds` the whole run including the 200-draw scoring — the trial log reads both.
     run_started = time.perf_counter()
     run = RunDir.create(base_dir=runs_dir, run_name=config["run_name"], config=config)
-    run.update_metadata(dataset=dataset.reference(), device="cpu", lineage=lineage)
 
     spec = model_spec(config)
     arch = model_module.arch_dict(
         n_features=dataset.n_features, lookback=dataset.lookback, **spec
     )
     estimator = model_module.build_model(**arch["kwargs"])
+    # ⚠️ THE DEVICE IS THE ESTIMATOR'S, AND THIS LINE USED TO HARD-CODE `"cpu"` (fixed
+    # 2026-09-19). Every model on this path is sklearn-shaped, but three of them are
+    # XGBoost underneath and take `device="cuda"` from their config, so the run folder and
+    # the trial log were recording `cpu` for fits that ran on the card. A device is part of
+    # the experimental setup for any SAMPLED XGBoost (`model/gbt/model.py`), so a metadata
+    # field that cannot be wrong about it is the point of having one.
+    est_device = str(getattr(estimator, "device", None)
+                     or (getattr(estimator, "params", {}) or {}).get("device") or "cpu")
+    run.update_metadata(dataset=dataset.reference(), device=est_device, lineage=lineage)
     # ⚠️ An estimator that must express a value in the ORIGINAL target units needs the
     # scaler, because everything here works in the scaled space and
     # `_write_predictions` inverts on the way out. `baseline.ZeroPredictor` is the case:
@@ -411,7 +419,7 @@ def train_estimator(
     estimator.fit(X_train, y_train)
     fit_seconds = time.perf_counter() - fit_started
     n_params = int(getattr(estimator, "n_params", 0))
-    print(f"device    cpu   parameters {n_params:,}")
+    print(f"device    {est_device}   parameters {n_params:,}")
 
     raw = estimator.predict_logit if classify else estimator.predict
 

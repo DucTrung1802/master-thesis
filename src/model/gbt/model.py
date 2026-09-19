@@ -17,9 +17,16 @@ here too.
 ⚠️ **`subsample`/`colsample` make the GPU and the CPU disagree.** `feature_selection`
 CONTEXT §5 measured it: with sampling on, XGBoost draws from a different RNG stream on
 CUDA, 4,189 of 8,280 nodes pick a different feature, and the kept feature set changes.
-This runs on **CPU** with a pinned seed so the run is reproducible; the design is 24
-columns, which is far too little work per kernel launch for a GPU to help anyway
-(measured: 21.2 s CUDA vs 12.3 s host on a comparable narrow pool).
+**`device` is therefore part of the experimental setup and is recorded on the run** —
+pin one before quoting a number, and never compare a CUDA run to a host one as though
+the seed made them the same model.
+
+⚠️ **THE DEFAULT IS `cpu` AND THE REASON IT GIVES EXPIRED** (2026-09-19). It used to read
+*"the design is 24 columns, far too little work per kernel launch"*, citing 21.2 s CUDA
+against 12.3 s host on a 27-column pool — true there and **false on the basket panel,
+which is 151 columns and 420k rows**. The default stays `cpu` because the narrow callers
+are still narrow; the basket's own configs pass `device="cuda"` (`event_chain/config.py`),
+which is how a width-dependent choice belongs in the CONFIG rather than in this file.
 """
 
 from __future__ import annotations
@@ -41,7 +48,7 @@ class GBTRegressor:
                  subsample: float = 0.8, colsample_bytree: float = 0.8,
                  min_child_weight: float = 5.0, reg_lambda: float = 1.0,
                  random_state: int = 42, gamma: float = 0.0,
-                 scale_pos_weight: float = 1.0):
+                 scale_pos_weight: float = 1.0, device: str = "cpu"):
         self.n_features = int(n_features)
         # ⚠️ `task` is set by the ENGINE (`set_task`), never by the config: the config's
         # own `task:` field is the one authority, and a second copy inside `model:` could
@@ -58,8 +65,8 @@ class GBTRegressor:
             reg_lambda=float(reg_lambda),
             gamma=float(gamma),
             random_state=int(random_state),
-            # ⚠️ CPU, deliberately. See the module docstring.
-            device="cpu",
+            # ⚠️ The CALLER's choice — see the module docstring on what it changes.
+            device=str(device),
             tree_method="hist",
             n_jobs=0,
         )

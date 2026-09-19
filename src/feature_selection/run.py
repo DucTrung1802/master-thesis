@@ -102,6 +102,10 @@ ALL_TARGETS = [
     "return_open_5day",
     "return_open_10day",
     "return_open_20day",
+    # ⚠️ the same trade sold one session earlier — `hold`, what the user actually trades
+    "return_hold_5day",
+    "return_hold_10day",
+    "return_hold_20day",
 ] + [e.column for e in event_target.EVENT_TARGETS]
 # ⚠️ **THE BINARY EVENT LABELS ARE APPENDED FROM `utils.event_target`, NOT SPELLED HERE**
 # (2026-09-16). `up_<g>pct_<h>day` is `1[close[t+h] >= (1+g)·close[t]]` — the answer as a

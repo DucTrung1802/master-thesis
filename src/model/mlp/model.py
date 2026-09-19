@@ -30,7 +30,8 @@ N_WINDOW_STATS = 6
 
 
 def window_statistics_torch(x: torch.Tensor) -> torch.Tensor:
-    """`(b, d, f)` → `(b, f*6)`, matching `common.features.window_statistics` exactly.
+    """`(b, d, f)` → `(b, f*6)`, matching `common.features.window_statistics` exactly —
+    including its `(b, f)` collapse at `d = 1` (`WST-1`).
 
     ⚠️ Same `[stat][channel]` column order and the same closed-form `slope`. A second
     implementation of one definition is a drift risk (issue **TGT-1**'s shape), and it
@@ -38,6 +39,8 @@ def window_statistics_torch(x: torch.Tensor) -> torch.Tensor:
     `test_mlp.py` pins the two to agree.
     """
     b, d, f = x.shape
+    if d == 1:
+        return x[:, -1, :]
     t = torch.arange(d, dtype=x.dtype, device=x.device)
     t_centred = t - t.mean()
     denom = (t_centred ** 2).sum().clamp_min(1e-12)

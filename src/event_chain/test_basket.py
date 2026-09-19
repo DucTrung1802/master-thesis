@@ -165,3 +165,38 @@ def test_the_cut_is_chosen_on_ev_among_cuts_that_trade(monkeypatch):
     monkeypatch.setattr(C, "BASKET_MIN_ACTIVE", 25)
     assert B.choose_min_prob(table) == 0.2   # 0.6 trades 3 sessions; the tie goes to the fuller basket
     assert B.choose_min_prob(table.assign(active=1)) == 0.0
+
+
+def test_the_board_is_chosen_on_the_within_session_auc(monkeypatch):
+    """⚠️ `BASKET_CHOOSE_ON` decides, and the default is the WITHIN-SESSION AUC.
+
+    A pooled AUC also ranks name-sessions ACROSS sessions, which no basket trades, so a row
+    that wins on `val_auc` and loses on `val_daily_auc` must NOT be chosen by default.
+    """
+    board = pd.DataFrame({
+        "run_name": ["pooled__a", "daily__b"], "model_type": ["GBT", "GBT"],
+        "val_auc": [0.70, 0.60], "val_daily_auc": [0.55, 0.65], "val_hit": [0.30, 0.30]})
+    assert C.BASKET_CHOOSE_ON == "val_daily_auc"
+    assert B._selection_key(board).iloc[0]["run_name"] == "daily__b"
+    assert B.best_on_val(B._selection_key(board))["run_name"] == "daily__b"
+    monkeypatch.setattr(C, "BASKET_CHOOSE_ON", "val_auc")
+    assert B._selection_key(board).iloc[0]["run_name"] == "pooled__a"
+
+
+def test_a_pooled_auc_can_be_paid_for_timing_the_within_session_one_cannot():
+    """The gap between the two AUCs is the part of the ranking a basket cannot trade."""
+    rows = []
+    for d in range(40):                       # half the sessions are eventful, half are not
+        hot = d % 2 == 0
+        for name in range(10):
+            y = float(hot and name < 5)
+            rows.append({"date": pd.Timestamp("2024-01-01") + pd.Timedelta(days=d),
+                         "ticker": f"T{name}", "y_true": y,
+                         # the score knows WHICH SESSION is eventful and nothing else
+                         "y_prob": 0.9 if hot else 0.1, "ret": 0.0,
+                         "at_ceiling": False, "at_ceiling_n": False})
+    frame = pd.DataFrame(rows)
+    out = B.auc_nulls(frame, draws=20)
+    per = B.sessions(frame, 5)
+    assert out["auc_null_mean"] > 0.6          # the pooled null itself is paid for timing
+    assert float(np.nanmean(per["daily_auc"])) == pytest.approx(0.5, abs=1e-9)

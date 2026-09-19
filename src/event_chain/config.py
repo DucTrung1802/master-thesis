@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import os
 
+from utils import event_target
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 TRAIN_RATIO = 0.70
@@ -143,11 +145,16 @@ BASKET_REFIT_SESSIONS = 63
 BASKET_COSTS = (0.0, 0.0030, 0.0050)
 # Estimators too slow to refit ~9 times on 600k rows; refitted once on train+val only.
 BASKET_NO_ROLLING = ("FOREST",)
-# ⚠️ THE CHOICE RULE (2026-09-17): the first basket trial chose on val hit@X; from the second
-# trial on the user asked for the best AUC, so the row with the highest VAL POOLED ROC-AUC is
-# chosen (ties: val within-session AUC, then val hit@X) — the rule of the VCB/MBB chains.
-# ⚠️ CHANGED AFTER THE FIRST BASKET TRIAL'S TEST NUMBERS WERE READ (NUL-1): record it as such.
-BASKET_CHOOSE_ON = "val_auc"   # "val_auc" | "val_daily_auc" | "val_hit"
+# ⚠️ THE CHOICE RULE (2026-09-18): the WITHIN-SESSION ROC-AUC, averaged over sessions — the
+# only AUC this basket can trade. A POOLED AUC also scores name-sessions against each other
+# ACROSS sessions, and no basket ever makes that comparison: at the close of N the decision is
+# which of THAT session's names to buy. The gap between the two is the part of the ranking that
+# is pure timing — measured 0.654 pooled vs 0.631 within-session on the first tradeable trial,
+# so 0.023 of the pooled figure was a question nobody asks. Ties: pooled AUC, then val hit@X.
+# ⚠️ ITS HISTORY, because a choice rule changed after a test read is `NUL-1`'s shape: the first
+# basket trial chose on `val_hit`, the second and third on `val_auc` (pooled), and this is the
+# fourth rule. The trial log keeps every row, so the earlier choices stay readable.
+BASKET_CHOOSE_ON = "val_daily_auc"   # "val_auc" | "val_daily_auc" | "val_hit"
 # ⚠️ A BASKET MAY HOLD FEWER THAN X NAMES (2026-09-17, the user's request): a session's basket
 # is its top X names whose P(event) is at least `min_prob`, and a session none of whose top X
 # reaches the cut holds CASH. The cut is chosen on VAL (the chosen row's frozen val scores) over
@@ -196,12 +203,24 @@ BASKET_MODELS = (
                                    "columns": list(_EVT + _DRV + _PXFLOW + _GLOBAL), "C": 0.01,
                                    "min_move": 0.03, "exclude": list(_NOT_DRV)}, {}),
     # the tree families on the panel's last row
+    # ⚠️ `device: cuda` since 2026-09-19 — the panel is 151 columns and 420k rows, where the
+    # card wins; `model/gbt/model.py`'s docstring carries what that changes (a SAMPLED
+    # XGBoost draws from a different RNG stream on CUDA, so these are not the CPU runs made
+    # faster — they are different trees, and `device` is part of the experimental setup).
     ("gbt", "_d2", {"type": "GBT", "max_depth": 2, "n_estimators": 300, "learning_rate": 0.03,
-                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 200.0}, {}),
+                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 200.0,
+                    "device": "cuda"}, {}),
     ("gbt", "_d4", {"type": "GBT", "max_depth": 4, "n_estimators": 300, "learning_rate": 0.03,
-                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 200.0}, {}),
-    ("forest", "_et_leaf200", {"type": "FOREST", "kind": "et", "min_samples_leaf": 200,
-                               "max_features": 0.3, "n_estimators": 200}, {}),
+                    "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 200.0,
+                    "device": "cuda"}, {}),
+    # ⚠️ WAS `_et_leaf200` (sklearn ExtraTrees, 1,103.8 s of CPU = 84 % of the grid's whole
+    # fit time) until 2026-09-19. `xgbrf` is XGBoost's own random forest, matched to it at
+    # 200 trees: **371.6 s, a 3x cut** — and ⚠️ **the card is NOT why**: the same fit is
+    # 372.6 s on the host. It is a DIFFERENT estimator, not a faster one, and
+    # `model/forest/model.py`'s docstring has the table and what does not carry over.
+    ("forest", "_rf200_d12", {"type": "FOREST", "kind": "xgbrf", "n_estimators": 200,
+                              "max_depth": 12, "min_child_weight": 50.0,
+                              "max_features": 0.3, "device": "cuda"}, {}),
     # ⚠️ ADDED FOR THE SECOND BASKET TRIAL on the CV above — CV pooled AUC 0.668 / within 0.666
     ("event_boost", "_xgb_d8", dict(_BOOST), {}),
     # the size of the move with a tree — CV 0.652 / 0.643 alone, the member that lifts the ensemble
@@ -236,6 +255,7 @@ SETUPS = {
     # `event_chain.basket`, scored per date, at most `top_k` names and cash below the cut.
     "basket": dict(ticker=BASKET_TICKER, lookback=BASKET_LOOKBACK, pools=BASKET_POOLS,
                    models=BASKET_MODELS, scope=BASKET_SCOPE, channels="all",
-                   aux_targets=("return_open_{h}day",), ensembles=BASKET_ENSEMBLES,
+                   aux_targets=(event_target.RULE_RETURN[event_target.EVENT_RULE],),
+                   ensembles=BASKET_ENSEMBLES,
                    top_k=BASKET_SIZE),
 }

@@ -385,7 +385,8 @@ def unified_pool_targets(
         target_cols = {h: f"return_{h}day" for h in horizons}
         relative_cols = {h: f"return_rel_{h}day" for h in horizons}
         price_cols = {h: f"close_adjust_{h}day" for h in horizons}
-        open_cols = {h: f"return_open_{h}day" for h in horizons}
+        open_cols = {h + 1: f"return_open_{h}day" for h in horizons}
+        open_cols.update({h: f"return_hold_{h}day" for h in horizons})
         # ⚠️ Keyed by COLUMN NAME, in the builder's own emission order. It used to be
         # keyed by horizon with the relative twin under `-h`, which worked for exactly
         # two families and had no room for a third — `close_adjust_{h}day` would have
@@ -492,8 +493,8 @@ def unified_pool_targets(
     # OPEN, so their tail is `h + 1` and a missing scraped open is an honest extra NULL:
     # they are held to a FLOOR with a 2 % ceiling, the two close rules to an equality.
     checked = [(h, (target_cols[h], price_cols[h]), True) for h in horizons] + [
-        (e.unlabelled, (col,), e.rule != "open") for col, e in event_cols.items()
-    ] + [(h + 1, (open_cols[h],), False) for h in horizons]
+        (e.unlabelled, (col,), not e.enters_at_open) for col, e in event_cols.items()
+    ] + [(exit_off, (col,), False) for exit_off, col in open_cols.items()]
     for h, cols, exact in checked:
         expected_tail = sum(min(h, n) for n in series_rows)
         for target_col in cols:

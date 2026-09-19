@@ -59,3 +59,28 @@ def test_last_makes_lookback_one_the_unwindowed_case():
     X = np.array([[[3.0, -1.0]]])
     out = window_statistics(X)
     np.testing.assert_allclose(out[0, :2], [3.0, -1.0])
+
+
+def test_a_one_row_window_is_the_row_itself_on_both_implementations():
+    """⚠️ `WST-1`: at `d = 1` the six statistics are one, and emitting six was a defect.
+
+    `last`/`mean`/`min`/`max` are the same number, `sd` is 0 and `slope` divides by 0, so a
+    151-channel panel used to become 906 columns holding 152 distinct ones — six times the
+    fit, and `max_features`/`colsample` drawing their decorrelation from duplicates.
+    """
+    import numpy as np
+    import torch
+
+    from model.common.features import window_statistics
+    from model.mlp.model import window_statistics_torch
+
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(64, 1, 7))
+    out = window_statistics(X)
+    assert out.shape == (64, 7)                       # not (64, 42)
+    assert np.array_equal(out, X[:, -1, :])
+    assert np.allclose(window_statistics_torch(torch.tensor(X)).numpy(), out)
+
+    # and a real window is untouched: six statistics, in the documented order
+    wide = window_statistics(rng.normal(size=(64, 5, 7)))
+    assert wide.shape == (64, 42)

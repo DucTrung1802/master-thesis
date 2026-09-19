@@ -178,9 +178,20 @@ def window_design(
             f"window has no dispersion to divide by and no last value other than "
             f"itself. Use lookback > 1 or normalize='none'."
         )
-    if lookback == 1 and tuple(stats) == ("last",):
-        # The degenerate case is the identity, and saying so keeps the un-windowed
-        # path free of a pointless copy.
+    if lookback == 1:
+        # ⚠️ **AT `d = 1` EVERY STATISTIC IS `last`, 0, OR UNDEFINED** (`WST-1`, 2026-09-19).
+        # A one-row window has no dispersion and no trend, so `mean`/`min`/`max` are the
+        # same number as `last`, `sd` is 0 and `slope` divides by 0. Asking for six of them
+        # built a design of `f * 6` columns holding `f + 1` distinct ones — measured on a
+        # 10-channel frame: 60 columns, 21 distinct. ⚠️ **THIS PACKAGE'S OWN CALLER WAS
+        # NEVER AFFECTED** — `selector.FeatureSelector` has always set
+        # `window_stats = ("last",) if lookback == 1`, and the re-run that checked it
+        # reproduced the old selection to the digit (59 channels, ic_mean +0.1271). The
+        # guard is here for a DIRECT caller, which would otherwise get four identical
+        # columns per channel and split one channel's importance across them. The stats
+        # are collapsed rather than refused, because `d = 1` is a legitimate setup (the
+        # event chain runs there) and a caller asking for the default six should get the
+        # design the data can support.
         return frame.rename(columns={c: design_column(c, "last") for c in frame})
 
     # ⚠️ `dtype` is applied HERE, at the source, not to the result. Casting the

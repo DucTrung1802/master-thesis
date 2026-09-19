@@ -43,10 +43,14 @@ decision 2026-09-17 — an order at the ceiling can fill while sellers remain). 
 carries `at_ceiling_n`, and `True` restores the `PRF-0` entry screen
 (`backtest.portfolio.mark_ceiling`), under which such a name is never in a basket.
 
-⚠️ **THE MODEL IS CHOSEN ON VAL** by `config.BASKET_CHOOSE_ON` — `val_hit` for the first basket
-trial, the pooled ROC-AUC (`val_auc`) since the second — with the other two as tie-breaks, and its
-test row is quoted beside every other row. `auc` is the POOLED ROC-AUC over every name-session;
-`daily_auc` ranks names within a session, which is what cutting a basket uses.
+⚠️ **THE MODEL IS CHOSEN ON VAL** by `config.BASKET_CHOOSE_ON` — `val_daily_auc`, the
+WITHIN-SESSION ROC-AUC, since 2026-09-18 — with the other two as tie-breaks, and its test row is
+quoted beside every other row. `auc` is the POOLED ROC-AUC over every name-session and `daily_auc`
+ranks names WITHIN a session, which is the only comparison a basket ever makes: a pooled AUC is
+also paid for knowing which SESSIONS are eventful, and a basket cannot trade that — it must buy
+five names every session it trades. ⚠️ **The two disagree by ~0.02** (0.654 vs 0.631 on the first
+tradeable trial), so quoting the pooled figure as "the model's AUC" overstates the tradeable part.
+`val_hit` was the first trial's rule and `val_auc` the second and third's.
 
 ⚠️ **A PANEL IS PURGED IN SESSIONS, NOT ROWS.** A refit before session S uses rows dated at
 least `d + h - 1` trading sessions before S — the dataset's own purge, on the market calendar.
@@ -105,9 +109,10 @@ def market_frame(chain, entry: Optional[str] = None) -> pd.DataFrame:
         basic[column] = pd.to_numeric(basic[column], errors="coerce")
     basic["open_adjust"] = basic["open"] * basic["close_adjust"] / basic["close_raw"]
     by = basic.groupby("ticker", sort=False)
-    # ⚠️ h sessions AFTER the entry, which is one session after the signal — the
-    # `open` rule of `utils.event_target`, so the money and the label price one trade.
-    basic["ret_next_open"] = by["close_adjust"].shift(-(h + 1)) / by["open_adjust"].shift(-1) - 1
+    # ⚠️ The EXIT SESSION IS THE RULE'S, not `h`: `open` sells at `t+h+1` and `hold` at
+    # `t+h`, so the money and the label price one trade either way.
+    exit_off = chain.event.exit_offset
+    basic["ret_next_open"] = by["close_adjust"].shift(-exit_off) / by["open_adjust"].shift(-1) - 1
     keep = ["date", "ticker", "exchange", "at_ceiling", "close_adjust", "open_adjust", "ret_next_open"]
     out = basic[keep].merge(targets.rename(columns={f"return_{h}day": "ret_close"}),
                             on=["date", "ticker"], how="left", validate="one_to_one")
@@ -907,22 +912,28 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
     lines += [
         f"## Leaderboard — chosen on `{C.BASKET_CHOOSE_ON}` (the other VAL metrics break a tie), test read once",
         "",
+        "⚠️ **`val daily AUC` / `test daily AUC` are the CHOICE metric** — the ROC-AUC computed "
+        "inside each session and averaged, which is the only comparison a basket makes. The pooled "
+        "columns beside them also score names ACROSS sessions and read ~0.02 higher.",
+        "",
         f"`hit` = share of the basket that rose ≥ {g:g} %; `base` = the same share over all buyable "
         f"names; null = {C.BASKET_NULL_DRAWS} random baskets per session. Refit = train+val once; "
         f"rolling = refitted every {C.BASKET_REFIT_SESSIONS} test sessions.",
         "",
-        "| model | val AUC | val daily AUC | val hit | **test AUC** | test daily AUC | refit AUC · daily | "
-        "rolling AUC · daily | **test hit** | test base | null p95 / max · z | lift | "
+        "| model | **val daily AUC** | val AUC (pooled) | val hit | **test daily AUC** | "
+        "test AUC (pooled) | refit daily · pooled | rolling daily · pooled | **test hit** | "
+        "test base | null p95 / max · z | lift | "
         "all-hit | basket ret | universe ret | Sharpe@50 (CAGR) | refit hit (lift) | "
         "rolling hit (lift) | rolling Sharpe@50 (CAGR) |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for _, r in board.iterrows():
         lines.append(
-            f"| `{str(r['run_name']).split('__')[0]}` | {_f(r.get('val_auc'))} | {_f(r.get('val_daily_auc'))} | "
-            f"{_f(r.get('val_hit'))} | **{_f(r.get('test_auc'))}** | {_f(r.get('test_daily_auc'))} | "
-            f"{_f(r.get('refit_auc'))} · {_f(r.get('refit_daily_auc'))} | "
-            f"{_f(r.get('rolling_auc'))} · {_f(r.get('rolling_daily_auc'))} | "
+            f"| `{str(r['run_name']).split('__')[0]}` | **{_f(r.get('val_daily_auc'))}** | "
+            f"{_f(r.get('val_auc'))} | "
+            f"{_f(r.get('val_hit'))} | **{_f(r.get('test_daily_auc'))}** | {_f(r.get('test_auc'))} | "
+            f"{_f(r.get('refit_daily_auc'))} · {_f(r.get('refit_auc'))} | "
+            f"{_f(r.get('rolling_daily_auc'))} · {_f(r.get('rolling_auc'))} | "
             f"**{_f(r.get('test_hit'))}** | {_f(r.get('test_base'))} | {_f(r.get('test_hit_bar'))} / "
             f"{_f(r.get('test_hit_null_max'))} · {_f(r.get('test_hit_z'), 2)} | {_f(r.get('test_lift'), 2)} | "
             f"{_f(r.get('test_all_hit'))} | {_f(r.get('test_bret'), 4, pct=True)} | "
@@ -935,13 +946,15 @@ def write(chain, walkforward: bool = True, runs_dir: Optional[str] = None,
     b = board[board["run_name"] == best["run_name"]].iloc[0]
     lines += [
         "",
-        f"**Chosen on val (`{C.BASKET_CHOOSE_ON}`):** `{str(b['run_name']).split('__')[0]}` — val AUC "
-        f"{_f(b['val_auc'])}, within-session {_f(b['val_daily_auc'])}, hit@{k} {_f(b['val_hit'])}. "
-        f"**Test AUC {_f(b['test_auc'])}** (within-session shuffle null p95 {_f(b.get('test_auc_bar'))}, "
-        f"z {_f(b.get('test_auc_z'), 2)}; within-session AUC {_f(b['test_daily_auc'])}, null p95 "
-        f"{_f(b.get('test_daily_auc_bar'))}, z {_f(b.get('test_daily_auc_z'), 2)}; refitted on train+val "
-        f"{_f(b.get('refit_auc'))} · {_f(b.get('refit_daily_auc'))}; refitted every "
-        f"{C.BASKET_REFIT_SESSIONS} sessions {_f(b.get('rolling_auc'))} · {_f(b.get('rolling_daily_auc'))}). "
+        f"**Chosen on val (`{C.BASKET_CHOOSE_ON}`):** `{str(b['run_name']).split('__')[0]}` — val "
+        f"within-session AUC {_f(b['val_daily_auc'])} (pooled {_f(b['val_auc'])}), hit@{k} "
+        f"{_f(b['val_hit'])}. **Test within-session AUC {_f(b['test_daily_auc'])}** (within-session "
+        f"label-shuffle null p95 {_f(b.get('test_daily_auc_bar'))}, z {_f(b.get('test_daily_auc_z'), 2)}; "
+        f"refitted on train+val {_f(b.get('refit_daily_auc'))}, refitted every "
+        f"{C.BASKET_REFIT_SESSIONS} sessions {_f(b.get('rolling_daily_auc'))}). The POOLED AUC, which "
+        f"also prices knowing WHICH SESSIONS are eventful and is not what a basket trades, reads "
+        f"{_f(b['test_auc'])} on test (null p95 {_f(b.get('test_auc_bar'))}, z {_f(b.get('test_auc_z'), 2)}; "
+        f"refit {_f(b.get('refit_auc'))}, rolling {_f(b.get('rolling_auc'))}). "
         f"**On test, {_f(b['test_hit'])} of its basket names rose ≥ {g:g} %** against a buyable base rate "
         f"of {_f(b['test_base'])} (lift {_f(b['test_lift'], 2)}×) and a random-basket null p95 of "
         f"{_f(b['test_hit_bar'])} (max {_f(b['test_hit_null_max'])}, z {_f(b['test_hit_z'], 2)}); every "

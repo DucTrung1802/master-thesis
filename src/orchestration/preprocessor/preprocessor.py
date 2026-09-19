@@ -8818,7 +8818,9 @@ class DataPreprocessor:
         # ⚠️ THE TRADEABLE RETURN (added 2026-09-18): `open_adjust[t+1] -> close[t+h+1]`,
         # what a decision taken after the close of `t` can actually earn. Its tail is
         # `h + 1` rows per series, one more than `return_{h}day`'s.
-        open_cols = {h: f"return_open_{h}day" for h in horizons}
+        # keyed by the EXIT offset, because that is what the LEAD and the tail check need
+        open_cols = {h + 1: f"return_open_{h}day" for h in horizons}
+        open_cols.update({h: f"return_hold_{h}day" for h in horizons})
         # ⚠️ THE EVENT LABELS (added 2026-09-16). One column per `utils.event_target.
         # EVENT_TARGETS` entry — the configured gain/horizon under both rules. Their
         # horizon is THEIR OWN and need not be one of `UNIFIED_TARGET_HORIZONS`; the
@@ -8940,10 +8942,10 @@ class DataPreprocessor:
                 # `close_adjust` the adjusted one, so the two are never compared across
                 # a split without it), and sold h sessions after the entry.
                 + [
-                    f"(LEAD(px, {h + 1}) OVER w"
+                    f"(LEAD(px, {exit_off}) OVER w"
                     f" / NULLIF(LEAD(op, 1) OVER w, 0) - 1.0)"
                     f"::double precision AS {col}"
-                    for h, col in open_cols.items()
+                    for exit_off, col in open_cols.items()
                 ]
                 # ⚠️ Rendered by `EventTarget.sql` over the SAME `WINDOW w`, so an event
                 # label and `return_{h}day` cannot disagree about which session follows
@@ -9034,12 +9036,13 @@ class DataPreprocessor:
         for col, event in event_cols.items():
             expected_tail = sum(min(event.unlabelled, n) for n in series_rows)
             unlabelled = written - labelled_by_col[col]
-            if event.rule == "open":
-                # ⚠️ The `open` rule reads the NEXT session's OPEN, a scraped price that
+            if event.enters_at_open:
+                # ⚠️ An open-entry rule reads the NEXT session's OPEN, a scraped price that
                 # `close_adjust` does not vouch for, so a missing or zero open is an
                 # honest extra NULL and the tail is a floor with a ceiling — not the
-                # equality the two close rules are held to. LIQUID: 1,374 against a
-                # 1,368-row tail, six rows with no usable open (2026-09-18).
+                # equality the two close rules are held to. LIQUID: `upopen` 1,374 against
+                # a 1,368-row tail and `uphold` 1,146 against 1,140 — the SAME six rows,
+                # because both rules enter on the same session (2026-09-18).
                 if unlabelled < expected_tail:
                     raise PipelineError(
                         f"{schema}.pool__targets has {unlabelled} NULL {col} values, "
@@ -9069,13 +9072,13 @@ class DataPreprocessor:
         # ALSO NULL wherever the next session's open is missing or zero, so its tail is
         # a floor rather than an equality — `pool__basic.open` is a scraped price and
         # `close_raw` its denominator.
-        for h, col in open_cols.items():
-            floor = sum(min(h + 1, n) for n in series_rows)
+        for exit_off, col in open_cols.items():
+            floor = sum(min(exit_off, n) for n in series_rows)
             unlabelled = written - labelled_by_col[col]
             if unlabelled < floor:
                 raise PipelineError(
                     f"{schema}.pool__targets has {unlabelled} NULL {col} values, fewer "
-                    f"than the {floor} of the {h + 1}-session tail — the LEAD ran over a "
+                    f"than the {floor} of the {exit_off}-session tail — the LEAD ran over a "
                     f"different ordering."
                 )
             if unlabelled > floor + 0.02 * written:

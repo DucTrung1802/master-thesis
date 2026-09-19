@@ -118,7 +118,14 @@ LOG_COLUMNS = [
     # the basket's h-session return against the universe's, and the non-overlapping track.
     "top_k", "val_hit_at_k", "test_hit_at_k", "test_base_rate_buyable", "test_hit_null_p95",
     "test_hit_null_max", "test_hit_z", "test_all_hit", "test_basket_return", "test_universe_return",
-    "test_daily_auc", "test_sharpe_50bps", "test_cagr_50bps", "test_hit_refit_train_val",
+    # ⚠️ THE WITHIN-SESSION AUC IS THE BASKET'S CHOICE METRIC (2026-09-18,
+    # `config.BASKET_CHOOSE_ON = "val_daily_auc"`): the ROC-AUC inside each session, averaged.
+    # The pooled `val_auc`/`test_auc` columns above are kept because every earlier trial is
+    # logged in them, and they read ~0.02 higher — a pooled AUC is also paid for knowing which
+    # SESSIONS are eventful, which no basket trades.
+    "val_daily_auc", "test_daily_auc", "test_daily_auc_null_p95", "test_daily_auc_z",
+    "test_daily_auc_refit_train_val", "test_daily_auc_rolling_refit",
+    "test_sharpe_50bps", "test_cagr_50bps", "test_hit_refit_train_val",
     "test_hit_rolling_refit", "test_sharpe_50bps_rolling_refit",
     # the val-chosen P(event) cut (at most k names, possibly none), on the chosen row only
     "min_prob", "test_cut_active_share", "test_cut_precision", "test_cut_basket_return",
@@ -431,7 +438,11 @@ def record(chain, built: Dict, notes: str = "",
     if best is not None and basket:
         significant = bool(best.get("test_hit", np.nan) > best.get("test_hit_bar", np.nan))
         verdict = (
-            f"best on val `{best['run_name'].split('__')[0]}`: val hit@{basket['top_k']} "
+            f"best on val `{best['run_name'].split('__')[0]}`: val within-session AUC "
+            f"{best.get('val_daily_auc', float('nan')):.3f} (pooled {best.get('val_auc', float('nan')):.3f}), "
+            f"test within-session AUC {best.get('test_daily_auc', float('nan')):.3f} vs a "
+            f"within-session shuffle null p95 {best.get('test_daily_auc_bar', float('nan')):.3f}; "
+            f"val hit@{basket['top_k']} "
             f"{best['val_hit']:.3f}, test hit {best['test_hit']:.3f} vs buyable base "
             f"{best['test_base']:.3f} and a random-basket null p95 {best['test_hit_bar']:.3f} "
             f"(max {best['test_hit_null_max']:.3f}, z {best['test_hit_z']:+.2f}); basket return "
@@ -666,7 +677,12 @@ def _basket_cells(body: Dict, em: Dict, chosen: bool = False) -> Dict:
         "test_hit_null_p95": _r(em.get("test_hit_bar")), "test_hit_null_max": _r(em.get("test_hit_null_max")),
         "test_hit_z": _r(em.get("test_hit_z"), 2), "test_all_hit": _r(em.get("test_all_hit")),
         "test_basket_return": _r(em.get("test_bret"), 5), "test_universe_return": _r(em.get("test_uret"), 5),
+        "val_daily_auc": _r(em.get("val_daily_auc")),
         "test_daily_auc": _r(em.get("test_daily_auc")),
+        "test_daily_auc_null_p95": _r(em.get("test_daily_auc_bar")),
+        "test_daily_auc_z": _r(em.get("test_daily_auc_z"), 2),
+        "test_daily_auc_refit_train_val": _r(em.get("refit_daily_auc")),
+        "test_daily_auc_rolling_refit": _r(em.get("rolling_daily_auc")),
         "test_sharpe_50bps": _r(em.get("test_sharpe_50"), 3), "test_cagr_50bps": _r(em.get("test_cagr_50")),
         "test_hit_refit_train_val": _r(em.get("refit_hit")),
         "test_hit_rolling_refit": _r(em.get("rolling_hit")),

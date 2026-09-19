@@ -1,0 +1,28 @@
+# Written by `python -m event_chain` for uphold_5pct_5day (1 when close_adjust[t+5] >= (1 + 5%) x open_adjust[t+1] — bought at the OPEN of t+1 and sold at the close of t+5, 5 sessions held — else 0; NULL for the last 5 sessions).
+# The grid is event_chain/config.py SETUPS['basket'].
+run_name: event_linear_mag_har_a100_hl4__liquid__uphold_5pct_5day__final__d1_h5__bsk
+dataset: liquid__uphold_5pct_5day__final__d1_h5__bsk__tr70_val15_test15__std
+dataset_hash: 65a64d2fbb4463b4
+task: classification
+lookback: 1
+n_features: 151
+model:
+  type: EVENT_LINEAR
+  kind: magnitude_ridge
+  columns:
+  - har_
+  - evt_
+  - sec_
+  - mkt_rate_
+  - mkt_ret_h
+  - mkt_disp_h
+  - cal_
+  - drv_
+  alpha: 100.0
+  half_life_years: 4.0
+  exclude:
+  - drv_vwap_raw
+  aux_target: return_hold_5day
+null_draws: 200
+seed: 42
+device: cpu

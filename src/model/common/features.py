@@ -24,7 +24,17 @@ WINDOW_STATS = ("last", "mean", "slope", "sd", "min", "max")
 
 
 def window_statistics(X: np.ndarray) -> np.ndarray:
-    """`(n, d, f)` → `(n, f*6)`: last, mean, slope, sd, min, max per channel.
+    """`(n, d, f)` → `(n, f*6)`: last, mean, slope, sd, min, max per channel — and
+    `(n, f)` at `d = 1`, where the six collapse to one.
+
+    ⚠️ **AT `d = 1` THE SIX STATISTICS ARE ONE** (`WST-1`, fixed 2026-09-19). A one-row
+    window has no dispersion and no trend: `last`, `mean`, `min` and `max` are the same
+    number, `sd` is 0, and `slope` divides by 0. Emitting all six turned a 151-channel
+    panel into **906 columns of which 152 were distinct** — four identical copies plus 302
+    constant zeros. ⚠️ **The cost was not only the 6x fit**: `max_features` / `colsample`
+    exist to DECORRELATE the trees, and drawing 30 % of 906 mostly-duplicate columns draws
+    nearly every channel, so they decorrelated far less than their values claimed. The
+    degenerate case now returns the row itself, `(n, f)`.
 
     `slope` is the least-squares gradient over the window in closed form against a fixed
     time index — no per-sample `polyfit`, which on 2,939 × 4 would dominate the fit.
@@ -34,6 +44,9 @@ def window_statistics(X: np.ndarray) -> np.ndarray:
     (channel, stat) pair must use `divmod(i, f)` → `(stat_index, channel_index)`.
     """
     n, d, f = X.shape
+    if d == 1:
+        # see the docstring: the other five statistics are this column, 0, or undefined
+        return X[:, -1, :]
     t = np.arange(d, dtype=float)
     t_centred = t - t.mean()
     denom = float((t_centred ** 2).sum()) or 1.0

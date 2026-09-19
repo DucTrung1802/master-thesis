@@ -224,47 +224,196 @@ name is the label's SPAN, because every purge in this repo is `d + h - 1` read o
 | `final` → `dataset` | `unified_schema_liquid.upopen_5pct_5day__final__d1_h6__bsk` → `liquid__upopen_5pct_5day__final__d1_h6__bsk__tr70_val15_test15__std` (hash `53228aec2e679487`, **151 channels**, purge 6 sessions) | 4 min |
 | `train` + `report` | the 9-model grid and 6 fixed ensembles, then `event_chain.basket` (200-draw nulls, quarterly rolling refit, yearly walk-forward, the P(event) cut) | 56 min |
 
+### ⚠️ What the GPU is worth here, measured rather than assumed (2026-09-19)
+
+The card is an RTX 3050 Laptop, 4 GB. **Feature selection has been on CUDA all along** (its own
+`gpu.py`: spearman 1.9 s, gain+SHAP 5.9 s, permutation 43.8 s of a 24.7-min pool run — the rest is
+the 10 null re-selections). What was NOT is the model grid, and the answer is one model deep:
+
+| fit, 419,923 x 151 -> a 906-column design | cpu | cuda | |
+|---|---|---|---|
+| `gbt_d4` | 138.8 s | **42.0 s** | **3.3x** — flipped to `cuda` |
+| `forest` as `xgbrf` (200 x depth 12) | 372.6 s | **371.6 s** | ⚠️ **1.00x — the card buys nothing** |
+| `forest` as `et` (sklearn ExtraTrees, what it replaced) | 1,103.8 s | — | no CUDA path exists (cuML is Linux-only) |
+| `event_boost_xgb_d8`, `event_boost_mag_d8` | — | — | ✅ already `cuda` since they were added |
+| `event_linear` x3 | 1.5-5.2 s | — | sklearn; a port would buy ~10 s |
+| the 200-draw nulls | ~4.4 min per report | — | numpy `lexsort` + `bincount`, already vectorised |
+
+⚠️ **THE FOREST'S 3x IS THE ESTIMATOR AND NOT THE DEVICE** — 1,103.8 s -> 371.6 s is ExtraTrees
+giving way to XGBoost's random forest, and that same forest is 372.6 s on the host. ⚠️ **AND THE
+FIRST MEASUREMENT OF IT SAID 20x AND WAS WRONG**: it fed the raw 151 columns to XGBoost, while
+every caller goes through `window_statistics` first, which at `d = 1` returns **906** columns. A
+benchmark that skips a transform the production path always runs is timing a different model.
+
+⚠️ **The lever that is left is not a device at all** (`WST-1`): of those 906 columns only **152 are
+distinct** — `last`/`mean`/`min`/`max` are four identical copies and `slope`/`sd` are 302 constant
+zeros — so every tree model pays 6x, and `max_features` / `colsample_bytree` are drawing their
+decorrelation from a set that is five-sixths duplicate. Fixing it changes what the models ARE, so
+it belongs to a re-run and not to a speed-up.
+
 Splits: train 419,503 rows (base **0.182**, 2009-01-02 → 2021-04-19), val 139,699 (**0.209**), test
 147,527 (**0.134**, 2023-12-14 → 2026-08-13). Trial
 `20260918-125131__liquid__upopen_5pct_5day__final__d1_h6__bsk`.
 
-**Chosen on val AUC: `ensemble_boost_eq`** (the same three members as the deleted flow's winner —
-XGBoost, the event logit, the tree magnitude model).
+⚠️ **THE MODEL IS CHOSEN ON THE WITHIN-SESSION AUC** (`BASKET_CHOOSE_ON = "val_daily_auc"`,
+2026-09-18): the ROC-AUC computed INSIDE each session and averaged. ⚠️ **THE FIRST VERSION OF THIS
+PARAGRAPH JUSTIFIED IT BY SAYING A BASKET CANNOT TRADE TIMING, AND THAT IS FALSE** — the reason is
+real and the argument was not, so it is corrected here rather than quietly rewritten. **A basket
+with a cut DOES trade timing**: a session none of whose names clears `min_prob` is not traded at
+all, which is a decision about the SESSION and not about a name.
+
+**Measured the same day** (`scratchpad/which_auc.py`, read-only, over the chosen row's 659 test
+sessions): the session's own score level predicts that session's base rate at Spearman **+0.250**
+for the top-5 mean (+0.183 for the max), against a 200-draw permutation of the sessions' base
+rates — **p95 +0.068, z +6.43**. And the cut spends it: at `min_prob` 0.36 the 200 traded sessions
+carry a base rate of **0.166 against 0.134** over all 659, while the basket hits 0.330. **So of the
++0.196 total edge, +0.032 is choosing the SESSION (16 %) and +0.164 is choosing the NAME (84 %)**
+— at the old 0.25 cut timing was +0.006, and at no cut it is 0 by construction.
+
+**The real reason the pooled AUC cannot be the choice metric is that it BLENDS the two** in
+proportions nobody sets: it scores name-sessions against each other across sessions, so its excess
+over 0.5 is part selection and part timing, and the mixing weights depend on how many names a
+session holds and how much base rates vary — properties of the UNIVERSE, not of the model. ⚠️ **Its
+null sits at 0.548, not 0.5**, and that 0.048 IS the blend showing itself: a score that knew only
+which sessions were eventful would read ~0.55 pooled and exactly 0.500 within-session
+(`test_basket.py` pins both ends). A number you cannot attribute cannot be optimised.
+
+⚠️ **THE MODEL-SELECTION EVIDENCE IS WEAK AND POINTS THE SAME WAY** — over the 13 models that rank
+at all, Spearman(val metric → test outcome) is **daily 0.702 vs pooled 0.570 for basket return**,
+0.602 vs 0.562 for Sharpe, 0.864 vs 0.645 for test daily AUC — **but 0.446 vs 0.749 for hit@5**,
+and with n=13 CORRELATED models (six are ensembles of the other nine) `SE(Spearman) ≈ 0.29`, so
+**not one of those gaps is established**. What the rules actually picked: daily AUC →
+`ensemble_boost` (+1.00 % per basket, Sharpe 0.55), pooled AUC and val hit → `ensemble_boost_eq`
+(+0.76 %, 0.39), and **the best test row, `event_boost_xgb_d8` at +1.15 % and Sharpe 1.01, was
+found by no rule at all.** The choice metric is not what limits this chain.
+
+⚠️ **NEITHER AUC SEES THE THING THE CUT ACTUALLY DEPENDS ON** — both are rank metrics and the cut
+is a level. The proof is in this run: swapping an arithmetic ensemble for a geometric one left the
+ranking almost identical (val daily AUC 0.6348 → 0.6357) and moved the val-chosen cut **0.25 →
+0.36**. So the metric set is three, not one: **within-session AUC for the name, a session-level
+correlation for the timing, Brier/reliability for the cut.**
+
+⚠️ **This is the FOURTH choice rule** (`val_hit` → `val_auc` → `val_auc` → `val_daily_auc`) and it
+was changed after test numbers had been read, which is `NUL-1`'s shape: every earlier row is still
+in `trials.csv`.
+
+**Chosen on val within-session AUC: `ensemble_boost`** (XGBoost, the event logit, the tree
+magnitude model — geometric mean). ⚠️ **The top three are inside 0.001** (`ensemble_boost` 0.6357,
+`ensemble_xl` 0.6357, `ensemble_boost_eq` 0.6348, the previous winner), so the flip is a TIE-BREAK
+— pooled AUC 0.650 vs 0.646 — and not a demonstrated difference. What separates them is the money:
++1.01 % per basket against +1.04 % and +0.76 %.
 
 | | val | **test** | refit (train+val) | rolling (quarterly) |
 |---|---|---|---|---|
-| pooled AUC | 0.650 | **0.654** (within-session shuffle null p95 0.547, **z +57.5**) | 0.656 | 0.657 |
-| within-session AUC | 0.635 | **0.631** (null p95 0.505, z +44.1) | 0.629 | 0.630 |
-| hit@5 (base 0.134) | 0.357 | **0.260** (null p95 0.141, max 0.150, z +24.2, lift **1.94**) | 0.255 | **0.270** (lift 2.02) |
+| **within-session AUC** (the choice metric) | 0.636 | **0.632** (within-session shuffle null p95 0.505, **z +44.7**) | 0.631 | 0.632 |
+| pooled AUC (⚠️ not tradeable) | 0.650 | **0.655** (null p95 0.548, z +58.0) | 0.658 | 0.658 |
+| hit@5 (base 0.134) | 0.352 | **0.266** (null p95 0.141, max 0.150, z +25.3, lift **1.99**) | 0.256 | **0.273** (lift 2.04) |
 
-**With the val-chosen cut `min_prob = 0.25`** (at most 5 names, cash when none clears it):
+**With the val-chosen cut `min_prob = 0.36`** (at most 5 names, cash when none clears it):
 
 | test basket | sessions traded | names | precision (null p95 · z) | basket ≥ 5 % | basket ret | EV/session | Sharpe@50 (worst offset) | CAGR | max DD | without ceiling names |
 |---|---|---|---|---|---|---|---|---|---|---|
-| frozen | 91.8 % | 3.99 | **0.286** (0.152 · +21.7) | 0.246 | +1.01 % | +0.47 % | 0.46 (0.10) | +12.9 % | −50.1 % | 0.281 · +0.91 % · 0.37 |
-| **rolling (quarterly)** | 88.9 % | 3.81 | **0.305** (0.159 · +23.0) | 0.276 | **+1.35 %** | +0.76 % | **0.69 (0.25)** | **+28.1 %** | −49.6 % | **0.306 · +1.38 % · 0.67** |
+| frozen | 24.4 % | 2.34 | **0.379** (0.231 · +9.4) | 0.373 | +4.37 % | +0.95 % | 0.92 (0.38) | +46.7 % | −36.2 % | 0.378 · +4.03 % · 0.77 |
+| **rolling (quarterly)** | 30.3 % | 2.29 | **0.408** (0.227 · +11.8) | 0.385 | **+3.02 %** | +0.76 % | **0.73 (0.32)** | **+30.6 %** | −45.9 % | **0.417 · +2.92 % · 0.58** |
+
+⚠️ **THE CUT MOVED 0.25 → 0.36 WITH THE MODEL, AND THAT IS THE CUT DOING ITS JOB, NOT A BETTER
+ONE**: `ensemble_boost` is a GEOMETRIC mean and `ensemble_boost_eq` an arithmetic one, so the same
+ranking carries a different probability SCALE — the cut is chosen on val EV either way and lands
+where that scale puts it. ⚠️ **It now trades 200 of 659 sessions, so `n_eff` is ~40 independent
+baskets and the z falls 23.0 → 11.8** even though the precision rises 0.305 → 0.408; the EV per
+session is **unchanged at +0.76 %**. ⚠️ **And the track is CONCENTRATED**: 117 of those 200 rolling
+sessions are 2025 (+5.08 % per basket) against 2026's 54 at **−0.29 %** and 2024's 24 at −0.06 %,
+so the +30.6 % CAGR is one good year plus cash.
 
 ✅ **TRAINING ON THE TRADEABLE LABEL IS WORTH ~3× THE MONEY**: the deleted close-priced model's own
 picks, re-priced at the open of N+1, gave precision 0.308 but **+0.78 % per basket, Sharpe 0.26,
 CAGR +2.4 %** (§6, and `EXE-1` in ISSUES.md). The new model ranks slightly worse on paper and earns
-**+1.35 %, Sharpe 0.69, CAGR +28.1 %** — it stops paying for names whose move happens overnight.
+**+3.02 %, Sharpe 0.73, CAGR +30.6 %** — it stops paying for names whose move happens overnight.
 ✅ **AND `CLF-1` NO LONGER BINDS**: dropping every name that closed at its ceiling on N leaves
-precision 0.306 and Sharpe 0.67 (against 0.305 / 0.69 with them), because the ceiling gap is now
+precision 0.417 and Sharpe 0.58 (against 0.408 / 0.73 with them), because the ceiling gap is now
 OUTSIDE the label. The old flow lost 1.28 → 0.13 the same way.
 
 **Walk-forward, yearly expanding refits of the chosen row** — lift over the buyable base in every
-one of six years, and the return is not: hit 0.452 / 0.347 / 0.300 / 0.237 / 0.301 / 0.235 on bases
-0.265 / 0.206 / 0.170 / 0.124 / 0.150 / 0.122 (**lift 1.68-2.00, z +10.1 … +15.4**), basket return
-+5.63 / +0.24 / +1.51 / +0.55 / +1.46 / **−0.54 %** and Sharpe@50 5.21 / −0.18 / 1.26 / 0.55 / 0.56
-/ **−1.25** (2021 … 2026). ⚠️ **2026 is negative on both** while the universe is −0.43 %.
+one of six years, and the return is not: hit 0.439 / 0.343 / 0.300 / 0.250 / 0.310 / 0.235 on bases
+0.265 / 0.206 / 0.170 / 0.124 / 0.150 / 0.122 (**lift 1.66-2.07, z +10.1 … +16.4**), basket return
++5.20 / +0.19 / +1.67 / +0.80 / +1.59 / **−0.35 %** and Sharpe@50 5.76 / −0.03 / 1.53 / 0.73 / 0.65
+/ **−0.41** (2021 … 2026), within-session AUC **0.612-0.652 in all six**. ⚠️ **2026 is negative on
+the money in every read of this chain** while the universe is −0.43 %.
 
 ⚠️ **What still qualifies every number here**: `NUL-1` — the grid, the ensembles and the cut rule
 were carried over from a search done on the deleted close-priced flow, so this test split is not
 the first read of that search; the universe is survivors-only and not point-in-time; the max
-drawdown of the cut track is ~50 %; and the cut's own grid on test is descriptive (a 0.35 cut
-trades 37 % of sessions at precision 0.399, Sharpe 0.80 — chosen on val it was 0.25).
+drawdown of the cut track is ~46 %; the cut trades 30 % of sessions, which is ~40 independent
+baskets; and the cut's own grid on test is descriptive — **only the val-chosen 0.36 is the
+result**.
+
+## 8. ⚠️ THE N+5 LABEL — what the user actually trades (2026-09-19)
+
+⚠️ **§7's `upopen_5pct_5day` SELLS ONE SESSION LATER THAN THE USER DESCRIBED.** Asked to confirm
+*"check data Friday, buy Monday's open, sell Friday's close"*, the arithmetic on disk said
+otherwise: `upopen`'s `h` counts sessions AFTER THE ENTRY, so a Friday signal buys Monday and sells
+**the following Monday** — six sessions and a second weekend. Verified on PNJ 2025-01-10: N+5
+(Friday 01-17) returns **+1.60 %** and N+6 (Monday 01-20) **+2.55 %**, and 2.55 % is what
+`pool__targets` stored. **The extra session was 0.96 pp of the move.**
+
+**`uphold_5pct_5day` is the rule that holds exactly `h` sessions** — `close[t+h] >= (1+g) ·
+open_adjust[t+1]`, bought at the OPEN of N+1 and sold at the CLOSE of N+5. Both labels are carried
+in `pool__targets` (the user asked to ADD, not replace), and `EVENT_RULE` picks the one the chain
+trains on. Base rate over the panel **0.159 against `upopen`'s 0.177** — one fewer session to reach
++5 %. Table `uphold_5pct_5day__final__d1_h5__bsk`, purge 5, trial
+`20260919-033720__liquid__uphold_5pct_5day__final__d1_h5__bsk`.
+
+Splits: train 419,923 (base **0.164**, → 2021-04-22), val 139,928 (**0.188**), test 147,536
+(**0.117**, 2023-12-15 → 2026-08-14). Both pools clear their null unchanged (`pool__event_features`
+59 channels, IC +0.1271, z +26.65; `pool__basic` 56, +0.1325, z +14.59).
+
+**Chosen on val within-session AUC: `ensemble_xl`** (XGBoost twice + the event logit).
+
+| | val | **test** | refit (train+val) | rolling (quarterly) |
+|---|---|---|---|---|
+| **within-session AUC** | 0.643 | **0.644** (null p95 0.506, **z +43.8**) | 0.642 | 0.645 |
+| pooled AUC (⚠️ not tradeable) | 0.656 | 0.662 (null p95 0.553, z +56.5) | 0.664 | 0.665 |
+| hit@5 (base 0.117) | 0.342 | **0.232** (null p95 0.126, max 0.131, z +21.7, lift **1.99**) | 0.234 | 0.236 |
+
+**With the val-chosen cut `min_prob = 0.30`:**
+
+| test basket | sessions traded | names | precision (null p95 · z) | basket ret | EV/session | Sharpe@50 (worst) | CAGR | max DD |
+|---|---|---|---|---|---|---|---|---|
+| **frozen** | 42.2 % | 3.09 | **0.289** (0.170 · +12.5) | **+1.98 %** | +0.62 % | **0.65 (0.43)** | **+24.9 %** | −43.6 % |
+| refit | 45.4 % | 3.17 | 0.283 (0.168 · +11.8) | +1.54 % | +0.47 % | 0.56 (−0.06) | +19.6 % | −39.0 % |
+| rolling | 49.0 % | 3.04 | 0.291 (0.172 · +12.3) | +1.45 % | +0.47 % | 0.53 (0.27) | +16.8 % | −44.0 % |
+
+Walk-forward, six yearly expanding refits: lift **1.74-2.15 in every year**, within-session AUC
+0.617-0.664, basket return +4.71 / +0.72 / +1.53 / +0.76 / +1.26 / **−0.25 %** (2021…2026). ⚠️
+**2026 is negative again**, as it is on every read of this chain, and at the chosen cut 2025 carries
+169 of the rolling track's 323 traded sessions.
+
+⚠️ **THIS IS NOT COMPARABLE TO §7's NUMBERS AND THE DIFFERENCE IS TWO CHANGES, NOT ONE.** The label
+moved (N+6 → N+5) and the DESIGN moved the same day (`WST-1`: 906 columns → 151), so the gap
+between `upopen`'s +3.02 % per basket and `uphold`'s +1.45 % cannot be attributed to either. What
+can be said: the within-session AUC is **higher** (0.644 vs 0.632) while the money is **lower**, and
+selling a session earlier gives up the second weekend on a label whose base rate falls 0.177 →
+0.159. Whether the shorter hold is worth it is a question for a paired comparison nobody has run.
+
+### ⚠️ What `WST-1` and the GPU were worth, measured on this run
+
+| model | before (906 cols, cpu) | after (151 cols, cuda) | |
+|---|---|---|---|
+| `forest` (ExtraTrees → `xgbrf`) | 1,103.8 s | **34.1 s** | **32.3x** |
+| `gbt_d4` | 92.6 s | **6.1 s** | 15.1x |
+| `gbt_d2` | 63.5 s | **5.1 s** | 12.4x |
+| `event_boost_xgb_d8` | 24.0 s | 21.6 s | 1.1x — already `cuda`, no `window_statistics` |
+| `event_linear` x3 | 1.5 / 5.2 / 3.8 s | 1.6 / 5.1 / 3.2 s | 1.0x — neither applies |
+| **whole grid** | **1,320.2 s** | **76.9 s** | **17.2x** |
+
+⚠️ **THE SPLIT IS THE POINT: every model that sped up is one that goes through
+`window_statistics`, and every model that did not is one that does not.** The card alone was worth
+3.3x on `gbt_d4` and **1.00x on the forest** (371.6 s cuda against 372.6 s cpu at 906 columns) — so
+`WST-1` is most of this, and "move it to the GPU" was the wrong diagnosis honestly tested. Stage
+times: select 52 min (unchanged — it never had the defect), train **8 min** (was 32), report
+**21 min** (was 59).
 
 **Run it**: `python -m event_chain --setup basket --apply` (runbook `G8`),
-`python -m event_chain.basket --pick YYYY-MM-DD` for one session (`G9`; 2026-08-21 → **PNJ** alone
-clears the cut, the other four of the top five sit at 0.21-0.24), `--min-prob-study` to re-choose
-the cut without refitting (`G10`).
+`python -m event_chain.basket --pick YYYY-MM-DD` for one session (`G9`), `--min-prob-study` to
+re-choose the cut without refitting (`G10`). ⚠️ **The report stage alone is ~59 min** (2026-09-18):
+the leaderboard is cheap and the refits are not.

@@ -69,3 +69,31 @@ def test_a_binary_event_dataset_is_never_target_scaled():
         # The table's h must be the event's own horizon, or the purge is wrong.
         TrainTestCreator(ticker="vcb", table="up_5pct_5day__final__d20_h10")
     assert TrainTestCreator(ticker="vcb", table="return_5day__final__d20_h5").scale_target is True
+
+
+def test_the_hold_rule_sells_one_session_before_the_open_rule():
+    """⚠️ `h` counts SESSIONS HELD in `hold` and sessions AFTER THE ENTRY in `open`.
+
+    Signal Friday: `hold` buys Monday's open and sells Friday's close (one week, 5 sessions);
+    `open` buys the same Monday and sells the FOLLOWING Monday's close (6 sessions, two
+    weekends). Measured on PNJ 2025-01-10 the extra session was +0.96 pp of a +2.55 % move.
+    """
+    hold, opn = E.EventTarget(5.0, 5, "hold"), E.EventTarget(5.0, 5, "open")
+    assert (hold.column, opn.column) == ("uphold_5pct_5day", "upopen_5pct_5day")
+    assert (hold.exit_offset, opn.exit_offset) == (5, 6)
+    assert (hold.held_sessions, opn.held_sessions) == (5, 6)
+    assert (hold.unlabelled, opn.unlabelled) == (5, 6)
+    assert hold.enters_at_open and opn.enters_at_open
+    assert not E.EventTarget(5.0, 5, "close").enters_at_open
+    assert (hold.aux_return, opn.aux_return) == ("return_hold_5day", "return_open_5day")
+    # both buy the SAME session and differ only in the exit
+    assert "LEAD(op, 1)" in hold.sql() and "LEAD(op, 1)" in opn.sql()
+    assert "LEAD(px, 5)" in hold.sql() and "LEAD(px, 6)" in opn.sql()
+
+
+def test_every_rule_is_carried_and_round_trips():
+    carried = {t.column for t in E.EVENT_TARGETS}
+    assert carried == {"uphold_5pct_5day", "upopen_5pct_5day", "up_5pct_5day", "upany_5pct_5day"}
+    for column in carried:
+        assert E.parse(column).column == column          # `uphold` is not parsed as `up` + "hold"
+    assert E.parse("uphold_5pct_5day").rule == "hold"
