@@ -492,3 +492,51 @@ measured on a ONE-TICKER series of ~4k rows, not a 228-name panel of 420k. ⚠�
 windowed grid these members come from LOST** — 15 models over 3 VCB trials, val-chosen test
 AUC 0.520-0.564 against a null p95 of 0.646-0.661 — **on one ticker. That difference is the
 whole hypothesis, and nothing here has been measured on this panel.**
+
+### 9c. ⚠️ THE FIRST `d = 10` TRIAL — worse on every read, and `d` is not why (2026-09-19)
+
+Trial `20260919-192250__liquid__uphold_5pct_5day__final__d10_h5__bsk`, on `2b429834`: **10 models
+declared, 14 rows scored (10 + 4 ensembles), none missing** (`BRD-1`'s guard). Chosen on val:
+**`ensemble_xl`** again, cut `min_prob = 0.28`.
+
+| same label `uphold`, chosen `ensemble_xl` | val dAUC | test dAUC (z) | hit@5 | frozen: active · prec · basket · EV · Sharpe@50 · CAGR · maxDD | rolling: basket · Sharpe · CAGR |
+|---|---|---|---|---|---|
+| `d = 1` (03:37) | 0.6433 | **0.6436** (+43.8) | 0.232 | 42.2 % · 0.289 · **+1.98 %** · +0.62 % · **0.65** · **+24.9 %** · −43.6 % | +1.45 % · 0.53 · +16.8 % |
+| `d = 10` (19:22) | 0.6356 | 0.6384 (+41.9) | 0.226 | 49.6 % · 0.274 · **+0.24 %** · −0.13 % · **−0.17** · **−13.2 %** · −59.3 % | +1.11 % · 0.34 · +6.6 % |
+
+⚠️ **THE CHOSEN MODEL READS NO WINDOW, SO `d` CANNOT BE WHY IT FELL.** `ensemble_xl` is
+`event_boost_xgb_d8`² · `event_linear_evt_c003`, and both read the LAST ROW only. What changed
+for it: the **boosting round count** — early stopping on val log-loss took `event_boost` from
+800 fixed rounds to **209 (best 159)** — and ~0.9 % fewer train rows (the purge is 14 and each
+name's first 9 sessions drop). ⚠️ **Plausibly the loss/metric mismatch §9 warned about**: val
+LOG-LOSS bottoms out at round 159 because it prices the probability LEVEL, while the
+within-session RANK may keep improving past it. **Untested** — a paired `event_boost` with
+early stopping off on this dataset (~3 min) is the measurement that would settle it.
+
+⚠️ **THE DEEP-LEARNING MEMBERS LEARNED IN ONE EPOCH AND THEN ONLY MEMORISED** — the hypothesis
+behind `d = 10`, measured:
+
+| member | best epoch | val loss: first → best → last | train loss | val dAUC | test dAUC |
+|---|---|---|---|---|---|
+| `lstm_h32` | **1** | 0.4730 → 0.4730 → **0.5613** | 0.4159 → 0.3474 | **0.6090** (lowest) | 0.6279 |
+| `tcn_c32` | **1** | 0.4646 → 0.4646 → 0.5288 | 0.4198 → 0.3749 | 0.6294 | 0.6344 |
+| `mlp_h32` | 3 | 0.4767 → 0.4678 → 0.4844 | 0.4169 → 0.3795 | 0.6185 | 0.6179 |
+| trees, for scale | 123-220 rounds | best **0.4606-0.4619** | | 0.6245-0.6317 | 0.6299-0.6387 |
+
+Even their BEST val loss is worse than any tree's, and the two lowest non-baseline rows on the
+board are two of the three. **The windowed grid lost on one VCB ticker and it loses on a
+228-name panel too** — the difference in rows was the whole hypothesis, and it did not hold.
+
+⚠️ **`ensemble_xl_seq` HAS THE BEST TEST ROW AND IS NOT THE ANSWER**: test dAUC **0.6420** and
+basket **+0.93 %**, but val **0.6306** — it was not chosen, and quoting its test row is
+choosing on test (`NUL-1`). Walk-forward of the chosen row: lift 1.71-1.92 in all six years,
+basket −0.04 % in 2022 and **−0.59 % in 2026**, Sharpe@50 negative 2024-2026.
+
+**Costs, measured** (`MEM-2` fixed first): select **4 h 34** (2 pools) · final 1 min · dataset
+3 min · train **35 min** (10 models, the DL three stopping at epoch 16-18) · report **17 min**.
+
+⚠️ **TWO LABELS IN THIS TRIAL'S ARTEFACTS ARE WRONG, AND THE NUMBERS ARE NOT**: `gbt_d2`/`gbt_d4`
+record `early_stopping: none` beside `best_round` 220/123 of a 2,000 cap (the family did not
+implement `early_stopping_rule`, and the engine's fallback is `none`), and the torch curves
+count steps from 0 while `training.best_epoch` counts from 1. Both fixed in code for the next
+trial; this trial's files stay as written (§8: a run folder is immutable).

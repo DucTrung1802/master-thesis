@@ -161,3 +161,26 @@ def test_every_family_names_the_loss_it_actually_minimises(kind, expected):
     from model.event_linear.model import build_model
 
     assert build_model(4, 1, kind=kind).objective.startswith(expected)
+
+
+def test_every_early_stopping_family_says_so_in_its_metadata():
+    """⚠️ `gbt_d4` logged `early_stopping: none` beside `best_round 123` (trial 20260919-192250).
+
+    The engine reads `early_stopping_rule` with a fallback of `none`, so a family that stops
+    and does not implement the name reports the opposite of what it did.
+    """
+    import numpy as np
+
+    from model.gbt.model import build_model
+
+    rng = np.random.default_rng(3)
+
+    class Dataset:
+        X_val = rng.normal(size=(60, 1, 4))
+        y_val = (rng.random(60) > 0.5).astype(float)
+
+    model = build_model(4, 1, max_depth=2, n_estimators=50, early_stopping_rounds=5)
+    model.set_task("classification")
+    model.set_dataset(Dataset())
+    assert model.early_stopping_rule.startswith("val log-loss")
+    assert build_model(4, 1, early_stopping_rounds=0).early_stopping_rule == "none"

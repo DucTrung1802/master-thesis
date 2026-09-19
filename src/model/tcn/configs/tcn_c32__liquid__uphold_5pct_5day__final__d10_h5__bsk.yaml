@@ -1,0 +1,27 @@
+# Written by `python -m event_chain` for uphold_5pct_5day (1 when close_adjust[t+5] >= (1 + 5%) x open_adjust[t+1] — bought at the OPEN of t+1 and sold at the close of t+5, 5 sessions held — else 0; NULL for the last 5 sessions).
+# The grid is event_chain/config.py SETUPS['basket'].
+run_name: tcn_c32__liquid__uphold_5pct_5day__final__d10_h5__bsk
+dataset: liquid__uphold_5pct_5day__final__d10_h5__bsk__tr70_val15_test15__std
+dataset_hash: d03983287f3e2d68
+task: classification
+lookback: 10
+n_features: 151
+model:
+  type: TCN
+  channels: 32
+  kernel_size: 3
+  num_layers: 2
+  dropout: 0.2
+null_draws: 200
+seed: 42
+device: auto
+train:
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.0001
+  max_epochs: 100
+  patience: 15
+  grad_clip: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  log_every: 10

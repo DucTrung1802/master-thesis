@@ -261,9 +261,13 @@ def train(
     # ⚠️ The column names are the SHARED contract, not this path's own: `_write_loss_history`
     # writes the same three columns for an estimator that has no epochs at all, so one
     # plotting function reads any run. This path's `step` is the epoch.
+    # ⚠️ `step` counts from 1 HERE because `Trainer` numbers epochs from 1 and writes that
+    # number into `training.best_epoch`; the curve and the metadata of one run must name the
+    # same point. (A boosted model's `best_iteration` is 0-based, and so is its curve.) The
+    # first basket trial to write these files, `20260919-192250`, has 0-based torch curves.
     _write_loss_history(run, [{"step": i, "train_loss": tr, "val_loss": va}
                               for i, (tr, va) in enumerate(zip(history["train"],
-                                                               history["val"]))])
+                                                               history["val"]), start=1)])
 
     _write_predictions(lambda s: trainer.predict(loaders[s]), dataset, run, task)
     _write_importances(run, net, dataset)

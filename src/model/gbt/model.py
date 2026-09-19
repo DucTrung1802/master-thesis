@@ -125,6 +125,18 @@ class GBTRegressor:
         self._val_y = np.asarray(dataset.y_val, dtype=float).ravel()
 
     @property
+    def early_stopping_rule(self) -> str:
+        """⚠️ **THIS WAS MISSING AND THE LOG SAID `none` FOR A MODEL THAT HAD STOPPED** —
+        trial `20260919-192250`'s `gbt_d4` recorded `early_stopping: none` beside
+        `best_round 123` of a 2,000 cap. The engine reads this name on every family and
+        falls back to `none`, so a family that forgets it reports the opposite of the truth."""
+        if not self.early_stopping_rounds:
+            return "none"
+        if self._val_X is None:
+            return "none (no val block: this is a refit, rounds frozen)"
+        return f"val log-loss, patience {self.early_stopping_rounds} rounds"
+
+    @property
     def best_iteration(self):
         """The round the val curve chose, or None when nothing stopped this fit."""
         return getattr(self.model_, "best_iteration", None) if self.early_stopping_rounds \
