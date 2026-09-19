@@ -48,6 +48,19 @@ def _utf8() -> None:
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 
+def _pool_shape(reader, pool: str) -> dict:
+    """`{rows, last_date}` of one pool table — the same probe the run itself records.
+
+    ⚠️ **ONE FUNCTION, BOTH SIDES.** It delegates to `feature_selection.run._source_shape`
+    rather than issuing its own SQL: two implementations of "how big is this pool" would
+    drift, and the drift would show up as a stale selection being silently reused, which
+    is the one failure the footprint exists to prevent.
+    """
+    from feature_selection.run import _source_shape
+
+    return _source_shape(reader, pool)
+
+
 @dataclass
 class EventChain:
     ticker: str = C.BASKET_TICKER
@@ -216,24 +229,89 @@ class EventChain:
             frame = frame[frame["started_at"] < pd.Timestamp(before)]
         return frame.reset_index(drop=True)
 
+    def _reusable_run(self, existing: pd.DataFrame, pool: str, holdout: str,
+                      shape: Optional[dict]):
+        """`(run_dir, why)` — the archived selection this pool may skip for, or `(None, why)`.
+
+        ⚠️ **THE OLD RULE WAS "A RUN EXISTS FOR THIS POOL, SO SKIP"**, keyed on
+        `(schema, target, lookback_d, horizon_h)`. `feature_selection.footprint`'s header
+        lists what that could not see; the two that bite here are a re-scraped pool and a
+        changed ranker, both of which reused a stale selection in silence.
+
+        ⚠️ **WHAT IS CHECKED, AND WHY IT IS NOT EVERY SETUP KEY.** The selector's own knobs
+        (`corr_threshold`, `n_splits`, `random_state`, the ranker ensemble …) are CONSTANTS
+        IN THE CODE, so the code digest already covers them — re-listing them here would be
+        a second copy that drifts. What the chain varies at the call site is checked
+        explicitly: the pool, the target, `d`, `h`, the holdout, the device and the null
+        draws. Plus the data, because nothing in the code can see a re-scrape.
+
+        ⚠️ **AN ARCHIVED RUN WITH NO KNOWN CODE IS NEVER REUSED** — `git_commit` ending in
+        `+dirty` cannot be resolved to bytes (`FPR-1`), and §5 rule 2 says an absent
+        measurement is absent, not assumed equal.
+        """
+        from feature_selection import footprint as fp
+
+        if existing.empty:
+            return None, "no archived run for this target and window"
+        rows = existing[existing["tables"] == pool]
+        if rows.empty:
+            return None, "no archived run for this pool"
+        row = rows.sort_values("started_at").iloc[-1]
+        mark = fp.read(row["dir"])
+        if mark is None:
+            return None, "the archived run has no metadata"
+        if not mark.get("reusable"):
+            return None, (f"{os.path.basename(row['dir'])} records no code digest "
+                          f"(`+dirty`, FPR-1) — readable, not skippable")
+        today = fp.code_digest()
+        if mark["parts"].get("code") != today:
+            return None, (f"the ranking path changed ({mark['parts'].get('code')} -> "
+                          f"{today}): selector/windows/gpu/run bytes")
+        with open(os.path.join(row["dir"], "metadata.json"), encoding="utf-8") as handle:
+            meta = json.load(handle)
+        setup, inputs = meta.get("setup") or {}, meta.get("input") or {}
+        want = {"target": self.event.column, "lookback_d": self.lookback,
+                "horizon_h": self.purge_horizon, "holdout_start": holdout}
+        for key, value in want.items():
+            if setup.get(key) != value:
+                return None, f"{key} moved {setup.get(key)!r} -> {value!r}"
+        if str((meta.get("execution") or {}).get("device")) != str(self.device):
+            return None, (f"device moved {(meta.get('execution') or {}).get('device')!r} -> "
+                          f"{self.device!r} (a sampled XGBoost draws from another RNG "
+                          f"stream on CUDA)")
+        drew = (meta.get("null") or {}).get("draws")
+        if (drew or 0) < self.null_draws:
+            return None, f"the archived bar used {drew} draws, this run asks {self.null_draws}"
+        # ⚠️ The only check the code digest cannot make: the POOL ITSELF moved.
+        if shape and (shape.get("rows"), str(shape.get("last_date"))) != (
+                inputs.get("source_rows"), str(inputs.get("source_last_date"))):
+            return None, (f"{pool} on disk is {shape.get('rows')} rows to "
+                          f"{shape.get('last_date')}, the run read "
+                          f"{inputs.get('source_rows')} to {inputs.get('source_last_date')}")
+        return row["dir"], f"footprint {mark['footprint']} matches"
+
     # ---------------------------------------------------------------- stages
     def select(self, pools: Optional[Sequence[str]] = None, force: bool = False) -> None:
         from feature_selection.run import run_selection
         from feature_selection.unified_reader import UnifiedSchemaReader
 
         holdout = self.holdout_start()
-        done = set(self.runs().get("tables", pd.Series(dtype=str)))
+        existing = self.runs()
         with UnifiedSchemaReader(self.ticker) as reader:
             present = set(reader.tables())
+            shape = {p: _pool_shape(reader, p) for p in (pools or self.pools) if p in present}
         pools = list(pools or self.pools)
         for i, pool in enumerate(pools, 1):
             head = f"[select {i}/{len(pools)}] {pool}"
             if pool not in present:
                 print(f"{head}: SKIPPED — {self.schema}.{pool} does not exist")
                 continue
-            if pool in done and not force:
-                print(f"{head}: already run under {self.root}")
+            reuse, why = self._reusable_run(existing, pool, holdout, shape.get(pool))
+            if reuse is not None and not force:
+                print(f"{head}: REUSED {os.path.basename(reuse)} — {why}")
                 continue
+            if why:
+                print(f"{head}: re-running — {why}")
             print(f"\n{head}: holdout from {holdout}, {self.null_draws} null draws")
             run_selection(
                 ticker=self.ticker, pools=[pool], target=self.event.column,

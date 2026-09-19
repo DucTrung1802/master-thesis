@@ -68,7 +68,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 
-from feature_selection import plots
+from feature_selection import footprint, plots
 from utils import runtime
 
 # Where a report lands unless the caller says otherwise. Anchored to the REPO ROOT,
@@ -375,6 +375,7 @@ def build_metadata(
     notes: str = "",
     extra: Optional[Dict] = None,
     columns_by_table: Optional[Dict[str, Sequence[str]]] = None,
+    source_shape: Optional[Dict[str, Dict]] = None,
     execution: Optional[Dict] = None,
 ) -> Dict:
     """Everything about the run, as a JSON-serialisable dict.
@@ -402,6 +403,16 @@ def build_metadata(
         "join_log": join_log or [],
         "panel_rows": int(len(panel)) if panel is not None else None,
         "panel_columns": int(panel.shape[1]) if panel is not None else None,
+        # ⚠️ **THE SOURCE TABLES BEFORE THE JOIN** — `{pool: {rows, last_date}}`, and the
+        # only field a reuse decision can check WITHOUT reading the panel it is trying to
+        # avoid reading. A re-scrape moves it and nothing else in this file does; `null`
+        # means the panel did not come from live pool tables, and such a run is never
+        # reused (§5 rule 2 — absent is absent, not "it cannot have moved").
+        "source_shape": _json_safe(source_shape) if source_shape else None,
+        "source_rows": (sum(int(v.get("rows") or 0) for v in source_shape.values())
+                        if source_shape else None),
+        "source_last_date": (max(str(v.get("last_date")) for v in source_shape.values())
+                             if source_shape else None),
         # ⚠️ `{pool: [channels it contributed]}`. See the docstring — this is a FACT
         # recorded where it is known, replacing a guess made three stages later.
         # `null` (rather than absent) when the caller did not supply it, so a consumer
@@ -517,6 +528,12 @@ def build_metadata(
         ),
         "notes": notes,
     }
+    # ⚠️ **THE REUSE KEY, COMPUTED FROM THE FILE THIS FUNCTION IS ABOUT TO WRITE** — data,
+    # setup, null draws and the BYTES of the ranking path. It is computed here rather than
+    # from the live selector so that one function reads a run written today and one written
+    # in August (`footprint.py`'s header has what the old key could not see). The code
+    # digest is taken NOW, while the tree that produced this run is still the tree on disk.
+    metadata["footprint"] = footprint.of_metadata(metadata, code=footprint.code_digest())
     if extra:
         metadata["extra"] = _json_safe(extra)
     return metadata
@@ -672,6 +689,7 @@ def write_report(
     notes: str = "",
     extra: Optional[Dict] = None,
     columns_by_table: Optional[Dict[str, Sequence[str]]] = None,
+    source_shape: Optional[Dict[str, Dict]] = None,
     execution: Optional[Dict] = None,
     root: str = DEFAULT_REPORT_ROOT,
     run_id: Optional[str] = None,
@@ -780,7 +798,7 @@ def write_report(
         result, selector=selector, panel=panel, schema=schema, tables=tables,
         database=database, join_log=join_log, null=null, holdout=holdout,
         universe=universe, notes=notes, extra=extra,
-        columns_by_table=columns_by_table, execution=execution,
+        columns_by_table=columns_by_table, source_shape=source_shape, execution=execution,
     )
     metadata["run_id"] = run_id
     metadata["artifacts"] = [

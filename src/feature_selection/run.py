@@ -196,6 +196,23 @@ def resolve_grain(target: str, n_tickers: int) -> bool:
     return n_tickers > 1
 
 
+def _source_shape(reader, table: str) -> dict:
+    """`{rows, last_date}` of ONE pool table — the cheap probe a reuse decision can afford.
+
+    ⚠️ **TWO NUMBERS, ONE FUNCTION, BOTH SIDES.** `event_chain.chain` calls this before
+    deciding to skip a selection and `run_selection` records what it returns, so the
+    comparison is between two values computed the same way. A second implementation on
+    the plan side would drift and then quietly reuse a stale selection, which is the
+    failure this whole footprint exists to stop.
+    """
+    with reader._driver._cursor_ctx() as cur:
+        cur.execute(f"SELECT COUNT(*) FROM {reader.schema}.{table}")
+        rows = int(cur.fetchone()[0])
+        cur.execute(f"SELECT MAX(date) FROM {reader.schema}.{table}")
+        last = cur.fetchone()[0]
+    return {"rows": rows, "last_date": str(last) if last is not None else None}
+
+
 def run_selection(
     ticker: str = "VCB",
     pools: Sequence[str] = ("pool__basic",),
@@ -297,6 +314,10 @@ def run_selection(
     ) as timer:
 
         universe: Optional[List[str]] = None
+        # ⚠️ `None` where the panel did not come from live pool tables (panel mode ships a
+        # frame, the cross-sectional read is hand-written SQL). A run with no source shape
+        # is NEVER reused — absent is absent (§5 rule 2), not "the data cannot have moved".
+        source_shape: Optional[Dict[str, dict]] = None
 
         if provided_panel is not None:
             # ⚠️ **PANEL MODE — THE JOIN ALREADY HAPPENED, WHERE THE DATABASE WAS.**
@@ -397,6 +418,14 @@ def run_selection(
                 # returns `unknown` for every pool built since 2026-08-10 and silently
                 # names `pool__ta` for a forex channel (`contract.py`).
                 columns_by_table = dict(reader.columns_by_table)
+                # ⚠️ **THE ONE INPUT NO CODE DIGEST CAN SEE: THE POOL ITSELF MOVED.** The
+                # joined panel's row count already lands in `input.panel_rows`, but a
+                # re-scrape has to be detectable BEFORE the join — a reuse decision cannot
+                # afford to read the panel it is trying to avoid reading. These two are the
+                # cheap probe `event_chain.chain._pool_shape` takes at plan time, so both
+                # sides compare the same two numbers computed the same way.
+                source_shape = {p: _source_shape(reader, p) for p in pools
+                                if p != "pool__targets"}
                 schema_name, database = reader.schema, reader.database
                 # ⚠️ **ALL_TARGETS IS CHECKED AGAINST THE TABLE, NOT TRUSTED.** `join`
                 # brings every non-key column of `pool__targets` into the panel, and
@@ -571,6 +600,7 @@ def run_selection(
             # ⚠️ The two facts a run folder could not previously state about itself:
             # which pool each channel came from, and what the run cost on what hardware.
             columns_by_table=columns_by_table,
+            source_shape=source_shape,
             # `summary()` reads a LIVE elapsed time on purpose — this call is what
             # writes the file the block goes into, so waiting for the finish banner
             # would record a zero.

@@ -3070,3 +3070,57 @@ raise on it. A selection on a 0/1 target runs unchanged: the CV IC is a rank cor
 label. ⚠️ `run_selection` anchors a RELATIVE `--root` at the repo root, not the CWD (`RTA-1`).
 The event chain's per-pool results are 📂 [single-stock.md](../findings/single-stock.md)
 §6-1-quinquies.
+
+## 21. ⚠️ THE FOOTPRINT — when a selection may be REUSED (2026-09-19)
+
+⚠️ **A SELECTION AT `d = 10` COSTS ~101 MINUTES PER POOL.** Measured 2026-09-19 on the
+LIQUID panel: one 9-phase cycle is **551 s** (phase 4, the ranker ensemble, is 402 s of it
+and the walk-forward 100 s), and a run is the real pass plus `null_draws` repeats of it —
+so two pools are **~3 h 25 min** against 52 min at `d = 1`, where `WST-1` collapses the
+design to one statistic per channel. At that price, reuse is worth having and a WRONG
+reuse is worth avoiding.
+
+**The reuse key until today** was `(schema, target, lookback_d, horizon_h)` plus the pool's
+name, read out of `metadata.json` by `event_chain.chain.runs()`. What it could not see:
+
+| input | consequence |
+|---|---|
+| `holdout_start` | it is READ into the frame and **never filtered on** — a different holdout reused in silence |
+| `null.draws` | a 10-draw bar answers a request for 20 (§5 rule 1) |
+| `device` | a sampled XGBoost draws from another RNG stream on CUDA (§16) — two experiments, one key |
+| the pool's own DATA | a re-scrape adds rows and the stale selection is reused; §5 rule 10's shape one layer up |
+| the bytes of `selector.py` / `windows.py` / `gpu.py` | the ranker changes and the key does not move |
+
+`feature_selection/footprint.py` hashes four blocks — **data · setup · null_draws · code** —
+into 12 hex, and `metadata.json` carries `footprint: {footprint, parts, code, reusable}`.
+A miss names the block that moved rather than just re-running, because on a 101-minute job
+being told *"it was the null draws, not the data"* is the whole value.
+
+⚠️ **THE CODE BLOCK IS THE BYTES, NOT THE COMMIT** — `git_commit` reads `1593f663+dirty`
+for most of a working day and `+dirty` cannot be resolved back to bytes. This is
+`web_scraper`'s `parser_digest()` (`FPR-1`) copied into the selection. `CODE_FILES` is the
+ranking path only: `selector`, `selector_methods`, `windows`, `gpu`, `run`, `evaluation`,
+`cross_sectional`. ⚠️ **`report.py` is deliberately absent** — it writes artefacts and
+cannot move a number, and including it would invalidate every selection whenever a heading
+changed.
+
+⚠️ **AN ARCHIVED RUN IS QUOTABLE BUT NOT SKIPPABLE.** The 30 runs on disk predate the
+field, so their code is `unknown` and `reusable` is `False` — they still get a footprint
+(computed from the blocks they DID record, so the archive is fully backfilled with **no
+re-run**), and `chain._reusable_run` refuses to skip for them. §5 rule 2: absent is absent,
+not assumed equal.
+
+⚠️ **WHAT THE REUSE CHECK COMPARES, AND WHY IT IS NOT EVERY SETUP KEY.** The selector's
+knobs (`corr_threshold`, `n_splits`, `random_state`, the ranker ensemble) are CONSTANTS IN
+THE CODE, so the code digest already covers them; re-listing them at the call site would be
+a second copy that drifts (`MTH-1`'s lesson). Checked explicitly: pool, target, `d`, `h`,
+`holdout_start`, `device`, `null_draws`, plus **the source pool's `rows` and `last_date`** —
+the one input no code digest can see. Both sides call **one** function for that probe
+(`run._source_shape`), because two implementations of *"how big is this pool"* would drift
+into exactly the silent stale reuse this exists to stop.
+
+⚠️ **`contract.SETUP_KEYS` AND `footprint.SETUP_KEYS` ANSWER DIFFERENT QUESTIONS** and are
+deliberately not one tuple: the first decides whether two runs may be **unioned** into one
+`__final__` table, the second whether one may be **skipped** because the other ran.
+Skipping is stricter — `target`, `holdout_start` and `device` do not stop a union and
+absolutely stop a reuse.
