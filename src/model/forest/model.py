@@ -155,6 +155,38 @@ class ForestWindow:
         return {"kind": self.kind, "device": self.device,
                 "backend": "xgboost" if self.kind == "xgbrf" else "sklearn"}
 
+    @property
+    def objective(self) -> str:
+        if self.task != "classification":
+            return "mean squared error (variance reduction at the split)"
+        return ("binary:logistic (binary cross-entropy)" if self.kind == "xgbrf"
+                else "Gini impurity at the split (sklearn), not a global loss")
+
+    @property
+    def early_stopping_rule(self) -> str:
+        """⚠️ **A FOREST HAS NOTHING TO STOP.** `xgbrf` is ONE boosting round of
+        `num_parallel_tree` trees at full step size, and a bagged sklearn forest is not
+        sequential at all — there is no val curve to watch, so its `loss_history.csv` is
+        one row by construction rather than by omission (`engine._write_loss_history`)."""
+        return "none: a forest is one round, there is no curve to stop on"
+
+    def importances(self, feature_columns=None) -> dict:
+        """`{stat__channel: importance}` — gain under `xgbrf`, impurity drop under sklearn.
+
+        ⚠️ The two are NOT on one scale; `engine._write_importances` records which.
+        """
+        from model.common.features import stat_names
+
+        names = stat_names(list(feature_columns or []))
+        if self.kind == "xgbrf":
+            score = self.model_.get_booster().get_score(importance_type="gain")
+            return {names[int(k[1:])]: float(v) for k, v in score.items()
+                    if int(k[1:]) < len(names)}
+        values = getattr(self.model_, "feature_importances_", None)
+        if values is None or len(names) != len(values):
+            return {}
+        return {n: float(v) for n, v in zip(names, values) if v > 0}
+
 
 def build_model(n_features: int, lookback: int, **kwargs) -> ForestWindow:
     return ForestWindow(n_features, lookback, **kwargs)

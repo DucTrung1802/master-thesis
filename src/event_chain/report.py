@@ -31,6 +31,7 @@ beside the number.
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Dict, List, Optional
 
@@ -166,6 +167,34 @@ def model_runs(chain, runs_dir: Optional[str] = None) -> pd.DataFrame:
     return rows[rows["dir"].map(os.path.isdir)].reset_index(drop=True)
 
 
+def _require_declared_grid(chain, runs: pd.DataFrame) -> None:
+    """Raise when the grid declared a model the board has no run for (`GRD-3`).
+
+    ⚠️ **A MODEL THAT FINISHED 46 SECONDS LATE VANISHED WITHOUT A WORD** (measured
+    2026-09-19): `event_boost_mag_d8` fitted for 94.5 s starting 03:36:48 and
+    `event_chain.report` read `index.csv` at 03:37:36, so the board carried 8 of the 9
+    declared models, `ensemble_boost` and `ensemble_boost_eq` were dropped on one
+    `a member has no run on this dataset — skipped` line, and **the trial log recorded a
+    complete-looking grid.** A leaderboard that silently scores a SUBSET of the declared
+    search is `NUL-1`'s shape — the search that produced the winner is not the search that
+    is written down.
+
+    ⚠️ It raises rather than warning because the failure mode is a report that LOOKS
+    finished. Re-run the missing model, or take it out of the grid on purpose.
+    """
+    declared = list(getattr(chain, "run_names", []) or [])
+    if not declared:
+        return
+    missing = [n for n in declared if n not in set(runs["run_name"])]
+    if missing:
+        raise RuntimeError(
+            f"the grid declares {len(declared)} models and {len(missing)} have no scored run "
+            f"on this dataset: {', '.join(sorted(n.split('__')[0] for n in missing))}. "
+            f"A report over a subset of the declared search is not the search that was "
+            f"declared — fit them (the chain's train stage) or remove them from the grid."
+        )
+
+
 def leaderboard(chain, runs_dir: Optional[str] = None) -> pd.DataFrame:
     from model.common.data import load_dataset
 
@@ -173,7 +202,9 @@ def leaderboard(chain, runs_dir: Optional[str] = None) -> pd.DataFrame:
     train_rate = float(np.mean(dataset.y_train))
     block = int(dataset.lookback + chain.horizon)
     table = []
-    for _, run in model_runs(chain, runs_dir).iterrows():
+    runs = model_runs(chain, runs_dir)
+    _require_declared_grid(chain, runs)
+    for _, run in runs.iterrows():
         pred = {}
         for split in ("val", "test"):
             path = os.path.join(run["dir"], "results", f"predictions_{split}.csv")
@@ -302,8 +333,35 @@ def _estimator(chain, board: pd.DataFrame, run_name: str, runs_dir: str, dataset
         cfg = yaml.safe_load(fh)
     package = _package(row["model_type"])
     module = importlib.import_module(f"model.{package}.model")
-    arch = module.arch_dict(n_features=dataset.n_features, lookback=dataset.lookback, **model_spec(cfg))
+    spec = model_spec(cfg)
+    # ⚠️ **A REFIT HAS NO VAL, SO IT CANNOT EARLY-STOP** (2026-09-19). `refit_test` fits on
+    # train+val and the rolling refit on everything before its block, so the val rows are
+    # INSIDE the fit block: stopping on them would watch the model's own training data and
+    # take the last round every time. The frozen fit already chose a round on a held-out
+    # val, so the refit REUSES it — `n_estimators` becomes that count and early stopping is
+    # switched off. One mode, two paths; the alternative (stop again on rows being fitted)
+    # is the kind of leak that reads as a better number.
+    if "early_stopping_rounds" in spec:
+        spec = dict(spec, early_stopping_rounds=0,
+                    n_estimators=int(_frozen_rounds(runs_dir, row) or spec["n_estimators"]))
+    arch = module.arch_dict(n_features=dataset.n_features, lookback=dataset.lookback, **spec)
     return module, arch
+
+
+def _frozen_rounds(runs_dir: str, row) -> Optional[int]:
+    """The boosting round the frozen fit's val curve chose (`training.best_epoch`) + 1.
+
+    ⚠️ Returns None when the run early-stopped on nothing, and the caller then keeps the
+    configured cap — a refit that silently used a DIFFERENT number of trees than the row it
+    is refitting would make the two columns incomparable, which is the whole point of the
+    column.
+    """
+    path = os.path.join(runs_dir, row["run_id"], "metadata.json")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        best = ((json.load(fh).get("training") or {}).get("best_epoch"))
+    return int(best) + 1 if best else None
 
 
 def _stacked(dataset):

@@ -188,6 +188,30 @@ class EventLinear:
         order = np.argsort(-np.abs(coef))
         return {str(names[i]): float(coef[i]) for i in order}
 
+    # `engine._write_importances` reads this name on every family; the SIGNED coefficient
+    # is the honest one for a linear model, and the file is sorted by magnitude either way.
+    importances = coefficients
+
+    @property
+    def objective(self) -> str:
+        return {"event_logit": "binary cross-entropy (L2 logistic, the event label)",
+                "magnitude_ridge": "mean squared error (ridge on log|log(1+r_h)|), "
+                                   "then a 1-D logistic calibration",
+                "direction_logit": "binary cross-entropy on a DIFFERENT label "
+                                   "(1{r>0} on rows with |move| >= min_move)"}[self.kind]
+
+    @property
+    def sample_weight_rule(self) -> str:
+        return ("uniform" if self.half_life_years is None
+                else f"exponential age decay, half-life {self.half_life_years} years")
+
+    @property
+    def early_stopping_rule(self) -> str:
+        """⚠️ **CONVEX: THERE IS NO CURVE TO STOP.** The capacity knob is `C` / `alpha`,
+        not a round count, so this family cannot answer an early-stopping requirement —
+        `event_chain/config.py` records that as a property of the grid, not an omission."""
+        return "none: convex fit, capacity set by C/alpha"
+
 
 def build_model(n_features: int, lookback: int, **kwargs) -> EventLinear:
     return EventLinear(n_features, lookback, **kwargs)

@@ -43,13 +43,24 @@ class GBTRegressor:
     estimator protocol `engine.train_estimator` expects.
     """
 
+    # ⚠️ For the VAL BLOCK ONLY (early stopping). The fit rows stay the train split, and
+    # `set_dataset` says what that costs.
+    needs_dataset = True
+
     def __init__(self, n_features: int, lookback: int, max_depth: int = 3,
                  n_estimators: int = 200, learning_rate: float = 0.05,
                  subsample: float = 0.8, colsample_bytree: float = 0.8,
                  min_child_weight: float = 5.0, reg_lambda: float = 1.0,
                  random_state: int = 42, gamma: float = 0.0,
-                 scale_pos_weight: float = 1.0, device: str = "cpu"):
+                 scale_pos_weight: float = 1.0, device: str = "cpu",
+                 early_stopping_rounds: int = 0):
         self.n_features = int(n_features)
+        # ⚠️ `n_estimators` stops being a hyper-parameter once this is set: it becomes a
+        # CAP and the val curve picks the round. Raise the cap when you turn this on.
+        self.early_stopping_rounds = int(early_stopping_rounds) or 0
+        self._val_X = None
+        self._val_y = None
+        self._val_design = None
         # ⚠️ `task` is set by the ENGINE (`set_task`), never by the config: the config's
         # own `task:` field is the one authority, and a second copy inside `model:` could
         # disagree with it.
@@ -80,9 +91,62 @@ class GBTRegressor:
             raise ValueError(f"unknown task {task!r}")
         self.task = task
 
+    @property
+    def objective(self) -> str:
+        return ("binary:logistic (binary cross-entropy)" if self.task == "classification"
+                else "reg:squarederror")
+
+    @property
+    def sample_weight_rule(self) -> str:
+        return ("uniform" if self.scale_pos_weight == 1.0
+                else f"scale_pos_weight={self.scale_pos_weight}")
+
+    def set_dataset(self, dataset) -> None:
+        """Keep the VAL block for early stopping. ⚠️ The FIT ROWS are still train only.
+
+        ⚠️ **VAL NOW CARRIES THREE JOBS** (decided 2026-09-19 by the user, against the
+        alternative of carving the stop block out of train): it chooses the model, it
+        chooses the basket's `min_prob` cut, and it stops the boosting. **So `val_daily_auc`
+        is no longer an out-of-sample estimate of anything** — it is a selection score, and
+        TEST is the only honest read. ⚠️ **And the refit paths have no val at all**
+        (`event_chain.report` refits on train+val), so they reuse the round this fit chose
+        rather than stopping again — see `best_iteration`.
+        """
+        # ⚠️ The DESIGN is not built here: `window_statistics` on the val block is a
+        # second copy of it in memory, and a run with early stopping off must not pay
+        # for a block it will never look at.
+        self._val_X = dataset.X_val
+        self._val_y = np.asarray(dataset.y_val, dtype=float).ravel()
+
+    @property
+    def best_iteration(self):
+        """The round the val curve chose, or None when nothing stopped this fit."""
+        return getattr(self.model_, "best_iteration", None) if self.early_stopping_rounds \
+            else None
+
+    def loss_history(self) -> list:
+        """`[{step, train_loss, val_loss}]` per boosting round — `engine`'s contract."""
+        result = getattr(self.model_, "evals_result_", None) or {}
+        train = list((result.get("validation_0") or {}).values())
+        val = list((result.get("validation_1") or {}).values())
+        if not train:
+            return []
+        return [{"step": i, "train_loss": float(t), "val_loss": float(v)}
+                for i, (t, v) in enumerate(zip(train[0], val[0] if val else train[0]))]
+
     def fit(self, X: np.ndarray, y: np.ndarray) -> "GBTRegressor":
         from xgboost import XGBClassifier, XGBRegressor
 
+        design = window_statistics(X)
+        fit_kwargs = {}
+        if self._val_X is not None and self.early_stopping_rounds:
+            self._val_design = window_statistics(np.asarray(self._val_X, dtype=float))
+            y_val = (self._val_y >= 0.5).astype(int) if self.task == "classification" \
+                else self._val_y
+            # ⚠️ TRAIN FIRST, VAL SECOND: `evals_result` keys on position
+            # (`validation_0`/`validation_1`) and XGBoost early-stops on the LAST one.
+            fit_kwargs = {"eval_set": [(design, y), (self._val_design, y_val)],
+                          "verbose": False}
         if self.task == "classification":
             # ⚠️ `scale_pos_weight` re-weights the rare class and so DE-CALIBRATES the
             # probability; left at 1.0 by default so log-loss and Brier stay readable.
@@ -90,10 +154,14 @@ class GBTRegressor:
                 **self.params,
                 objective="binary:logistic",
                 eval_metric="logloss",
+                early_stopping_rounds=self.early_stopping_rounds if fit_kwargs else None,
                 scale_pos_weight=self.scale_pos_weight,
-            ).fit(window_statistics(X), y)
+            ).fit(design, y, **fit_kwargs)
         else:
-            self.model_ = XGBRegressor(**self.params).fit(window_statistics(X), y)
+            self.model_ = XGBRegressor(
+                **self.params,
+                early_stopping_rounds=self.early_stopping_rounds if fit_kwargs else None,
+            ).fit(design, y, **fit_kwargs)
         # ⚠️ `n_params` in `index.csv` is a CAPACITY column, so a tree model must put
         # something comparable in it or the ladder in §14 has a hole. A boosted ensemble
         # has no weights; its fitted degrees of freedom are the DECISION NODES (every

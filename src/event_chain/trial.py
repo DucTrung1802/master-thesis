@@ -59,7 +59,7 @@ from event_chain import config as C
 
 TRIALS_DIR = os.path.join(C.OUTPUT_ROOT, "trials")
 TRIALS_LOG = os.path.join(C.OUTPUT_ROOT, "trials.csv")
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # The code whose bytes decide a trial's numbers. Globs, relative to the repo root.
 CODE_FILES = (
@@ -309,6 +309,15 @@ def _selection(chain, runs: pd.DataFrame, feature_columns: Sequence[str]) -> Lis
             "shortlisted": len(channels),
             "shortlist": channels,
             "in_final_table": sorted(features.intersection(channels)),
+            # ⚠️ **WHICH OF THE DATASET'S CHANNELS CAME FROM THIS POOL** (added 2026-09-19).
+            # `trial.json` carried a FLAT list of 151 feature columns and a per-pool KEPT
+            # COUNT, so nothing on disk said which channel belonged to which pool — a chart
+            # grouped by feature group had to join three folders to find out, and the
+            # selection folder is the one artefact a re-run overwrites. The list is the
+            # intersection of the pool's own ranked channels with the built design, so a
+            # channel two pools both offer appears under both, which is the truth.
+            "columns_in_design": sorted(features.intersection(
+                _pool_channels(run["dir"]))),
             "evidence": shortlist["evidence"].iloc[0] if "evidence" in shortlist and len(shortlist) else None,
             "cv_ic": run.get("ic"),
             "null": meta.get("null"),
@@ -390,6 +399,115 @@ def _predictions(board: pd.DataFrame, runs_dir: str) -> pd.DataFrame:
                 frame.insert(0, "run_name", row["run_name"])
                 frames.append(frame)
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def _pool_channels(selection_dir: str) -> set:
+    """Every channel this selection run ranked — `feature_importance.csv`'s own column."""
+    path = os.path.join(selection_dir, "feature_importance.csv")
+    if not os.path.exists(path):
+        return set()
+    frame = pd.read_csv(path)
+    return set(frame["channel"].astype(str)) if "channel" in frame else set()
+
+
+def _loss_block(board: pd.DataFrame, runs_dir: str) -> dict:
+    """The grid's loss rule, plus the objective every run actually recorded.
+
+    ⚠️ **THE GRID CARRIED THREE LOSSES UNTIL 2026-09-19 AND THE RUN FOLDERS SAID SO IN ONE
+    SENTENCE**: `training.criterion` read `"train log-loss, single fit (no training loop)"`
+    for a `binary:logistic` classifier, a `reg:squarederror` regressor and a
+    `rank:pairwise` ranker alike, because it describes the SHAPE of the fit and not the
+    function. `per_model` below is read from each run's own `training.objective`, so a
+    member that drifts off the rule is visible here rather than inferable from a config.
+    """
+    per_model = {}
+    for _, row in board.iterrows():
+        run_id = row.get("run_id")
+        if not run_id:
+            # An ensemble fits nothing; the geometric mean has no loss of its own.
+            per_model[row["run_name"].split("__")[0]] = "none (fixed geometric mean)"
+            continue
+        path = os.path.join(runs_dir, run_id, "metadata.json")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                training = json.load(fh).get("training") or {}
+            per_model[row["run_name"].split("__")[0]] = {
+                "objective": training.get("objective"),
+                "sample_weight": training.get("sample_weight"),
+                "early_stopping": training.get("early_stopping"),
+                "best_round": training.get("best_epoch"),
+            }
+    return {
+        "rule": "binary cross-entropy on the 0/1 event label, unweighted, no class weighting",
+        "chosen_because": (
+            "the decision has two halves and both were measured: 84 % of the edge is "
+            "choosing the NAME inside a session (a rank) and 16 % is choosing the SESSION "
+            "through the min_prob cut (a LEVEL). Log-loss is a proper scoring rule, so one "
+            "number serves both; rank:pairwise is invariant to monotone transforms inside a "
+            "query, so its scores cannot be compared across sessions and the cut is lost."
+        ),
+        "would_flip_if": "the cut is dropped and a fixed basket is traded every session",
+        "early_stopping": (
+            "val log-loss. ⚠️ VAL NOW CHOOSES THE MODEL, THE CUT AND THE ROUND, so "
+            "val_daily_auc is a selection score and TEST is the only honest read. The refit "
+            "paths have no val and reuse the frozen fit's round."
+        ),
+        "families_that_cannot_stop": (
+            "a forest is one boosting round, a logistic is convex (capacity is C/alpha), "
+            "and the prior does not fit — they write a one-row loss_history.csv"
+        ),
+        "per_model": per_model,
+    }
+
+
+def _copy_curves(board: pd.DataFrame, runs_dir: str, folder: str) -> int:
+    """Copy each run's small per-fit artefacts into the trial folder, which git TRACKS.
+
+    ⚠️ **`src/model/runs/*/` IS GITIGNORED** (only `index.csv` is tracked) and `RPR-1`
+    deleted 29 run folders once. A learning curve, an importance table and a calibration
+    table are a few KB each and are the inputs to every chart this trial will ever justify,
+    so they live where the trial lives. The predictions stay behind: those are megabytes,
+    and `predictions_wide.csv.gz` already carries them.
+    """
+    copied = 0
+    curves = os.path.join(folder, "curves")
+    for _, row in board.iterrows():
+        run_id = row.get("run_id")
+        if not run_id:
+            continue
+        short = row["run_name"].split("__")[0]
+        for artefact in ("loss_history.csv", "feature_importance.csv", "calibration.csv"):
+            path = os.path.join(runs_dir, run_id, "results", artefact)
+            if os.path.exists(path):
+                os.makedirs(curves, exist_ok=True)
+                shutil.copyfile(path, os.path.join(curves, f"{short}__{artefact}"))
+                copied += 1
+    return copied
+
+
+def _with_ensembles(wide: pd.DataFrame, chain) -> pd.DataFrame:
+    """Add one column per FIXED ensemble — the geometric mean `event_chain.report` scored.
+
+    ⚠️ **THE CHOSEN MODEL HAS BEEN AN ENSEMBLE ON EVERY BASKET TRIAL, AND IT WAS THE ONE
+    ROW THIS FILE DID NOT CARRY** (fixed 2026-09-19). An ensemble has no run folder — its
+    `run_id` is empty by construction, because nothing fits it — so `_predictions` skipped
+    it and `predictions_wide.csv.gz` held the eight members and not the winner. It is
+    REPRODUCIBLE from them (a member listed twice counts twice, so `ensemble_xl` is
+    `xgb^(2/3) · evt^(1/3)`), and reproducible is not recorded: every chart of the chosen
+    model had to recompute it, from a rule stored in a different file.
+
+    ⚠️ An ensemble whose member is missing from the frame is SKIPPED rather than computed
+    from what is there — a geometric mean over a subset is a different model wearing the
+    same name.
+    """
+    for name, members in (getattr(chain, "ensembles", None) or {}).items():
+        if any(m not in wide.columns for m in members):
+            continue
+        product = np.ones(len(wide))
+        for member in members:
+            product = product * np.clip(wide[member].to_numpy(dtype=float), 1e-9, 1.0)
+        wide[name] = product ** (1.0 / len(members))
+    return wide
 
 
 def _trial_id(started_at: pd.Timestamp, chain) -> str:
@@ -493,7 +611,13 @@ def record(chain, built: Dict, notes: str = "",
                   "purge_rule": split_meta.get("purge_rule"), "splits": splits},
         "setup": {"name": getattr(chain, "setup", "window"), "channels": getattr(chain, "channels", "shortlist"),
                   "aux_targets": list(getattr(chain, "aux_targets", ()) or []),
-                  "ensembles": {k: list(v) for k, v in (getattr(chain, "ensembles", {}) or {}).items()}},
+                  "ensembles": {k: list(v) for k, v in (getattr(chain, "ensembles", {}) or {}).items()},
+                  "declared_models": list(getattr(chain, "run_names", []) or []),
+                  "scored_models": sorted(board["run_name"].tolist()) if not board.empty else []},
+        # ⚠️ ONE LOSS FOR THE WHOLE GRID, written down so a later reader does not have to
+        # infer it from nine `hyperparameters` blobs. `objective` per model is in
+        # `models[].training.objective`; this is the GRID's rule and what it refuses.
+        "loss": _loss_block(board, runs_dir),
         "selection": {"root": _rel(chain.root), "lookback": chain.lookback,
                       "null_draws_configured": chain.null_draws,
                       "pools_offered": list(chain.pools), "runs": selection},
@@ -542,12 +666,14 @@ def record(chain, built: Dict, notes: str = "",
         # trial still outlives its run folders (`RPR-1`) without a 60 MB file in git.
         wide = predictions.assign(run=predictions["run_name"].str.split("__").str[0]).pivot_table(
             index=["split", "date", "ticker", "y_true"], columns="run", values="y_prob", aggfunc="first")
+        wide = _with_ensembles(wide, chain)
         wide.reset_index().to_csv(os.path.join(folder, "predictions_wide.csv.gz"), index=False,
                                   float_format="%.5g", compression="gzip")
     elif not predictions.empty:
         # 6 significant digits: re-scorable to 1e-6, and half the bytes of repr floats.
         predictions.to_csv(os.path.join(folder, "predictions.csv"), index=False,
                            float_format="%.6g")
+    _copy_curves(board, runs_dir, folder)
     shutil.copyfile(built["path"], os.path.join(folder, "report.md"))
     rebuild_log()
     return folder
@@ -604,7 +730,13 @@ def log_rows(body: Dict) -> List[Dict]:
                       for k in ("run_seconds", "fit_seconds")}
             devices = {str(x.get("device") or (x.get("config") or {}).get("device")) for x in members}
             device = "+".join(sorted(devices)) if devices else "cpu"
-        gpu = ((m.get("env") or {}).get("cuda_device") or machine_gpu) if str(device).startswith("cuda") else ""
+        # ⚠️ `startswith` WAS WRONG FOR AN ENSEMBLE, whose `device` is the JOINED set of its
+        # members' (`cpu+cuda`): the string starts with `cpu`, so a row whose two XGBoost
+        # members fitted on the card logged `gpu: not used`. That is the second half of
+        # `DEV-1` — the first was the engine writing a literal `cpu` — and it reads as a
+        # different experiment, since a sampled XGBoost draws from another RNG stream on
+        # CUDA. Any member on the card makes the row a CUDA row.
+        gpu = ((m.get("env") or {}).get("cuda_device") or machine_gpu) if "cuda" in str(device) else ""
         rows.append({
             "exchange": body["universe"].get("exchange"),
             "ticker": body["universe"]["ticker"],

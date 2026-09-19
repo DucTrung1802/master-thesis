@@ -103,13 +103,36 @@ def test_trading_track_is_non_overlapping_and_charges_the_round_trip():
 def test_the_basket_setup_is_a_panel_with_a_parameter_x():
     chain = EventChain.from_setup("basket")
     assert chain.is_basket and chain.top_k == C.BASKET_SIZE == 5
-    assert chain.ticker == "LIQUID" and chain.lookback == 1
+    # ⚠️ `lookback` LEFT 1 on 2026-09-19 (the user's decision to keep the deep-learning
+    # models): a sequence model at d=1 reads a single row. The purge follows it — §5 rule 6
+    # is `d + h - 1`, so 14 here and 5 before.
+    assert chain.ticker == "LIQUID" and chain.lookback == C.BASKET_LOOKBACK > 1
     assert C.BASKET_EXCLUDE_CEILING is False   # the user's decision, 2026-09-17
     assert EventChain.from_setup("basket", top_k=3).top_k == 3
     assert set(C.SETUPS) == {"basket"}   # the close-to-close setups were deleted 2026-09-18
     members = {m for ms in chain.ensembles.values() for m in ms}
     names = {f"{p}{v}" for p, v, _, _ in chain.models}
     assert members <= names
+
+
+def test_every_member_of_the_grid_minimises_one_loss():
+    """⚠️ ONE LOSS, CHECKED — the grid carried three until 2026-09-19.
+
+    A member is admissible when it fits BINARY CROSS-ENTROPY on the event label. The two
+    that did not were `event_linear`'s `magnitude_ridge` (squared error on a volatility
+    proxy) and `event_boost`'s `magnitude` / `rank`; both kinds stay in their packages, so
+    only a CONFIG can put them back and this test is what notices.
+    """
+    chain = EventChain.from_setup("basket")
+    for package, variant, spec, _ in chain.models:
+        kind = spec.get("kind")
+        assert kind not in ("magnitude_ridge", "direction_logit", "magnitude", "rank"), (
+            f"{package}{variant} fits {kind!r}, which is not binary cross-entropy on the "
+            f"event label — the grid is one loss (config.py)")
+    # and the one that early-stops must have a cap it can actually reach
+    for package, variant, spec, _ in chain.models:
+        if spec.get("early_stopping_rounds"):
+            assert spec["n_estimators"] >= 2000, f"{package}{variant} caps the val curve"
 
 
 def test_the_auc_nulls_keep_timing_and_break_the_ranking():

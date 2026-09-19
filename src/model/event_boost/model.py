@@ -48,7 +48,8 @@ class EventBoost:
                  min_child_weight: float = 500.0, reg_lambda: float = 1.0,
                  max_bin: int = 256, half_life_years: Optional[float] = None,
                  aux_target: str = "return_5day", eps: float = 1e-3,
-                 device: str = "cuda", seed: int = 42):
+                 device: str = "cuda", seed: int = 42,
+                 early_stopping_rounds: int = 0):
         if kind not in KINDS:
             raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
         self.kind = kind
@@ -71,6 +72,54 @@ class EventBoost:
         self.fit_aux_ = None
         self.fit_summary_: dict = {}
         self.n_params = 0
+        # ⚠️ A CAP once early stopping is on, not a hyper-parameter — the val curve picks
+        # the round. `kind='xgb'` only: a ranker's val query set is a different question and
+        # the magnitude regressor is off the basket grid (one loss, `event_chain/config.py`).
+        self.early_stopping_rounds = int(early_stopping_rounds) or 0
+        self._val_X = None
+        self._val_y = None
+
+    # ------------------------------------------------------------ reporting
+    @property
+    def objective(self) -> str:
+        return {"xgb": "binary:logistic (binary cross-entropy)",
+                "magnitude": "reg:squarederror",
+                "rank": "rank:pairwise"}[self.kind]
+
+    @property
+    def sample_weight_rule(self) -> str:
+        return ("uniform" if self.half_life_years is None
+                else f"exponential age decay, half-life {self.half_life_years} years")
+
+    @property
+    def early_stopping_rule(self) -> str:
+        if self.kind != "xgb" or not self.early_stopping_rounds:
+            return "none"
+        if self._val_X is None:
+            return "none (no val block: this is a refit, rounds frozen)"
+        return f"val log-loss, patience {self.early_stopping_rounds} rounds"
+
+    @property
+    def best_iteration(self):
+        return getattr(self.model_, "best_iteration", None) if self.early_stopping_rounds \
+            else None
+
+    def loss_history(self) -> list:
+        """`[{step, train_loss, val_loss}]` per boosting round — `engine`'s contract."""
+        result = getattr(self.model_, "evals_result_", None) or {}
+        train = list((result.get("validation_0") or {}).values())
+        val = list((result.get("validation_1") or {}).values())
+        if not train:
+            return []
+        return [{"step": i, "train_loss": float(t), "val_loss": float(v)}
+                for i, (t, v) in enumerate(zip(train[0], val[0] if val else train[0]))]
+
+    def importances(self, feature_columns=None) -> dict:
+        """`{channel: gain}` over the channels this model kept (`columns` / `exclude`)."""
+        score = self.model_.get_booster().get_score(importance_type="gain")
+        names = self.names_ or [f"f{i}" for i in self.index_]
+        return {names[int(k[1:])]: float(v) for k, v in score.items()
+                if int(k[1:]) < len(names)}
 
     # ------------------------------------------------------------ context
     def set_task(self, task: str) -> None:
@@ -94,6 +143,11 @@ class EventBoost:
             raise ValueError(
                 f"kind='magnitude' fits on the auxiliary target {self.aux_target!r}, which the dataset "
                 f"does not carry — build it with train_test_creator aux_targets=({self.aux_target!r},)")
+        # ⚠️ THE VAL BLOCK IS KEPT FOR EARLY STOPPING ONLY and the fit rows stay the train
+        # split. Val now chooses the model, the basket's cut AND the boosting round, so
+        # `val_daily_auc` is a selection score and TEST is the only honest read.
+        self._val_X = dataset.X_val if self.early_stopping_rounds else None
+        self._val_y = dataset.y_val if self.early_stopping_rounds else None
         self.set_fit_context(dates=dataset.dates_train, aux=aux.get("train"))
 
     def set_fit_context(self, dates=None, aux=None) -> None:
@@ -125,9 +179,22 @@ class EventBoost:
             age = (dates.max() - dates).astype(float) / 365.25
             weight = np.power(0.5, age / self.half_life_years)
         if self.kind == "xgb":
+            # ⚠️ EARLY STOPPING IS ON THE VAL BLOCK, and only when a dataset handed one over
+            # (`set_dataset`). A REFIT has no val — `event_chain.report` fits on train+val —
+            # so it arrives with `early_stopping_rounds=0` and the round this fit chose
+            # frozen into `n_estimators`; stopping on rows inside the fit block would pick
+            # the last round every time.
+            stop = self.early_stopping_rounds if self._val_X is not None else 0
+            eval_set = None
+            if stop:
+                Zval = self._design(np.asarray(self._val_X))
+                yval = (np.asarray(self._val_y, dtype=float).ravel() >= 0.5).astype(int)
+                # train first, val second: XGBoost stops on the LAST eval set.
+                eval_set = [(Z, target), (Zval, yval)]
             self.model_ = XGBClassifier(**self.params, device=self.device,
-                                        objective="binary:logistic", eval_metric="logloss")
-            self.model_.fit(Z, target, sample_weight=weight)
+                                        objective="binary:logistic", eval_metric="logloss",
+                                        early_stopping_rounds=stop or None)
+            self.model_.fit(Z, target, sample_weight=weight, eval_set=eval_set, verbose=False)
         elif self.kind == "magnitude":
             if self.fit_aux_ is None or len(self.fit_aux_) != len(Z):
                 raise ValueError(

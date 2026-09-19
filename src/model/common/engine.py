@@ -258,11 +258,17 @@ def train(
     fit_started = time.perf_counter()
     history = trainer.fit(loaders["train"], loaders["val"])
     fit_seconds = time.perf_counter() - fit_started
-    pd.DataFrame(history).to_csv(
-        os.path.join(run.results_dir, "loss_history.csv"), index_label="epoch"
-    )
+    # ⚠️ The column names are the SHARED contract, not this path's own: `_write_loss_history`
+    # writes the same three columns for an estimator that has no epochs at all, so one
+    # plotting function reads any run. This path's `step` is the epoch.
+    _write_loss_history(run, [{"step": i, "train_loss": tr, "val_loss": va}
+                              for i, (tr, va) in enumerate(zip(history["train"],
+                                                               history["val"]))])
 
     _write_predictions(lambda s: trainer.predict(loaders[s]), dataset, run, task)
+    _write_importances(run, net, dataset)
+    if task == M.CLASSIFICATION:
+        _write_calibration(run)
 
     run.update_metadata(
         model={"type": model_type, **arch["kwargs"], "n_params": int(n_params)},
@@ -270,6 +276,13 @@ def train(
             "best_epoch": int(trainer.best_epoch),
             "best_val_loss": float(trainer.best_val),
             "criterion": CRITERIA[task].__name__,
+            # ⚠️ The LOSS, spelled out, because `criterion` is a class name and
+            # `BCEWithLogitsLoss` and `binary:logistic` are the same function under two
+            # libraries' spellings. One grid, one loss (`event_chain/config.py`).
+            "objective": ("binary cross-entropy" if task == M.CLASSIFICATION
+                          else "mean squared error"),
+            "early_stopping": f"val loss, patience {getattr(train_cfg, 'patience', None)}",
+            "sample_weight": "uniform",
             **{
                 k: getattr(train_cfg, k)
                 for k in ("batch_size", "lr", "weight_decay", "max_epochs", "patience")
@@ -434,22 +447,46 @@ def train_estimator(
     else:
         train_mse = float(np.mean((fitted - y_train) ** 2))
     _write_predictions(predict, dataset, run, task)
+    _write_importances(run, estimator, dataset)
+    if classify:
+        _write_calibration(run)
+
+    # ⚠️ `loss_history()` is the estimator's own curve when it HAS one — XGBoost's
+    # `evals_result` under `eval_set`, one row per boosting round. Everything else is a
+    # single fit and writes the one row the contract requires; see `_write_loss_history`.
+    curve = getattr(estimator, "loss_history", None)
+    rows = curve() if callable(curve) else None
+    if not rows:
+        y_val = np.asarray(dataset.y_val, dtype=float).ravel()
+        val_loss = (log_loss((y_val >= 0.5).astype(int), 1.0 / (1.0 + np.exp(-predict("val"))))
+                    if classify else float(np.mean((predict("val") - y_val) ** 2)))
+        rows = [{"step": 0, "train_loss": train_mse, "val_loss": val_loss}]
+    _write_loss_history(run, rows)
 
     # ⚠️ An estimator that trains on rows OUTSIDE the dataset (`model.event_panel`'s peers)
     # says what they were here — the dataset hash cannot.
     provenance = getattr(estimator, "provenance", None)
     extra = {"provenance": provenance()} if callable(provenance) else {}
+    best_iteration = getattr(estimator, "best_iteration", None)
     run.update_metadata(
         model={"type": model_type, **arch["kwargs"], "n_params": n_params, **extra},
         training={
             # ⚠️ Not epochs. See the docstring — the schema is shared with the torch
-            # path and a blank would read as "not measured".
-            "best_epoch": 0,
-            "best_val_loss": train_mse,
+            # path and a blank would read as "not measured". A boosted model that
+            # early-stopped puts its chosen ROUND here, which is the same quantity.
+            "best_epoch": int(best_iteration) if best_iteration is not None else 0,
+            "best_val_loss": float(rows[-1]["val_loss"]) if len(rows) > 1 else train_mse,
             "criterion": (
                 "train log-loss, single fit (no training loop)" if classify
                 else "closed-form / single fit (no training loop)"
             ),
+            # ⚠️ THE LOSS THE MODEL ACTUALLY MINIMISED, from the estimator itself. The
+            # line above is a SHAPE (one fit vs a loop) and three different objectives
+            # used to share it word for word, which is how a squared-error member and a
+            # log-loss member read identically in the trial log.
+            "objective": str(getattr(estimator, "objective", "unknown")),
+            "sample_weight": str(getattr(estimator, "sample_weight_rule", "uniform")),
+            "early_stopping": str(getattr(estimator, "early_stopping_rule", "none")),
             "fitted_on": "train split only",
         },
     )
@@ -557,6 +594,82 @@ def _write_predictions(predict, dataset, run, task) -> None:
         frame.to_csv(
             os.path.join(run.results_dir, f"predictions_{split}.csv"), index=False
         )
+
+
+def feature_columns(dataset) -> list:
+    """The dataset's own channel names, or `[]` — `train_test_creator` writes them."""
+    return list(((dataset.meta or {}).get("features") or {}).get("feature_columns") or [])
+
+
+def log_loss(y_true, y_prob) -> float:
+    """Binary cross-entropy, the ONE loss this repo's classifiers minimise (§5 rule 25)."""
+    p = np.clip(np.asarray(y_prob, dtype=float).ravel(), 1e-7, 1 - 1e-7)
+    y = np.asarray(y_true, dtype=float).ravel()
+    return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
+
+
+def _write_loss_history(run, rows) -> None:
+    """`results/loss_history.csv` — `step, train_loss, val_loss`, written by EVERY run.
+
+    ⚠️ **`step` IS WHATEVER THE FAMILY ITERATES OVER**, and the families disagree: an
+    EPOCH on the torch path, a BOOSTING ROUND under XGBoost, and `0` for a model fitted
+    in one shot — a logistic, a ridge, `xgbrf`'s single round of `num_parallel_tree`
+    trees, the prior. **A model with no curve writes ONE ROW rather than no file**, so a
+    missing file always means a bug and never "this family has no epochs"; the reader
+    tells the two apart by the row count, which is the honest distinction.
+    """
+    frame = pd.DataFrame(rows, columns=["step", "train_loss", "val_loss"])
+    frame.to_csv(os.path.join(run.results_dir, "loss_history.csv"), index=False)
+
+
+def _write_importances(run, estimator, dataset) -> None:
+    """`results/feature_importance.csv` — `feature, importance`, when the model has one.
+
+    ⚠️ **NOT COMPARABLE ACROSS FAMILIES.** A tree reports GAIN over its splits and a
+    linear model the absolute standardised coefficient; both answer "which channel did
+    this model lean on" and neither is on the other's scale. The column is named
+    `importance` and the metadata records `importance_kind`, because a chart that puts
+    the two on one axis is the mistake this file cannot prevent.
+    """
+    importances = getattr(estimator, "importances", None)
+    if not callable(importances):
+        return
+    scored = importances(feature_columns(dataset)) or {}
+    if not scored:
+        return
+    frame = pd.DataFrame(sorted(scored.items(), key=lambda kv: -abs(kv[1])),
+                         columns=["feature", "importance"])
+    frame.to_csv(os.path.join(run.results_dir, "feature_importance.csv"), index=False)
+
+
+def _write_calibration(run, bins: int = 10) -> None:
+    """`results/calibration.csv` — equal-count bins of the predicted probability.
+
+    ⚠️ **THE BASKET'S CUT IS A LEVEL, NOT A RANK** (`event_chain` §7): `min_prob` keeps a
+    name only when P(event) clears it, so the model's probability has to MEAN something
+    and the AUCs cannot see that. `mean_pred` against `observed` per bin is the check.
+    Read back from `predictions_<split>.csv` rather than recomputed, so the file can
+    never disagree with the predictions it describes.
+    """
+    rows = []
+    for split in ("val", "test"):
+        path = os.path.join(run.results_dir, f"predictions_{split}.csv")
+        if not os.path.exists(path):
+            continue
+        frame = pd.read_csv(path)
+        if "y_prob" not in frame:
+            return
+        # ⚠️ Equal COUNT, not equal width: at a base rate of 0.16 the top width-bins hold
+        # a handful of rows and their observed rate is noise wearing a chart's authority.
+        order = frame["y_prob"].rank(method="first")
+        frame["bin"] = np.minimum((order * bins / (len(frame) + 1)).astype(int), bins - 1)
+        for b, part in frame.groupby("bin"):
+            rows.append({"split": split, "bin": int(b), "n": int(len(part)),
+                         "mean_pred": float(part["y_prob"].mean()),
+                         "observed": float(part["y_true"].mean())})
+    if rows:
+        pd.DataFrame(rows).to_csv(
+            os.path.join(run.results_dir, "calibration.csv"), index=False)
 
 
 def _split_tickers(dataset, split: str):

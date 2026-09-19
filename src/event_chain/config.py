@@ -57,7 +57,52 @@ ROLLING_REFIT_SESSIONS = 21
 # the three kinds ~0.69 (`.claude/context/event_chain.md` §6). Every hyper-parameter below is
 # that CV's choice, frozen here before the tabular chain's own val or test was scored.
 # ══════════════════════════════════════════════════════════════════════════════════════
-BASKET_LOOKBACK = 1
+# ══════════════════════════════════════════════════════════════════════════════════════
+# ⚠️ ONE LOSS FOR THE WHOLE GRID (2026-09-19, the user's decision)
+#
+# **Every member minimises BINARY CROSS-ENTROPY on the 0/1 event label**, unweighted, with
+# no `scale_pos_weight`. The grid used to carry three: log-loss on the event (5 members),
+# squared error on `log|log(1+r_h)|` (2), and log-loss on a DIFFERENT label (1).
+#
+# ⚠️ **WHY LOG-LOSS AND NOT A RANKING LOSS**, which matches the decision better on its face:
+# the basket's decision has two halves and both were measured (`measure_auc_split.py`,
+# 2026-09-18) — **84 % of the edge is choosing the NAME inside a session** (a rank) and
+# **16 % is choosing the SESSION** through the `min_prob` cut (a LEVEL). Log-loss is a
+# proper scoring rule, so one number serves both. `rank:pairwise` is invariant to any
+# monotone transform inside a query, so its scores do not travel across sessions and the
+# cut — that 16 % — cannot be made at all. **The one thing that would flip this is dropping
+# the cut** and trading a fixed basket every session.
+#
+# ⚠️ **NO CLASS WEIGHTING.** `model/gbt/model.py` already records why: re-weighting the rare
+# class DE-CALIBRATES the probability, and `min_prob` is read as a probability.
+#
+# ⚠️ **THREE OF THE ELEVEN MEMBERS STILL CANNOT EARLY-STOP, AND THAT IS A PROPERTY OF THE
+# FAMILY**: a forest is one round (`xgbrf`: `num_parallel_tree` at full step size), a
+# logistic is convex with `C` as its capacity knob, and the prior does not fit. They write
+# a one-row `loss_history.csv`, which is the honest answer and not a gap.
+EARLY_STOPPING_ROUNDS = 50
+
+# ⚠️ **VAL CARRIES THREE JOBS NOW** (2026-09-19, the user's decision, taken over the
+# alternative of carving the stop block out of train): it chooses the model
+# (`BASKET_CHOOSE_ON`), it chooses `min_prob`, and it stops the boosting. **So
+# `val_daily_auc` is a selection score and no longer an estimate of anything out of
+# sample** — TEST is the only honest read, and the trial log says so in the verdict.
+# ⚠️ **THE REFIT PATHS HAVE NO VAL** (`report.refit_test` fits on train+val, the rolling
+# refit on everything before the block), so they cannot stop again: each refit reuses the
+# ROUND this fit chose, frozen from `training.best_epoch`. One mode, two paths.
+
+# ⚠️ **d > 1 SINCE 2026-09-19 (the user's decision: keep the deep-learning models).** At
+# `d = 1` a sequence model has nothing to read, so LSTM/TCN could not be members at all.
+# ⚠️ **THE BILL IS REAL AND IS NOT THE DL TRAINING**: the window tensor is `d` times bigger
+# (420k x 10 x 151 is 2.5 GB as float32 and the engine casts to **float64**, so ~5 GB), the
+# selection layer builds six statistics per channel instead of collapsing to one (`WST-1`
+# short-circuits `d == 1` ONLY), and `gbt`/`forest` go back to a legitimate 906-column
+# design — the 1,320 s -> 77 s the same fix bought is spent again here. Budget a re-run of
+# selection, the final table, the dataset and the grid.
+# ⚠️ **10 IS A CHOICE, NOT A STANDARD**: the repo's documented pairing is `d = 20, h = 5`
+# (purge 24), measured on a ONE-TICKER series of ~4k rows, not a 420k-row panel. 10 gives
+# two horizons of context at half the tensor; the purge is `d + h - 1 = 14` (§5 rule 6).
+BASKET_LOOKBACK = 10
 # The channel blocks, by NAME PREFIX (`model.event_linear` `columns`).
 # ⚠️ `mkt_` is spelt out: `pool__market_breadth` also names its channels `mkt_xs_*`, and the
 # CV that chose these blocks did not include them.
@@ -184,35 +229,79 @@ BASKET_MIN_ACTIVE = 25   # 5 non-overlapping baskets at h = 5
 # half-life, lambda 5 and 128 bins moved it by <= 0.002; date-level pools LOWERED it (0.661, the
 # date memorisation of `PDL-1`), within-session ranks and exchange-band / limit-hit channels
 # added nothing (0.664, 0.668), and a pairwise/ndcg ranker scored 0.650 pooled, 0.659-0.662 within.
-_BOOST = {"type": "EVENT_BOOST", "kind": "xgb", "max_depth": 8, "n_estimators": 800,
+_BOOST = {"type": "EVENT_BOOST", "kind": "xgb", "max_depth": 8, "n_estimators": 2000,
           "learning_rate": 0.02, "subsample": 0.8, "colsample_bytree": 0.4,
-          "min_child_weight": 500.0, "device": "cuda", "seed": 42}
+          "min_child_weight": 500.0, "device": "cuda", "seed": 42,
+          # ⚠️ 800 was the CV's CHOICE; with early stopping it is a cap and the val curve
+          # picks the round. Raised so the cap cannot bind silently — `training.best_epoch`
+          # records what was taken, and a run that stops at 1,999 is a run to re-read.
+          "early_stopping_rounds": EARLY_STOPPING_ROUNDS}
+
+# ⚠️ THE TORCH TRAINING BLOCK, recovered verbatim from the windowed grid this chain deleted
+# on 2026-09-18 (`git show 1593f663^:src/event_chain/config.py`). It is the one family that
+# has ALWAYS early-stopped on validation loss — `model/common/trainer.py` restores the best
+# epoch — so the 2026-09-19 requirement is met natively here and bolted on everywhere else.
+_TRAIN = dict(batch_size=64, lr=0.001, weight_decay=0.0001, max_epochs=100,
+              patience=15, grad_clip=1.0, lr_factor=0.5, lr_patience=5, log_every=10)
+
+# ⚠️ **THE DEEP-LEARNING MEMBERS, ADDED 2026-09-19 (the user's decision).** They are the
+# reason `BASKET_LOOKBACK` left 1: a sequence model at `d = 1` reads a single row and is an
+# MLP with extra machinery. ⚠️ **THE WINDOWED GRID THEY COME FROM LOST** — 15 models over 3
+# VCB trials put their val-chosen model at test AUC 0.520-0.564 against a block-shuffled
+# null p95 of 0.646-0.661 (`CLAUDE.md` §2) — but that was ONE TICKER's ~4k rows, and this is
+# a 228-name panel with 420k. **That difference is the whole hypothesis; nothing here has
+# been measured on this panel yet.**
+# ⚠️ **AND THEY CANNOT BE REFITTED BY TODAY'S REPORT**: `report.REFITTABLE` covers
+# estimators that are `build_model` + `fit` with no training loop, so the refit and rolling
+# columns are BLANK for these rows rather than wrong — read the frozen test column for them.
+BASKET_DL_MODELS = (
+    ("mlp", "_h32", {"type": "MLP", "hidden_size": 32, "dropout": 0.2}, {"train": _TRAIN}),
+    ("lstm", "_h32", {"type": "LSTM", "hidden_size": 32, "num_layers": 1, "dropout": 0.2},
+     {"train": _TRAIN}),
+    ("tcn", "_c32", {"type": "TCN", "channels": 32, "kernel_size": 3, "num_layers": 2,
+                     "dropout": 0.2}, {"train": _TRAIN}),
+)
 
 BASKET_MODELS = (
     ("baseline", "_prior", {"type": "BASELINE", "kind": "prior"}, {}),
     # ⚠️ THE THREE LINEAR KINDS, chosen on a VCB CV10 before any test row was read (0.667 /
     # 0.670 / 0.607) and kept through every basket trial since. Their channel blocks are the
     # `_EVT` / `_DRV` / `_HAR` / `_PXFLOW` / `_GLOBAL` prefixes above.
-    ("event_linear", "_mag_har_a100_hl4", {"type": "EVENT_LINEAR", "kind": "magnitude_ridge",
-                                           "columns": list(_HAR + _EVT + _DRV), "alpha": 100.0,
-                                           "half_life_years": 4.0, "exclude": list(_NOT_DRV)}, {}),
+    # ⚠️ **WAS `_mag_har_a100_hl4`, A RIDGE ON `log|log(1+r_h)|` WITH A 4-YEAR HALF-LIFE**,
+    # until the one-loss decision of 2026-09-19. It kept its CHANNELS (the `har_` block is
+    # in the pool because of it) and lost its loss: squared error on a volatility proxy is
+    # not the event's loss, and the age weight made it a WEIGHTED log-loss beside unweighted
+    # members — a fourth loss hiding in a config key. ⚠️ **THIS IS AN EXPERIMENT, NOT A
+    # RENAME**: the magnitude route measured CV AUC ~0.67 on VCB and 0.6180 val within-session
+    # AUC on the last basket trial, and what the HAR block is worth under log-loss has never
+    # been measured. `kind='magnitude_ridge'` stays in `model.event_linear` for that test.
+    ("event_linear", "_har_c003", {"type": "EVENT_LINEAR", "kind": "event_logit",
+                                   "columns": list(_HAR + _EVT + _DRV), "C": 0.03,
+                                   "exclude": list(_NOT_DRV)}, {}),
     ("event_linear", "_evt_c003", {"type": "EVENT_LINEAR", "kind": "event_logit",
                                    "columns": list(_EVT + _DRV), "C": 0.03,
                                    "exclude": list(_NOT_DRV)}, {}),
-    ("event_linear", "_dir_c001", {"type": "EVENT_LINEAR", "kind": "direction_logit",
-                                   "columns": list(_EVT + _DRV + _PXFLOW + _GLOBAL), "C": 0.01,
-                                   "min_move": 0.03, "exclude": list(_NOT_DRV)}, {}),
+    # ⚠️ `_dir_c001` (`direction_logit`) WAS HERE AND IS GONE (2026-09-19). It is the only
+    # member that fitted a DIFFERENT LABEL — `1{r>0}` on the rows whose move cleared 3 % —
+    # so one loss could not cover it, and it had already measured nothing: val within-session
+    # AUC **0.5007**, test 0.5021, z **+0.68** on the `uphold` trial. Both facts point the
+    # same way, which is the only reason to drop a member that a CV once chose.
     # the tree families on the panel's last row
     # ⚠️ `device: cuda` since 2026-09-19 — the panel is 151 columns and 420k rows, where the
     # card wins; `model/gbt/model.py`'s docstring carries what that changes (a SAMPLED
     # XGBoost draws from a different RNG stream on CUDA, so these are not the CPU runs made
     # faster — they are different trees, and `device` is part of the experimental setup).
-    ("gbt", "_d2", {"type": "GBT", "max_depth": 2, "n_estimators": 300, "learning_rate": 0.03,
+    # ⚠️ `n_estimators` IS A CAP NOW, NOT A CHOICE (2026-09-19): with `early_stopping_rounds`
+    # the val curve picks the round, so 300 was a ceiling the fit could hit without anyone
+    # seeing it. Raised to 2,000 for that reason and for no other — a cap that BINDS is a
+    # hyper-parameter pretending to be a limit, and `training.best_epoch` now records which
+    # round was actually taken.
+    ("gbt", "_d2", {"type": "GBT", "max_depth": 2, "n_estimators": 2000, "learning_rate": 0.03,
                     "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 200.0,
-                    "device": "cuda"}, {}),
-    ("gbt", "_d4", {"type": "GBT", "max_depth": 4, "n_estimators": 300, "learning_rate": 0.03,
+                    "device": "cuda", "early_stopping_rounds": EARLY_STOPPING_ROUNDS}, {}),
+    ("gbt", "_d4", {"type": "GBT", "max_depth": 4, "n_estimators": 2000, "learning_rate": 0.03,
                     "subsample": 0.8, "colsample_bytree": 0.5, "min_child_weight": 200.0,
-                    "device": "cuda"}, {}),
+                    "device": "cuda", "early_stopping_rounds": EARLY_STOPPING_ROUNDS}, {}),
     # ⚠️ WAS `_et_leaf200` (sklearn ExtraTrees, 1,103.8 s of CPU = 84 % of the grid's whole
     # fit time) until 2026-09-19. `xgbrf` is XGBoost's own random forest, matched to it at
     # 200 trees: **371.6 s, a 3x cut** — and ⚠️ **the card is NOT why**: the same fit is
@@ -223,27 +312,37 @@ BASKET_MODELS = (
                               "max_features": 0.3, "device": "cuda"}, {}),
     # ⚠️ ADDED FOR THE SECOND BASKET TRIAL on the CV above — CV pooled AUC 0.668 / within 0.666
     ("event_boost", "_xgb_d8", dict(_BOOST), {}),
-    # the size of the move with a tree — CV 0.652 / 0.643 alone, the member that lifts the ensemble
-    ("event_boost", "_mag_d8", dict(_BOOST, kind="magnitude"), {}),
-)
+    # ⚠️ `_mag_d8` (`kind='magnitude'`, `reg:squarederror`) WAS HERE AND IS GONE (2026-09-19,
+    # the one-loss decision). ⚠️ **AND IT HAD ALREADY VANISHED ONCE WITHOUT ANYONE NOTICING**:
+    # on the `uphold` trial it FITTED (run folder `…__20260919-033648`, 94.5 s) and finished
+    # 46 s AFTER `event_chain.report` had read `index.csv`, so the board held 8 of the 9
+    # declared models and `ensemble_boost` / `ensemble_boost_eq` were skipped on one log line
+    # that scrolled past. `report.leaderboard` raises on that gap now (`GRD-3`).
+) + BASKET_DL_MODELS
 
 # ⚠️ FIXED BEFORE THE CHAIN RAN, no weights fitted: VCB's `geo3`/`geo2`, and the same two
 # with the depth-4 tree as a member (a panel is where interactions have rows to be learned).
 BASKET_ENSEMBLES = {
-    # ⚠️ FIXED BEFORE ANY CHAIN RAN, no weights fitted (VCB CV10: geo3 0.682, geo2 0.683)
-    "ensemble_geo3": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003",
-                      "event_linear_dir_c001"),
-    "ensemble_geo2": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003"),
-    "ensemble_geo2t": ("event_linear_mag_har_a100_hl4", "event_linear_evt_c003", "gbt_d4"),
+    # ⚠️ WAS FIVE MORE, AND THE ONE-LOSS GRID TOOK THREE OF THEM (2026-09-19). An ensemble
+    # here is a FIXED geometric mean, declared before the chain ran and never refitted, so
+    # one whose member has left the grid cannot be "adjusted" — it is a different ensemble
+    # and is deleted with its member. `ensemble_geo3` needed `event_linear_dir_c001`;
+    # `ensemble_boost` and `ensemble_boost_eq` needed `event_boost_mag_d8`.
+    # ⚠️ The two survivors below swapped `event_linear_mag_har_a100_hl4` for its log-loss
+    # successor `event_linear_har_c003` — **the same CHANNELS under a different loss, so
+    # their CV numbers do not carry over** and are recorded as history, not as a bar.
+    "ensemble_geo2": ("event_linear_har_c003", "event_linear_evt_c003"),    # was CV 0.683
+    "ensemble_geo2t": ("event_linear_har_c003", "event_linear_evt_c003", "gbt_d4"),
     # ⚠️ ADDED FOR THE SECOND BASKET TRIAL, on CV alone (pooled AUC · within-session AUC). A
     # member LISTED TWICE COUNTS TWICE in the geometric mean — the weights are the CV's
-    # (xgb 1/2, event logit 1/4, tree magnitude 1/4), fixed before the chain scored them.
-    "ensemble_boost": ("event_boost_xgb_d8", "event_boost_xgb_d8", "event_linear_evt_c003",
-                       "event_boost_mag_d8"),                                   # CV 0.6745 · 0.6667
-    "ensemble_boost_eq": ("event_boost_xgb_d8", "event_linear_evt_c003",
-                          "event_boost_mag_d8"),                                # CV 0.6731 · 0.6641
+    # (xgb 1/2, event logit 1/4), fixed before the chain scored them. This one is untouched
+    # by the loss change, and it is the row the last two trials chose.
     "ensemble_xl": ("event_boost_xgb_d8", "event_boost_xgb_d8",
                     "event_linear_evt_c003"),                                   # CV ~0.672 · 0.667
+    # ⚠️ NEW 2026-09-19, and declared HERE, before any d>1 row has been scored: the same
+    # shape as `ensemble_xl` with the sequence model in the event logit's place. If it is
+    # added after reading a test score it is `NUL-1`, so it is added now or never.
+    "ensemble_xl_seq": ("event_boost_xgb_d8", "event_boost_xgb_d8", "lstm_h32"),
 }
 
 # The chain's setup. It names its `ticker` (the LIQUID panel) and runs on it unless

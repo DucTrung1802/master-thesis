@@ -417,3 +417,78 @@ times: select 52 min (unchanged — it never had the defect), train **8 min** (w
 `python -m event_chain.basket --pick YYYY-MM-DD` for one session (`G9`), `--min-prob-study` to
 re-choose the cut without refitting (`G10`). ⚠️ **The report stage alone is ~59 min** (2026-09-18):
 the leaderboard is cheap and the refits are not.
+
+## 9. ⚠️ ONE LOSS, AND WHAT EVERY RUN NOW RECORDS (2026-09-19, code only — not yet run)
+
+⚠️ **THE GRID CARRIED THREE LOSS FUNCTIONS AND ITS RUN FOLDERS DESCRIBED THEM WITH ONE
+SENTENCE.** `training.criterion` read `"train log-loss, single fit (no training loop)"` for a
+`binary:logistic` classifier, a `reg:squarederror` regressor and a `rank:pairwise` ranker
+alike, because it names the SHAPE of the fit and not the function. The user asked for one
+loss; the answer below is **binary cross-entropy on the 0/1 event label, unweighted, with no
+class weighting**, and every member now writes the objective it actually minimised.
+
+**Why log-loss and not a ranking loss**, which matches the top-5-in-a-session decision on its
+face: the decision has two halves and both are measured (`measure_auc_split.py`) — **84 % of
+the edge is choosing the NAME inside a session** (a rank) and **16 % is choosing the SESSION**
+through the `min_prob` cut (a LEVEL). Log-loss is a proper scoring rule, so one number serves
+both. `rank:pairwise` is invariant to any monotone transform inside a query, so its scores do
+not travel across sessions and the cut cannot be made at all. ⚠️ **The one thing that would
+flip this is dropping the cut** and trading a fixed basket every session.
+
+| member | was | is |
+|---|---|---|
+| `event_linear_mag_har_a100_hl4` | ridge on `log\|log(1+r_h)\|`, 4-year half-life, + a 1-D logistic | **`event_linear_har_c003`** — the same `har_` channels, log-loss on the event, uniform weights |
+| `event_linear_dir_c001` | log-loss on a DIFFERENT label (`1{r>0}`, moves ≥ 3 %) | **removed** — and it had already measured nothing: val within-session AUC **0.5007**, test 0.5021, **z +0.68** |
+| `event_boost_mag_d8` | `reg:squarederror` on the same volatility proxy | **removed** (see `BRD-1`: it had been silently absent from the board anyway) |
+| `ensemble_geo3`, `ensemble_boost`, `ensemble_boost_eq` | fixed geometric means | **removed with their members** — a fixed ensemble whose member left is a different ensemble, not an adjustable one |
+| `gbt_d2`/`gbt_d4`/`event_boost_xgb_d8` | `n_estimators` 300 / 300 / 800 | a **cap of 2,000** with `early_stopping_rounds = 50` |
+
+⚠️ **EARLY STOPPING IS ON VAL, WHICH NOW CARRIES THREE JOBS** (the user's decision, taken over
+carving the stop block out of train): val chooses the model (`BASKET_CHOOSE_ON`), chooses
+`min_prob`, and stops the boosting. **So `val_daily_auc` is a selection score and no longer an
+out-of-sample estimate of anything** — TEST is the only honest read. ⚠️ **And the refit paths
+have no val at all** (`refit_test` fits on train+val, the rolling refit on everything before
+its block), so they cannot stop again: each **reuses the round the frozen fit chose**,
+`training.best_epoch + 1`, with stopping switched off. One mode, two paths.
+
+⚠️ **THREE FAMILIES CANNOT EARLY-STOP AND THAT IS A PROPERTY OF THE FAMILY, NOT A GAP**: a
+forest is ONE boosting round (`xgbrf`: `num_parallel_tree` at full step size), a logistic is
+convex with `C`/`alpha` as its capacity knob, and the prior does not fit. They write a
+**one-row** `loss_history.csv`, because a missing file must always mean a bug.
+
+### 9a. The artefacts a chart is drawn from
+
+Every run folder now writes three more files, and `trial.json` copies them into
+`trials/<id>/curves/` — **run folders are gitignored and `RPR-1` deleted 29 of them once.**
+
+| file | columns | note |
+|---|---|---|
+| `results/loss_history.csv` | `step, train_loss, val_loss` | `step` is an EPOCH on the torch path, a BOOSTING ROUND under XGBoost, `0` for a single fit |
+| `results/feature_importance.csv` | `feature, importance` | ⚠️ gain for a tree, the SIGNED standardised coefficient for a linear model — **not one scale** |
+| `results/calibration.csv` | `split, bin, n, mean_pred, observed` | 10 **equal-count** bins; the cut is a level, and no AUC can see whether the level means anything |
+
+`trial.json` is **schema 3**: a `loss` block (the grid's rule, why, what would flip it, and
+each run's own recorded objective), `setup.declared_models` beside `setup.scored_models`
+(`BRD-1`), `selection.runs[].columns_in_design` — the **feature → pool mapping** the flat
+151-name list never carried — and `predictions_wide.csv.gz` now holds a column per ENSEMBLE,
+which is the one model the file used to omit because it has no run folder.
+
+### 9b. ⚠️ `d` LEFT 1, AND THE BILL IS NOT THE DL TRAINING
+
+`BASKET_LOOKBACK = 10` (was 1) so LSTM/TCN have something to read — at `d = 1` a sequence
+model is an MLP with extra machinery. Members added: `mlp_h32`, `lstm_h32`, `tcn_c32`, and
+`ensemble_xl_seq` declared **now**, before any `d > 1` row is scored, because adding it after
+would be `NUL-1`. What it costs, all of it re-run:
+
+- the window tensor is `d`× bigger — 420k × 10 × 151 is 2.5 GB as float32 and the engine casts
+  to **float64**;
+- `WST-1` short-circuits `d == 1` **only**, so `gbt`/`forest` go back to a legitimate
+  906-column design and the **1,320 s → 77 s that fix bought is spent again**;
+- the selection layer builds six statistics per channel instead of collapsing to one;
+- the purge becomes `d + h − 1 = 14` (§5 rule 6), not 5.
+
+⚠️ **10 is a choice, not a standard**: the repo's documented pairing is `d = 20, h = 5`,
+measured on a ONE-TICKER series of ~4k rows, not a 228-name panel of 420k. ⚠️ **And the
+windowed grid these members come from LOST** — 15 models over 3 VCB trials, val-chosen test
+AUC 0.520-0.564 against a null p95 of 0.646-0.661 — **on one ticker. That difference is the
+whole hypothesis, and nothing here has been measured on this panel.**
