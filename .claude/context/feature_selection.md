@@ -3124,3 +3124,13 @@ deliberately not one tuple: the first decides whether two runs may be **unioned*
 `__final__` table, the second whether one may be **skipped** because the other ran.
 Skipping is stricter — `target`, `holdout_start` and `device` do not stop a union and
 absolutely stop a reuse.
+
+⚠️ **AND THE CODE DIGEST IS READ WHEN THE REPORT IS WRITTEN** (`FPT-1`, open, not observed):
+`report.py` calls `footprint.code_digest()` after the whole run, so a ranking-path file edited
+DURING a 101-minute selection is recorded as if it were the bytes that ran, and the next chain
+skips the selection as REUSED against it. Both `d = 10` runs of 2026-09-19 are clean — they
+record `9453193bef5e`, today's digest, and no `CODE_FILES` commit follows `2ead7719`.
+⚠️ **Until it is fixed, edit no ranking-path file while a selection runs.** The fix that keeps
+those two footprints valid is a second digest taken when `report` is IMPORTED — `run.py`
+imports it at the top, before any ranking — with `code: unknown` written when the two differ;
+moving the digest into `run.py` would change the digest itself and cost the 4 h 34 it protects.

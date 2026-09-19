@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from model.common.features import WINDOW_STATS, window_statistics
+from model.common.features import window_statistics
 
 
 class GBTRegressor:

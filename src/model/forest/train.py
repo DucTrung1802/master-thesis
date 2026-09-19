@@ -1,6 +1,6 @@
 """Config → run folder → fitted forest → scored result.
 
-    python -m model.forest --config forest_et__vcb__up_5pct_5day__final__d20_h5.yaml
+    python -m model.forest --config forest_rf200_d12__liquid__uphold_5pct_5day__final__d10_h5__bsk.yaml
     python -m model.forest --config <path> --dry-run
 
 No training logic here — `model/common/engine.py`'s estimator path, shared with

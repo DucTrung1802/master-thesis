@@ -1,6 +1,6 @@
 """Config → run folder → fitted boosted-tree event estimator → scored result.
 
-    python -m model.event_boost --config event_boost_xgb_d8__liquid__up_5pct_5day__final__d1_h5__bsk.yaml
+    python -m model.event_boost --config event_boost_xgb_d8__liquid__uphold_5pct_5day__final__d10_h5__bsk.yaml
     python -m model.event_boost --config <path> --dry-run
 
 No training logic here — `model/common/engine.py`'s estimator path, shared with

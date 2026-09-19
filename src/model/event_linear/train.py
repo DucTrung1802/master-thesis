@@ -1,6 +1,6 @@
 """Config → run folder → fitted linear event estimator → scored result.
 
-    python -m model.event_linear --config event_linear_mag__vcb__up_5pct_5day__final__d1_h5__tab.yaml
+    python -m model.event_linear --config event_linear_evt_c003__liquid__uphold_5pct_5day__final__d10_h5__bsk.yaml
     python -m model.event_linear --config <path> --dry-run
 
 No training logic here — `model/common/engine.py`'s estimator path, shared with

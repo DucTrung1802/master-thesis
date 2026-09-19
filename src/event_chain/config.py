@@ -317,7 +317,7 @@ BASKET_MODELS = (
     # on the `uphold` trial it FITTED (run folder `…__20260919-033648`, 94.5 s) and finished
     # 46 s AFTER `event_chain.report` had read `index.csv`, so the board held 8 of the 9
     # declared models and `ensemble_boost` / `ensemble_boost_eq` were skipped on one log line
-    # that scrolled past. `report.leaderboard` raises on that gap now (`GRD-3`).
+    # that scrolled past. `report.leaderboard` raises on that gap now (`BRD-1`).
 ) + BASKET_DL_MODELS
 
 # ⚠️ FIXED BEFORE THE CHAIN RAN, no weights fitted: VCB's `geo3`/`geo2`, and the same two

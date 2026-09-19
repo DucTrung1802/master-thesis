@@ -168,7 +168,7 @@ def model_runs(chain, runs_dir: Optional[str] = None) -> pd.DataFrame:
 
 
 def _require_declared_grid(chain, runs: pd.DataFrame) -> None:
-    """Raise when the grid declared a model the board has no run for (`GRD-3`).
+    """Raise when the grid declared a model the board has no run for (`BRD-1`).
 
     ⚠️ **A MODEL THAT FINISHED 46 SECONDS LATE VANISHED WITHOUT A WORD** (measured
     2026-09-19): `event_boost_mag_d8` fitted for 94.5 s starting 03:36:48 and

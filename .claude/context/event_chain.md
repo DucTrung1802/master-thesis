@@ -536,7 +536,17 @@ basket −0.04 % in 2022 and **−0.59 % in 2026**, Sharpe@50 negative 2024-2026
 3 min · train **35 min** (10 models, the DL three stopping at epoch 16-18) · report **17 min**.
 
 ⚠️ **TWO LABELS IN THIS TRIAL'S ARTEFACTS ARE WRONG, AND THE NUMBERS ARE NOT**: `gbt_d2`/`gbt_d4`
-record `early_stopping: none` beside `best_round` 220/123 of a 2,000 cap (the family did not
-implement `early_stopping_rule`, and the engine's fallback is `none`), and the torch curves
-count steps from 0 while `training.best_epoch` counts from 1. Both fixed in code for the next
+record `early_stopping: none` beside `best_round` 220/123 of a 2,000 cap (`ESR-1`: the family
+did not implement `early_stopping_rule`, and the engine's fallback is `none`), and the torch
+curves count steps from 0 while `training.best_epoch` counts from 1 (`EPC-1` — add 1 to a torch
+`step` from this trial before comparing it with `best_epoch`). Both fixed in code for the next
 trial; this trial's files stay as written (§8: a run folder is immutable).
+
+⚠️ **ITS `index.csv` HOLDS FIFTEEN `d = 10` ROWS FOR TEN MODELS.** Five members were fitted
+twice: at 16:55-17:11, on the code before `MEM-2` (whose chunked `window_statistics` moved 759
+of 45.3M float32 cells by one ulp), and again under `--stages train --force` at 18:48-19:14 so
+that the trial reads ONE code version. The trial uses the second set only. The first set's
+run folders were deleted on 2026-09-19, with one partial `forest_rf200_d12` folder the OOM
+left without an index row; their five rows stay, as every deleted run's does (the index is
+the record), and `report.model_runs` skips a row whose folder is gone, so a re-run of
+`report` sees ten.
