@@ -118,6 +118,40 @@ def test_a_model_without_a_val_block_does_not_early_stop():
     assert model.loss_history() == []   # no eval_set, so the engine writes its one row
 
 
+def test_every_grid_estimator_accepts_the_call_the_engine_makes():
+    """⚠️ **THE WHOLE `train` STAGE DIED ON THE FIRST MODEL FOR WANT OF THIS TEST.**
+
+    `engine._write_importances` calls `estimator.importances(feature_columns)` on every
+    family. `model.event_linear` exposed the name as `importances = coefficients`, whose
+    signature takes no argument, and the basket chain aborted with
+    `coefficients() takes 1 positional argument but 2 were given` — after `select` had
+    run for four and a half hours. The earlier tests here passed because they used a
+    FAKE estimator with the right signature, which is the mistake this one repairs:
+    check the REAL classes the grid declares, not a stand-in for them.
+    """
+    import importlib
+    import inspect
+
+    from event_chain.chain import EventChain
+
+    chain = EventChain.from_setup("basket")
+    checked = 0
+    for package, variant, spec, _ in chain.models:
+        module = importlib.import_module(f"model.{package}.model")
+        try:
+            estimator = module.build_model(n_features=8, lookback=chain.lookback,
+                                           **{k: v for k, v in spec.items() if k != "type"})
+        except TypeError:
+            continue   # a torch builder takes a different shape; the engine never calls it
+        hook = getattr(estimator, "importances", None)
+        if hook is None:
+            continue
+        # it must be callable with exactly the one positional argument the engine passes
+        inspect.signature(hook).bind(["a", "b"])
+        checked += 1
+    assert checked >= 3, f"only {checked} estimators exposed an importances hook"
+
+
 @pytest.mark.parametrize("kind,expected", [
     ("event_logit", "binary cross-entropy"),
     ("magnitude_ridge", "mean squared error"),

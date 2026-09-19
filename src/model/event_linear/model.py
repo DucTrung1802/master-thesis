@@ -188,9 +188,17 @@ class EventLinear:
         order = np.argsort(-np.abs(coef))
         return {str(names[i]): float(coef[i]) for i in order}
 
-    # `engine._write_importances` reads this name on every family; the SIGNED coefficient
-    # is the honest one for a linear model, and the file is sorted by magnitude either way.
-    importances = coefficients
+    def importances(self, feature_columns=None) -> dict:
+        """`engine._write_importances`'s name on every family — here, the coefficients.
+
+        ⚠️ **`feature_columns` IS ACCEPTED AND IGNORED, AND THE SIGNATURE IS THE POINT.**
+        This was `importances = coefficients` for one afternoon and the whole `train` stage
+        died on the FIRST model with `coefficients() takes 1 positional argument but 2 were
+        given` — the engine passes the dataset's channel names to every family. This model
+        already knows them (`set_dataset` stored `feature_names_`, which is how it selects
+        its own columns by prefix), so it does not need them; a tree keyed on `f12` does.
+        """
+        return self.coefficients()
 
     @property
     def objective(self) -> str:
